@@ -21,10 +21,11 @@ for f in packages/*; do
 				mkdir -p /tmp/tmp-charts
 				git clone $url /tmp/tmp-charts
 				pwd=$(pwd)
-				cd /tmp/tmp-charts/${subdirectory}
+				cd /tmp/tmp-charts
 				git checkout $commit
 				cd $pwd
-				cp -r /tmp/tmp-charts/${subdirectory}/* ${f}/charts
+				rm -rf ${f}/charts
+				cp -r /tmp/tmp-charts/${subdirectory} ${f}/charts
 				rm -rf /tmp/tmp-charts
 			else
 				curl -sLf ${url} | tar xvzf - -C ${f}/charts --strip ${fields} ${subdirectory} > /dev/null 2>&1
@@ -32,6 +33,27 @@ for f in packages/*; do
 			for file in $(find ./${f} -type f -name "*.patch"); do
 				basename=$(basename -- ${file})
 				patch -p3 -d ${f}/charts < ${f}/$basename
+			done
+			copied_dependencies=()
+			if [[ -f ${f}/charts/requirements.yaml ]]; then
+				repos=$(cat ${f}/charts/requirements.yaml | yq r - "dependencies.*.repository")
+				while IFS= read -r repo; do
+					if [[ ${repo} == file://* ]]; then
+						charts_path=${repo/file:\/\//${f}/charts/}
+						overlay_path=${repo/file:\/\//${f}/overlay/}
+						if [[ ! -d $charts_path ]] && [[ -d $overlay_path ]]; then
+							cp -R $overlay_path $charts_path
+							copied_dependencies+=("${charts_path}")
+						fi
+					fi
+				done < <(echo "${repos}")
+			fi
+			pwd=$(pwd)
+			cd ${f}/charts
+			helm dependency update
+			cd $pwd
+			for dep in "${copied_dependencies[@]}"; do
+				rm -rf $dep
 			done
 		fi
   fi
