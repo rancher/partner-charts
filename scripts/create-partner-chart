@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -e
+
+usage="Usage: make create URL={REQUIRED_URL_TO_CHART} CHART={OPTIONAL_CHART_DIR_NAME}"
+
+# Verify required arguments
+if [[ ! $URL ]]; then
+    echo "Error: Missing required argument URL"
+    echo $usage
+    exit 1
+fi
+
+# Verify URL is valid and references a tgz resource
+if [[ ! $URL =~ https?://.*\.tgz ]]; then
+    echo "Error: Invalid URL form"
+    exit 1
+fi
+curl -fsI $URL &>/dev/null && ok=1
+if [[ ! $ok ]]; then
+    echo "Error: No resource found at $URL"
+    exit 1
+fi
+
+# Try trimming tgz basename to generate a name for chart dir if one wasn't provided
+# A single semantic version suffix is expected, otherwise a name has to be provided
+# e.g chart-name-v1.0.0.tgz is good, chart-name-v1.0.0-beta2.tgz is bad
+if [[ ! $CHART ]]; then
+    base=$(basename $URL .tgz)
+    CHART=${base%-*}
+    if [[ $CHART =~ "." ]]; then
+        echo "Error: Couldn't generate name for chart directory, please use the CHART parameter to supply one"
+        echo $usage
+        exit 1
+    fi
+fi
+
+# Verify a chart with the same name doesn't exist already
+chart_dir=packages/$CHART
+if [ -d $chart_dir ]; then
+    echo "Error: $chart_dir already exists"
+    exit 1
+fi
+
+# Create directory and patch for new chart
+CHART_DIR=packages/$CHART
+mkdir -p $CHART_DIR
+touch $CHART_DIR/$CHART.patch
+
+# Create overlay files (Required for all partner charts)
+mkdir -p $CHART_DIR/overlay
+touch $CHART_DIR/overlay/questions.yaml
+touch $CHART_DIR/overlay/app-readme.md
+
+# Create package.yaml and populate with URL and default packageVersion
+touch $CHART_DIR/package.yaml
+yq w -i $CHART_DIR/package.yaml url $URL
+yq w -i $CHART_DIR/package.yaml packageVersion 00
+
+echo "Succesfully created chart ./$chart_dir"

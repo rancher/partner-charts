@@ -1,6 +1,9 @@
 ci: bootstrap
 	./scripts/ci
 
+create: 
+	./scripts/create-partner-chart
+
 prepare: bootstrap
 	./scripts/prepare
 
