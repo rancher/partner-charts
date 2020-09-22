@@ -1,4 +1,4 @@
-## charts
+## partner-charts
 
 This is charts repo to automate system charts and adding overlays files on top of it.
 
