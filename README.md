@@ -83,7 +83,7 @@ make prepare CHART={CHART_NAME}
 Any modifications to your upstream chart like **adding the partner label** will be done in 
 the auto-generated `charts` directory.
 
-Add the partner label and required annotations in `Chart.yaml`:
+If this is a new chart, add the partner label and required annotations in `Chart.yaml`:
 
 ```yaml
 annotations:
@@ -170,7 +170,34 @@ questions:
 
 **subquestions**: `subquestions[]` cannot contain `subquestions` or `show_subquestions_if` keys, but all other keys in the above table are supported. 
 
-### 6. Test your changes
+### 6. Update package to track new upstream (Maintenance)
+
+There are two ways you can update a package, one is to track a new updated upstream chart
+and the other is to do small modifications/fixes.
+
+#### Update package to track a new upstream chart
+
+Update the `url` to reference the new upstream chart and reset the `packageVersion` to `00` in `package.yaml`, in order for `make prepare CHART={CHART_NAME}` to pull in the new upstream chart and apply the patch if one exists. You might need to run `make patch CHART={CHART_NAME}` to ensure the patch can be applied on the new upstream. If applying the patch fails, there's currently no method for rebasing to a new upstream when the patch gets broken as a result.
+
+For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-v0.1.2.tgz`
+can be updated to track the new `url: https://example.com/helm-repo/chart-v0.1.3.tgz`, and a new package 
+`chart-v0.1.300.tgz` will be generated.
+
+```yaml
+url: https://example.com/helm-repo/chart-v0.1.3.tgz
+packageVersion: 00
+```
+
+#### Update existing package to introduce a small change
+
+Increase the `packageVersion` in `package.yaml` without updating the `url`. This will
+create a new version of a package tracking the same upstream chart.
+
+For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-v0.1.2.tgz`
+generated a package `chart-v0.1.200.tgz`. Increasing the `packageVersion` without changing the `url`
+will generate a new package `chart-v0.1.201.tgz` based off of the same upstream chart.
+
+### 7. Test your changes
 
 #### Generate modified chart
 
@@ -200,7 +227,7 @@ fork / branch as a Repository in the Dashboard UI. Your chart will then show up 
 
 Alternatively, Python and Ngrok can be used if you rather avoid the push and revert commit approach. Use `python -m SimpleHTTPServer` to host the generated files locally, and expose them using Ngrok. Then add the Ngrok URL as a Repository in the Dashboard UI the same way you would add a fork / branch.
 
-### 7. Pull Request
+### 8. Pull Request
 
 Run to clean up your working directory before staging your changes.
 
