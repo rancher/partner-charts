@@ -88,7 +88,6 @@ If this is a new chart, add the partner label and required annotations in `Chart
 ```yaml
 annotations:
   catalog.cattle.io/certified: partner
-  catalog.cattle.io/namespace: {CHART_NAMESPACE}       # Your chart's name is recommended
   catalog.cattle.io/release-name: {CHART_RELEASE_NAME} # Your chart's name is recommended
 ```
 
