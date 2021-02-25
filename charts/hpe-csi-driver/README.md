@@ -25,6 +25,7 @@ The following table lists the configurable parameters of the HPE-CSI chart and t
 | disableNodeConformance    | Disable automatic installation of iSCSI/Multipath Packages.            | false        |
 | iscsi.chapUser            | Username for iSCSI CHAP authentication.                                | ""           |
 | iscsi.chapPassword        | Password for iSCSI CHAP authentication.                                | ""           |
+| registry                  | Registry to pull HPE CSI Driver container images from.                 | quay.io      |
 
 It's recommended to create a [values.yaml](https://github.com/hpe-storage/co-deployments/blob/master/helm/values/csi-driver) file from the corresponding release of the chart and edit it to fit the environment the chart is being deployed to. Download and edit [a sample file](https://github.com/hpe-storage/co-deployments/blob/master/helm/values/csi-driver).
 
@@ -32,54 +33,43 @@ These are the bare minimum required parameters for a successful deployment to an
 
 ```
 iscsi:
-  chapUser: <username>
-  chapPassword: <password>
+  chapUser: "<username>"
+  chapPassword: "<password>"
 ```
 
 Tweak any additional parameters to suit the environment or as prescribed by HPE.
 
 ### Installing the chart
 
-To install the chart with the name `hpe-csi`:
+To install the chart with the name `my-hpe-csi-driver`:
 
 Add HPE helm repo:
 
 ```
-helm repo add hpe https://hpe-storage.github.io/co-deployments
+helm repo add hpe-storage https://hpe-storage.github.io/co-deployments/
 helm repo update
 ```
 
 Install the latest chart:
 
 ```
-helm install hpe-csi hpe/hpe-csi-driver --namespace kube-system -f myvalues.yaml
+kubectl create ns hpe-storage
+helm install my-hpe-csi-driver hpe-storage/hpe-csi-driver -n hpe-storage -f myvalues.yaml
 ```
 
-**Note**: values.yaml is optional if no parameters are overridden from defaults.
+**Note**: `values.yaml` is optional if no parameters are overridden from defaults.
 
-### Upgrading the Chart
+### Upgrading the chart
 
-To upgrade the chart, specify the version you want to upgrade to as below. Please do NOT re-use a full blown `values.yaml` from prior versions to upgrade to later versions. Always use `values.yaml` from corresponding release from [values.yaml](https://github.com/hpe-storage/co-deployments/blob/master/helm/values/csi-driver)
+Due to the [helm limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/#some-caveats-and-explanations) to not support upgrade of CRDs between different chart versions, `hpe-csi-driver` helm chart upgrade is not supported.
+Our recommendation is to uninstall the existing chart and install the chart with the desired version. CRDs will be preserved between uninstall and install.
 
-List the avaiable version of the plugin:
+### Uninstalling the chart
 
-```
-helm repo update
-helm search repo hpe-csi-driver -l
-```
-
-Select the target version to upgrade as below:
+To uninstall the `my-hpe-csi-driver` chart:
 
 ```
-helm upgrade hpe-csi hpe/hpe-csi-driver --namespace kube-system --version=x.x.x.x -f myvalues.yaml
-```
-
-### Uninstalling the Chart
-
-To uninstall the `hpe-csi` chart:
-
-```
-helm uninstall hpe-csi --namespace kube-system
+helm uninstall my-hpe-csi-driver -n hpe-storage
 ```
 
 **Note**: Due to a limitation in Helm, CRDs are not deleted as part of the chart uninstall.
@@ -89,8 +79,9 @@ helm uninstall hpe-csi --namespace kube-system
 In some cases it's more practical to provide the local configuration via the `helm` CLI directly. Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. These will take precedence over entries in [values.yaml](https://github.com/hpe-storage/co-deployments/blob/master/helm/values/csi-driver). For example:
 
 ```
-helm install hpe-csi hpe/hpe-csi-driver --namespace kube-system --set iscsi.chapUsername=admin \
---set iscsi.chapPassword=xxxxxxxx
+helm install my-hpe-csi-driver hpe-storage/hpe-csi-driver -n hpe-storage \
+  --set iscsi.chapUsername=admin \
+  --set iscsi.chapPassword=xxxxxxxx
 ```
 
 ## Using persistent storage with Kubernetes

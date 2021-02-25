@@ -20,7 +20,7 @@ spec:
         role: hpe-csi
     spec:
       serviceAccount: hpe-csi-node-sa
-      {{- if semverCompare ">=1.17.0" .Capabilities.KubeVersion.GitVersion }}
+      {{- if and (eq .Capabilities.KubeVersion.Major "1") ( ge  ( trimSuffix "+" .Capabilities.KubeVersion.Minor ) "17") }}
       priorityClassName: system-node-critical
       {{- end }}
       hostNetwork: true
@@ -31,21 +31,21 @@ spec:
             value: "1"
       containers:
         - name: csi-node-driver-registrar
-          image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/k8scsi/csi-node-driver-registrar:v2.0.1
+          {{- else }}
+          image: quay.io/k8scsi/csi-node-driver-registrar:v2.0.1
+          {{- end}} 
           args:
             - "--csi-address=$(ADDRESS)"
             - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
             - "--v=5"
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "rm -rf /registration/csi.hpe.com /registration/csi.hpe.com-reg.sock"]
           env:
             - name: ADDRESS
               value: /csi/csi.sock
             - name: DRIVER_REG_SOCK_PATH
               value: /var/lib/kubelet/plugins/csi.hpe.com/csi.sock
-            {{- if semverCompare "~1.12.0" .Capabilities.KubeVersion.GitVersion }}
+            {{- if and (eq .Capabilities.KubeVersion.Major "1") ( eq  ( trimSuffix "+" .Capabilities.KubeVersion.Minor ) "12") }}
             - name: KUBE_NODE_NAME
               valueFrom:
                 fieldRef:
@@ -55,11 +55,15 @@ spec:
           imagePullPolicy: "Always"
           volumeMounts:
             - name: plugin-dir
-              mountPath: /csi/
+              mountPath: /csi
             - name: registration-dir
               mountPath: /registration
         - name: hpe-csi-driver
-          image: hpestorage/csi-driver:v1.3.0
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/csi-driver:v1.4.0
+          {{- else }}
+          image: quay.io/hpestorage/csi-driver:v1.4.0
+          {{- end}}        
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--node-service"
@@ -121,9 +125,11 @@ spec:
         - name: registration-dir
           hostPath:
             path: /var/lib/kubelet/plugins_registry
+            type: Directory
         - name: plugin-dir
           hostPath:
             path: /var/lib/kubelet/plugins/csi.hpe.com
+            type: DirectoryOrCreate
         - name: pods-mount-dir
           hostPath:
             path: /var/lib/kubelet

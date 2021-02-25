@@ -21,7 +21,7 @@ spec:
         role: hpe-csi
     spec:
       serviceAccount: hpe-csi-controller-sa
-      {{- if semverCompare ">=1.17.0" .Capabilities.KubeVersion.GitVersion }}
+      {{- if and (eq .Capabilities.KubeVersion.Major "1") ( ge  ( trimSuffix "+" .Capabilities.KubeVersion.Minor ) "17") }}
       priorityClassName: system-cluster-critical
       {{- end }}
       hostNetwork: true
@@ -32,15 +32,15 @@ spec:
             value: "1"
       containers:
         - name: csi-provisioner
-          {{- if semverCompare "<=1.16.0" .Capabilities.KubeVersion.GitVersion }}
-          image: quay.io/k8scsi/csi-provisioner:v1.4.0
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/k8scsi/csi-provisioner:v1.5.0
           {{- else }}
           image: quay.io/k8scsi/csi-provisioner:v1.5.0
           {{- end }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v=5"
-            {{- if semverCompare ">= 1.13.0" .Capabilities.KubeVersion.GitVersion }}
+            {{- if and (eq .Capabilities.KubeVersion.Major "1") ( ge  ( trimSuffix "+" .Capabilities.KubeVersion.Minor ) "13") }}
             - "--timeout=30s"
             - "--worker-threads=16"
             {{- end }}
@@ -52,8 +52,8 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy
         - name: csi-attacher
-          {{- if semverCompare "~1.13.0" .Capabilities.KubeVersion.GitVersion }}
-          image: quay.io/k8scsi/csi-attacher:v1.1.0
+          {{- if .Values.registry }}
+          image:  {{ .Values.registry }}/k8scsi/csi-attacher:v2.1.1
           {{- else }}
           image: quay.io/k8scsi/csi-attacher:v2.1.1
           {{- end }}
@@ -67,23 +67,31 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy
-        {{- if semverCompare ">=1.17.0" .Capabilities.KubeVersion.GitVersion }}
+        {{- if and (eq .Capabilities.KubeVersion.Major "1") ( ge  ( trimSuffix "+" .Capabilities.KubeVersion.Minor ) "17") }}
         - name: csi-snapshotter
-          image: quay.io/k8scsi/csi-snapshotter:v2.0.1
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/k8scsi/csi-snapshotter:v3.0.2
+          {{- else }}
+          image: quay.io/k8scsi/csi-snapshotter:v3.0.2
+          {{- end }}
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         {{- end }}
-        {{- if semverCompare ">=1.15.0" .Capabilities.KubeVersion.GitVersion }}
+        {{- if and (eq .Capabilities.KubeVersion.Major "1") ( ge  ( trimSuffix "+" .Capabilities.KubeVersion.Minor ) "15") }}
         - name: csi-resizer
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/k8scsi/csi-resizer:v0.4.0
+          {{- else }}
           image: quay.io/k8scsi/csi-resizer:v0.4.0
+          {{- end }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v=5"
@@ -96,7 +104,11 @@ spec:
               mountPath: /var/lib/csi/sockets/pluginproxy
         {{- end }}
         - name: hpe-csi-driver
-          image: hpestorage/csi-driver:v1.3.0
+         {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/csi-driver:v1.4.0
+         {{- else }}
+          image: quay.io/hpestorage/csi-driver:v1.4.0
+         {{- end }}
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--flavor=kubernetes"
@@ -120,7 +132,43 @@ spec:
             - name: root-dir
               mountPath: /host
         - name: csi-volume-mutator
-          image: quay.io/hpestorage/volume-mutator:v1.0.0
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/volume-mutator:v1.2.0
+          {{- else }}
+          image: quay.io/hpestorage/volume-mutator:v1.2.0
+          {{- end }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi-extensions.sock
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-volume-group-snapshotter
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/volume-group-snapshotter:v1.0.0
+          {{- else }}
+          image: quay.io/hpestorage/volume-group-snapshotter:v1.0.0
+          {{- end }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi-extensions.sock
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-volume-group-provisioner
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/volume-group-provisioner:v1.0.0
+          {{- else }}
+          image: quay.io/hpestorage/volume-group-provisioner:v1.0.0
+          {{- end }}
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
@@ -132,7 +180,11 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: csi-extensions
-          image: quay.io/hpestorage/csi-extensions:v1.0.0
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/csi-extensions:v1.2.0
+          {{- else }}
+          image: quay.io/hpestorage/csi-extensions:v1.2.0
+          {{- end }}  
           args:
             - "--v=5"
             - "--endpoint=$(CSI_ENDPOINT)"
