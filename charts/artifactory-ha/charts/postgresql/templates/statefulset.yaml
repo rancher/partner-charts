@@ -3,15 +3,16 @@ kind: StatefulSet
 metadata:
   name: {{ template "postgresql.master.fullname" . }}
   labels:
-    app: {{ template "postgresql.name" . }}
-    chart: {{ template "postgresql.chart" . }}
-    release: {{ .Release.Name | quote }}
-    heritage: {{ .Release.Service | quote }}
+  {{- include "common.labels.standard" . | nindent 4 }}
   {{- with .Values.master.labels }}
   {{- toYaml . | nindent 4 }}
   {{- end }}
+  annotations:
+  {{- if .Values.commonAnnotations }}
+  {{- include "postgresql.tplValue" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
   {{- with .Values.master.annotations }}
-  annotations: {{ toYaml . | nindent 4 }}
+  {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   serviceName: {{ template "postgresql.fullname" . }}-headless
@@ -23,20 +24,16 @@ spec:
     {{- end }}
   selector:
     matchLabels:
-      app: {{ template "postgresql.name" . }}
-      release: {{ .Release.Name | quote }}
+    {{- include "common.labels.matchLabels" . | nindent 6 }}
       role: master
   template:
     metadata:
       name: {{ template "postgresql.fullname" . }}
       labels:
-        app: {{ template "postgresql.name" . }}
-        chart: {{ template "postgresql.chart" . }}
-        release: {{ .Release.Name | quote }}
-        heritage: {{ .Release.Service | quote }}
+      {{- include "common.labels.standard" . | nindent 8 }}
         role: master
       {{- with .Values.master.podLabels }}
-      {{- toYaml . | indent 8 }}
+      {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.master.podAnnotations }}
       annotations: {{- toYaml . | nindent 8 }}
@@ -67,7 +64,7 @@ spec:
       {{- end }}
       {{- if or .Values.master.extraInitContainers (and .Values.volumePermissions.enabled (or .Values.persistence.enabled (and .Values.shmVolume.enabled .Values.shmVolume.chmod.enabled))) }}
       initContainers:
-      {{- if and .Values.volumePermissions.enabled (or .Values.persistence.enabled (and .Values.shmVolume.enabled .Values.shmVolume.chmod.enabled)) }}
+      {{- if and .Values.volumePermissions.enabled (or .Values.persistence.enabled (and .Values.shmVolume.enabled .Values.shmVolume.chmod.enabled) .Values.tls.enabled) }}
         - name: init-chmod-data
           image: {{ template "postgresql.volumePermissions.image" . }}
           imagePullPolicy: {{ .Values.volumePermissions.image.pullPolicy | quote }}
@@ -79,9 +76,14 @@ spec:
             - -cx
             - |
               {{- if .Values.persistence.enabled }}
-              mkdir -p {{ .Values.persistence.mountPath }}/conf {{ .Values.persistence.mountPath }}/data
-              chmod 700 {{ .Values.persistence.mountPath }}/conf {{ .Values.persistence.mountPath }}/data
-              find {{ .Values.persistence.mountPath }} -mindepth 1 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" | \
+              {{- if eq ( toString ( .Values.volumePermissions.securityContext.runAsUser )) "auto" }}
+              chown `id -u`:`id -G | cut -d " " -f2` {{ .Values.persistence.mountPath }}
+              {{- else }}
+              chown {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.fsGroup }} {{ .Values.persistence.mountPath }}
+              {{- end }}
+              mkdir -p {{ .Values.persistence.mountPath }}/data {{- if (include "postgresql.mountConfigurationCM" .) }} {{ .Values.persistence.mountPath }}/conf {{- end }}
+              chmod 700 {{ .Values.persistence.mountPath }}/data {{- if (include "postgresql.mountConfigurationCM" .) }} {{ .Values.persistence.mountPath }}/conf {{- end }}
+              find {{ .Values.persistence.mountPath }} -mindepth 1 -maxdepth 1 {{- if not (include "postgresql.mountConfigurationCM" .) }} -not -name "conf" {{- end }} -not -name ".snapshot" -not -name "lost+found" | \
               {{- if eq ( toString ( .Values.volumePermissions.securityContext.runAsUser )) "auto" }}
                 xargs chown -R `id -u`:`id -G | cut -d " " -f2`
               {{- else }}
@@ -90,6 +92,15 @@ spec:
               {{- end }}
               {{- if and .Values.shmVolume.enabled .Values.shmVolume.chmod.enabled }}
               chmod -R 777 /dev/shm
+              {{- end }}
+              {{- if .Values.tls.enabled }}
+              cp /tmp/certs/* /opt/bitnami/postgresql/certs/
+              {{- if eq ( toString ( .Values.volumePermissions.securityContext.runAsUser )) "auto" }}
+              chown -R `id -u`:`id -G | cut -d " " -f2` /opt/bitnami/postgresql/certs/
+              {{- else }}
+              chown -R {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.fsGroup }} /opt/bitnami/postgresql/certs/
+              {{- end }}
+              chmod 600 {{ template "postgresql.tlsCertKey" . }}
               {{- end }}
           {{- if eq ( toString ( .Values.volumePermissions.securityContext.runAsUser )) "auto" }}
           securityContext:
@@ -107,9 +118,15 @@ spec:
             - name: dshm
               mountPath: /dev/shm
             {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: raw-certificates
+              mountPath: /tmp/certs
+            - name: postgresql-certificates
+              mountPath: /opt/bitnami/postgresql/certs
+            {{- end }}
       {{- end }}
       {{- if .Values.master.extraInitContainers }}
-      {{- tpl .Values.master.extraInitContainers . | nindent 8 }}
+      {{- include "postgresql.tplValue" ( dict "value" .Values.master.extraInitContainers "context" $ ) | nindent 8 }}
       {{- end }}
       {{- end }}
       {{- if .Values.master.priorityClassName }}
@@ -177,7 +194,7 @@ spec:
             - name: POSTGRES_CLUSTER_APP_NAME
               value: {{ .Values.replication.applicationName }}
             {{- end }}
-            {{- if and .Values.postgresqlPostgresPassword (not (eq .Values.postgresqlUsername "postgres")) }}
+            {{- if and (not (eq .Values.postgresqlUsername "postgres")) (or .Values.postgresqlPostgresPassword (include "postgresql.useExistingSecret" .)) }}
             {{- if .Values.usePasswordFile }}
             - name: POSTGRES_POSTGRES_PASSWORD_FILE
               value: "/opt/bitnami/postgresql/secrets/postgresql-postgres-password"
@@ -243,6 +260,24 @@ spec:
             - name: POSTGRESQL_LDAP_URL
               value: {{ .Values.ldap.url }}
             {{- end}}
+            - name: POSTGRESQL_ENABLE_TLS
+              value: {{ ternary "yes" "no" .Values.tls.enabled | quote }}
+            {{- if .Values.tls.enabled }}
+            - name: POSTGRESQL_TLS_PREFER_SERVER_CIPHERS
+              value: {{ ternary "yes" "no" .Values.tls.preferServerCiphers | quote }}
+            - name: POSTGRESQL_TLS_CERT_FILE
+              value: {{ template "postgresql.tlsCert" . }}
+            - name: POSTGRESQL_TLS_KEY_FILE
+              value: {{ template "postgresql.tlsCertKey" . }}
+            {{- if .Values.tls.certCAFilename }}
+            - name: POSTGRESQL_TLS_CA_FILE
+              value: {{ template "postgresql.tlsCACert" . }}
+            {{- end }}
+            {{- if .Values.tls.crlFilename }}
+            - name: POSTGRESQL_TLS_CRL_FILE
+              value: {{ template "postgresql.tlsCRL" . }}
+            {{- end }}
+            {{- end }}
           {{- if .Values.extraEnvVarsCM }}
           envFrom:
             - configMapRef:
@@ -258,9 +293,9 @@ spec:
                 - /bin/sh
                 - -c
                 {{- if (include "postgresql.database" .) }}
-                - exec pg_isready -U {{ include "postgresql.username" . | quote }} -d {{ (include "postgresql.database" .) | quote }} -h 127.0.0.1 -p {{ template "postgresql.port" . }}
+                - exec pg_isready -U {{ include "postgresql.username" . | quote }} -d "dbname={{ include "postgresql.database" . }} {{- if and .Values.tls.enabled .Values.tls.certCAFilename }} sslcert={{ include "postgresql.tlsCert" . }} sslkey={{ include "postgresql.tlsCertKey" . }}{{- end }}" -h 127.0.0.1 -p {{ template "postgresql.port" . }}
                 {{- else }}
-                - exec pg_isready -U {{ include "postgresql.username" . | quote }} -h 127.0.0.1 -p {{ template "postgresql.port" . }}
+                - exec pg_isready -U {{ include "postgresql.username" . | quote }} {{- if and .Values.tls.enabled .Values.tls.certCAFilename }} -d "sslcert={{ include "postgresql.tlsCert" . }} sslkey={{ include "postgresql.tlsCertKey" . }}"{{- end }} -h 127.0.0.1 -p {{ template "postgresql.port" . }}
                 {{- end }}
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
@@ -299,6 +334,11 @@ spec:
             - name: postgresql-password
               mountPath: /opt/bitnami/postgresql/secrets/
             {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: postgresql-certificates
+              mountPath: /opt/bitnami/postgresql/certs
+              readOnly: true
+            {{- end }}
             {{- if .Values.shmVolume.enabled }}
             - name: dshm
               mountPath: /dev/shm
@@ -328,8 +368,14 @@ spec:
         {{- end }}
           env:
             {{- $database := required "In order to enable metrics you need to specify a database (.Values.postgresqlDatabase or .Values.global.postgresql.postgresqlDatabase)" (include "postgresql.database" .) }}
+            {{- $sslmode := ternary "require" "disable" .Values.tls.enabled }}
+            {{- if and .Values.tls.enabled .Values.tls.certCAFilename }}
+            - name: DATA_SOURCE_NAME
+              value: {{ printf "host=127.0.0.1 port=%d user=%s sslmode=%s sslcert=%s sslkey=%s" (int (include "postgresql.port" .)) (include "postgresql.username" .) $sslmode (include "postgresql.tlsCert" .) (include "postgresql.tlsCertKey" .) }}
+            {{- else }}
             - name: DATA_SOURCE_URI
-              value: {{ printf "127.0.0.1:%d/%s?sslmode=disable" (int (include "postgresql.port" .)) $database | quote }}
+              value: {{ printf "127.0.0.1:%d/%s?sslmode=%s" (int (include "postgresql.port" .)) $database $sslmode }}
+            {{- end }}
             {{- if .Values.usePasswordFile }}
             - name: DATA_SOURCE_PASS_FILE
               value: "/opt/bitnami/postgresql/secrets/postgresql-password"
@@ -342,6 +388,9 @@ spec:
             {{- end }}
             - name: DATA_SOURCE_USER
               value: {{ template "postgresql.username" . }}
+            {{- if .Values.metrics.extraEnvVars }}
+            {{- include "postgresql.tplValue" (dict "value" .Values.metrics.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
@@ -368,6 +417,11 @@ spec:
             {{- if .Values.usePasswordFile }}
             - name: postgresql-password
               mountPath: /opt/bitnami/postgresql/secrets/
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: postgresql-certificates
+              mountPath: /opt/bitnami/postgresql/certs
+              readOnly: true
             {{- end }}
             {{- if .Values.metrics.customMetrics }}
             - name: custom-metrics
@@ -407,6 +461,13 @@ spec:
         - name: custom-init-scripts-secret
           secret:
             secretName: {{ template "postgresql.initdbScriptsSecret" . }}
+        {{- end }}
+        {{- if  .Values.tls.enabled }}
+        - name: raw-certificates
+          secret:
+            secretName: {{ required "A secret containing TLS certificates is required when TLS is enabled" .Values.tls.certificatesSecret }}
+        - name: postgresql-certificates
+          emptyDir: {}
         {{- end }}
         {{- if .Values.master.extraVolumes }}
         {{- toYaml .Values.master.extraVolumes | nindent 8 }}

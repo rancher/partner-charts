@@ -34,6 +34,7 @@ spec:
 {{ toYaml . | indent 8 }}
         {{- end }}
       annotations:
+        checksum/database-secrets: {{ include (print $.Template.BasePath "/artifactory-database-secrets.yaml") . | sha256sum }}
         checksum/binarystore: {{ include (print $.Template.BasePath "/artifactory-binarystore-secret.yaml") . | sha256sum }}
         checksum/systemyaml: {{ include (print $.Template.BasePath "/artifactory-system-yaml.yaml") . | sha256sum }}
       {{- if .Values.artifactory.persistence.googleStorage.gcpServiceAccount.enabled }}
@@ -52,16 +53,17 @@ spec:
     {{- end }}
       serviceAccountName: {{ template "artifactory-ha.serviceAccountName" . }}
       terminationGracePeriodSeconds: {{ .Values.artifactory.terminationGracePeriodSeconds }}
-    {{- if .Values.imagePullSecrets }}
-      imagePullSecrets:
-      - name: {{ .Values.imagePullSecrets }}
+    {{- if or .Values.imagePullSecrets .Values.global.imagePullSecrets }}
+{{- include "artifactory-ha.imagePullSecrets" . | indent 6 }}
     {{- end }}
+      {{- if .Values.artifactory.setSecurityContext }}
       securityContext:
         runAsUser: {{ .Values.artifactory.uid }}
-        fsGroup: {{ .Values.artifactory.uid }}
+        fsGroup: {{ .Values.artifactory.gid }}
+      {{- end }}
       initContainers:
-    {{- if .Values.artifactory.customInitContainersBegin }}
-{{ tpl .Values.artifactory.customInitContainersBegin . | indent 6 }}
+    {{- if or .Values.artifactory.customInitContainersBegin .Values.global.customInitContainersBegin }}
+{{ tpl (include "artifactory-ha.customInitContainersBegin" .)  . | indent 6 }}
     {{- end }}
   {{- if .Values.artifactory.persistence.enabled }}
     {{- if eq .Values.artifactory.persistence.type "file-system" }}
@@ -126,7 +128,11 @@ spec:
           echo "Copy system.yaml to {{ .Values.artifactory.persistence.mountPath }}/etc";
           mkdir -p {{ .Values.artifactory.persistence.mountPath }}/etc;
           mkdir -p {{ .Values.artifactory.persistence.mountPath }}/etc/access/keys/trusted;
+          {{- if .Values.systemYamlOverride.existingSecret }}
+          cp -fv /tmp/etc/{{ .Values.systemYamlOverride.dataKey }} {{ .Values.artifactory.persistence.mountPath }}/etc/system.yaml;
+          {{- else }}          
           cp -fv /tmp/etc/system.yaml {{ .Values.artifactory.persistence.mountPath }}/etc/system.yaml;
+          {{- end }}
           echo "Remove {{ .Values.artifactory.persistence.mountPath }}/lost+found folder if exists";
           rm -rfv {{ .Values.artifactory.persistence.mountPath }}/lost+found;
           echo "Removing join.key file";
@@ -137,7 +143,7 @@ spec:
         {{- if .Values.access.customCertificatesSecretName }}
           echo "Load custom certificates from database";
         {{- end }}
-        {{- if or .Values.artifactory.masterKey .Values.artifactory.masterKeySecretName }}
+        {{- if or .Values.artifactory.masterKey .Values.global.masterKey .Values.artifactory.masterKeySecretName .Values.global.masterKeySecretName }}
           echo "Copy masterKey to {{ .Values.artifactory.persistence.mountPath }}/etc/security";
           mkdir -p {{ .Values.artifactory.persistence.mountPath }}/etc/security;
           echo -n ${ARTIFACTORY_MASTER_KEY} > {{ .Values.artifactory.persistence.mountPath }}/etc/security/master.key;
@@ -145,7 +151,7 @@ spec:
         - name: ARTIFACTORY_MASTER_KEY
           valueFrom:
             secretKeyRef:
-              name: "{{ .Values.artifactory.masterKeySecretName | default (include "artifactory-ha.fullname" .) }}"
+              name: {{ include "artifactory-ha.masterKeySecretName" . }}
               key: master-key
         {{- end }}
         resources:
@@ -153,17 +159,24 @@ spec:
         volumeMounts:
         - name: volume
           mountPath: {{ .Values.artifactory.persistence.mountPath | quote }}
+      {{- if or .Values.systemYamlOverride.existingSecret .Values.artifactory.systemYaml }}  
         - name: systemyaml
+          {{- if .Values.systemYamlOverride.existingSecret }}
+          mountPath: "/tmp/etc/{{.Values.systemYamlOverride.dataKey}}"
+          subPath: {{ .Values.systemYamlOverride.dataKey }}
+          {{- else if .Values.artifactory.systemYaml }}
           mountPath: "/tmp/etc/system.yaml"
           subPath: system.yaml
-    {{- if .Values.artifactory.customPersistentPodVolumeClaim }}
+          {{- end }}
+      {{- end }}
+    {{- if and .Values.artifactory.customPersistentPodVolumeClaim (not .Values.artifactory.customPersistentPodVolumeClaim.skipPrepareContainer) }}
       - name: "prepare-custom-persistent-volume"
         image: "{{ .Values.initContainerImage }}"
         command:
           - 'sh'
           - '-c'
           - >
-            chown -Rv {{ .Values.artifactory.uid }}:{{ .Values.artifactory.uid }} {{ .Values.artifactory.customPersistentPodVolumeClaim.mountPath }}
+            chown -Rv {{ .Values.artifactory.uid }}:{{ .Values.artifactory.gid }} {{ .Values.artifactory.customPersistentPodVolumeClaim.mountPath }}
         securityContext:
           runAsUser: 0
         resources:
@@ -187,12 +200,12 @@ spec:
 {{ toYaml .Values.initContainers.resources | indent 10 }}
       {{- end }}
     {{- end }}
-    {{- if .Values.artifactory.customInitContainers }}
-{{ tpl .Values.artifactory.customInitContainers . | indent 6 }}
+    {{- if or .Values.artifactory.customInitContainers .Values.global.customInitContainers }}
+{{ tpl (include "artifactory-ha.customInitContainers" .)  . | indent 6 }}
     {{- end }}
 {{- if .Values.artifactory.migration.enabled }}
       - name: 'migration-artifactory-ha'
-        image: '{{ .Values.artifactory.image.repository }}:{{ default .Chart.AppVersion .Values.artifactory.image.version }}'
+        image: {{ include "artifactory-ha.getImageInfoByValue" (list . "artifactory") }}
         imagePullPolicy: {{ .Values.artifactory.image.pullPolicy }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -211,10 +224,14 @@ spec:
           cp -fv /tmp/migrationHelmInfo.yaml $scriptsPath/migrationHelmInfo.yaml;
           cp -fv /tmp/migrationStatus.sh $scriptsPath/migrationStatus.sh;
           mkdir -p {{ .Values.artifactory.persistence.mountPath }}/log;
-          bash $scriptsPath/migrationStatus.sh {{ default .Chart.AppVersion .Values.artifactory.image.version }} {{ .Values.artifactory.migration.timeoutSeconds }} > >(tee {{ .Values.artifactory.persistence.mountPath }}/log/helm-migration.log) 2>&1;
+          bash $scriptsPath/migrationStatus.sh {{ include "artifactory-ha.app.version" . }} {{ .Values.artifactory.migration.timeoutSeconds }} > >(tee {{ .Values.artifactory.persistence.mountPath }}/log/helm-migration.log) 2>&1;
         resources:
 {{ toYaml .Values.artifactory.node.resources | indent 10 }}
         env:
+      {{- if and (not .Values.waitForDatabase) (not .Values.postgresql.enabled) }}
+        - name: SKIP_WAIT_FOR_EXTERNAL_DB
+          value: "true"
+      {{- end }}
       {{- if or .Values.database.secrets.user .Values.database.user }}
         - name: JF_SHARED_DATABASE_USERNAME
           valueFrom:
@@ -283,8 +300,8 @@ spec:
           mountPath: "{{ $.Values.artifactory.persistence.fileSystem.existingSharedClaim.backupDir }}"
     {{- end }}
   {{- end }}
-  {{- if .Values.artifactory.customVolumeMounts }}
-{{ tpl .Values.artifactory.customVolumeMounts . | indent 8 }}
+  {{- if or .Values.artifactory.customVolumeMounts .Values.global.customVolumeMounts }}
+{{ tpl (include "artifactory-ha.customVolumeMounts" .) . | indent 8 }}
   {{- end }}
   {{- if eq .Values.artifactory.persistence.type "nfs" }}
         - name: artifactory-ha-data
@@ -306,7 +323,7 @@ spec:
 {{- end }}
       containers:
       - name: {{ .Values.artifactory.name }}
-        image: '{{ .Values.artifactory.image.repository }}:{{ default .Chart.AppVersion .Values.artifactory.image.version }}'
+        image: {{ include "artifactory-ha.getImageInfoByValue" (list . "artifactory") }}
         imagePullPolicy: {{ .Values.artifactory.image.pullPolicy }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -324,6 +341,7 @@ spec:
           {{ tpl . $ }};
         {{- end }}
           exec /entrypoint-artifactory.sh
+        {{- with .Values.artifactory.postStartCommand }}
         lifecycle:
           postStart:
             exec:
@@ -331,11 +349,14 @@ spec:
               - '/bin/bash'
               - '-c'
               - >
-                echo;
-              {{- with .Values.artifactory.postStartCommand }}
+                echo "Running custom postStartCommand command";
                 {{ tpl . $ }}
-              {{- end }}
+        {{- end }}
         env:
+      {{- if and (not .Values.waitForDatabase) (not .Values.postgresql.enabled) }}
+        - name: SKIP_WAIT_FOR_EXTERNAL_DB
+          value: "true"
+      {{- end }}
       {{- if or .Values.database.secrets.user .Values.database.user }}
         - name: JF_SHARED_DATABASE_USERNAME
           valueFrom:
@@ -384,12 +405,16 @@ spec:
 {{- end }}
         ports:
         - containerPort: {{ .Values.artifactory.internalPort }}
+          name: http
         - containerPort: {{ .Values.artifactory.internalArtifactoryPort }}
+          name: http-internal
         {{- if .Values.artifactory.node.javaOpts.jmx.enabled }}
         - containerPort: {{ .Values.artifactory.node.javaOpts.jmx.port }}
+          name: tcp-jmx
         {{- end }}
         {{- if .Values.artifactory.ssh.enabled }}
         - containerPort: {{ .Values.artifactory.ssh.internalPort }}
+          name: tcp-ssh
         {{- end }}
         volumeMounts:
        {{- if .Values.artifactory.customPersistentVolumeClaim }}
@@ -445,8 +470,8 @@ spec:
         - name: installer-info
           mountPath: "/artifactory_bootstrap/info/installer-info.json"
           subPath: installer-info.json
-      {{- if .Values.artifactory.customVolumeMounts }}
-{{ tpl .Values.artifactory.customVolumeMounts . | indent 8 }}
+      {{- if or .Values.artifactory.customVolumeMounts .Values.global.customVolumeMounts }}
+{{ tpl (include "artifactory-ha.customVolumeMounts" .) . | indent 8 }}
       {{- end }}
         resources:
 {{ toYaml .Values.artifactory.node.resources | indent 10 }}
@@ -474,12 +499,10 @@ spec:
           failureThreshold: {{ .Values.artifactory.livenessProbe.failureThreshold }}
           successThreshold: {{ .Values.artifactory.livenessProbe.successThreshold }}
         {{- end }}
-      {{- $image := .Values.logger.image.repository }}
-      {{- $tag := .Values.logger.image.tag }}
       {{- $mountPath := .Values.artifactory.persistence.mountPath }}
       {{- range .Values.artifactory.loggers }}
       - name: {{ . | replace "_" "-" | replace "." "-" }}
-        image: '{{ $image }}:{{ $tag }}'
+        image: {{ include "artifactory-ha.getImageInfoByValue" (list $ "logger") }}
         command:
           - 'sh'
           - '-c'
@@ -496,7 +519,7 @@ spec:
       {{ if .Values.artifactory.catalinaLoggers }}
       {{- range .Values.artifactory.catalinaLoggers }}
       - name: {{ . | replace "_" "-" | replace "." "-" }}
-        image: '{{ $image }}:{{ $tag }}'
+        image: {{ include "artifactory-ha.getImageInfoByValue" (list $ "logger") }}
         command:
         - 'sh'
         - '-c'
@@ -536,8 +559,8 @@ spec:
 {{ toYaml .Values.filebeat.resources | indent 10 }}
         terminationGracePeriodSeconds: {{ .Values.terminationGracePeriod }}
       {{- end }}
-    {{- if .Values.artifactory.customSidecarContainers }}
-{{ tpl .Values.artifactory.customSidecarContainers . | indent 6 }}
+    {{- if or .Values.artifactory.customSidecarContainers .Values.global.customSidecarContainers }}
+{{ tpl (include "artifactory-ha.customSidecarContainers" .) . | indent 6 }}
     {{- end }}
     {{- with .Values.artifactory.node.nodeSelector }}
       nodeSelector:
@@ -619,7 +642,7 @@ spec:
       - name: bootstrap-config
         configMap:
           name: {{ .Values.artifactory.configMapName }}
-      {{- end}}      
+      {{- end}}
       {{- if or .Values.artifactory.loggers .Values.artifactory.catalinaLoggers }}
       - name: tail-logger-script
         configMap:
@@ -650,9 +673,11 @@ spec:
         persistentVolumeClaim:
           claimName: {{ template "artifactory-ha.fullname" . }}-backup-pvc
       {{- end }}
+      {{- if or .Values.systemYamlOverride.existingSecret .Values.artifactory.systemYaml }}
       - name: systemyaml
         secret:
-          secretName: {{ template "artifactory-ha.primary.name" . }}-system-yaml
+          secretName: {{ default (printf "%s-%s" (include "artifactory-ha.primary.name" .) "system-yaml") .Values.systemYamlOverride.existingSecret }}
+      {{- end }}
       {{- if .Values.artifactory.customPersistentVolumeClaim }}
       - name: {{ .Values.artifactory.customPersistentVolumeClaim.name }}
         persistentVolumeClaim:
@@ -663,8 +688,8 @@ spec:
         configMap:
           name: {{ template "artifactory-ha.fullname" . }}-filebeat-config
       {{- end }}
-      {{- if .Values.artifactory.customVolumes }}
-{{ tpl .Values.artifactory.customVolumes . | indent 6 }}
+      {{- if or .Values.artifactory.customVolumes .Values.global.customVolumes }}
+{{ tpl (include "artifactory-ha.customVolumes" .) . | indent 6 }}
       {{- end }}
   {{- if not .Values.artifactory.persistence.enabled }}
       - name: volume

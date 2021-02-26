@@ -3,8 +3,30 @@
 # Beware when changing values here. You should know what you are doing!
 # Access the values with {{ .Values.key.subkey }}
 
-# Common
-initContainerImage: docker.bintray.io/alpine:3.12
+global:
+  # imageRegistry: docker.bintray.io
+  # imagePullSecrets:
+  #   - myRegistryKeySecretName
+  ## Chart.AppVersion can be overidden using global.versions.artifactory or .Values.artifactory.image.tag
+  ## Note: Order of preference is 1) global.versions 2) .Values.artifactory.image.tag 3) Chart.AppVersion
+  ## This applies also for nginx images (.Values.nginx.image.tag)
+  versions: {}
+  #   artifactory:
+  # joinKey:
+  # masterKey:
+  # joinKeySecretName:
+  # masterKeySecretName:
+  # customInitContainersBegin: |
+
+  # customInitContainers: |
+
+  # customVolumes: |
+
+  # customVolumeMounts: |
+
+  # customSidecarContainers: |
+
+initContainerImage: docker.bintray.io/alpine:3.12.1
 
 installer:
   type:
@@ -13,7 +35,20 @@ installer:
 installerInfo: '{"productId": "Helm_artifactory-ha/{{ .Chart.Version }}", "features": [ { "featureId": "Platform/{{ default "kubernetes" .Values.installer.platform }}"}]}'
 
 # For supporting pulling from private registries
-imagePullSecrets:
+# imagePullSecrets:
+#   - myRegistryKeySecretName
+
+## Artifactory systemYaml override
+## This is for advanced usecases where users wants to provide their own systemYaml for configuring artifactory
+## Refer: https://www.jfrog.com/confluence/display/JFROG/Artifactory+System+YAML
+## Note: This will override existing (default) .Values.artifactory.systemYaml in values.yaml
+## Alternatively, systemYaml can be overidden via customInitContainers using external sources like vaults, external repositories etc. Please refer customInitContainer section below for an example.
+## Note: Order of preference is 1) customInitContainers 2) systemYamlOverride existingSecret 3) default systemYaml in values.yaml
+systemYamlOverride:
+## You can use a pre-existing secret by specifying existingSecret
+  existingSecret:
+## The dataKey should be the name of the secret data key created.
+  dataKey:
 
 ## Role Based Access Control
 ## Ref: https://kubernetes.io/docs/admin/authorization/rbac/
@@ -67,6 +102,8 @@ ingress:
   # Additional ingress rules
   additionalRules: []
 
+## Allows to add custom ingress
+customIngress: |
 
 networkpolicy:
   # Allows all ingress and egress
@@ -102,7 +139,7 @@ postgresql:
   image:
     registry: docker.bintray.io
     repository: bitnami/postgresql
-    tag: 10.13.0-debian-10-r38
+    tag: 12.5.0-debian-10-r25
   postgresqlUsername: artifactory
   postgresqlPassword: ""
   postgresqlDatabase: artifactory
@@ -156,7 +193,8 @@ database:
 
 logger:
   image:
-    repository: docker.bintray.io/busybox
+    registry: docker.bintray.io
+    repository: busybox
     tag: 1.31.1
 
 # Artifactory
@@ -164,8 +202,9 @@ artifactory:
   name: artifactory-ha
   # Note that by default we use appVersion to get image tag/version
   image:
-    repository: docker.bintray.io/jfrog/artifactory-pro
-    # version:
+    registry: docker.bintray.io
+    repository: jfrog/artifactory-pro
+    # tag:
     pullPolicy: IfNotPresent
 
   # Create a priority class for the Artifactory pods or use an existing one
@@ -186,6 +225,12 @@ artifactory:
     connector:
       maxThreads: 200
       extraConfig: 'acceptCount="100"'
+
+  # Support for open metrics is only available for Artifactory 7.7.x (appVersions) and above.
+  # To enable set `.Values.artifactory.openMetrics.enabled` to `true`
+  # Refer - https://www.jfrog.com/confluence/display/JFROG/Open+Metrics
+  openMetrics:
+    enabled: false
 
   # This directory is intended for use with NFS eventual configuration for HA
   haDataDir:
@@ -273,13 +318,13 @@ artifactory:
 
   ## Add custom init containers execution after predefined init containers
   customInitContainers: |
-  #  - name: "custom-setup"
+  #  - name: "custom-systemyaml-setup"
   #    image: "{{ .Values.initContainerImage }}"
   #    imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
   #    command:
   #      - 'sh'
   #      - '-c'
-  #      - 'touch {{ .Values.artifactory.persistence.mountPath }}/example-custom-setup'
+  #      - 'wget -O {{ .Values.artifactory.persistence.mountPath }}/etc/system.yaml https://<repo-url>/systemyaml'
   #    volumeMounts:
   #      - mountPath: "{{ .Values.artifactory.persistence.mountPath }}"
   #        name: volume
@@ -292,8 +337,7 @@ artifactory:
   #    image: "{{ .Values.initContainerImage }}"
   #    imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
   #    securityContext:
-  #      runAsUser: 0
-  #      fsGroup: 0
+  #      allowPrivilegeEscalation: false
   #    command:
   #      - 'sh'
   #      - '-c'
@@ -331,6 +375,7 @@ artifactory:
   #    subPath: prehook-start.sh
 
   # Add custom persistent volume mounts - Available for the pod
+  # If skipPrepareContainer is set to true , this will skip the prepare-custom-persistent-volume init container
   customPersistentPodVolumeClaim: {}
   #  name:
   #  mountPath:
@@ -338,6 +383,7 @@ artifactory:
   #   - "-"
   #  size:
   #  storageClassName:
+  #  skipPrepareContainer: false
 
   # Add custom persistent volume mounts - Available to the entire namespace
   customPersistentVolumeClaim: {}
@@ -500,6 +546,10 @@ artifactory:
         driver: "{{ .Values.database.driver }}"
       {{- end }}
     artifactory:
+    {{- if .Values.artifactory.openMetrics }}
+      metrics:
+        enabled: {{ .Values.artifactory.openMetrics.enabled }}
+    {{- end }}
     {{- if or .Values.artifactory.haDataDir.enabled .Values.artifactory.haBackupDir.enabled }}
       node:
       {{- if .Values.artifactory.haDataDir.path }}
@@ -515,6 +565,9 @@ artifactory:
         connector:
           maxThreads: {{ .Values.artifactory.tomcat.connector.maxThreads }}
           extraConfig: {{ .Values.artifactory.tomcat.connector.extraConfig }}
+    frontend:
+      session:
+        timeMinutes: {{ .Values.frontend.session.timeoutMinutes | quote }}
     access:
       database:
         maxOpenConnections: {{ .Values.access.database.maxOpenConnections }}
@@ -544,7 +597,13 @@ artifactory:
   externalArtifactoryPort: 8081
   internalArtifactoryPort: 8081
   uid: 1030
+  gid: 1030
   terminationGracePeriodSeconds: 30
+
+  ## By default, the Artifactory StatefulSet is created with a securityContext that sets the `runAsUser` and the `fsGroup` to the `artifactory.uid` value.
+  ## If you want to disable the securityContext for the Artifactory StatefulSet, set this tag to false
+  setSecurityContext: true
+
   ## The following settings are to configure the frequency of the liveness and readiness probes
   livenessProbe:
     enabled: true
@@ -807,6 +866,12 @@ artifactory:
             {{- with .cloudFrontPrivateKey }}
               <cloudFrontPrivateKey>{{ . }}</cloudFrontPrivateKey>
             {{- end }}
+            {{- with .enableSignedUrlRedirect }}
+              <enableSignedUrlRedirect>{{ . }}</enableSignedUrlRedirect>
+            {{- end }}
+            {{- with .enablePathStyleAccess }}
+              <enablePathStyleAccess>{{ . }}</enablePathStyleAccess>
+            {{- end }}
           </provider>
         {{- end }}
       </config>
@@ -983,7 +1048,7 @@ artifactory:
         #      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
         #      "client_x509_cert_url": "https://www.googleapis.com/robot/v1....."
         #   }
-      endpoint: storage.googleapis.com
+      endpoint: commondatastorage.googleapis.com
       httpsOnly: false
       # Set a unique bucket name
       bucketName: "artifactory-ha-gcp"
@@ -1011,6 +1076,8 @@ artifactory:
       cloudFrontDomainName:
       cloudFrontKeyPairId:
       cloudFrontPrivateKey:
+      enableSignedUrlRedirect: false
+      enablePathStyleAccess: false
 
     ## For artifactory.persistence.type aws-s3
     ## IMPORTANT: Make sure S3 `endpoint` and `region` match! See https://docs.aws.amazon.com/general/latest/gr/rande.html
@@ -1075,6 +1142,22 @@ artifactory:
         # - hosts:
         #   - artifactory.domain.example
         #   secretName: chart-example-tls-secret
+    ## When replicator is enabled and want to use tracker feature, trackerIngress.enabled flag should be set to true
+    ## Please refer - https://www.jfrog.com/confluence/display/JFROG/JFrog+Peer-to-Peer+%28P2P%29+Downloads
+    trackerIngress:
+      enabled: false
+      name:
+      hosts: []
+      annotations: {}
+       # kubernetes.io/ingress.class: nginx
+       # nginx.ingress.kubernetes.io/proxy-buffering: "off"
+       # nginx.ingress.kubernetes.io/configuration-snippet: |
+       #   chunked_transfer_encoding on;
+      tls: []
+       #  Secrets must be manually created in the namespace.
+       # - hosts:
+       #   - artifactory.domain.example
+       #   secretName: chart-example-tls-secret
 
   ssh:
     enabled: false
@@ -1095,6 +1178,11 @@ artifactory:
       ## Set existingClaim to true or false
       ## If true, you must prepare a PVC with the name e.g `volume-myrelease-artifactory-ha-primary-0`
       existingClaim: false
+
+    ## IMPORTANT: This value should remain at 1!
+    replicaCount: 1
+    # minAvailable: 1
+
     ## Resources for the primary node
     resources: {}
     #  requests:
@@ -1189,6 +1277,12 @@ artifactory:
       type: ""
       topologyKey: "kubernetes.io/hostname"
 
+frontend:
+  ## Session settings
+  session:
+    ## Time in minutes after which the frontend token will need to be refreshed
+    timeoutMinutes: '30'
+
 access:
   ## Enable TLS by changing the tls entry (under the security section) in the access.config.yaml file.
   ## ref: https://www.jfrog.com/confluence/display/JFROG/Managing+TLS+Certificates#ManagingTLSCertificates
@@ -1238,10 +1332,13 @@ nginx:
   gid: 107
   # Note that by default we use appVersion to get image tag/version
   image:
-    repository: docker.bintray.io/jfrog/nginx-artifactory-pro
-    # version:
+    registry: docker.bintray.io
+    repository: jfrog/nginx-artifactory-pro
+    # tag:
     pullPolicy: IfNotPresent
 
+  # Priority Class name to be used in deployment if provided
+  priorityClassName:
 
   # Sidecar containers for tailing Nginx logs
   loggers: []
@@ -1493,7 +1590,7 @@ filebeat:
   name: artifactory-filebeat
   image:
     repository: "docker.elastic.co/beats/filebeat"
-    version: 7.5.1
+    version: 7.9.2
   logstashUrl: "logstash:5044"
 
   terminationGracePeriod: 10
@@ -1549,3 +1646,8 @@ filebeat:
     output:
       logstash:
          hosts: ["{{ .Values.filebeat.logstashUrl }}"]
+
+## Allows to add additional kubernetes resources
+## Use --- as a separator between multiple resources
+## For an example, refer - https://github.com/jfrog/log-analytics-prometheus/blob/master/artifactory-ha-values.yaml
+additionalResources: |
