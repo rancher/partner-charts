@@ -221,12 +221,19 @@ Get the password secret.
 {{- end -}}
 
 {{/*
+Return true if we should use an existingSecret.
+*/}}
+{{- define "postgresql.useExistingSecret" -}}
+{{- if or .Values.global.postgresql.existingSecret .Values.existingSecret -}}
+    {{- true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Return true if a secret object should be created
 */}}
 {{- define "postgresql.createSecret" -}}
-{{- if .Values.global.postgresql.existingSecret }}
-{{- else if .Values.existingSecret -}}
-{{- else -}}
+{{- if not (include "postgresql.useExistingSecret" .) -}}
     {{- true -}}
 {{- end -}}
 {{- end -}}
@@ -250,6 +257,15 @@ Get the extended configuration ConfigMap name.
 {{- printf "%s" (tpl .Values.extendedConfConfigMap $) -}}
 {{- else -}}
 {{- printf "%s-extended-configuration" (include "postgresql.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return true if a configmap should be mounted with PostgreSQL configuration
+*/}}
+{{- define "postgresql.mountConfigurationCM" -}}
+{{- if or (.Files.Glob "files/postgresql.conf") (.Files.Glob "files/pg_hba.conf") .Values.postgresqlConfiguration .Values.pgHbaConfiguration .Values.configurationConfigMap }}
+    {{- true -}}
 {{- end -}}
 {{- end -}}
 
@@ -325,9 +341,9 @@ Get the readiness probe command
 {{- define "postgresql.readinessProbeCommand" -}}
 - |
 {{- if (include "postgresql.database" .) }}
-  exec pg_isready -U {{ include "postgresql.username" . | quote }} -d {{ (include "postgresql.database" .) | quote }} -h 127.0.0.1 -p {{ template "postgresql.port" . }}
+  exec pg_isready -U {{ include "postgresql.username" . | quote }} -d "dbname={{ include "postgresql.database" . }} {{- if and .Values.tls.enabled .Values.tls.certCAFilename }} sslcert={{ include "postgresql.tlsCert" . }} sslkey={{ include "postgresql.tlsCertKey" . }}{{- end }}" -h 127.0.0.1 -p {{ template "postgresql.port" . }}
 {{- else }}
-  exec pg_isready -U {{ include "postgresql.username" . | quote }} -h 127.0.0.1 -p {{ template "postgresql.port" . }}
+  exec pg_isready -U {{ include "postgresql.username" . | quote }} {{- if and .Values.tls.enabled .Values.tls.certCAFilename }} -d "sslcert={{ include "postgresql.tlsCert" . }} sslkey={{ include "postgresql.tlsCertKey" . }}"{{- end }} -h 127.0.0.1 -p {{ template "postgresql.port" . }}
 {{- end }}
 {{- if contains "bitnami/" .Values.image.repository }}
   [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
@@ -399,6 +415,8 @@ Compile all warnings into a single message, and call fail.
 {{- define "postgresql.validateValues" -}}
 {{- $messages := list -}}
 {{- $messages := append $messages (include "postgresql.validateValues.ldapConfigurationMethod" .) -}}
+{{- $messages := append $messages (include "postgresql.validateValues.psp" .) -}}
+{{- $messages := append $messages (include "postgresql.validateValues.tls" .) -}}
 {{- $messages := without $messages "" -}}
 {{- $message := join "\n" $messages -}}
 
@@ -416,5 +434,68 @@ postgresql: ldap.url, ldap.server
     You cannot set both `ldap.url` and `ldap.server` at the same time.
     Please provide a unique way to configure LDAP.
     More info at https://www.postgresql.org/docs/current/auth-ldap.html
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate values of Postgresql - If PSP is enabled RBAC should be enabled too
+*/}}
+{{- define "postgresql.validateValues.psp" -}}
+{{- if and .Values.psp.create (not .Values.rbac.create) }}
+postgresql: psp.create, rbac.create
+    RBAC should be enabled if PSP is enabled in order for PSP to work.
+    More info at https://kubernetes.io/docs/concepts/policy/pod-security-policy/#authorizing-policies
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return the appropriate apiVersion for podsecuritypolicy.
+*/}}
+{{- define "podsecuritypolicy.apiVersion" -}}
+{{- if semverCompare "<1.10-0" .Capabilities.KubeVersion.GitVersion -}}
+{{- print "extensions/v1beta1" -}}
+{{- else -}}
+{{- print "policy/v1beta1" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate values of Postgresql TLS - When TLS is enabled, so must be VolumePermissions
+*/}}
+{{- define "postgresql.validateValues.tls" -}}
+{{- if and .Values.tls.enabled (not .Values.volumePermissions.enabled) }}
+postgresql: tls.enabled, volumePermissions.enabled
+    When TLS is enabled you must enable volumePermissions as well to ensure certificates files have
+    the right permissions.
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return the path to the cert file.
+*/}}
+{{- define "postgresql.tlsCert" -}}
+{{- required "Certificate filename is required when TLS in enabled" .Values.tls.certFilename | printf "/opt/bitnami/postgresql/certs/%s" -}}
+{{- end -}}
+
+{{/*
+Return the path to the cert key file.
+*/}}
+{{- define "postgresql.tlsCertKey" -}}
+{{- required "Certificate Key filename is required when TLS in enabled" .Values.tls.certKeyFilename | printf "/opt/bitnami/postgresql/certs/%s" -}}
+{{- end -}}
+
+{{/*
+Return the path to the CA cert file.
+*/}}
+{{- define "postgresql.tlsCACert" -}}
+{{- printf "/opt/bitnami/postgresql/certs/%s" .Values.tls.certCAFilename -}}
+{{- end -}}
+
+{{/*
+Return the path to the CRL file.
+*/}}
+{{- define "postgresql.tlsCRL" -}}
+{{- if .Values.tls.crlFilename -}}
+{{- printf "/opt/bitnami/postgresql/certs/%s" .Values.tls.crlFilename -}}
 {{- end -}}
 {{- end -}}

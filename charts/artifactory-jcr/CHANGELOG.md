@@ -1,6 +1,37 @@
 # JFrog Container Registry Chart Changelog
 All changes to this chart will be documented in this file.
 
+## [3.4.0] - Jan 4, 2020
+* Update dependency Artifactory chart version to 11.7.4 (Artifactory 7.12.5)
+
+## [3.3.1] - Dec 1, 2020
+* Update dependency Artifactory chart version to 11.5.4 (Artifactory 7.11.5)
+
+## [3.3.0] - Nov 23, 2020
+* Update dependency Artifactory chart version to 11.5.2 (Artifactory 7.11.2)
+
+## [3.2.2] - Nov 9, 2020
+* Update dependency Artifactory chart version to 11.4.5 (Artifactory 7.10.6)
+
+## [3.2.1] - Nov 2, 2020
+* Update dependency Artifactory chart version to 11.4.4 (Artifactory 7.10.5)
+
+## [3.2.0] - Oct 19, 2020
+* Update dependency Artifactory chart version to 11.4.0 (Artifactory 7.10.2)
+
+## [3.1.0] - Sep 30, 2020
+* Update dependency Artifactory chart version to 11.1.0 (Artifactory 7.9.0)
+
+## [3.0.2] - Sep 23, 2020
+* Updates readme
+
+## [3.0.1] - Sep 15, 2020
+* Update dependency Artifactory chart version to 11.0.1 (Artifactory 7.7.8)
+
+## [3.0.0] - Sep 14, 2020
+* **Breaking change:** Added `image.registry` and changed `image.version` to `image.tag` for docker images
+* Update dependency Artifactory chart version to 11.0.0 (Artifactory 7.7.3)
+
 ## [2.5.1] - Jul 29, 2020
 * Update dependency Artifactory chart version to 10.0.12 (Artifactory 7.6.3)
 
