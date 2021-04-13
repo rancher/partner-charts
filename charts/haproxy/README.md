@@ -14,8 +14,8 @@ This chart bootstraps an HAProxy kubernetes-ingress deployment/daemonset on a [K
 
 ### Prerequisites
 
-  - Kubernetes 1.12+
-  - Helm 2.9+
+- Kubernetes 1.12+
+- Helm 2.9+
 
 ## Before you begin
 
@@ -111,9 +111,9 @@ helm install my-ingress3 haproxytech/kubernetes-ingress \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-cross-zone-load-balancing-enabled"="true"
 ```
 
-***NOTE***: With helm `--set` it is needed to put quotes and escape dots in the annotation key and commas in the value string. 
+***NOTE***: With helm `--set` it is needed to put quotes and escape dots in the annotation key and commas in the value string.
 
-### Installing with Horizontal Pod Autoscaler 
+### Installing with Horizontal Pod Autoscaler
 
 [HPA](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) automatically scales number of replicas in Deployment or Replication Controller and adjusts replica count. Therefore we want to unset default replicaCount for controller and defaultBackend by setting corresponding key values to null:
 
@@ -121,6 +121,15 @@ helm install my-ingress3 haproxytech/kubernetes-ingress \
 helm install my-ingress4 haproxytech/kubernetes-ingress \
   --set controller.replicaCount=null \
   --set defaultBackend.replicaCount=null
+```
+
+### Installing the ServiceMonitor
+
+If you're using the [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator), you can automatically install the `ServiceMonitor` definition in order to automate the scraping options according to your needs.
+
+```console
+helm install my-ingress5 haproxytech/kubernetes-ingress \
+  --set "controller.serviceMonitor.enabled=true"
 ```
 
 ### Using values from YAML file
@@ -172,7 +181,7 @@ helm upgrade my-release haproxytech/kubernetes-ingress
 To uninstall/delete the *my-release* deployment:
 
 ```console
-helm delete kubernetes-ingress
+helm delete my-release
 ```
 
 ## Debugging

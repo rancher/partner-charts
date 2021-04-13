@@ -46,7 +46,7 @@ Create chart name and version as used by the chart label.
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{kubernetes-ingress.publishServicePath{/*
+{{/*
 Encode an imagePullSecret string.
 */}}
 {{- define "kubernetes-ingress.imagePullSecret" }}
@@ -118,6 +118,13 @@ Construct the syslog-server annotation
 {{- range $key, $val := .Values.controller.logging.traffic -}}
 {{- printf "%s:%s, " $key $val }}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Create a default fully qualified ServiceMonitor name.
+*/}}
+{{- define "kubernetes-ingress.serviceMonitorName" -}}
+{{- default (include "kubernetes-ingress.fullname" .) .Values.controller.serviceMonitor.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/* vim: set filetype=mustache: */}}

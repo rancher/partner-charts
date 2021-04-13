@@ -29,6 +29,9 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    {{- if .Values.controller.extraLabels }}
+{{ toYaml .Values.controller.extraLabels | indent 4 }}
+    {{- end }}
 spec:
   minReadySeconds: 0
   updateStrategy:
@@ -53,12 +56,21 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ template "kubernetes-ingress.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
       {{- if $useHostNetwork }}
       hostNetwork: true
       {{- end }}
+{{- if .Values.controller.dnsConfig }}
+      dnsConfig:
+{{ toYaml .Values.controller.dnsConfig | indent 8 }}
+{{- end }}
+      dnsPolicy: {{ .Values.controller.dnsPolicy }}
 {{- if .Values.controller.imageCredentials.registry }}
       imagePullSecrets:
       - name: {{ template "kubernetes-ingress.fullname" . }}
+{{- end }}
+{{- if .Values.controller.priorityClassName }}
+      priorityClassName: {{ .Values.controller.priorityClassName }}
 {{- end }}
       containers:
         - name: {{ template "kubernetes-ingress.name" . }}-{{ .Values.controller.name }}
@@ -67,13 +79,15 @@ spec:
           args:
 {{- if and .Values.controller.defaultTLSSecret.enabled -}}
 {{- if .Values.controller.defaultTLSSecret.secret }}
-          - --default-ssl-certificate={{ .Values.controller.defaultTLSSecret.secret }}
+          - --default-ssl-certificate={{ .Release.Namespace }}/{{ .Values.controller.defaultTLSSecret.secret }}
 {{- else }}
           - --default-ssl-certificate={{ .Release.Namespace }}/{{ template "kubernetes-ingress.defaultTLSSecret.fullname" . }}
 {{- end }}
 {{- end }}
           - --configmap={{ .Release.Namespace }}/{{ template "kubernetes-ingress.fullname" . }}
+{{- if .Values.defaultBackend.enabled }}
           - --default-backend-service={{ .Release.Namespace }}/{{ template "kubernetes-ingress.defaultBackend.fullname" . }}
+{{- end }}
 {{- if .Values.controller.ingressClass }}
           - --ingress.class={{ .Values.controller.ingressClass }}
 {{- end }}
@@ -86,6 +100,16 @@ spec:
 {{- range .Values.controller.extraArgs }}
           - {{ . }}
 {{- end }}
+          {{- if .Values.controller.unprivileged }}
+          securityContext:
+            runAsUser:  1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+          {{- end }}
           ports:
           {{- range $key, $value := .Values.controller.containerPort }}
             - name: {{ $key }}
@@ -123,6 +147,16 @@ spec:
             periodSeconds: {{ .Values.controller.readinessProbe.periodSeconds }}
             successThreshold: {{ .Values.controller.readinessProbe.successThreshold }}
             timeoutSeconds: {{ .Values.controller.readinessProbe.timeoutSeconds }}
+          startupProbe:
+            failureThreshold: {{ .Values.controller.startupProbe.failureThreshold }}
+            httpGet:
+              path: {{ .Values.controller.startupProbe.path }}
+              port: {{ .Values.controller.startupProbe.port }}
+              scheme: {{ .Values.controller.startupProbe.scheme }}
+            initialDelaySeconds: {{ .Values.controller.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.controller.startupProbe.periodSeconds }}
+            successThreshold: {{ .Values.controller.startupProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.controller.startupProbe.timeoutSeconds }}
           env:
           - name: POD_NAME
             valueFrom:
@@ -132,11 +166,58 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+          {{- range .Values.controller.extraEnvs }}
+          - name: "{{ .name }}"
+            value: "{{ .value }}"
+          {{- end }}
           resources:
             {{- toYaml .Values.controller.resources | nindent 12 }}
-      {{- with.Values.controller.initContainers }}
+          {{- if .Values.controller.lifecycle }}
+          lifecycle:
+            {{- if eq "string" (printf "%T" .Values.controller.lifecycle) }}
+{{ tpl .Values.controller.lifecycle . | indent 12 }}
+            {{- else }}
+{{ toYaml .Values.controller.lifecycle | indent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.controller.extraVolumeMounts }}
+          volumeMounts:
+            {{- if eq "string" (printf "%T" .Values.controller.extraVolumeMounts) }}
+{{ tpl .Values.controller.extraVolumeMounts . | indent 12 }}
+            {{- else }}
+{{ toYaml .Values.controller.extraVolumeMounts | indent 12 }}
+            {{- end }}
+          {{- end}}
+        {{- if .Values.controller.extraContainers }}
+          {{- if eq "string" (printf "%T" .Values.controller.extraContainers) }}
+{{ tpl .Values.controller.extraContainers . | indent 8 }}
+          {{- else }}
+{{ toYaml .Values.controller.extraContainers | indent 8 }}
+          {{- end }}
+        {{- end }}
+      {{- if .Values.controller.extraVolumes }}
+      volumes:
+        {{- if eq "string" (printf "%T" .Values.controller.extraVolumes) }}
+{{ tpl .Values.controller.extraVolumes . | indent 8 }}
+        {{- else }}
+{{ toYaml .Values.controller.extraVolumes | indent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- if or .Values.controller.unprivileged .Values.controller.initContainers }}
       initContainers:
-        {{- toYaml . | nindent 8 }}
+        {{- if .Values.controller.unprivileged }}
+        - name: sysctl
+          image: busybox:musl
+          command:
+            - /bin/sh
+            - -c
+            - sysctl -w net.ipv4.ip_unprivileged_port_start=0
+          securityContext:
+            privileged: true
+        {{- end }}
+        {{- with.Values.controller.initContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.controller.nodeSelector }}
       nodeSelector:
