@@ -88,7 +88,8 @@ If this is a new chart, add the partner label and required annotations in `Chart
 ```yaml
 annotations:
   catalog.cattle.io/certified: partner
-  catalog.cattle.io/release-name: {CHART_RELEASE_NAME} # Your chart's name is recommended
+  catalog.cattle.io/release-name: chart-name-here # Your chart's name in kebab-case, this is used for deployment
+  catalog.cattle.io/display-name: Fancy Chart Name Here # The chart's name you want displayed in the UI
 ```
 
 Run to save the changes to a `{CHART_NAME}.patch` file once you are done making changes.
