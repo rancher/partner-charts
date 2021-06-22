@@ -29,6 +29,14 @@ spec:
           env:
             - name: TVK_ENV
               value: {{ .Values.tvkEnv }}
+            - name: REGISTRY
+              value: {{ .Values.registry }}
+            - name: ADMISSION_MUTATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-mutating-webhook-configuration
+            - name: ADMISSION_VALIDATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-validating-webhook-configuration
+            - name: NAMESPACE_VALIDATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-ns-validating-webhook-configuration
           volumeMounts:
           {{- if .Values.tls.enable }}
           - name: helm-tls-certs
@@ -55,16 +63,25 @@ spec:
           image: {{ .Values.registry }}/{{ index .Values "operator-webhook-init" "repository" }}:{{ .Values.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
           env:
-            - name: MUTATE_CONFIG
+            - name: ADMISSION_MUTATION_CONFIG
               value: {{ template "k8s-triliovault-operator.name" . }}-mutating-webhook-configuration
-            - name: VALIDATE_CONFIG
+            - name: ADMISSION_VALIDATION_CONFIG
               value: {{ template "k8s-triliovault-operator.name" . }}-validating-webhook-configuration
+            - name: NAMESPACE_VALIDATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-ns-validating-webhook-configuration
             - name: WEBHOOK_SERVICE
               value: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-service
             - name: WEBHOOK_NAMESPACE
               value: {{ .Release.Namespace }}
             - name: SECRET_NAME
               value: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-certs
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{- .Values.nodeSelector | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+      {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
       volumes:
       {{- if .Values.tls.enable }}
       - name: helm-tls-certs
