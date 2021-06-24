@@ -1,26 +1,10 @@
-ci: bootstrap
-	./scripts/ci
+pull-scripts:
+	./scripts/pull-scripts
 
-prepare: bootstrap
-	./scripts/prepare
+TARGETS := prepare patch charts clean validate template
 
-bootstrap:
-	./scripts/bootstrap
+$(TARGETS):
+	@./scripts/pull-scripts
+	@./bin/charts-build-scripts $@
 
-charts: bootstrap prepare
-	./scripts/generate-charts
-
-patch: bootstrap
-	./scripts/generate-patch
-
-validate: bootstrap
-	./scripts/validate
-
-mirror: bootstrap
-	./scripts/image-mirror
-
-clean:
-	./scripts/clean
-
-.DEFAULT_GOAL := ci
-
+.PHONY: $(TARGETS)
