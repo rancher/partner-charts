@@ -55,20 +55,18 @@ partner-charts                     # Repo root level
 
 Set up the following in your `package.yaml` to track your upstream chart:
 
-- `url` - the URL that references your chart's tarball hosted in a Helm repository.
+- `url` - the URL that references your upstream chart's tarball hosted in a Helm repository.
 
-- `packageVersion` - The version of the package. This is appended to your upstream chart's version in the form `{CHART_NAME}-{VERSION}{packageVersion}.tgz` after a package is generated. If omitted, the version contained in your chart will be used.
+- `packageVersion` - The version of the package. This is used along with your upstream chart's name and version to generate a filename with the format `{CHART_NAME}-{VERSION}{packageVersion}+up{VERSION}.tgz` for the package's tarball that gets generated.
 
-More information of what can be specified can be found in the [README.md](packages/README.md) within the `packages/` directory.
+  For example, an upstream chart `chart-0.1.2.tgz` and the `package.yaml` from below would generate a package with the name `chart-0.1.201+up0.1.2`.
 
-#### Example `package.yaml`
+  ```yaml
+  url: https://example.com/helm-repo/chart-0.1.2.tgz
+  packageVersion: 01
+  ```
 
-This `package.yaml` will generate a `chart-v0.1.201.tgz` package.
-
-```yaml
-url: https://example.com/helm-repo/chart-v0.1.2.tgz
-packageVersion: 01
-```
+More information of what can be specified can be found in [packages/README.md](packages/README.md).
 
 ### 3. Prepare for changes
 
@@ -178,12 +176,12 @@ and the other is to do small modifications/fixes.
 
 Update the `url` to reference the new upstream chart. If your chart uses `packageVersion`, reset it to `01` in `package.yaml`, in order for `PACKAGE={CHART_NAME} make prepare` to pull in the new upstream chart and apply the patch if one exists. You might need to run `PACKAGE={CHART_NAME} make patch` to ensure the patch can be applied on the new upstream. If applying the patch fails, there's currently no method for rebasing to a new upstream when the patch gets broken as a result.
 
-For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-v0.1.2.tgz`
-can be updated to track the new `url: https://example.com/helm-repo/chart-v0.1.3.tgz`, and a new package
-`chart-v0.1.301.tgz` will be generated.
+For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
+can be updated to track the new `url: https://example.com/helm-repo/chart-0.1.3.tgz`, and a new package
+`chart-0.1.301+up0.1.3.tgz` will be generated.
 
 ```yaml
-url: https://example.com/helm-repo/chart-v0.1.3.tgz
+url: https://example.com/helm-repo/chart-0.1.3.tgz
 packageVersion: 01
 ```
 
@@ -200,9 +198,9 @@ you would need to update the `url` in `example-chart/generated-changes/dependenc
 If your chart uses `packageVersion`, increase the `packageVersion` in `package.yaml` without updating the `url`. This will
 create a new version of a package tracking the same upstream chart.
 
-For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-v0.1.2.tgz`
-generated a package `chart-v0.1.201.tgz`. Increasing the `packageVersion` without changing the `url`
-will generate a new package `chart-v0.1.201.tgz` based off of the same upstream chart.
+For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
+generated a package `chart-0.1.201+up0.1.2.tgz`. Increasing the `packageVersion` without changing the `url`
+will generate a new package `chart-0.1.202+up0.1.2.tgz` based off of the same upstream chart.
 
 ### 7. Test your changes
 
