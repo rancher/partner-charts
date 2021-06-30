@@ -86,7 +86,7 @@ the auto-generated `charts` directory.
 If this is a new chart, set the `kubeVersion` field and add the required annotations in `packages/{CHART_NAME}/charts/Chart.yaml`:
 
 ```yaml
-kubeVersion: # A SemVer range of compatible Kubernetes versions. E.g 1.18 - 1.21, >= 1.19, etc
+kubeVersion: # A SemVer range of compatible Kubernetes versions. E.g "1.18 - 1.21", ">= 1.19", etc
 annotations:
   catalog.cattle.io/certified: partner # Enables the "partner" badge in the UI for easier identification
   catalog.cattle.io/release-name: chart-name-here # Your chart's name in kebab-case, this is used for deployment
@@ -238,4 +238,11 @@ export PACKAGE={CHART_NAME} # Only need to run once
 make clean
 ```
 
-Ensure that you've already saved your changes with `PACKAGE={CHART_NAME} make patch` and cleaned up your working directory with `PACKAGE={CHART_NAME} make clean`. Then, commit all the remaining changes to `packages/{CHART_NAME}` and submit your PR to the branch `main-source`.
+Ensure that you've already saved your changes with `PACKAGE={CHART_NAME} make patch` and cleaned up your working directory with `PACKAGE={CHART_NAME} make clean`. Then, commit all the remaining changes to `packages/{CHART_NAME}`.
+
+Once you've committed all your changes in your package directory, run `make charts` and add everything that gets updated to a second commit (Usually `assets`, `charts` and in some cases `index.yaml` as well) so that your Pull Request contents are as following:
+
+    1st commit: Changes in package to add or update your chart
+    2nd commit: Result of running `make charts`
+
+You are now ready to submit a Pull Request to the `main-source` branch for review.
