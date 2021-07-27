@@ -38,18 +38,18 @@ files on top of it.
 
 ### 1. Fork the repository
 
-After forking the repository, checkout the `main-source` branch and pull the latest changes.
+Fork the repository, checkout the `main-source` branch and pull the latest changes.
 Then create a new branch off of `main-source` (e.g. `git checkout -b <name-of-new-branch>`) and execute
 `make` commands from next steps at the repository's root level.
 
 ### 2. Set up your package to track an upstream chart (**SKIP if upgrading existing package**)
 
-Create a directory for your package in the `packages` directory and a `package.yaml` file inside (Replace `{CHART_NAME}` for your chart's name).
+Create a directory for your package in the `packages` directory and a `package.yaml` file inside (Replace `{PACKAGE_NAME}` for your chart's name).
 
 ```text
 partner-charts                     # Repo root level
 └── packages
-    └── {CHART_NAME}
+    └── {PACKAGE_NAME}
         └── package.yaml           # Metadata manifest containing upstream location version
 ```
 
@@ -57,7 +57,7 @@ Set up the following in your `package.yaml` to track your upstream chart:
 
 - `url` - the URL that references your upstream chart's tarball hosted in a Helm repository.
 
-- `packageVersion` - The version of the package. This is used along with your upstream chart's name and version to generate a filename with the format `{CHART_NAME}-{VERSION}{packageVersion}+up{VERSION}.tgz` for the package's tarball that gets generated.
+- `packageVersion` - The version of the package. This is used along with your upstream chart's name and version to generate a filename with the format `{PACKAGE_NAME}-{VERSION}{packageVersion}+up{VERSION}.tgz` for the package's tarball that gets generated.
 
   For example, an upstream chart `chart-0.1.2.tgz` and the `package.yaml` from below would generate a package with the name `chart-0.1.201+up0.1.2`.
 
@@ -74,16 +74,17 @@ Run to pull in the upstream chart tracked by the `package.yaml`. If any `generat
 it will be applied onto the upstream chart after it is pulled in as part of the `prepare` step.
 
 ```bash
-export PACKAGE={CHART_NAME} # Only need to run once
+export PACKAGE={PACKAGE_NAME} # Only need to run once
 make prepare
 ```
 
 ### 4. Make changes
 
-Any modifications to your upstream chart like **adding the partner label** will be done in
-the auto-generated `charts` directory.
+Any modifications to your upstream chart like **adding the partner label** will be done in the auto-generated `charts` directory. If you are adding a new package, you will need to set a `kubeVersion`, add the required annotations, an icon, and a `app-readme.md` file. Optionally, you may add a `questions.yaml` file as well (more details below).
 
-If this is a new chart, set the `kubeVersion` field and add the required annotations in `packages/{CHART_NAME}/charts/Chart.yaml`:
+#### Set the kubeVersion and annotations (**For new packages only**)
+
+Set the `kubeVersion` and annotations in `packages/{PACKAGE_NAME}/charts/Chart.yaml`. A closed range (E.g `kubeVersion: "1.18 - 1.21"`) is preferred, but an open-ended range is also acceptable if you need it (E.g `kubeVersion: ">= 1.19"`). Please be aware Kubernetes may introduce breaking changes and make your chart suddenly incompatible, therefore it is important that you test the compatibility of your chart with every new Kubernetes release, and update it accordingly if you are using an open-ended range.
 
 ```yaml
 kubeVersion: # A SemVer range of compatible Kubernetes versions. E.g "1.18 - 1.21", ">= 1.19", etc
@@ -93,7 +94,13 @@ annotations:
   catalog.cattle.io/display-name: Fancy Chart Name Here # The chart's name you want displayed in the UI
 ```
 
-You will also need to ensure that your chart has the following files in `packages/{CHART_NAME}/charts/`:
+### Add an icon (**For new packages only**)
+
+Add a reference to an icon in `packages/{PACKAGE_NAME}/charts/Chart.yaml`. Alternatively, if you don't have an hosted icon that you can use, you may add one to the repository's assets in `assets/logos/{PACKAGE_NAME}.png` and reference it as `https://partner-charts.rancher.io/assets/logos/{PACKAGE_NAME}.png`.
+
+#### Add the overlay files (**For new packages only**)
+
+Add the `app-readme.md` file, and optional `questions.yaml` in `packages/{PACKAGE_NAME}/charts/`.
 
 - `app-readme.md` - Write a brief description of the app and how to use it. It's recommended to keep
 it short as the longer `README.md` in your chart will be displayed in the UI as detailed description.
@@ -101,8 +108,7 @@ it short as the longer `README.md` in your chart will be displayed in the UI as 
 - `questions.yaml` - Defines a set of questions to display in the chart's installation page in order for users to
 answer them and configure the chart using the UI instead of modifying the chart's values file directly.
 
-#### Questions Example
-
+#### Questions example
 ```yaml
 questions:
 - variable: password
@@ -132,8 +138,9 @@ questions:
     label: Service NodePort
 ```
 
-#### Questions Variable Reference
+#### Questions variable reference
 
+| Questions Variable Reference |
 | Variable  | Type | Required | Description |
 | ------------- | ------------- | --- |------------- |
 | 	variable          | string  | true    |  define the variable name specified in the `values.yaml`file, using `foo.bar` for nested object. |
@@ -163,7 +170,7 @@ This directory will automatically be created and populated if any changes are de
 set up the chart on a `make prepare` in a future change.
 
 ```bash
-export PACKAGE={CHART_NAME} # Only need to run once
+export PACKAGE={PACKAGE_NAME} # Only need to run once
 make patch
 ```
 
@@ -174,7 +181,7 @@ and the other is to do small modifications/fixes.
 
 #### Update package to track a new upstream chart
 
-Update the `url` to reference the new upstream chart. If your chart uses `packageVersion`, reset it to `01` in `package.yaml`, in order for `PACKAGE={CHART_NAME} make prepare` to pull in the new upstream chart and apply the patch if one exists. You might need to run `PACKAGE={CHART_NAME} make patch` to ensure the patch can be applied on the new upstream. If applying the patch fails, there's currently no method for rebasing to a new upstream when the patch gets broken as a result.
+Update the `url` to reference the new upstream chart. If your chart uses `packageVersion`, reset it to `01` in `package.yaml`, in order for `PACKAGE={PACKAGE_NAME} make prepare` to pull in the new upstream chart and apply the patch if one exists. You might need to run `PACKAGE={PACKAGE_NAME} make patch` to ensure the patch can be applied on the new upstream. If applying the patch fails, there's currently no method for rebasing to a new upstream when the patch gets broken as a result.
 
 For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
 can be updated to track the new `url: https://example.com/helm-repo/chart-0.1.3.tgz`, and a new package
@@ -209,16 +216,16 @@ will generate a new package `chart-0.1.202+up0.1.2.tgz` based off of the same up
 Run to generate a chart and a tarball of your modified chart.
 
 ```
-export PACKAGE={CHART_NAME} # Only need to run once
+export PACKAGE={PACKAGE_NAME} # Only need to run once
 make charts
 ```
 
 This will create the following two directories, and several files (e.g. `index.html`, `index.yaml`, etc.)
 to set up a Helm repo in your current branch.
 
-- `charts/{CHART_NAME}/{CHART_NAME}/{VERSION}` - Contains an unarchived version of your modified chart
-- `assets/{CHART_NAME}/` - Contains an archived (tarball) version of your modified chart
-named `{CHART_NAME}-{VERSION}{packageVersion}.tgz`
+- `charts/{PACKAGE_NAME}/{PACKAGE_NAME}/{VERSION}` - Contains an unarchived version of your modified chart
+- `assets/{PACKAGE_NAME}/` - Contains an archived (tarball) version of your modified chart
+named `{PACKAGE_NAME}-{VERSION}{packageVersion}+up{VERSION}.tgz`
 
 #### Test modified chart
 To test your changes, just push the generated files to your fork as a separate commit and add your
@@ -231,18 +238,18 @@ Alternatively, Python and Ngrok can be used if you rather avoid the push and rev
 
 Run to clean up your working directory before staging your changes.
 
-*Note: Any changes added to `packages/{CHART_NAME}/charts` will be lost when you run `make clean`, so always make sure to run `make patch CHART={CHART_NAME}` to save your changes before running `make clean`.*
+*Note: Any changes added to `packages/{PACKAGE_NAME}/charts` will be lost when you run `make clean`, so always make sure to run `make patch PACKAGE={PACKAGE_NAME}` to save your changes before running `make clean`.*
 
 ```
-export PACKAGE={CHART_NAME} # Only need to run once
+export PACKAGE={PACKAGE_NAME} # Only need to run once
 make clean
 ```
 
-Ensure that you've already saved your changes with `PACKAGE={CHART_NAME} make patch` and cleaned up your working directory with `PACKAGE={CHART_NAME} make clean`. Then, commit all the remaining changes to `packages/{CHART_NAME}`.
+Ensure that you've already saved your changes with `PACKAGE={PACKAGE_NAME} make patch` and cleaned up your working directory with `PACKAGE={PACKAGE_NAME} make clean`. Then, commit all the remaining changes to `packages/{PACKAGE_NAME}`.
 
 Once you've committed all your changes in your package directory, run `make charts` and add everything that gets updated to a second commit (usually `assets`, `charts` and in some cases `index.yaml` as well) so that your Pull Request's contents are as following:
 
     1st commit: Changes in package to add or update your chart
     2nd commit: Result of running `make charts`
 
-You are now ready to submit a Pull Request to the `main-source` branch for review.
+Lastly, run `make validate` to make sure everything is correct. If no problems arised, you are ready to submit a Pull Request to the `main-source` branch for review.
