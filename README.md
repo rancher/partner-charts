@@ -84,7 +84,9 @@ Any modifications to your upstream chart like **adding the partner label** will 
 
 #### Set the kubeVersion and annotations (**For new packages only**)
 
-Set the `kubeVersion` and annotations in `packages/{PACKAGE_NAME}/charts/Chart.yaml`. A closed range (E.g `kubeVersion: "1.18 - 1.21"`) is preferred, but an open-ended range is also acceptable if you need it (E.g `kubeVersion: ">= 1.19"`). Please be aware Kubernetes may introduce breaking changes and make your chart suddenly incompatible, therefore it is important that you test the compatibility of your chart with every new Kubernetes release, and update it accordingly if you are using an open-ended range.
+Set the `kubeVersion` and annotations in `packages/{PACKAGE_NAME}/charts/Chart.yaml`. A closed range (E.g `kubeVersion: "1.18 - 1.21"`) is preferred, but an open-ended range is also acceptable if you need it (E.g `kubeVersion: ">= 1.19"`). 
+
+**Please be aware Kubernetes may introduce breaking changes that may suddenly make your chart incompatible; therefore, it is important that you test the compatibility of your chart with every new Kubernetes release and update it accordingly if you are using an open-ended range.**
 
 ```yaml
 kubeVersion: # A SemVer range of compatible Kubernetes versions. E.g "1.18 - 1.21", ">= 1.19", etc
