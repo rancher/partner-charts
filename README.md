@@ -142,7 +142,6 @@ questions:
 
 #### Questions variable reference
 
-| Questions Variable Reference |
 | Variable  | Type | Required | Description |
 | ------------- | ------------- | --- |------------- |
 | 	variable          | string  | true    |  define the variable name specified in the `values.yaml`file, using `foo.bar` for nested object. |
