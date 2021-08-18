@@ -57,9 +57,9 @@ Set up the following in your `package.yaml` to track your upstream chart:
 
 - `url` - the URL that references your upstream chart's tarball hosted in a Helm repository.
 
-- `packageVersion` - The version of the package. This is used along with your upstream chart's name and version to generate a filename with the format `{PACKAGE_NAME}-{VERSION}{packageVersion}+up{VERSION}.tgz` for the package's tarball that gets generated.
+- `packageVersion` - The version of the package. This is used along with your upstream chart's name and version to generate a filename with the format `{PACKAGE_NAME}-{VERSION}{packageVersion}.tgz` for the package's tarball that gets generated.
 
-  For example, an upstream chart `chart-0.1.2.tgz` and the `package.yaml` from below would generate a package with the name `chart-0.1.201+up0.1.2`.
+  For example, an upstream chart `chart-0.1.2.tgz` and the `package.yaml` from below would generate an asset with the name `chart-0.1.201.tgz`.
 
   ```yaml
   url: https://example.com/helm-repo/chart-0.1.2.tgz
@@ -186,7 +186,7 @@ Update the `url` to reference the new upstream chart. If your chart uses `packag
 
 For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
 can be updated to track the new `url: https://example.com/helm-repo/chart-0.1.3.tgz`, and a new package
-`chart-0.1.301+up0.1.3.tgz` will be generated.
+`chart-0.1.301.tgz` will be generated.
 
 ```yaml
 url: https://example.com/helm-repo/chart-0.1.3.tgz
@@ -207,8 +207,8 @@ If your chart uses `packageVersion`, increase the `packageVersion` in `package.y
 create a new version of a package tracking the same upstream chart.
 
 For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
-generated a package `chart-0.1.201+up0.1.2.tgz`. Increasing the `packageVersion` without changing the `url`
-will generate a new package `chart-0.1.202+up0.1.2.tgz` based off of the same upstream chart.
+generated a package `chart-0.1.201.tgz`. Increasing the `packageVersion` without changing the `url`
+will generate a new package `chart-0.1.202.tgz` based off of the same upstream chart.
 
 ### 7. Test your changes
 
@@ -226,7 +226,7 @@ to set up a Helm repo in your current branch.
 
 - `charts/{PACKAGE_NAME}/{PACKAGE_NAME}/{VERSION}` - Contains an unarchived version of your modified chart
 - `assets/{PACKAGE_NAME}/` - Contains an archived (tarball) version of your modified chart
-named `{PACKAGE_NAME}-{VERSION}{packageVersion}+up{VERSION}.tgz`
+named `{PACKAGE_NAME}-{VERSION}{packageVersion}.tgz`
 
 #### Test modified chart
 To test your changes, just push the generated files to your fork as a separate commit and add your
