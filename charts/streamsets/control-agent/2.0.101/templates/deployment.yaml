@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "control-agent.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "control-agent.name" . }}
+    helm.sh/chart: {{ include "control-agent.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "control-agent.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "control-agent.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- if .Values.rbac.enabled }}
+      serviceAccountName: {{ include "control-agent.fullname" . }}
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: {{ include "control-agent.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+	  {{- if .Values.krb.enabled }}
+          volumeMounts:
+          - name: krb5conf
+            mountPath: "/opt/kerberos"
+            readOnly: true
+	  {{- end}}
+          {{- if .Values.resources }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          {{- end }}
+          env:
+          - name: HOST
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: dpm_agent_master_url
+            value: "https://kubernetes.default.svc.cluster.local"
+          - name: dpm_agent_cof_type
+            value: KUBERNETES
+          - name: dpm_agent_dpm_baseurl
+            value: {{ default "https://cloud.streamsets.com" .Values.streamsets.api.url }}
+          - name: dpm_agent_component_id
+            value: {{ .Release.Name }}-{{ .Values.streamsets.orgId }}
+          - name: dpm_agent_token_string
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "control-agent.fullname" . }}
+                key: apiToken
+          - name: dpm_agent_name
+            value: {{ .Release.Name }}
+          - name: dpm_agent_orgId
+            value: {{required "An SCH orgId is required!" .Values.streamsets.orgId }}
+          - name: dpm_agent_secret
+            value: {{ include "control-agent.fullname" . }}
+          - name: dpm_agent_crd_enabled
+            value: "{{.Values.streamsets.crdEnabled}}"
+	  {{- if .Values.krb.enabled }}
+          - name: dpm_agent_kerberos_enabled
+            value: "true"
+          - name: KRB5_CONFIG
+            value: "/opt/kerberos/krb5.conf"
+          - name: dpm_agent_kerberos_secret
+            value: kerbsecret
+          - name: dpm_agent_kdc_type
+            value: {{ .Values.krb.kdcType }}
+	  {{- end}}
+      {{- if .Values.krb.enabled }}
+      volumes:
+        - name: krb5conf
+          secret:
+            secretName: krb5conf
+      {{- end}}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
