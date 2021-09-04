@@ -1,0 +1,130 @@
+{{- $_ := required "Namespace is required" .Release.Namespace }}
+{{- $_ := required "Name of operator is required." .Values.name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+    version: {{ .Values.image.tag }}
+  name: {{ .Values.name }}
+  namespace:  {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "confluent-operator"
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        {{- range $key, $value := .Values.pod.annotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      labels:
+        app: "confluent-operator"
+        app.kubernetes.io/name: "confluent-operator"
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        confluent-platform: "true"
+        version: {{ .Values.image.tag }}
+        {{- range $key, $value := .Values.pod.labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+    spec:
+      {{- if not (empty $.Values.affinity) }}
+      affinity:
+{{ toYaml .Values.affinity | trim | indent 8 }}
+      {{- end }}
+      {{- if not (empty $.Values.tolerations) }}
+      tolerations:
+{{ toYaml .Values.tolerations | trim | indent 6 }}
+      {{- end }}
+      {{- if .Values.podSecurity.enabled }}
+      securityContext:
+{{ toYaml .Values.podSecurity.securityContext | indent 8 }}
+      {{- end }}
+      containers:
+      - args:
+        - --debug={{.Values.debug}}
+        {{- if gt (int (.Values.replicas)) 1 }}
+        - --enable-leader-election
+        {{- end }}
+        {{- if .Values.namespaced }}
+        {{- if empty .Values.namespaceList }}
+        - --namespaces={{ .Release.Namespace }}
+        {{- else}}
+        {{- $ns := "" }}
+        {{- range $i, $v := .Values.namespaceList }}
+        {{- $ns =  printf "%s,%s" $ns (trim $v) }}
+        {{- end }}
+        - --namespaces={{ substr 1 (len $ns) $ns }} 
+        {{- end }}
+        {{- end }}
+        name: {{ .Values.name }}
+        image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{.Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        readinessProbe:
+          httpGet:
+            port: 8080
+            path: /readyz
+        livenessProbe:
+          httpGet:
+            port: 8080
+            path: /healthz
+        resources:
+{{ toYaml .Values.resources | trim | indent 10 }}
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: NODEIP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: DD_ENTITY_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.uid
+          {{- if .Values.licenseSecretRef }}
+          - name: CONFLUENT_LICENSE_SECRET_NAME
+            value: {{ .Values.licenseSecretRef }}
+          {{- end }}
+          {{- if .Values.telemetry.enabled }}
+          {{- if and (empty .Values.telemetry.secretRef) (empty .Values.telemetry.directoryPathInContainer) }}
+          {{- $_ := required "secretRef or directoryPathInContainer must be configured when telemetry is enabled" .Values.telemetry.secretRef }}
+          {{- end }}
+          {{- if .Values.telemetry.secretRef }}
+          - name: CONFLUENT_TELEMETRY_SECRET_NAME
+            value: {{ .Values.telemetry.secretRef }}
+          {{- end }}
+          {{- if .Values.telemetry.directoryPathInContainer }}
+          - name: CONFLUENT_TELEMETRY_DIRECTORY_PATH
+            value: {{ .Values.telemetry.directoryPathInContainer }}
+          {{- end }}
+          {{- if .Values.telemetry.proxy.enabled }}
+          - name: CONFLUENT_TELEMETRY_PROXY_ENABLED
+            value: "true"
+          {{- end }}
+          {{- if .Values.telemetry.proxy.credentialRequired }}
+          - name: CONFLUENT_TELEMETRY_PROXY_CREDENTIAL_REQUIRED
+            value: "true"
+          {{- end }}
+          {{- end }}
+      serviceAccountName: {{ template "confluent-operator.service-account" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
