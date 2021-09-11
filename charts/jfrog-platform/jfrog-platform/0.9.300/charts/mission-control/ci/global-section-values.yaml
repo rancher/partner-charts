@@ -1,0 +1,60 @@
+unifiedUpgradeAllowed: true
+databaseUpgradeReady: true
+missionControl:
+  persistence:
+    enabled: false
+postgresql:
+  postgresqlPassword: password
+  db:
+    password: password
+  persistence:
+    enabled: false
+
+elasticsearch:
+  persistence:
+    enabled: false
+  javaOpts:
+    xms: "2g"
+    xmx: "2g"
+
+global:
+  version:
+    missionControl: 4.7.3
+  jfrogUrl: http://artifactory.rt:8082
+  masterKey: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  joinKey: EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+  customVolumes: |
+   - name: custom-script2
+     emptyDir:
+       sizeLimit: 100Mi
+  customVolumeMounts: |
+   - name: custom-script2
+     mountPath: "/scripts"
+  customInitContainers: |
+   - name: "custom-setup2"
+     image: "{{ .Values.initContainerImage }}"
+     imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+     command:
+       - 'sh'
+       - '-c'
+       - 'touch {{ .Values.missionControl.persistence.mountPath }}/example-custom-setup'
+     volumeMounts:
+       - mountPath: "{{ .Values.missionControl.persistence.mountPath }}"
+         name: mission-control-data
+  customSidecarContainers: |
+   - name: "sidecar-list-etc2"
+     image: "{{ .Values.initContainerImage }}"
+     imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+     securityContext:
+       allowPrivilegeEscalation: false
+     command: ["sh","-c","echo 'Sidecar is running' >> /scripts/sidecar.txt; cat /scripts/sidecar.txt; while true; do sleep 30; done"]
+     volumeMounts:
+       - mountPath: "/scripts"
+         name: custom-script2
+     resources:
+       requests:
+         memory: "32Mi"
+         cpu: "50m"
+       limits:
+         memory: "128Mi"
+         cpu: "100m"

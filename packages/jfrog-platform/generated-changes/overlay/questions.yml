@@ -1,0 +1,489 @@
+questions:
+# Advance Settings
+- variable: artifactory-ha.artifactory.masterKey
+  default: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+  description: "Artifactory master key. For security reasons, we strongly recommend you generate your own master key using this command: 'openssl rand -hex 32'"
+  type: string
+  label: Artifactory master key
+  group: "Security Settings"
+- variable: artifactory-ha.artifactory.joinKey
+  default: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+  description: "Artifactory join key. For security reasons, we strongly recommend you generate your own master key using this command: 'openssl rand -hex 32'"
+  type: string
+  label: Artifactory join key
+  group: "Security Settings"
+
+# Container Images
+- variable: artifactory-ha.defaultImage
+  default: true
+  description: "Use default Docker image"
+  label: Use Default Image
+  type: boolean
+  show_subquestion_if: false
+  group: "Container Images"
+  subquestions:
+  - variable: artifactory-ha.initContainerImage
+    default: "releases-docker.jfrog.io/alpine:3.14.0"
+    description: "Init image name"
+    type: string
+    label: Init image name
+  - variable: artifactory-ha.artifactory.image.repository
+    default: "releases-docker.jfrog.io/jfrog/artifactory-pro"
+    description: "Artifactory image name"
+    type: string
+    label: Artifactory Image Name
+  - variable: artifactory-ha.nginx.image.repository
+    default: "releases-docker.jfrog.io/jfrog/nginx-artifactory-pro"
+    description: "Nginx image name"
+    type: string
+    label: Nginx Image Name
+  - variable: artifactory-ha.imagePullSecrets
+    description: "Image Pull Secret"
+    type: string
+    label: Image Pull Secret
+
+# Services and LoadBalancing Settings
+- variable: artifactory-ha.artifactory.node.replicaCount
+  default: "2"
+  description: "Number of Secondary Nodes"
+  type: string
+  label: Number of Secondary Nodes
+  show_subquestion_if: true
+  group: "Services and Load Balancing"
+- variable: artifactory-ha.ingress.enabled
+  default: false
+  description: "Expose app using Layer 7 Load Balancer - ingress"
+  type: boolean
+  label: Expose app using Layer 7 Load Balancer
+  show_subquestion_if: true
+  group: "Services and Load Balancing"
+  required: true
+  subquestions:
+  - variable: artifactory-ha.ingress.hosts[0]
+    default: "xip.io"
+    description: "Hostname to your artifactory installation"
+    type: hostname
+    required: true
+    label: Hostname
+
+# Nginx Settings
+- variable: artifactory-ha.nginx.enabled
+  default: true
+  description: "Enable nginx server"
+  type: boolean
+  label: Enable Nginx Server
+  group: "Services and Load Balancing"
+  required: true
+  show_if: "ingress.enabled=false"
+- variable: artifactory-ha.nginx.service.type
+  default: "LoadBalancer"
+  description: "Nginx service type"
+  type: enum
+  required: true
+  label: Nginx Service Type
+  show_if: "nginx.enabled=true&&ingress.enabled=false"
+  group: "Services and Load Balancing"
+  options:
+  - "ClusterIP"
+  - "NodePort"
+  - "LoadBalancer"
+- variable: artifactory-ha.nginx.service.loadBalancerIP
+  default: ""
+  description: "Provide Static IP to configure with Nginx"
+  type: string
+  label: Config Nginx LoadBalancer IP
+  show_if: "nginx.enabled=true&&nginx.service.type=LoadBalancer&&ingress.enabled=false"
+  group: "Services and Load Balancing"
+- variable: artifactory-ha.nginx.tlsSecretName
+  default: ""
+  description: "Provide SSL Secret name to configure with Nginx"
+  type: string
+  label: Config Nginx SSL Secret
+  show_if: "nginx.enabled=true&&ingress.enabled=false"
+  group: "Services and Load Balancing"
+- variable: artifactory-ha.nginx.customArtifactoryConfigMap
+  default: ""
+  description: "Provide configMap name to configure Nginx with custom `artifactory.conf`"
+  type: string
+  label: ConfigMap for Nginx Artifactory Config
+  show_if: "nginx.enabled=true&&ingress.enabled=false"
+  group: "Services and Load Balancing"
+
+# Artifactory Storage Settings
+- variable: artifactory-ha.artifactory.persistence.size
+  default: "50Gi"
+  description: "Artifactory persistent volume size"
+  type: string
+  label: Artifactory Persistent Volume Size
+  required: true
+  group: "Artifactory Storage"
+- variable: artifactory-ha.artifactory.persistence.type
+  default: "file-system"
+  description: "Artifactory persistent volume size"
+  type: enum
+  label: Artifactory Persistent Storage Type
+  required: true
+  options:
+    - "file-system"
+    - "nfs"
+    - "google-storage"
+    - "aws-s3"
+  group: "Artifactory Storage"
+
+#Storage Type Settings
+- variable: artifactory-ha.artifactory.persistence.nfs.ip
+  default: ""
+  type: string
+  group: "Artifactory Storage"
+  label: NFS Server IP
+  description: "NFS server IP"
+  show_if: "artifactory.persistence.type=nfs"
+- variable: artifactory-ha.artifactory.persistence.nfs.haDataMount
+  default: "/data"
+  type: string
+  label: NFS Data Directory
+  description: "NFS data directory"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=nfs"
+- variable: artifactory-ha.artifactory.persistence.nfs.haBackupMount
+  default: "/backup"
+  type: string
+  label: NFS Backup Directory
+  description: "NFS backup directory"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=nfs"
+- variable: artifactory-ha.artifactory.persistence.nfs.dataDir
+  default: "/var/opt/jfrog/artifactory-ha"
+  type: string
+  label: HA Data Directory
+  description: "HA data directory"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=nfs"
+- variable: artifactory-ha.artifactory.persistence.nfs.backupDir
+  default: "/var/opt/jfrog/artifactory-backup"
+  type: string
+  label: HA Backup Directory	
+  description: "HA backup directory	"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=nfs"
+- variable: artifactory-ha.artifactory.persistence.nfs.capacity
+  default: "200Gi"
+  type: string
+  label: NFS PVC Size	
+  description: "NFS PVC size	"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=nfs"
+
+#Google storage settings
+- variable: artifactory-ha.artifactory.persistence.googleStorage.bucketName
+  default: "artifactory-ha-gcp"
+  type: string
+  label: Google Storage Bucket Name	
+  description: "Google storage bucket name"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=google-storage"
+- variable: artifactory-ha.artifactory.persistence.googleStorage.identity
+  default: ""
+  type: string
+  label: Google Storage Service Account ID	
+  description: "Google Storage service account id"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=google-storage"
+- variable: artifactory-ha.artifactory.persistence.googleStorage.credential
+  default: ""
+  type: string
+  label: Google Storage Service Account Key	
+  description: "Google Storage service account key"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=google-storage"
+- variable: artifactory-ha.artifactory.persistence.googleStorage.path
+  default: "artifactory-ha/filestore"
+  type: string
+  label: Google Storage Path In Bucket	
+  description: "Google Storage path in bucket"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=google-storage"
+# awsS3 storage settings
+- variable: artifactory-ha.artifactory.persistence.awsS3.bucketName
+  default: "artifactory-ha-aws"
+  type: string
+  label: AWS S3 Bucket Name	
+  description: "AWS S3 bucket name"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=aws-s3"
+- variable: artifactory-ha.artifactory.persistence.awsS3.region
+  default: ""
+  type: string
+  label: AWS S3 Bucket Region	
+  description: "AWS S3 bucket region"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=aws-s3"
+- variable: artifactory-ha.artifactory.persistence.awsS3.identity
+  default: ""
+  type: string
+  label: AWS S3 AWS_ACCESS_KEY_ID
+  description: "AWS S3 AWS_ACCESS_KEY_ID"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=aws-s3"
+- variable: artifactory-ha.artifactory.persistence.awsS3.credential
+  default: ""
+  type: string
+  label: AWS S3 AWS_SECRET_ACCESS_KEY	
+  description: "AWS S3 AWS_SECRET_ACCESS_KEY"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=aws-s3"
+- variable: artifactory-ha.artifactory.persistence.awsS3.path
+  default: "artifactory-ha/filestore"
+  type: string
+  label: AWS S3 Path In Bucket	
+  description: "AWS S3 path in bucket"
+  group: "Artifactory Storage"
+  show_if: "artifactory.persistence.type=aws-s3"
+
+# Database Settings
+- variable: postgresql.enabled
+  default: true
+  description: "Enable PostgreSQL"
+  type: boolean
+  required: true
+  label: Enable PostgreSQL
+  group: "Database Settings"
+  show_subquestion_if: true
+  subquestions:
+  - variable: postgresql.postgresqlPassword
+    default: ""
+    description: "PostgreSQL password"
+    type: password
+    required: true
+    label: PostgreSQL Password
+    group: "Database Settings"
+    show_if: "postgresql.enabled=true"
+  - variable: postgresql.persistence.size
+    default: 20Gi
+    description: "PostgreSQL persistent volume size"
+    type: string
+    label: PostgreSQL Persistent Volume Size
+    show_if: "postgresql.enabled=true"
+  - variable: postgresql.persistence.storageClass
+    default: ""
+    description: "If undefined or null, uses the default StorageClass. Default to null"
+    type: storageclass
+    label: Default StorageClass for PostgreSQL
+    show_if: "postgresql.enabled=true"
+  - variable: postgresql.resources.requests.cpu
+    default: "200m"
+    description: "PostgreSQL initial cpu request"
+    type: string
+    label: PostgreSQL Initial CPU Request
+    show_if: "postgresql.enabled=true"
+  - variable: postgresql.resources.requests.memory
+    default: "500Mi"
+    description: "PostgreSQL initial memory request"
+    type: string
+    label: PostgreSQL Initial Memory Request
+    show_if: "postgresql.enabled=true"
+  - variable: postgresql.resources.limits.cpu
+    default: "1"
+    description: "PostgreSQL cpu limit"
+    type: string
+    label: PostgreSQL CPU Limit
+    show_if: "postgresql.enabled=true"
+  - variable: postgresql.resources.limits.memory
+    default: "1Gi"
+    description: "PostgreSQL memory limit"
+    type: string
+    label: PostgreSQL Memory Limit
+    show_if: "postgresql.enabled=true"
+- variable: artifactory-ha.database.type
+  default: "postgresql"
+  description: "xternal database type (postgresql, mysql, oracle or mssql)"
+  type: enum
+  required: true
+  label: External Database Type
+  group: "Database Settings"
+  show_if: "postgresql.enabled=false"
+  options:
+    - "postgresql"
+    - "mysql"
+    - "oracle"
+    - "mssql"
+- variable: global.database.url
+  default: ""
+  description: "External database URL. If you set the url, leave host and port empty"
+  type: string
+  label: External Database URL
+  group: "Database Settings"
+  show_if: "postgresql.enabled=false"
+- variable: global.database.host
+  default: ""
+  description: "External database hostname"
+  type: string
+  label: External Database Hostname
+  group: "Database Settings"
+  show_if: "postgresql.enabled=false"
+- variable: global.database.port
+  default: ""
+  description: "External database port"
+  type: string
+  label: External Database Port
+  group: "Database Settings"
+  show_if: "postgresql.enabled=false"
+- variable: global.database.adminUsername
+  default: ""
+  description: "External database admin username"
+  type: string
+  label: External Database Username
+  group: "Database Settings"
+  show_if: "postgresql.enabled=false"
+- variable: global.database.adminPassword
+  default: ""
+  description: "External database admin password"
+  type: password
+  label: External Database Password
+  group: "Database Settings"
+  show_if: "postgresql.enabled=false"
+
+# Advance Settings
+- variable: advancedOptions
+  default: false
+  description: "Show advanced configurations"
+  label: Show Advanced Configurations
+  type: boolean
+  show_subquestion_if: true
+  group: "Advanced Options"
+  subquestions:
+  - variable: artifactory-ha.artifactory.primary.resources.requests.cpu
+    default: "500m"
+    description: "Artifactory primary node initial cpu request"
+    type: string
+    label: Artifactory Primary Node Initial CPU Request
+  - variable: artifactory-ha.artifactory.primary.resources.requests.memory
+    default: "1Gi"
+    description: "Artifactory primary node initial memory request"
+    type: string
+    label: Artifactory Primary Node Initial Memory Request
+  - variable: artifactory-ha.artifactory.primary.javaOpts.xms
+    default: "1g"
+    description: "Artifactory primary node java Xms size"
+    type: string
+    label: Artifactory Primary Node Java Xms Size
+  - variable: artifactory-ha.artifactory.primary.resources.limits.cpu
+    default: "2"
+    description: "Artifactory primary node cpu limit"
+    type: string
+    label: Artifactory Primary Node CPU Limit
+  - variable: artifactory-ha.artifactory.primary.resources.limits.memory
+    default: "4Gi"
+    description: "Artifactory primary node memory limit"
+    type: string
+    label: Artifactory Primary Node Memory Limit
+  - variable: artifactory-ha.artifactory.primary.javaOpts.xmx
+    default: "4g"
+    description: "Artifactory primary node java Xmx size"
+    type: string
+    label: Artifactory Primary Node Java Xmx Size
+  - variable: artifactory-ha.artifactory.node.resources.requests.cpu
+    default: "500m"
+    description: "Artifactory member node initial cpu request"
+    type: string
+    label: Artifactory Member Node Initial CPU Request
+  - variable: artifactory-ha.artifactory.node.resources.requests.memory
+    default: "2Gi"
+    description: "Artifactory member node initial memory request"
+    type: string
+    label: Artifactory Member Node Initial Memory Request
+  - variable: artifactory-ha.artifactory.node.javaOpts.xms
+    default: "1g"
+    description: "Artifactory member node java Xms size"
+    type: string
+    label: Artifactory Member Node Java Xms Size
+  - variable: artifactory-ha.artifactory.node.resources.limits.cpu
+    default: "2"
+    description: "Artifactory member node cpu limit"
+    type: string
+    label: Artifactory Member Node CPU Limit
+  - variable: artifactory-ha.artifactory.node.resources.limits.memory
+    default: "4Gi"
+    description: "Artifactory member node memory limit"
+    type: string
+    label: Artifactory Member Node Memory Limit
+  - variable: artifactory-ha.artifactory.node.javaOpts.xmx
+    default: "4g"
+    description: "Artifactory member node java Xmx size"
+    type: string
+    label: Artifactory Member Node Java Xmx Size
+
+# Xray Settings
+- variable: Install_Xray
+  default: false
+  description: "Install Xray"
+  label: Install Xray
+  type: boolean
+  show_subquestion_if: true
+  group: "Install Xray"
+  subquestions:
+  - variable: xray.replicaCount
+    default: "2"
+    description: "Number of Xray Pods"
+    type: string
+    label: Number of Xray Pods
+    group: "Install Xray"
+  - variable: rabbitmq.enabled
+    default: true
+    description: "RabbitMQ is required for xray. Do not disable."
+    type: boolean
+    group: "Install Xray"
+  - variable: xray.user
+    default: "xray"
+    description: "Xray database username"
+    type: string
+    label: Xray database username
+    group: "Install Xray"
+  - variable: xray.password
+    default: "xray"
+    description: "Xray database password"
+    type: password
+    label: Xray database Password
+    group: "Install Xray"
+  - variable: xray.common.persistence.size
+    default: "200Gi"
+    description: "Xray persistent volume size"
+    type: string
+    label: Xray Persistent Volume Size
+    required: true
+    group: "Install Xray"
+
+
+# Internal Settings
+- variable: internalSettings
+  default: false
+  description: "Internal Settings"
+  label: These are internal settings, please do not modify.
+  type: boolean
+  show_subquestion_if: true
+  group: "Internal Settings (Do not modify)"
+  subquestions:
+  - variable: artifactory-ha.installerInfo
+    default: '\{\"productId\": \"RancherHelm_jfrog-platform/0.9.3\", \"features\": \[\{\"featureId\": \"Partner/ACC-007246\"\}\]\}'
+    type: string
+    group: "Internal Settings (Do not modify)"
+
+# MUST MODIFY
+- variable: distribution.enabled
+  default: false
+  type: boolean
+  group: "MUST MODIFY"
+  description: "You must uncheck this checkbox for successful install. Yes we are working on fixing this issue."
+  label: "You must uncheck this checkbox for successful install. Yes we are working on fixing this issue."
+- variable: mission-control.enabled
+  default: false
+  type: boolean
+  group: "MUST MODIFY"
+  description: "You must uncheck this checkbox for successful install. Yes we are working on fixing this issue."
+  label: "You must uncheck this checkbox for successful install. Yes we are working on fixing this issue."
+- variable: pipelines.enabled
+  default: false
+  type: boolean
+  group: "MUST MODIFY"
+  description: "You must uncheck this checkbox for successful install. Yes we are working on fixing this issue."
+  label: "You must uncheck this checkbox for successful install. Yes we are working on fixing this issue."
