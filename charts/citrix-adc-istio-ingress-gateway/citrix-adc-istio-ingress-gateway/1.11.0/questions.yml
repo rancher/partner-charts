@@ -1,0 +1,466 @@
+labels:
+  io.rancher.certified: partner
+questions:
+- variable: citrixCPX
+  required: true
+  type: boolean
+  default: true
+  description: "Set true to use Citrix ADC CPX as ingress device. Set false to use VPX/MPX as ingress device"
+  label: citrixCPX
+  group: "Deployment Settings"
+- variable: secrets.name
+  required: true
+  type: string
+  default: "nslogin"
+  description: "Ensure to create nslogin secret in same namespace"
+  show_if: "citrixCPX=false"
+  group: "nslogin Settings"
+- variable: xDSAdaptor.image
+  required: true
+  type: string
+  default: "quay.io/citrix/citrix-xds-adaptor:0.9.9"
+  label: xDSAdaptor Image
+  description: "xDSAdaptor Image to be used with version"
+  group: "xDSAdaptor Settings"
+- variable: xDSAdaptor.imagePullPolicy
+  required: true
+  type: enum
+  default: IfNotPresent
+  label: xDSAdaptor imagePullPolicy
+  description: "xDSAdaptor Image pull policy"
+  options:
+  - "Always"
+  - "IfNotPresent"
+  - "Never"
+  group: "xDSAdaptor Settings"
+- variable: xDSAdaptor.proxyType
+  required: false
+  type: string
+  default: "router"
+  label: xDSAdaptor proxyType
+  description: "xDSAdaptor proxyType type set to router by default"
+  group: "xDSAdaptor Settings"
+- variable: xDSAdaptor.secureConnect
+  required: true
+  type: boolean
+  default: true
+  label: xDSAdaptor secureConnect
+  description: "If this value is set to true, xDSAdaptor establishes secure gRPC channel with Istio Pilot"
+  group: "xDSAdaptor Settings"
+- variable: xDSAdaptor.logLevel
+  required: false
+  type: enum
+  default: DEBUG
+  label: xDSAdaptor logLevel
+  description: "xDSAdaptor logLevel"
+  options:
+  - "TRACE"
+  - "DEBUG"
+  - "INFO"
+  - "WARN"
+  - "ERROR"
+  group: "xDSAdaptor Settings"
+- variable: xDSAdaptor.jsonLog
+  required: false
+  type: string	
+  default: "true"
+  label: xDSAdaptor jsonLog
+  description: "Set this argument to true if log messages are required in JSON format"
+  group: "xDSAdaptor Settings"
+- variable: coe.coeURL
+  required: false
+  type: string
+  label: coe coeURL
+  description: "Name of Citrix Observability Exporter Service"
+  group: "COE Settings"
+- variable: coe.coeTracing
+  required: false
+  type: boolean
+  label: coe coeTracing
+  description: "Used to send appflow transactions to Zipkin endpoint,if true ADM servicegraph (if configured) can be impacted"
+  group: "COE Settings"
+- variable: istioPilot.name
+  required: true
+  type: string
+  default: istiod
+  label: istio-pilot name
+  group: "istio-pilot Settings"
+  description: "Name of the Istio Pilot service"
+- variable: istioPilot.namespace
+  required: true
+  type: string
+  default: istio-system
+  label: istio-pilot namespace
+  description: "Namespace where Istio Pilot is running"
+  group: "istio-pilot Settings"
+- variable: istioPilot.secureGrpcPort
+  required: true
+  type: int
+  default: 15012
+  label: istio-pilot secureGrpcPort
+  show_if: "xDSAdaptor.secureConnect=true"
+  description: "Secure GRPC port where Istio Pilot is listening"
+  group: "istio-pilot Settings"
+- variable: istioPilot.insecureGrpcPort
+  required: true
+  type: int
+  default: 15010
+  show_if: "xDSAdaptor.secureConnect=false"
+  label: istio-pilot insecureGrpcPort
+  description: "Insecure GRPC port where Istio Pilot is listening"
+  group: "istio-pilot Settings"
+- variable: istioPilot.SAN
+  required: false
+  type: string
+  default: 
+  label: istio-pilot SAN
+  description: "Subject alternative name for Istio Pilot which is (SPIFFE) ID of Istio Pilot"
+  show_if: "xDSAdaptor.secureConnect=true"
+  group: "istio-pilot Settings"
+- variable: ingressGateway.netscalerUrl
+  required: true
+  type: string
+  default: 
+  label: ingressGateway netscalerUrl
+  description: "URL or IP address of the Citrix ADC which Istio-adaptor configures (Mandatory if citrixCPX=false)"
+  show_if: "citrixCPX=false"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.image
+  required: true
+  type: string
+  default: "quay.io/citrix/citrix-k8s-cpx-ingress:13.0-79.64"
+  label: ingressGateway Image
+  description: "ingressGateway image to be used"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.imagePullPolicy
+  required: true
+  type: enum
+  default: IfNotPresent
+  label: ingressGateway imagePullPolicy
+  description: Ingress-gateway Image pull policy
+  group: "ingressGateway Settings"
+  options:
+  - "Always"
+  - "IfNotPresent"
+  - "Never"
+- variable: ingressGateway.EULA
+  required: true
+  type: enum
+  description: "End user license agreement (read EULA before accepting it yes)"
+  label: ingressGateway EULA
+  options:
+   - "YES"
+   - "NO"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.mgmtHttpPort
+  required: true
+  type: int
+  default: 10080
+  label: ingressGateway mgmtHttpPort
+  description: "Management port of the Citrix ADC CPX"
+  show_if: "citrixCPX=true"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.mgmtHttpsPort
+  required: true
+  type: int
+  default: 10443
+  show_if: "citrixCPX=true"
+  label: ingressGateway mgmtHttpsPort
+  description: "Secure management port of Citrix ADC CPX"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.httpNodePort
+  required: true
+  type: int
+  default: 30180
+  show_if: "citrixCPX=true"
+  label: ingressGateway httpNodePort
+  description: "Port on host machine which is used to expose HTTP port of Citrix ADC CPX"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.httpsNodePort
+  required: true
+  type: int
+  default: 31443
+  show_if: "citrixCPX=true"
+  label: ingressGateway httpsNodePort
+  description: "Port on host machine which is used to expose HTTPS port of Citrix ADC CPX"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.nodePortRequired
+  required: true
+  type: boolean
+  default: false
+  label: ingressGateway nodePortRequired
+  description: "Set this argument if servicetype to be NodePort of Citrix ADC CPX, else it will be loadbalancer type"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.lightWeightCPX
+  required: false
+  type: int
+  default: 1
+  show_if: "citrixCPX=true"
+  label: ingressGateway lightWeightCPX
+  description: "Set this argument if lighter version of Citrix ADC CPX used"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.exposeMutipleApps
+  required: true
+  type: boolean
+  default: false
+  description: "By default, only one service is exposed via ingress gateway. To expose another service, select it TRUE, and then specify a set of secret, volume name, mount path in subsequent fields"
+  label: exposeMutipleApps
+  group: "ingressGateway Settings"
+- variable: ingressGateway.secretVolumes[0].name
+  required: true
+  type: string
+  show_if: "ingressGateway.exposeMutipleApps=true"
+  label: ingressGateway secretVolumes name
+  group: "ingressGateway Settings"
+- variable: ingressGateway.secretVolumes[0].secretName
+  required: true
+  type: string
+  show_if: "ingressGateway.exposeMutipleApps=true"
+  label: ingressGateway secretVolumes secretName
+  description: "user defined volumes to be mounted using Kubernetes secrets name" 
+  group: "ingressGateway Settings"
+- variable: ingressGateway.secretVolumes[0].mountPath
+  required: true
+  type: string
+  show_if: "ingressGateway.exposeMutipleApps=true"
+  label: ingressGateway secretVolumes mountPath
+  group: "ingressGateway Settings"
+- variable: ingressGateway.label
+  required: true
+  type: string
+  default: "citrix-ingressgateway"
+  label: ingressGateway label
+  description: "Custom label for the Ingress Gateway service"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.exposeNonHttpService
+  required: true
+  type: boolean
+  default: false
+  description: "By default, gateway is configured to expose HTTP(S) services. To expose non-HTTP services, select exposeNonHttpService to True, and then specify a set of port, port-name, target-port, nodeport (if applicable) in subsequent field."
+  label: exposeNonHttpService
+  group: "ingressGateway Settings"
+- variable: ingressGateway.tcpPort[0].name
+  required: true
+  type: string
+  default:  
+  label: Services runing on tcpPort name
+  show_if: "ingressGateway.exposeNonHttpService=true"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.tcpPort[0].nodePort
+  required: true
+  type: int
+  min: 30000
+  max: 32767
+  label: Citrix ADC CPX exposed using nodePort
+  show_if: "citrixCPX=true && ingressGateway.exposeNonHttpService=true"
+  description: "NodePort (to set explicitly, choose port between 30000-32767)"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.tcpPort[0].port
+  required: true
+  type: int
+  label: Services exposed using Port on Citrix ADC
+  show_if: "ingressGateway.exposeNonHttpService=true"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.tcpPort[0].targetPort
+  required: true
+  type: int
+  label: Services running on targetPort
+  show_if: "ingressGateway.exposeNonHttpService=true"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.vserverIP
+  required: true
+  type: string
+  default: "nsip"
+  show_if: "citrixCPX=false"
+  label: ingressGateway vserverIP
+  description: "Virtual server IP address on Citrix ADC"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.adcServerName
+  required: false
+  type: string
+  default: 
+  label: ingressGateway adcServerName
+  description: "Citrix ADC ServerName used in the Citrix ADC certificate"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.netProfile
+  required: false
+  type: string
+  default: 
+  label: ingressGateway netProfile
+  description: "Network profile name used to configure Citrix ADC VPX or MPX which is deployed as Ingress Gateway"
+  show_if: "citrixCPX=false"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.multiClusterIngress
+  required: false
+  type: boolean
+  default: false
+  label: ingressGateway multiClusterIngress
+  description: "Flag indicating if Citrix ADC is acting as Ingress gateway to multi cluster Istio mesh installation"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.multiClusterListenerPort
+  required: true
+  type: int
+  default: 15443
+  label: ingressGateway multiClusterListenerPort
+  description: "Port opened on Citrix ADC to enable inter-cluster service to service (E-W) communication"
+  show_if: "ingressGateway.multiClusterIngress=true"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.multiClusterListenerNodePort
+  required: true
+  type: int
+  default: 15443
+  label: ingressGateway multiClusterListenerNodePort
+  description: "Nodeport for multiClusterListenerPort in case of Citrix ADC CPX acting as Ingress gateway"
+  show_if: "ingressGateway.multiClusterIngress=true"
+  group: "ingressGateway Settings"
+- variable: ingressGateway.multiClusterSvcDomain
+  required: true
+  type: string
+  default: global
+  label: ingressGateway multiClusterSvcDomain
+  description: "Domain suffix of remote service (deployed in other cluster) used in E-W communication"
+  show_if: "ingressGateway.multiClusterIngress=true"
+  group: "ingressGateway Settings"
+- variable: metricExporter.required
+  required: false
+  type: boolean
+  default: true
+  label: Exporter required
+  description: "Metrics exporter for Citrix ADC"
+  group: "metricExporter Settings"
+- variable: metricExporter.image
+  required: true
+  type: string
+  default: "quay.io/citrix/citrix-adc-metrics-exporter:1.4.8"
+  label: Exporter Image
+  description: "Exporter Image to be used with version"
+  show_if: "metricExporter.required=true"
+  group: "metricExporter Settings"
+- variable: metricExporter.port
+  required: true
+  type: int
+  default: 8888
+  label: metricExporter Port
+  show_if: "metricExporter.required=true"
+  group: "metricExporter Settings"
+- variable: metricExporter.logLevel
+  required: true
+  type: enum
+  default: ERROR
+  label: metricExporter logLevel
+  show_if: "metricExporter.required=true"
+  group: "metricExporter Settings"
+  options:
+  - "DEBUG"
+  - "INFO"
+  - "WARNING"
+  - "ERROR"
+  - "TRACE"
+- variable: metricExporter.imagePullPolicy
+  required: true
+  type: enum
+  default: IfNotPresent
+  label: metricExporter imagePullPolicy
+  description: "Exporter Image pull policy"
+  show_if: "metricExporter.required=true"
+  group: "metricExporter Settings"
+  options:
+  - "Always"
+  - "IfNotPresent"
+  - "Never"
+- variable: certProvider.caAddr
+  required: true
+  type: string
+  default: "istiod.istio-system.svc"
+  label: certProvider caAddr
+  description: "Certificate Authority (CA) address issuing certificate to application"
+  group: "certProvider Settings"
+- variable: certProvider.caPort
+  required: true
+  type: int
+  default: 15012
+  label: certProvider caPort
+  description: "Certificate Authority (CA) port issuing certificate to application"
+  group: "certProvider Settings"
+- variable: certProvider.trustDomain
+  required: true
+  type: string
+  default: "cluster.local"
+  label: certProvider trustDomain
+  description: "SPIFFE Trust Domain"
+  group: "certProvider Settings"
+- variable: certProvider.certTTLinHours
+  required: true
+  type: int
+  default: 720
+  label: certProvider certTTLinHours
+  description: "Validity of certificate generated by xds-adaptor and signed by Istiod (Istio Citadel) in hours."
+  group: "certProvider Settings"
+- variable: certProvider.clusterId
+  required: true
+  type: string
+  default: "Kubernetes"
+  label: certProvider clusterId
+  description: "clusterId is the ID of the cluster where Istiod CA instance resides (default Kubernetes). It can be different value on some cloud platforms or in m
+ulticluster environments. For example, in Anthos servicemesh, it might be of the format of `cn<project-name>-<region>-<cluster_name>`. In multiCluster environments, it is the val
+ue of global.multiCluster.clusterName provided during servicemesh control plane installation"
+  group: "certProvider Settings"
+- variable: certProvider.jwtPolicy
+  required: true
+  type: enum
+  default: "first-party-jwt"
+  label: certProvider jwtPolicy
+  description: "Kubernetes platform supports First party tokens and Third party tokens"
+  options:
+  - "first-party-jwt"
+  - "third-party-jwt"
+  group: "certProvider Settings"
+- variable: ADMSettings.ADMIP
+  required: false
+  type: string
+  default: 
+  label: ADMSettings ADMIP
+  description: "Citrix Application Delivery Management (ADM) IP address"
+  group: "ADMSettings Settings"
+- variable: ADMSettings.licenseServerIP
+  required: false
+  type: string
+  default: 
+  label: ADMSettings licenseServerIP
+  description: "Citrix License Server IP address"
+  group: "ADMSettings Settings"
+- variable: ADMSettings.licenseServerPort
+  required: false
+  type: int
+  default: 27000
+  label: ADMSettings licenseServerPort
+  description: "Citrix ADM port if a non-default port is used"
+  group: "ADMSettings Settings"
+- variable: ADMSettings.bandWidthLicense
+  required: false
+  type: boolean
+  default: false
+  label: ADMSettings bandWidthLicense
+  description: "To specify bandwidth based licensing"
+  group: "ADMSettings Settings"
+- variable: ADMSettings.bandWidth
+  required: false
+  type: string
+  default: 
+  label: ADMSettings bandWidth
+  description: "Desired bandwidth capacity to be set for Citrix ADC CPX in Mbps"
+  group: "ADMSettings Settings"
+- variable: ADMSettings.vCPULicense
+  required: false
+  type: boolean
+  default: "false"
+  label: ADMSettings vCPULicense
+  description: "To specify vCPULicense based licensing"
+  group: "ADMSettings Settings"
+- variable: ADMSettings.cpxCores
+  required: false
+  type: string
+  default: 
+  label: ADMSettings cpxCores
+  description: "To specify cpxCores in licensing"
+  group: "ADMSettings Settings"
