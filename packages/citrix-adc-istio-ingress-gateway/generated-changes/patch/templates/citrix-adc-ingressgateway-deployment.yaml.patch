@@ -1,0 +1,72 @@
+--- charts-original/templates/citrix-adc-ingressgateway-deployment.yaml
++++ charts/templates/citrix-adc-ingressgateway-deployment.yaml
+@@ -31,12 +31,14 @@
+         secret:
+           optional: true
+           secretName: "citrix-ingressgateway-ca-certs" # IMPORTANT: This secret MUST BE created before deploying gateway and ingress-gateway
++{{- if eq .Values.ingressGateway.exposeMutipleApps true }}
+      {{- range .Values.ingressGateway.secretVolumes }}
+       - name: {{ .name }}
+         secret:
+           secretName: {{ .secretName | quote }}
+           optional: true
+      {{- end }}
++{{- end }}
+       - name: cpx-conf
+         emptyDir: {}
+       - name: cpx-crash
+@@ -193,11 +195,13 @@
+           - mountPath: /etc/istio/ingressgateway-ca-certs # Make sure that Gateway definition has this path mentioned in server.tls section for MUTUAL TLS
+             name: citrix-ingressgateway-ca-certs
+             readOnly: true
++{{- if eq .Values.ingressGateway.exposeMutipleApps true }}
+           {{- range .Values.ingressGateway.secretVolumes }}
+           - name: {{ .name }}
+             mountPath: {{ .mountPath | quote }}
+             readOnly: true
+           {{- end }}
++{{- end }}
+         - name: citrix-ingressgateway
+           image: "{{ .Values.ingressGateway.image }}"
+           imagePullPolicy: {{ .Values.ingressGateway.imagePullPolicy }}
+@@ -212,9 +216,11 @@
+ {{- if .Values.ingressGateway.mgmtHttpsPort }}
+             - containerPort: {{ .Values.ingressGateway.mgmtHttpsPort }}
+ {{- end }}
++{{- if eq .Values.ingressGateway.exposeNonHttpService true }}
+ {{- range .Values.ingressGateway.tcpPort }}
+             - containerPort: {{ .port }}
+ {{- end }}
++{{- end }}
+           volumeMounts:
+           - mountPath: /cpx/conf/
+             name: cpx-conf
+@@ -452,11 +458,13 @@
+         - mountPath: /etc/istio/ingressgateway-ca-certs # Make sure that Gateway definition has this path mentioned in server.tls section for MUTUAL TLS
+           name: citrix-ingressgateway-ca-certs
+           readOnly: true  
++{{- if eq .Values.ingressGateway.exposeMutipleApps true }}
+         {{- range .Values.ingressGateway.secretVolumes }}
+         - name: {{ .name }}
+           mountPath: {{ .mountPath | quote }}
+           readOnly: true
+         {{- end }}
++{{- end }}
+ {{- if .Values.ingressGateway.adcServerName }}
+         - mountPath: /etc/nitro/
+           name: citrix-adc-cert
+@@ -483,12 +491,14 @@
+         secret:
+           optional: true
+           secretName: "citrix-ingressgateway-ca-certs" # IMPORTANT: This secret MUST BE created before deploying gateway and ingress-gateway 
++{{- if eq .Values.ingressGateway.exposeMutipleApps true }}
+      {{- range .Values.ingressGateway.secretVolumes }}
+       - name: {{ .name }}
+         secret:
+           secretName: {{ .secretName | quote }}
+           optional: true
+      {{- end }}
++{{- end }}
+ {{- if .Values.ingressGateway.adcServerName }}
+       - name: citrix-adc-cert
+         secret:
