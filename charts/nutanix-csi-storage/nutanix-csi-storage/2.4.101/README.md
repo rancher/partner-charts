@@ -35,6 +35,7 @@ https://portal.nutanix.com/page/documents/details?targetId=CSI-Volume-Driver-v2_
 - Kubernetes 1.17 or later
 - Kubernetes worker nodes must have the iSCSI package installed (Nutanix Volumes only)
 - This chart have been validated on CentOS 7 and Ubuntu 18.04/20.04, but the new architecture enables easy portability to other distributions.
+- This Chart is not made to be installed on the local k3s cluster (by default iscsi prerequisite is missing)
 
 ## Installing the Chart
 
