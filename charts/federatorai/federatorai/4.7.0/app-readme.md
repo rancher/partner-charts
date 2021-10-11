@@ -1,7 +1,7 @@
 # <img src="https://raw.githubusercontent.com/prophetstor-ai/public/master/images/logo.png" width=60/> Federator.ai Operator
 Federator.ai helps enterprises optimize cloud resources, maximize application performance, and save significant cost without excessive over-provisioning or under-provisioning of resources, meeting the service-level requirements of their applications.
 
-Enterprises often lack understanding of the resources needed to support their applications. This leads to either excessive over-provisioning or under-provisioning of resources (CPU, memory, storage). Using machine learning, Federator.ai determines the optimal cloud resources needed to support any workload on OpenShift and helps users find the best-cost instances from cloud providers for their applications.
+Enterprises often lack understanding of the resources needed to support their applications. This leads to either excessive over-provisioning or under-provisioning of resources (CPU, memory, storage). Using machine learning, Federator.ai determines the optimal cloud resources needed to support any workload on Kubernetes and helps users find the best-cost instances from cloud providers for their applications.
 
 
 **Multi-layer workload prediction**
