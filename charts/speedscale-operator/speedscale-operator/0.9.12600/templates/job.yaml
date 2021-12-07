@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  creationTimestamp: null
+  name: speedscale-keys-create
+  namespace: speedscale
+spec:
+  template:
+    metadata:
+      creationTimestamp: null
+    spec:
+      containers:
+      - command:
+        - /bin/sh
+        - -ce
+        - |
+          speedctl init --force --api-key {{ .Values.apiKey }} --app-url {{ .Values.appUrl }}
+          speedctl deploy operator --dir ./manifests
+          kubectl apply -f ./manifests/webhook.yaml
+          kubectl apply -f ./manifests/configmap.yaml
+          kubectl apply -f ./manifests/secret.yaml
+        image: gcr.io/sspublic/speedscale-cli:latest
+        imagePullPolicy: Always
+        name: speedscale-cli
+        resources: {}
+      restartPolicy: Never
+      serviceAccountName: speedscale-control-sa
+status: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-delete
+  creationTimestamp: null
+  name: speedscale-keys-cleanup
+  namespace: speedscale
+spec:
+  template:
+    metadata:
+      creationTimestamp: null
+    spec:
+      containers:
+      - command:
+        - /bin/sh
+        - -ce
+        - |
+          speedctl init --force --api-key {{ .Values.apiKey }} --app-url {{ .Values.appUrl }}
+          speedctl deploy operator --dir ./manifests
+          kubectl delete -f ./manifests/webhook.yaml
+        image: gcr.io/sspublic/speedscale-cli:latest
+        imagePullPolicy: Always
+        name: speedscale-cli
+        resources: {}
+      restartPolicy: Never
+      serviceAccountName: speedscale-control-sa
+status: {}
