@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cf-venona.fullname" . }}
+  labels: {{- include "cf-venona.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "cf-venona.selectorLabels" . | nindent 6 }}
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels: {{- include "cf-venona.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "cf-venona.fullname" . }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      {{- end }}      
+      {{/*      {{ if ne .Values.nodeSelector "" }}*/}}
+      {{/*      nodeSelector:*/}}
+      {{/*      {{ .Values.NodeSelector | nodeSelectorParamToYaml | indent 8 | unescape }}*/}}
+      {{/*      {{ end }}*/}}
+      {{/*      tolerations:*/}}
+      {{/*      {{ toYaml .Values.Tolerations | indent 8 | unescape }}*/}}
+      containers:
+        - name: venona
+          env:
+            {{/*            {{- if .Values.EnvVars }}*/}}
+            {{/*            {{- range $key, $value := .Values.EnvVars }}*/}}
+            {{/*            - name: {{ $key }}*/}}
+            {{/*              value: "{{ $value}}"*/}}
+            {{/*            {{- end}}*/}}
+            {{/*            {{- end}}*/}}
+            {{/*            {{- if .Values.AdditionalEnvVars }}*/}}
+            {{/*            {{- range $key, $value := .Values.AdditionalEnvVars }}*/}}
+            {{/*            - name: {{ $key }}*/}}
+            {{/*              value: "{{ $value}}"*/}}
+            {{/*            {{- end}}*/}}
+            {{/*            {{- end}}*/}}
+            - name: SELF_DEPLOYMENT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CODEFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cf-venona.fullname" . }}
+                  key: codefresh.token
+            - name: CODEFRESH_IN_CLUSTER_RUNTIME
+              value: {{ .Values.global.runtimeName }}
+            - name: CODEFRESH_HOST
+              value: {{ .Values.global.codefreshHost }}
+            - name: AGENT_MODE
+              value: InCluster
+            - name: "AGENT_ID" {{/* agent name */}}
+              value: {{ .Values.global.agentName }}
+            {{- if ne .Values.dockerRegistry "" }}
+            - name: DOCKER_REGISTRY
+              value: {{ .Values.dockerRegistry }}
+            {{- end }}
+            {{- if .Values.newRelicLicense }}
+            - name: NEWRELIC_LICENSE_KEY
+              value: {{ .Values.newRelicLicense }}
+          {{- end }}
+          image: {{ include "cf-venona.docker-image" . }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          {{/*          volumeMounts:*/}}
+          {{/*            - name: runnerconf*/}}
+          {{/*              mountPath: "/etc/secrets"*/}}
+          {{/*              readOnly: true*/}}
+          imagePullPolicy: Always
+      {{/*          resources: {{ toYaml .Values.Runner.resources | nindent 10 /* todo capital change  }}*/}}
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      restartPolicy: Always
