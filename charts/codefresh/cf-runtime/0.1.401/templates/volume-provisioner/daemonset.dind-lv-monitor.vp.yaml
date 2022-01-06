@@ -1,0 +1,78 @@
+{{- if eq .Values.storage.backend "local" -}}
+  {{- $localVolumeParentDir := .Values.storage.local.volumeParentDir  }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "cf-vp.monitorName" . }}
+  labels: {{- include "cf-vp.monitorLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "cf-vp.monitorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cf-vp.monitorLabels" . | nindent 8 }}
+      annotations:
+        prometheus_port: "9100"
+        prometheus_scrape: "true"
+    spec:
+      serviceAccountName: {{ include "cf-vp.fullname" . }}
+      # Debug:
+      # hostNetwork: true
+      # nodeSelector:
+      #   kubernetes.io/role: "node"
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
+      tolerations:
+        - key: 'codefresh/dind'
+          operator: 'Exists'
+          effect: 'NoSchedule'
+      
+      {{- if .Values.tolerations }}
+{{ toYaml .Values.tolerations | indent 8 }}
+      {{- end }}
+
+{{/*      {{ toYaml .Values.tolerations | indent 8}}*/}}
+      containers:
+        - image: {{ include "cf-vp.docker-image-volume-utils" . }}
+          name: lv-cleaner
+{{/*          todo add resources*/}}
+{{/*          resources: {{ toYaml .Values.storage.localVolumeMonitor | nindent 10 }}*/}}
+          imagePullPolicy: Always
+          command:
+            - /bin/local-volumes-agent
+          env:
+            {{/*            {{- if .Values.EnvVars }}*/}}
+            {{/*            {{- range $key, $value := .Values.EnvVars }}*/}}
+            {{/*            - name: {{ $key }}*/}}
+            {{/*              value: "{{ $value}}"*/}}
+            {{/*            {{- end}}*/}}
+            {{/*            {{- end}}*/}}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: VOLUME_PARENT_DIR
+              value: {{ $localVolumeParentDir }}
+          #              Debug:
+          #            - name: DRY_RUN
+          #              value: "1"
+          #            - name: DEBUG
+          #              value: "1"
+          #            - name: SLEEP_INTERVAL
+          #              value: "3"
+          #            - name: LOG_DF_EVERY
+          #              value: "60"
+          #            - name: KB_USAGE_THRESHOLD
+          #              value: "20"
+
+          volumeMounts:
+            - mountPath: {{ $localVolumeParentDir }}
+              readOnly: false
+              name: dind-volume-dir
+      volumes:
+        - name: dind-volume-dir
+          hostPath:
+            path: {{ $localVolumeParentDir }}
+  {{- end -}}

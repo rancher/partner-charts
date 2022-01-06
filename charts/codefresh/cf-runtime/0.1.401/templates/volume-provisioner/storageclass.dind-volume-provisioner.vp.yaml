@@ -1,0 +1,63 @@
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  {{/* has to be exactly that */}}
+  name: dind-local-volumes-runner-{{.Values.global.namespace}}
+  labels:
+    app: dind-volume-provisioner
+  {{/*  annotations:*/}}
+  {{/*    {{ range $key, $value := .Values.Storage.Annotations }}*/}}
+  {{/*    {{ $key }}: {{ $value }}*/}}
+  {{/*  {{ end }}*/}}
+provisioner: {{ include "cf-vp.volumeProvisionerName" . }}
+parameters:
+  {{- if eq .Values.storage.backend "local" }}
+
+  volumeBackend: local
+  volumeParentDir: {{ .Values.storage.local.volumeParentDir }}
+
+  {{- else if eq .Values.storage.backend "gcedisk" }}
+
+  volumeBackend: {{ .Values.storage.backend }}
+  #  pd-ssd or pd-standard
+  type: {{ .Values.storage.gce.volumeType | default "pd-ssd" }}
+  # Valid zone in GCP
+  zone: {{ .Values.storage.gce.availabilityZone }}
+  # ext4 or xfs (default to ext4 because xfs is not installed on GKE by default )
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+
+  {{- else if or (eq .Values.storage.backend "ebs") (eq .Values.storage.backend "ebs-csi")}}
+  # ebs or ebs-csi
+  volumeBackend: {{ .Values.storage.backend }}
+  #  gp2 or io1
+  VolumeType: {{ .Values.storage.ebs.volumeType | default "gp2" }}
+  # Valid zone in aws (us-east-1c, ...)
+  AvailabilityZone: {{ .Values.storage.ebs.availabilityZone }}
+  # ext4 or xfs (default to ext4 )
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+
+  # "true" or "false" (default - "false")
+  encrypted: "{{ .Values.storage.ebs.encrypted | default "false" }}"
+  {{ if .Values.storage.ebs.kmsKeyId }}
+  kmsKeyId: {{ .Values.storage.ebs.kmsKeyId }}
+  {{- end }}
+
+  {{- else if or (eq .Values.storage.backend "azuredisk") (eq .Values.storage.backend "azuredisk-csi")}}
+  volumeBackend: {{ .Values.storage.backend }}
+  kind: managed
+  skuName: {{ .Values.storage.azure.skuName | default "Premium_LRS" }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+  cachingMode: {{ .Values.storage.azure.cachingMode | default "None" }}
+
+  {{- if .Values.storage.azure.location }}
+  location: {{ .Values.storage.azure.location }}
+  {{- end }}
+  {{/* azure location */}}
+
+  {{- if .Values.storage.azure.resourceGroup }}
+  resourceGroup: {{ .Values.storage.azure.resourceGroup }}
+  {{- end }}
+  {{/* azure resource group*/}}
+
+  {{- end }}
+  {{/* if azuredisk*/}}
