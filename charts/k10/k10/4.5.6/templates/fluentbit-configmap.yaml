@@ -1,0 +1,34 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: fluentbit-configmap
+data:
+  fluentbit.conf: |
+    [SERVICE]
+        HTTP_Server On
+        HTTP_Listen 0.0.0.0
+        HTTP_PORT 24225
+
+    [INPUT]
+        Name tcp
+        Listen 0.0.0.0
+        Port 24224
+
+    [OUTPUT]
+        Name stdout
+        Match *
+
+    [OUTPUT]
+        Name file
+        Match *
+        Path {{ .Values.global.persistence.mountPath }}/k10.log
+  logrotate.conf: |
+    {{ .Values.global.persistence.mountPath }}/k10.log {
+      create
+      missingok
+      rotate 6
+      size 1G
+    }
