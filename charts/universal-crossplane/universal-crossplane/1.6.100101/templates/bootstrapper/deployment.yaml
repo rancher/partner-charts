@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "bootstrapper-name" . }}
+  labels:
+    {{- include "labelsBootstrapper" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "selectorLabelsBootstrapper" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "selectorLabelsBootstrapper" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ template "bootstrapper-name" . }}
+      {{- if .Values.billing.awsMarketplace.enabled }}
+      securityContext:
+        # Providing this is not required for 1.19 or later clusters.
+        # See https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts-technical-overview.html
+        fsGroup: 1337
+      {{- end }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range $index, $secret := .Values.imagePullSecrets }}
+      - name: {{ $secret }}
+      {{- end }}
+      {{ end }}
+      containers:
+        - name: bootstrapper
+          image: "{{ .Values.bootstrapper.image.repository }}:{{ .Values.bootstrapper.image.tag }}"
+          args:
+            - start
+            - --namespace
+            - {{ .Release.Namespace }}
+            - --upbound-api-url
+            - {{ .Values.upbound.apiURL }}
+            - --upbound-token-secret
+            - {{ .Values.upbound.controlPlane.tokenSecretName }}
+            - --agent-manifest
+            - {{ include "agent-spec" . | b64enc }}
+            - --controller
+            - upbound-agent
+            - --controller
+            - tls-secrets
+          {{- if .Values.billing.awsMarketplace.enabled }}
+            - --controller
+            - aws-marketplace
+          {{- end }}
+          {{- if .Values.bootstrapper.config.debugMode }}
+            - "--debug"
+          {{- end }}
+          {{- range $arg := .Values.bootstrapper.config.args }}
+            - {{ $arg }}
+          {{- end }}
+          env:
+          {{- range $key, $value := .Values.bootstrapper.config.envVars }}
+            - name: {{ $key | replace "." "_" }}
+              value: {{ $value | quote }}
+          {{- end}}
+          imagePullPolicy: {{ .Values.bootstrapper.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.bootstrapper.resources | nindent 12 }}

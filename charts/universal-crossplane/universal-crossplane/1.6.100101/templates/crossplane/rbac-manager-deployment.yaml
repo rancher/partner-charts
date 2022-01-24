@@ -1,0 +1,87 @@
+{{- if .Values.rbacManager.deploy }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "crossplane.name" . }}-rbac-manager
+  labels:
+    app: {{ template "crossplane.name" . }}-rbac-manager
+    release: {{ .Release.Name }}
+    {{- include "crossplane.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.rbacManager.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "crossplane.name" . }}-rbac-manager
+      release: {{ .Release.Name }}
+  strategy:
+    type: {{ .Values.deploymentStrategy }}
+  template:
+    metadata:
+      {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      {{- end }}
+      labels:
+        app: {{ template "crossplane.name" . }}-rbac-manager
+        release: {{ .Release.Name }}
+        {{- include "crossplane.labels" . | indent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContextRBACManager | nindent 8 }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      serviceAccountName: rbac-manager
+      initContainers:
+      - image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        args:
+        - rbac
+        - init
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ .Chart.Name }}-init
+        resources:
+          {{- toYaml .Values.resourcesRBACManager | nindent 12 }}
+        securityContext:
+          {{- toYaml .Values.securityContextRBACManager | nindent 12 }}
+      containers:
+      - image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        args:
+        - rbac
+        - start
+        {{- if .Values.rbacManager.managementPolicy }}
+        - --manage={{ .Values.rbacManager.managementPolicy }}
+        {{- end }}
+        {{- range $arg := .Values.rbacManager.args }}
+        - {{ $arg }}
+        {{- end }}
+        - --provider-clusterrole={{ template "crossplane.name" . }}:allowed-provider-permissions
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ .Chart.Name }}
+        resources:
+          {{- toYaml .Values.resourcesRBACManager | nindent 12 }}
+        {{- if .Values.metrics.enabled }}
+        ports:
+        - name: metrics
+          containerPort: 8080
+        {{- end }}
+        securityContext:
+          {{- toYaml .Values.securityContextRBACManager | nindent 12 }}
+        env:
+          - name: LEADER_ELECTION
+            value: "{{ .Values.rbacManager.leaderElection }}"
+        {{- range $key, $value := .Values.extraEnvVarsRBACManager }}
+          - name: {{ $key | replace "." "_" }}
+            value: {{ $value | quote }}
+        {{- end}}
+      {{- if .Values.rbacManager.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.rbacManager.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.rbacManager.tolerations }}
+      tolerations: {{ toYaml .Values.rbacManager.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.rbacManager.affinity }}
+      affinity: {{ toYaml .Values.rbacManager.affinity | nindent 8 }}
+      {{- end }}
+{{- end}}
