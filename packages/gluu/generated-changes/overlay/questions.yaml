@@ -166,6 +166,13 @@ questions:
   required: true
   label: Enable ConfigAPI
   description: "Config Api endpoints can be used to configure the auth-server, which is an open-source OpenID Connect Provider (OP) and UMA Authorization Server (AS)."
+- variable: global.casa.enabled
+  default: false
+  type: boolean
+  group: "Optional Services"
+  required: true
+  label: Enable Casa
+  description: "Gluu Casa ('Casa') is a self-service web portal for end-users to manage authentication and authorization preferences for their account in a Gluu Server."
 - variable: global.scim.enabled
   default: false
   type: boolean
@@ -726,7 +733,7 @@ questions:
   group: "NGINX"
   required: false
   show_if: "global.istio.ingress=false"
-  description: "Enable Admin UI endpoints. COMING SOON."
+  description: "Enable Admin UI endpoints."
   label: Enable Admin UI endpoints
   subquestions:
   - variable: nginx-ingress.ingress.openidConfigEnabled
@@ -736,6 +743,20 @@ questions:
     required: true
     description: "Enable endpoint /.well-known/openid-configuration"
     label: Enable endpoint /.well-known/openid-configuration
+  - variable: nginx-ingress.ingress.deviceCodeEnabled
+    default: true
+    type: boolean
+    group: "NGINX"
+    required: true
+    description: "Enable endpoint /device-code"
+    label: Enable endpoint /device-code
+  - variable: nginx-ingress.ingress.firebaseMessagingEnabled
+    default: true
+    type: boolean
+    group: "NGINX"
+    required: true
+    description: "Enable endpoint /firebase-messaging-sw.js"
+    label: Enable endpoint /firebase-messaging-sw.js
   - variable: nginx-ingress.ingress.uma2ConfigEnabled
     default: true
     type: boolean
@@ -782,10 +803,18 @@ questions:
   default: false
   type: boolean
   group: "NGINX"
-  show_if: "global.distribution=default&&global.istio.ingress=false"
+  show_if: "global.distribution=default&&global.istio.ingress=false&&global.fido2.enabled=true"
   required: true
-  description: "Enable endpoint /.well-known/fido2-configuration"
+  description: "Enable endpoint /.well-known/fido2-configuration. Enable this!"
   label: Enable endpoint /.well-known/fido2-configuration
+- variable: nginx-ingress.ingress.casaEnabled
+  default: false
+  type: boolean
+  group: "NGINX"
+  show_if: "global.distribution=default&&global.istio.ingress=false&&global.casa.enabled=true"
+  required: true
+  description: "Enable endpoint /casa. Enable this!"
+  label: Enable endpoint /casa Enable this!
 - variable: nginx-ingress.ingress.authServerProtectedToken
   default: true
   type: boolean
@@ -806,18 +835,18 @@ questions:
   default: false
   type: boolean
   group: "NGINX"
-  show_if: "global.distribution=default&&global.istio.ingress=false"
+  show_if: "global.distribution=default&&global.istio.ingress=false&&global.scim.enabled=true"
   required: true
-  description: "Enable endpoint /.well-known/scim-configuration"
-  label: Enable endpoint /.well-known/scim-configuration
+  description: "Enable endpoint /.well-known/scim-configuration. Enable this!"
+  label: Enable endpoint /.well-known/scim-configuration. Enable this!
 - variable: nginx-ingress.ingress.scimEnabled
   default: false
   type: boolean
   group: "NGINX"
-  show_if: "global.distribution=default&&global.istio.ingress=false"
+  show_if: "global.distribution=default&&global.istio.ingress=false&&global.scim.enabled=true"
   required: true
-  description: "Enable SCIM endpoints /jans-scim"
-  label: Enable SCIM endpoints /jans-scim
+  description: "Enable SCIM endpoints /jans-scim. Enable this!"
+  label: Enable SCIM endpoints /jans-scim. Enable this!
 
 # ============
 # Images group
@@ -846,11 +875,40 @@ questions:
 - variable: auth-server.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The Auth Server Image tag"
   label: Auth Server image tag
   group: "Images"
   show_if: "global.auth-server.enabled=true"
+# AdminUI
+- variable: admin-ui.image.repository
+  required: true
+  type: string
+  default: "gluufederation/admin-ui"
+  description: "The AdminUI Image repository"
+  label: The AdminUI Image repository
+  group: "Images"
+  show_if: "global.admin-ui.enabled=true"
+- variable: admin-ui.image.pullPolicy
+  required: true
+  type: enum
+  group: "Images"
+  default: IfNotPresent
+  description: "The AdminUI Image pull policy"
+  label: AdminUI imagePullPolicy
+  options:
+  - "Always"
+  - "IfNotPresent"
+  - "Never"
+  show_if: "global.admin-ui.enabled=true"
+- variable: admin-ui.image.tag
+  required: true
+  type: string
+  default: "1.0.0-0"
+  description: "The AdminUI Image tag"
+  label: AdminUI image tag
+  group: "Images"
+  show_if: "global.admin-ui.enabled=true"
 # AuthServer KeyRotation
 - variable: auth-server-key-rotation.image.repository
   required: true
@@ -875,11 +933,40 @@ questions:
 - variable: auth-server-key-rotation.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The Auth Server Image tag"
   label: Auth Server KeyRotation image tag
   group: "Images"
   show_if: "global.auth-server-key-rotation.enabled=true"
+# Casa
+- variable: casa.image.repository
+  required: true
+  type: string
+  default: "gluufederation/casa"
+  description: "The Casa Image repository"
+  label: Casa image repo
+  group: "Images"
+  show_if: "global.casa.enabled=true"
+- variable: casa.image.pullPolicy
+  required: true
+  type: enum
+  group: "Images"
+  default: IfNotPresent
+  description: "The Casa Image pull policy"
+  label: Casa imagePullPolicy
+  options:
+  - "Always"
+  - "IfNotPresent"
+  - "Never"
+  show_if: "global.casa.enabled=true"
+- variable: casa.image.tag
+  required: true
+  type: string
+  default: "5.0.0-0"
+  description: "The Casa Image tag"
+  label: Casa image tag
+  group: "Images"
+  show_if: "global.casa.enabled=true"
 # ClientAPI
 - variable: client-api.image.repository
   required: true
@@ -904,7 +991,7 @@ questions:
 - variable: client-api.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The ClientAPI Image tag"
   label: ClientAPI image tag
   group: "Images"
@@ -933,7 +1020,7 @@ questions:
 - variable: config.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The Configurator Image tag"
   label: Configurator image tag
   group: "Images"
@@ -962,7 +1049,7 @@ questions:
 - variable: config-api.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The ConfigAPI Image tag"
   label: ConfigAPI image tag
   group: "Images"
@@ -991,7 +1078,7 @@ questions:
 - variable: fido2.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The Fido2 Image tag"
   label: Fido2 image tag
   group: "Images"
@@ -1020,7 +1107,7 @@ questions:
 - variable: jackrabbit.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The Jackrabbit Image tag"
   label: Jackrabbit image tag
   group: "Images"
@@ -1078,7 +1165,7 @@ questions:
 - variable: persistence.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The Persistence Image tag"
   label: Persistence image tag
   group: "Images"
@@ -1107,7 +1194,7 @@ questions:
 - variable: scim.image.tag
   required: true
   type: string
-  default: "1.0.0-beta.13"
+  default: "1.0.0-beta.16"
   description: "The SCIM Image tag"
   label: SCIM image tag
   group: "Images"
@@ -1123,6 +1210,15 @@ questions:
   type: int
   group: "Replicas"
   label: Auth-server Replicas
+  description: "Service replica number."
+  show_if: "global.auth-server.enabled=true"
+# Casa
+- variable: casa.replicas
+  default: 1
+  required: false
+  type: int
+  group: "Replicas"
+  label: Casa Replicas
   description: "Service replica number."
   show_if: "global.auth-server.enabled=true"
 # ClientAPI
@@ -1143,15 +1239,15 @@ questions:
   label: ConfigAPI Replicas
   description: "Service replica number."
   show_if: "global.config-api.enabled=true"
-# ConfigAPI
-- variable: config-api.replicas
+# AdminUi
+- variable: admin-ui.replicas
   default: 1
   required: false
   type: int
   group: "Replicas"
-  label: ConfigAPI Replicas
+  label: Admin UI Replicas
   description: "Service replica number."
-  show_if: "global.config-api.enabled=true"
+  show_if: "global.admin-ui.enabled=true"
 # Fido2
 - variable: fido2.replicas
   default: 1
