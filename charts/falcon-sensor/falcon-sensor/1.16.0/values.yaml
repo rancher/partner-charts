@@ -1,0 +1,149 @@
+# Default values for falcon-sensor.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+node:
+  # When enabled, Helm chart deploys the Falcon Sensors to Kubernetes nodes
+  enabled: true
+
+  daemonset:
+    # Annotations to apply to the daemonset
+    annotations: {}
+
+    # additionals labels
+    labels: {}
+
+    tolerations:
+    # We want to schedule on control plane nodes where they are accessible
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+    # Future taint for K8s >=1.24
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    # Daemonsets automatically get additional tolerations: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+
+    # Update strategy to role out new daemonset configuration to the nodes.
+    updateStrategy: RollingUpdate
+
+    # Sets the max unavailable nodes. Default is 1 when no value exists.
+    maxUnavailable: 1
+
+  image:
+    repository: falcon-node-sensor
+    pullPolicy: Always
+    pullSecrets:
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: "latest"
+
+    # Value must be base64. This setting conflicts with node.image.pullSecrets
+    # The base64 encoded string of the docker config json for the pull secret can be
+    # gotten through:
+    # $ cat ~/.docker/config.json | base64 -
+    registryConfigJSON:
+
+  # Override various naming aspects of this chart
+  # Only edit these if you know what you're doing
+  nameOverride: ""
+  fullnameOverride: ""
+
+  podAnnotations: {}
+
+  # How long to wait for Falcon pods to stop gracefully
+  terminationGracePeriod: 30
+
+container:
+  # When enabled, Helm chart deploys the Falcon Container Sensor to Pods through Webhooks
+  enabled: false
+
+  # Auto update the certificates every time there is an update
+  autoCertificateUpdate: true
+
+  # Update Webhook and roll out new Deployment on upgrade
+  autoDeploymentUpdate: true
+
+  # For AKS without the pulltoken option
+  azure:
+    enabled: false
+
+    # Path to the Kubernetes Azure config file on worker nodes
+    azureConfig: /etc/kubernetes/azure.json
+
+  # Disable injection for all Namespaces
+  disableNSInjection: false
+
+  # Disable injection for all Pods
+  disablePodInjection: false
+
+  # Certificate validity duration in number of days
+  certExpiration: 3650
+
+  # Configure the Injector Port
+  injectorPort: 4433
+
+  # Configure the requests and limits of the sensor
+  sensorResources:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 10m
+  #   memory: 20Mi
+
+  # For custom DNS configurations when .svc requires a domain for services
+  # For example if service.my-namespace.svc doesn't resolve and the cluster uses
+  # service.my-namespace.svc.testing.io, you would add testing.io as the value below.
+  # Otherwise, keep this blank.
+  domainName:
+
+  image:
+    repository: falcon-sensor
+    pullPolicy: Always
+    # Set to true if connecting to a registry that requires authentication
+    pullSecrets:
+      enable: false
+      # Configure the list of namespaces that should have access to pull the Falcon
+      # sensor from a registry that requires authentication. This is a comma separated
+      # list. For example:
+      #
+      # namespaces: ns1,ns2,ns3
+      namespaces:
+
+      # Attempt to create the Falcon sensor pull secret in all Namespaces
+      # instead of using "container.image.pullSecrets.namespaces"
+      allNamespaces: false
+
+      # Value must be base64
+      # The base64 encoded string of the docker config json for the pull secret can be
+      # gotten through:
+      # $ cat ~/.docker/config.json | base64 -
+      registryConfigJSON:
+
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: "latest"
+
+  resources:
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 20Mi
+
+serviceAccount:
+  name: crowdstrike-falcon-sa
+  annotations: {}
+
+falcon:
+  cid:
+  aid:
+  apd:
+  aph:
+  app:
+  trace: none
+  feature:
+  message_log:
+  billing:
+  tags:
+  provisioning_token:
