@@ -1,0 +1,191 @@
+{{- if .Values.preflight.enabled -}}
+{{- template "k8s-triliovault-operator.preFlightValidation" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{template "k8s-triliovault-operator.name" .}}-{{.Release.Namespace}}-preflight-role
+  labels:
+    app.kubernetes.io/part-of: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/name: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/instance: {{template "k8s-triliovault-operator.appName" .}}-preflight-role
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": hook-failed, hook-succeeded
+    "helm.sh/hook-weight": "1"
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+      - pods
+      - persistentvolumeclaims
+      - pods/exec
+    verbs:
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - clusterroles
+      - clusterrolebindings
+    verbs:
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - create
+      - delete
+  - apiGroups:
+      - storage.k8s.io
+    resources:
+      - storageclasses
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - snapshot.storage.k8s.io
+    resources:
+      - volumesnapshots
+      - volumesnapshotclasses
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ template "k8s-triliovault-operator.name" . }}-preflight-service-account
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/name: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/instance: {{ template "k8s-triliovault-operator.appName" . }}-preflight-service-account
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": hook-failed, hook-succeeded
+    "helm.sh/hook-weight": "2"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "k8s-triliovault-operator.name" . }}-{{ .Release.Namespace }}-preflight-rolebinding
+  labels:
+    app.kubernetes.io/part-of: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/name: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/instance: {{ template "k8s-triliovault-operator.appName" . }}-preflight-rolebinding
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": hook-failed, hook-succeeded
+    "helm.sh/hook-weight": "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ template "k8s-triliovault-operator.name" . }}-{{ .Release.Namespace }}-preflight-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "k8s-triliovault-operator.name" . }}-preflight-service-account
+    namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "k8s-triliovault-operator.name" . }}-preflight-job-preinstall-hook-{{ randAlphaNum 4 | lower }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "k8s-triliovault-operator.fullname" . }}
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/part-of: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/name: {{ template "k8s-triliovault-operator.appName" . }}
+    app.kubernetes.io/instance: {{ template "k8s-triliovault-operator.appName" . }}-preflight-job-preinstall-hook
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "4"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      containers:
+        - name: preflight
+          image: {{ index .Values "registry" }}/{{ index .Values "preflight" "repository" }}:latest
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              /opt/tvk-plugins/preflight run --in-cluster
+              --log-level={{ .Values.preflight.logLevel }}
+              --namespace={{ .Release.Namespace }}
+              {{- if .Values.preflight.cleanupOnFailure }}
+              --cleanup-on-failure
+              {{- end }}
+              {{- if .Values.preflight.imagePullSecret }}
+              --image-pull-secret={{ .Values.preflight.imagePullSecret }}
+              {{- end }}
+              {{- if .Values.preflight.limits }}
+              --limits={{ .Values.preflight.limits }}
+              {{- end }}
+              {{- if .Values.preflight.localRegistry }}
+              --local-registry={{ .Values.preflight.localRegistry }}
+              {{- end }}
+              {{- if .Values.preflight.nodeSelector }}
+              --node-selector={{ .Values.preflight.nodeSelector }}
+              {{- end }}
+              {{- if .Values.preflight.pvcStorageRequest }}
+              --pvc-storage-request={{ .Values.preflight.pvcStorageRequest }}
+              {{- end }}
+              {{- if .Values.preflight.requests }}
+              --requests={{ .Values.preflight.requests }}
+              {{- end }}
+              {{- if .Values.preflight.storageClass }}
+              --storage-class={{ .Values.preflight.storageClass }}
+              {{- end }}
+              {{- if .Values.preflight.volumeSnapshotClass }}
+              --volume-snapshot-class={{ .Values.preflight.volumeSnapshotClass }}
+              {{- end }}
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      serviceAccountName: {{ template "k8s-triliovault-operator.name" . }}-preflight-service-account
+{{- end }}
