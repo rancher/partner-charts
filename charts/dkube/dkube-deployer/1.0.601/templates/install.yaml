@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "dkube-helm-installer"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dkube-deployer.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "dkube-helm-installer"
+      labels:
+        {{- include "dkube-deployer.selectorLabels" . | nindent 8 }}
+    spec:
+      hostPID: true
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: dkube-dockerhub-secret
+      containers:
+      - name: dkube-helm-installer
+        image: {{ .Values.registry.name }}/dkubeadm:{{ .Values.version }}
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        volumeMounts: 
+          -
+            mountPath: /root/.dkube/dkube.ini
+            name: dkube-config
+            subPath: dkube.ini
+        {{- if eq .Values.wipedata "yes" }}
+        command: ["/opt/dkubeadm/dkubeadm.sh", "dkube", "install", "--accept-eula=yes", "--wipe-data"]
+        {{- else }}
+        command: ["/opt/dkubeadm/dkubeadm.sh", "dkube", "install", "--accept-eula={{ .Values.EULA }}"]
+        {{- end }}
+      serviceAccountName: dkube-deployer-sa
+      volumes:
+        -
+          configMap:
+            name: dkube-config
+          name: dkube-config
