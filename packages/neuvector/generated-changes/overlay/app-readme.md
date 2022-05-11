@@ -11,4 +11,6 @@ NeuVector integrates tightly with Rancher and Kubernetes to extend the built-in 
 + Advanced network controls including DLP detection, service mesh integration, connection blocking and packet captures
 + Run-time vulnerability scanning and CIS benchmarks
 
-Please Note: Before installing this chart, you will need to get an image pull secret and license key from NeuVector. Without this data supplied, the chart will not work. Configure correct container runtime and runtime path.
+Additional Notes:
++ Configure correct container runtime and runtime path under container runtime. Enable only one runtime.
++ Neuvector deployed from Partners chart repository do not support Single Sign On from Rancher Manager. Please deploy Neuvector from Rancher charts for Single Sign On to work.
