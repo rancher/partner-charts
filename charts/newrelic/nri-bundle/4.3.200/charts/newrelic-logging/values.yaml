@@ -1,0 +1,235 @@
+# IMPORTANT: Specify your New Relic API key here.
+# licenseKey:
+#
+# Optionally, specify a cluster name and log records can
+# be filtered by cluster.
+# cluster:
+#
+# or Specify secret which contains New Relic API key
+# customSecretName: secret_name
+# customSecretLicenseKey: secret_key
+#
+# The previous values can also be set as global so that they
+# can be shared by other newrelic product's charts
+#
+# global:
+#   licenseKey:
+#   cluster:
+#   customSecretName:
+#   customSecretLicenseKey:
+#
+# IMPORTANT: if you use a kubernetes secret to specify the license,
+# you have to manually provide the correct endpoint depending on
+# whether your account is for the EU region or not.
+#
+# endpoint: https://log-api.newrelic.com/log/v1
+
+fluentBit:
+  logLevel: "info"
+  path: "/var/log/containers/*.log"
+  windowsPath: "C:\\var\\log\\containers\\*.log"
+  db: "/var/log/flb_kube.db"
+  windowsDb: "C:\\var\\log\\flb_kube.db"
+  criEnabled: false
+  k8sBufferSize: "32k"
+  k8sLoggingExclude: "Off"
+  additionalEnvVariables: []
+  # additionalEnvVariables:
+  # - name: HTTPS_PROXY
+  #   value: http://example.com:3128
+
+  # New Relic default configuration for fluent-bit.conf (service, inputs, filters, outputs)
+  # and parsers.conf (parsers). The configuration below is not configured for lowDataMode and will
+  # send all attributes.  If custom configuration is required, update these variables.
+  config:
+    service: |
+      [SERVICE]
+          Flush         1
+          Log_Level     ${LOG_LEVEL}
+          Daemon        off
+          Parsers_File  parsers.conf
+          HTTP_Server   On
+          HTTP_Listen   0.0.0.0
+          HTTP_Port     2020
+
+    inputs: |
+      [INPUT]
+          Name              tail
+          Tag               kube.*
+          Path              ${PATH}
+          Parser            ${LOG_PARSER}
+          DB                ${FB_DB}
+          Mem_Buf_Limit     7MB
+          Skip_Long_Lines   On
+          Refresh_Interval  10
+
+    filters: |
+      [FILTER]
+          Name                kubernetes
+          Match               kube.*
+          # We need the full DNS suffix as Windows only supports resolving names with this suffix
+          # See: https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
+          Kube_URL            https://kubernetes.default.svc.cluster.local:443
+          Buffer_Size         ${K8S_BUFFER_SIZE}
+          K8S-Logging.Exclude ${K8S_LOGGING_EXCLUDE}
+
+      [FILTER]
+          Name           record_modifier
+          Match          *
+          Record         cluster_name ${CLUSTER_NAME}
+
+    lowDataModeFilters: |
+      [FILTER]
+          Name           kubernetes
+          Match          kube.*
+          # We need the full DNS suffix as Windows only supports resolving names with this suffix
+          # See: https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
+          Kube_URL       https://kubernetes.default.svc.cluster.local:443
+          Buffer_Size    ${K8S_BUFFER_SIZE}
+          K8S-Logging.Exclude ${K8S_LOGGING_EXCLUDE}
+          Labels         Off
+          Annotations    Off
+
+      [FILTER]
+          Name           nest
+          Match          *
+          Operation      lift
+          Nested_under   kubernetes
+
+      [FILTER]
+          Name           record_modifier
+          Match          *
+          Record         cluster_name ${CLUSTER_NAME}
+          Allowlist_key  container_name
+          Allowlist_key  namespace_name
+          Allowlist_key  pod_name
+          Allowlist_key  stream
+          Allowlist_key  message
+          Allowlist_key  log
+
+    outputs: |
+      [OUTPUT]
+          Name           newrelic
+          Match          *
+          licenseKey     ${LICENSE_KEY}
+          endpoint       ${ENDPOINT}
+          lowDataMode    ${LOW_DATA_MODE}
+
+    parsers: |
+      [PARSER]
+          Name         docker
+          Format       json
+          Time_Key     time
+          Time_Format  %Y-%m-%dT%H:%M:%S.%L
+          Time_Keep    On
+
+      [PARSER]
+          Name cri
+          Format regex
+          Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+          Time_Key    time
+          Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+image:
+  repository: newrelic/newrelic-fluentbit-output
+  tag: ""
+  pullPolicy: IfNotPresent
+  ## See https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod
+  # pullSecrets:
+    # - name: regsecret
+
+# By default, the Linux DaemonSet will always be deployed, while the Windows DaemonSet(s) won't.
+enableLinux: true
+enableWindows: false
+# For every entry in this Windows OS list, we will create an independent DaemonSet which will get deployed
+# on Windows nodes running each specific Windows version and build number. Note that
+# Windows containers can only be executed on hosts running the exact same Windows version and build number,
+# because Kubernetes only supports process isolation and not Hyper-V isolation (as of September 2021)
+windowsOsList:
+  # Right now, the windows-2019 worker offerred by GitHub is based on ltsc2019/10.0.17763.2183,
+  # so it can only compile containers running this specific version and compilation number of the OS.
+  # We aim to support (but right now, we can only support LTSC2019 using GitHub actions):
+  # https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#windows-os-version-support
+  - version: ltsc2019
+    imageTagSuffix: windows-ltsc-2019
+    buildNumber: 10.0.17763
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 250m
+    memory: 64Mi
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  pspEnabled: false
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  # Specify any annotations to add to the ServiceAccount
+  annotations: {}
+
+# If you wish to provide additional labels to apply to the pod(s), specify
+# them here
+# podLabels:
+
+# Pod scheduling priority
+# Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# priorityClassName: high-priority
+
+# Node affinity rules
+# Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+#
+# IMPORTANT #
+# ######### #
+# When .Values.global.fargate == true, the chart will automatically add the required affinity rules to exclude
+# the DaemonSet from Fargate nodes. There is no need to manually touch this property achieve this.
+# This automatic exclusion will, however, not take place if this value is overridden: Setting this to a
+# non-empty value WHEN deploying in EKS Fargate (global.fargate == true) requires the user to manually
+# include in their custom ruleset an exclusion for nodes with "eks.amazonaws.com/compute-type: fargate", as
+# the New Relic DaemonSet MUST NOT be deployed on fargate nodes, as the operator takes care of injecting it
+# as a sidecar instead.
+# Please refer to the daemonset.yaml template for more details on how to achieve this.
+nodeAffinity: {}
+
+# Node labels for pod assignment
+# Ref: https://kubernetes.io/docs/user-guide/node-selection/
+# Note that the Linux DaemonSet already contains a node selector label based on their OS (kubernetes.io/os: linux).
+nodeSelector: {}
+
+# Note that the Windows DaemonSet already contains a node selector label based on their OS (kubernetes.io/os: windows).
+# and build number (node.kubernetes.io/windows-build: {{ .buildNumber }}, to ensure that each version of the DaemonSet
+# gets deployed only on those Windows nodes running the exact same Windows version and build number. Note that
+# Windows containers can only be executed on hosts running the exact same Windows version and build number.
+windowsNodeSelector: {}
+
+# These are default tolerations to be able to run the New Relic Kubernetes
+# integration.
+tolerations:
+  - operator: "Exists"
+    effect: "NoSchedule"
+  - operator: "Exists"
+    effect: "NoExecute"
+
+updateStrategy: RollingUpdate
+
+# Sends data to staging, can be set as a global.
+# global.nrStaging
+nrStaging: false
+
+daemonSet:
+  # Annotations to add to the DaemonSet.
+  annotations: {}
+
+# When low data mode is enabled only minimal attributes are added to the logs. Kubernetes labels and
+# annotations are not included. The plugin.type, plugin.version and plugin.source attributes are minified
+# into the plugin.source attribute.
+# Can be set as a global: global.lowDataMode
+# lowDataMode: false
