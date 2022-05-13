@@ -3,13 +3,13 @@
 This chart simplifies repeatable, versioned deployment of the [Container Ingress Services](https://clouddocs.f5.com/containers/latest/).
 
 ### Prerequisites
-- Refer to [CIS Prerequisites](https://clouddocs.f5.com/containers/latest/userguide/cis-helm.html#prerequisites) to install Container Ingress Services on Kubernetes or Openshift
+- Refer to [CIS Prerequisites](https://clouddocs.f5.com/containers/latest/userguide/cis-helm.html#prerequisites) to install F5 Container Ingress Services on Kubernetes.
 - [Helm 3](https://helm.sh/docs/intro/) should be installed.
 
 
 ## Installing CIS Using Helm Charts
 
-This is the simplest way to install the CIS on OpenShift/Kubernetes cluster. Helm is a package manager for Kubernetes. Helm is Kubernetes version of yum or apt. Helm deploys something called charts, which you can think of as a packaged application. It is a collection of all your versioned, pre-configured application resources which can be deployed as one unit. This chart creates a Deployment for one Pod containing the [k8s-bigip-ctlr](https://clouddocs.f5.com/containers/latest/), it's supporting RBAC, Service Account and Custom Resources Definition installations.
+This is the simplest way to install the CIS on Kubernetes cluster. Helm is a package manager for Kubernetes. Helm is Kubernetes version of yum or apt. Helm deploys something called charts, which you can think of as a packaged application. It is a collection of all your versioned, pre-configured application resources which can be deployed as one unit. This chart creates a Deployment for one Pod containing the [k8s-bigip-ctlr](https://clouddocs.f5.com/containers/latest/), it's supporting RBAC, Service Account and Custom Resources Definition installations.
 
 ## Installing the Chart
 
@@ -18,10 +18,6 @@ This is the simplest way to install the CIS on OpenShift/Kubernetes cluster. Hel
 For Kubernetes, use the following command:
 
 ```kubectl create secret generic f5-bigip-ctlr-login -n kube-system --from-literal=username=admin --from-literal=password=<password>```
-    
-For OpenShift, use the following command:
-
-```oc create secret generic f5-bigip-ctlr-login -n kube-system --from-literal=username=admin --from-literal=password=<password>```
     
 - Add the CIS chart repository in Helm using following command:
 
