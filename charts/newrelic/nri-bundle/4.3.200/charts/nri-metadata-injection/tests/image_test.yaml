@@ -1,0 +1,61 @@
+suite: test docker images references
+release:
+  name: release
+  namespace: ns
+tests:
+  - it: deployment image defaults to chart's appVersion
+    chart:
+      appVersion: 9.9.9-mock # override chart's appVersion to keep test independent.
+    set:
+      cluster: my-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: newrelic/k8s-metadata-injection:9.9.9-mock
+        template: templates/deployment.yaml
+  - it: deployment image uses specified tag
+    set:
+      cluster: my-cluster
+      image:
+        tag: "1.6.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: newrelic/k8s-metadata-injection:1.6.0
+        template: templates/deployment.yaml
+  - it: job image is properly set
+    set:
+      cluster: my-cluster
+      image:
+        repository: k8s.gcr.io/ingress-nginx/kube-webhook-certgen
+        tag: "v1.1.1"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: k8s.gcr.io/ingress-nginx/kube-webhook-certgen:v1.1.1
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+  - it: deployment image pullSecrets
+    set:
+      cluster: my-cluster
+      image:
+        pullSecrets:
+         - name: secret1
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: secret1
+        template: templates/deployment.yaml
+  - it: job image pullSecrets
+    set:
+      cluster: my-cluster
+      image:
+        pullSecrets:
+         - name: secretImage
+      jobImage:
+        pullSecrets:
+          - name: secretJobImage
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: secretJobImage
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
