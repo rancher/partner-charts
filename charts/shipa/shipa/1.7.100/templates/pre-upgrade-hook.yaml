@@ -1,0 +1,84 @@
+{{- if .Values.tags.defaultDB }}
+{{- if .Values.tags.legacyMongoReplicaset }}
+{{- fail "tags.defaultDB and tags.legacyMongoReplicaset cannot both be set to true. See https://learn.shipa.io/docs/upgrading-self-managed-shipa" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "shipa.fullname" . }}-pre-upgrade-config
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-weight": "-1"
+data:
+  pre-upgrade.sh: |
+{{ .Files.Get "scripts/pre-upgrade.sh" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "shipa.fullname" . }}-pre-upgrade-hook-{{ .Release.Revision }}"
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-weight": 0"
+    "helm.sh/hook-delete-policy": hook-succeeded
+    sidecar.istio.io/inject: "false"
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "{{ template "shipa.fullname" . }}-pre-upgrade-hook-{{ .Release.Revision }}"
+      labels:
+        shipa-hook: "pre-upgrade"
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      terminationGracePeriodSeconds: 3
+      {{- if .Values.rbac.enabled }}
+      serviceAccountName: {{ template "shipa.fullname" . }}
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
+      restartPolicy: Never
+      containers:
+        - name: pre-upgrade-hook
+        {{- if .Values.cli.image }}
+          image: "{{ .Values.cli.image }}"
+        {{- else }}
+          image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.cli.repositoryBasename }}:{{ .Values.cli.tag }}"
+        {{- end }}
+          command:
+            - /scripts/pre-upgrade.sh
+          imagePullPolicy: {{ .Values.cli.pullPolicy }}
+          env:
+            - name: RELEASE_NAME
+              value: {{ template "shipa.fullname" . }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PERSISTENCE_EXISTING_CLAIM
+              value: "{{ .Values.mongodb.persistence.existingClaim }}"
+            - name: PERSISTENCE_SIZE
+              value: "{{ .Values.mongodb.persistence.size }}"
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: scripts-out
+              mountPath: /etc/shipa/
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      volumes:
+        - name: scripts
+          configMap:
+            defaultMode: 0755
+            name: {{ template "shipa.fullname" . }}-pre-upgrade-config
+        - name: scripts-out
+          emptyDir: {}
+
+{{- end }}

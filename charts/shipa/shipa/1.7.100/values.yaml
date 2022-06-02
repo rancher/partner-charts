@@ -1,0 +1,343 @@
+# Default values for shipa.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+auth:
+  dummyDomain: "@shipa.io"
+
+images:
+  # The base directory for Shipa Corp images. For Shipa Corp images this value has repositoryBasename and tag appended to it to determine the location to pull images from
+  # This does not affect non-Shipa Corp images, such as k8s.gcr.io/ingress-nginx/controller, docker.io/postgres, k8s.gcr.io/mongodb-install, docker.io/mongo, docker.io/busybox, and docker.io/traefik
+  shipaRepositoryDirname: docker.io/shipasoftware
+
+shipaApi:
+  port: "8080"
+  securePort: "8081"
+  servicePorts:
+    - "80"
+  serviceSecurePorts:
+    - "443"
+  repositoryBasename: api
+  tag: 12ae8d77648df4e61d4b1bf191c6c01f9686d704
+  pullPolicy: Always
+  debug: false
+  cnames: []
+  allowRestartIngressControllers: true
+  allowMigrationDowntime: true
+  appAutoDiscoveryEnabled: true
+  isCAEndpointDisabled: false
+  secureIngressOnly: false
+  useInternalHost: true
+
+  # if set this secret will be used for api ingress controller resources instead of default one
+  # customSecretName: shipa-api-secret
+
+  # if set these annotations will be appended for API ingress resources
+  # customIngressAnnotations:
+  #   aaa: "bbb"
+  #   ccc: "ddd"
+
+shipaCluster:
+  # use debug logs in traefik ingress controller
+  debug: false
+
+  ingress:
+    # ingress controller type
+    # supported: (nginx, istio, traefik)
+    type: nginx
+
+    # NGINX ingress controller image
+    # If the ingress controller type is nginx and no ingress controller ip address is provided, an ingress controller will be deployed using this image
+    image: k8s.gcr.io/ingress-nginx/controller:v1.1.0
+
+    # ingress controller serviceType
+    # when using shipa managed nginx, we reconcile looking for the right Host of LoadBalancer or ClusterIP based on what is provided here
+    # when using non user managed ingress controller we use this just to store it in DB
+    serviceType: LoadBalancer
+
+    # ingress controller ip address
+    # if provided we assume user provided ingress controller should be used and create api resources for it
+    # ip: 10.100.10.11
+
+    # ingress controller class name.
+    # If undefined, in most places we set default: nginx, traefik, istio. If we detect that it's shipa managed nginx, we default to shipa-nginx-ingress
+    # className: shipa-nginx-ingress
+
+    # if enabled we will create ingress controller resources to allow api to be accessible on root ip of ingress controller
+    # NOTE: all ingresses require Host targeting instead of Path targeting for TLS
+    # also if you use nginxinc/kubernetes-ingress, using Ingress without host is not allowed until this is resolved: https://github.com/nginxinc/kubernetes-ingress/issues/209
+    apiAccessOnIngressIp: true
+
+    # shipa managed nginx only configs:
+
+    # ingress controller ClusterIp address
+    # if provided it will be used for shipa managed nginx ingress controller
+    # clusterIp: 10.100.10.11
+
+    # ingress controller LoadBalancerIp address
+    # if provided it will be used for shipa managed nginx ingress controller
+    # loadBalancerIp: 10.100.10.11
+
+    # if provided it will be used as node port for shipa managed nginx ingress controller
+    # nodePort: 31000
+
+    # if set these annotations will be appended for the Nginx ingress controller service resource
+    # customNginxServiceAnnotations:
+    #   aaa: "bbb"
+    #   ccc: "ddd"
+    # shipaCluster.ingress.customNginxServiceAnnotations example for configuring internet facing NLB in AWS:
+    # customNginxServiceAnnotations:
+    #   service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    #   service.beta.kubernetes.io/aws-load-balancer-eip-allocations: eipalloc-abcd1234
+
+  clusterDomain: cluster.local
+
+# populate with docker hub username to use authenticated user. Secrets should be added to cluster outside shipa helm chart
+# imagePullSecrets: ""
+
+dashboard:
+  enabled: true
+  repositoryBasename: dashboard
+  tag: ff17198a3343c07d8eccf0fa418da7136aa09244
+
+postgres:
+  source:
+    ## Leave blank to default to {{ template "shipa.fullname" . }}-postgres.{{ .Release.Namespace }} e.g. shipa-postgres.shipa-system
+    host:
+    port: 5432
+    user: postgres
+    ## Leave blank to generate a random value
+    password:
+    ## options for postgres.source.sslmode are "require", "verify-full", "verify-ca", or "disable
+    sslmode: disable
+  ## set postgres.create to false to avoid creating a postgres instance
+  create: true
+  ## If create is set to true, this is the image that will be used
+  image: docker.io/postgres:13
+  persistence:
+    ## Persistent Volume Storage Class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.
+    ##
+    ## storageClass: ""
+    accessMode: "ReadWriteOnce"
+    size: 10Gi
+
+cli:
+  repositoryBasename: cli
+  tag: 4a023b65e6023d8949bdae76a8c22706c66bfe50
+  pullPolicy: Always
+
+metrics:
+  repositoryBasename: metrics
+  tag: v0.0.7
+  pullPolicy: Always
+
+  # Extra configuration to add to prometheus.yaml
+  # extraPrometheusConfiguration: |
+  #   remote_read:
+  #      - url: http://localhost:9268/read
+  #   remote_write:
+  #      - url: http://localhost:9268/write
+  extraPrometheusConfiguration:
+  #password: hardcoded
+  prometheusArgs: "--storage.tsdb.retention.time=1d"
+
+busybody:
+  repositoryBasename: bb
+  tag: 6e7d2fd228b6c3587476efce0ca982f48bccb856
+
+shipaController:
+  repositoryBasename: shipa-controller
+  tag: c03c6bfb0e0ec07ad252a69401b736ab445ae431 
+  enableEventUpdater: false
+
+prometheusMetricsExporter:
+  repositoryBasename: prometheus-metrics-exporter
+  tag: b123eb79bdbe56f83812b5ad3cfb8bbb568b2e3d
+
+clair:
+  repositoryBasename: clair
+  tag: v2.1.7
+
+shipaNodeTraefik:
+  # image: docker.io/traefik:v1.7.24
+  user: admin
+
+# --------------------------------------------------------------------------
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
+rbac:
+  enabled: true
+
+# Connect your own instance of mongodb
+externalMongodb:
+  # url must follow Standard Connection String Format as described here: https://docs.mongodb.com/manual/reference/connection-string/#standard-connection-string-format
+  # For a sharded cluster it should be a comma separated list of hosts:
+  # e.g. "mongos0.example.com:27017,mongos1.example.com:27017,mongos2.example.com:27017"
+  # Due to some limitations of the dependencies, we currently do not support url with 'DNS Seed List Connection Format'.
+  url: < database url >
+  auth:
+    username: < username >
+    password: < password >
+  # Enable/Disable TLS when connecting to external DB instance.
+  tls:
+    enable: true
+
+# tags are standard way to handle chart dependencies.
+tags:
+  # Set defaultDB (and legacyMongoReplicaset) to 'false' when using external DB to not install default DB.
+  # It will also prevent creating Persistent Volumes.
+  # This cannot be used with tags.legacyMongoReplicaset
+  defaultDB: true
+  # Set legacyMongoReplicaset to 'true' in order to use the deprecated https://charts.helm.sh/stable/mongodb-replicaset chart as an internal MongoDB.
+  # This cannot be used with tags.defaultDB
+  legacyMongoReplicaset: false
+
+certManager:
+  installUrl: https://github.com/jetstack/cert-manager/releases/download/v1.5.3/cert-manager.yaml
+
+# Default DB config, enabled by setting tag.defaultDB to true. This is not intended for production use
+# Full list of configuration values can be found at https://github.com/bitnami/charts/blob/d997058e6f9c99826242c0ae6d19ccc1cdc2106a/bitnami/mongodb/values.yaml
+mongodb:
+  global:
+    imageRegistry: ""
+    imagePullSecrets: []
+  image:
+    registry: docker.io
+    repository: bitnami/mongodb
+    tag: 5.0.6-debian-10-r29
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  persistence:
+    existingClaim: ""
+    size: "10Gi"
+  architecture: "standalone"
+  useStatefulSet: true
+  replicaSetName: rs0
+  service:
+    port: 27017
+  nodeSelector:
+    kubernetes.io/os: linux
+  arbiter:
+    podSecurityContext:
+      enabled: true
+      fsGroup: 999
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 999
+    nodeSelector:
+      kubernetes.io/os: linux
+  auth:
+    enabled: false
+  tls:
+    enabled: false
+    image:
+      registry: docker.io
+      repository: bitnami/nginx
+      tag: 1.21.6-debian-10-r30
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+  externalAccess:
+    enabled: false
+    autoDiscovery:
+      enabled: false
+      image:
+        registry: docker.io
+        repository: bitnami/kubectl
+        tag: 1.23.4-debian-10-r7
+        pullPolicy: IfNotPresent
+        pullSecrets: []
+  volumePermissions:
+    enabled: false
+    image:
+      registry: docker.io
+      repository: bitnami/bitnami-shell
+      tag: 10-debian-10-r350
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+  metrics:
+    enabled: false
+    image:
+      registry: docker.io
+      repository: bitnami/mongodb-exporter
+      tag: 0.30.0-debian-10-r83
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+  extraFlags: "--dbpath=/bitnami/mongodb"
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 999
+    runAsNonRoot: true
+  podSecurityContext:
+    enabled: true
+    fsGroup: 999
+
+# Deprecated DB config (default DB for 1.6.2 and prior), enabled by setting tag.legacyMongoReplicaset to true. This is not intended for production use
+mongodb-replicaset:
+  replicaSetName: rs0
+  replicas: 1
+  port: 27017
+  nodeSelector:
+    kubernetes.io/os: linux
+  auth:
+    enabled: false
+  installImage:
+    repository: k8s.gcr.io/mongodb-install
+    tag: 0.6
+    pullPolicy: IfNotPresent
+  image:
+    repository: docker.io/mongo
+    tag: 5.0
+    pullPolicy: IfNotPresent
+  copyConfigImage:
+    repository: docker.io/busybox
+    tag: 1.29.3
+    pullPolicy: IfNotPresent
+  persistentVolume:
+    ## Persistent Volume Storage Class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.
+    ##
+    ## storageClass: ""
+    enabled: true
+    size: 10Gi
+  tls:
+    enabled: false
+  configmap:
+
+shipaCloud:
+  enabled: false
+  shipaPayApi:
+    host: ""
+    token: ""
+  googleRecaptcha:
+    sitekey: ""
+    secret: ""
+  smartlook:
+    projectKey: ""
+  launchDarkly:
+    sdkKey: ""
+
+ketch:
+  enabled: true
+  repositoryBasename: ketch
+  tag: e5a27aacde7adecb7332aa069726c61123163576
+  metricsAddress: 127.0.0.1:8080
+
+agent:
+  repositoryBasename: shipa-cluster-agent
+  tag: aee9eb9e8c513fb0bb32a731b641f8239e4a2a7d
