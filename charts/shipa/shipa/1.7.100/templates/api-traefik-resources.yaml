@@ -1,0 +1,108 @@
+{{ if eq .Values.shipaCluster.ingress.type "traefik" }}
+{{- if not .Values.shipaApi.secureIngressOnly }}
+{{- range $i, $servicePort := .Values.shipaApi.servicePorts }}
+{{- if $.Values.shipaCluster.ingress.apiAccessOnIngressIp }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ template "shipa.fullname" $ }}-api-http-ingress-{{ $i }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+  annotations:
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: {{ template "shipa.fullname" $ }}-api
+          port: {{ $servicePort }}
+          scheme: http
+---
+{{- end }}
+{{- range $j, $cname := splitList "," (trimPrefix "\n" (include "shipa.cnames" $)) }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ template "shipa.fullname" $ }}-api-http-ingress-cname-{{ $i }}-{{ $j }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+  annotations:
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ $cname }}`)
+      kind: Rule
+      services:
+        - name: {{ template "shipa.fullname" $ }}-api
+          port: {{ $servicePort }}
+          scheme: http
+---
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if $.Values.shipaCluster.ingress.apiAccessOnIngressIp }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ template "shipa.fullname" $ }}-api-https-ingress
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+  annotations:
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: {{ template "shipa.fullname" $ }}-api
+          port: {{ first .Values.shipaApi.servicePorts }}
+          scheme: http
+  tls:
+    {{ if $.Values.shipaApi.customSecretName}}
+    secretName: {{ $.Values.shipaApi.customSecretName }}
+    {{- else }}
+    secretName: {{ template "shipa.fullname" $ }}-api-ingress-secret
+    {{- end }}
+---
+{{- end }}
+{{- range $i, $cname := splitList "," (trimPrefix "\n" (include "shipa.cnames" $)) }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ template "shipa.fullname" $ }}-api-https-ingress-cname-{{ $i }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+  annotations:
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4}}
+{{- end }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ $cname }}`)
+      kind: Rule
+      services:
+        - name: {{ template "shipa.fullname" $ }}-api
+          port: {{ first $.Values.shipaApi.servicePorts }}
+          scheme: http
+  tls:
+    {{ if $.Values.shipaApi.customSecretName}}
+    secretName: {{ $.Values.shipaApi.customSecretName }}
+    {{- else }}
+    secretName: {{ template "shipa.fullname" $ }}-api-ingress-secret
+    {{- end }}
+    domains:
+    - main: {{ $cname }}
+---
+{{- end }}
+{{- end }}
