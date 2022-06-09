@@ -68,14 +68,14 @@ release: {{ .Release.Name | quote }}
     {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
         {{ trim .Values.customRegistryURL }}
     {{- else -}}
-        {{- if or (or (and (semverCompare ">= 1.16.14" $version ) (semverCompare "<=1.17.0"  $version)) (and (semverCompare ">= 1.17.10" $version) (semverCompare "<=1.18.0" $version ))) (semverCompare ">=1.18.7" $version) -}}
+        {{- if or (or (and (semverCompare ">= 1.16.14-0" $version ) (semverCompare "<=1.17.0-0"  $version)) (and (semverCompare ">= 1.17.10" $version) (semverCompare "<=1.18.0-0" $version ))) (semverCompare ">=1.18.7-0" $version) -}}
            {{cat (trim .Values.customRegistryURL) "/k8s.gcr.io" | replace " " ""}}
         {{- else -}}
            {{cat (trim .Values.customRegistryURL) "/gcr.io/google_containers" | replace " " ""}}
         {{- end -}}
     {{- end -}}
 {{- else -}}
-     {{- if or (or (and (semverCompare ">= 1.16.14" $version ) (semverCompare "<=1.17.0"  $version)) (and (semverCompare ">= 1.17.10" $version) (semverCompare "<=1.18.0" $version ))) (semverCompare ">=1.18.7" $version) -}}
+     {{- if or (or (and (semverCompare ">= 1.16.14-0" $version ) (semverCompare "<=1.17.0-0"  $version)) (and (semverCompare ">= 1.17.10-0" $version) (semverCompare "<=1.18.0-0" $version ))) (semverCompare ">=1.18.7-0" $version) -}}
         {{ "k8s.gcr.io" }}
      {{- else -}}
         {{ "gcr.io/google_containers" }}
@@ -97,9 +97,9 @@ release: {{ .Release.Name | quote }}
 
 
 {{- define "px.getCSIProvisionerImage" -}}
-{{- if semverCompare "<1.17.0" .Capabilities.KubeVersion.GitVersion -}}
+{{- if semverCompare "<1.17.0-0" .Capabilities.KubeVersion.GitVersion -}}
     {{ "docker.io/openstorage/csi-provisioner:v1.6.1-1" }}
-{{- else if semverCompare "< 1.20.0" .Capabilities.KubeVersion.GitVersion -}}
+{{- else if semverCompare "< 1.20.0-0" .Capabilities.KubeVersion.GitVersion -}}
     {{ "docker.io/openstorage/csi-provisioner:v2.2.2-1" }}
 {{- else -}}
     {{ "docker.io/openstorage/csi-provisioner:v3.0.0-1" }}
@@ -107,9 +107,9 @@ release: {{ .Release.Name | quote }}
 {{- end -}}
 
 {{- define "px.getCSISnapshotterImage" -}}
-{{- if semverCompare "<1.17.0" .Capabilities.KubeVersion.GitVersion -}}
+{{- if semverCompare "<1.17.0-0" .Capabilities.KubeVersion.GitVersion -}}
     {{ "docker.io/openstorage/csi-snapshotter:v1.2.2-1" }}
-{{- else if semverCompare "< 1.20.0" .Capabilities.KubeVersion.GitVersion -}}
+{{- else if semverCompare "< 1.20.0-0" .Capabilities.KubeVersion.GitVersion -}}
     {{ "k8s.gcr.io/sig-storage/csi-snapshotter:v3.0.3" }}
 {{- else -}}
     {{ "k8s.gcr.io/sig-storage/csi-snapshotter:v4.2.1" }}
@@ -117,7 +117,7 @@ release: {{ .Release.Name | quote }}
 {{- end -}}
 
 {{- define "px.getCSISnapshotControllerImage" -}}
-{{- if semverCompare "< 1.20.0" .Capabilities.KubeVersion.GitVersion -}}
+{{- if semverCompare "< 1.20.0-0" .Capabilities.KubeVersion.GitVersion -}}
     {{ "k8s.gcr.io/sig-storage/snapshot-controller:v3.0.3" }}
 {{- else -}}
     {{ "k8s.gcr.io/sig-storage/snapshot-controller:v4.2.1" }}
