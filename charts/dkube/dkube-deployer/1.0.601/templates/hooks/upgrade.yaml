@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "dkube-upgrade-hook"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dkube-deployer.labels" . | nindent 4 }}
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "dkube-upgrade-hook"
+      labels:
+        {{- include "dkube-deployer.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: dkube-dockerhub-secret
+      containers:
+      - name: dkube-upgrade-hook
+        image: {{ .Values.registry.name }}/dkubeadm:{{ .Values.version }}
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        command: ["/opt/dkubeadm/dkubeadm.sh", "dkube", "upgrade", {{ .Values.version | quote}}]
+      serviceAccountName: dkube-deployer-sa
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "dkube-installer-job-cleanup-hook"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dkube-deployer.labels" . | nindent 4 }}
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-upgrade,post-upgrade
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "dkube-installer-job-cleanup-hook"
+      labels:
+        {{- include "dkube-deployer.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: dkube-dockerhub-secret
+      containers:
+      - name: dkube-installer-job-cleanup-hook
+        image: {{ .Values.registry.name }}/dkubeadm:{{ .Values.version }}
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        command: ["/bin/sh", "-c"]
+        args:
+          - kubectl delete job dkube-helm-installer --ignore-not-found=true
+      serviceAccountName: dkube-deployer-sa

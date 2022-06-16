@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "dkube-uninstaller-hook"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dkube-deployer.labels" . | nindent 4 }}
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "dkube-uninstaller-hook"
+      labels:
+        {{- include "dkube-deployer.selectorLabels" . | nindent 8 }}
+    spec:
+      hostPID: true
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: dkube-dockerhub-secret
+      containers:
+      - name: dkube-uninstaller-hook
+        image: {{ .Values.registry.name }}/dkubeadm:{{ .Values.version }}
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        volumeMounts:
+          -
+            mountPath: /root/.dkube/dkube.ini
+            name: dkube-config
+            subPath: dkube.ini
+        {{- if eq .Values.wipedata "yes" }}
+        command: ["/opt/dkubeadm/dkubeadm.sh", "dkube", "uninstall", "--wipe-data"]
+        {{- else }}
+        command: ["/opt/dkubeadm/dkubeadm.sh", "dkube", "uninstall"]
+        {{- end }}
+      serviceAccountName: dkube-deployer-sa
+      volumes:
+        -
+          configMap:
+            name: dkube-config
+          name: dkube-config
