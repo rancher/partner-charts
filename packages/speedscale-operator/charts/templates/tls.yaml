@@ -1,0 +1,25 @@
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- $s := (lookup "v1" "Secret" .Release.Namespace "speedscale-certs") -}}
+{{- if $s -}}
+{{- $crt = index $s.data "tls.crt" | b64dec -}}
+{{- $key = index $s.data "tls.key" | b64dec -}}
+{{ else }}
+{{- $cert := genCA "Speedscale" 3650 -}}
+{{- $crt = $cert.Cert -}}
+{{- $key = $cert.Key -}}
+{{- end -}}
+---
+apiVersion: v1
+data:
+  tls.crt: {{ $crt | b64enc }}
+  tls.key: {{ $key | b64enc }}
+kind: Secret
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+  creationTimestamp: null
+  name: speedscale-certs
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
