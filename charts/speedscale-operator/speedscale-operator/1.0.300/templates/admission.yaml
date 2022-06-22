@@ -1,0 +1,127 @@
+{{- $cacrt := "" -}}
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- $s := (lookup "v1" "Secret" .Release.Namespace "speedscale-webhook-certs") -}}
+{{- if $s -}}
+{{- $cacrt = index $s.data "ca.crt" | default (index $s.data "tls.crt") | b64dec -}}
+{{- $crt = index $s.data "tls.crt" | b64dec -}}
+{{- $key = index $s.data "tls.key" | b64dec -}}
+{{ else }}
+{{- $altNames := list ( printf "speedscale-operator.%s" .Release.Namespace ) ( printf "speedscale-operator.%s.svc" .Release.Namespace ) -}}
+{{- $ca := genCA "speedscale-operator" 3650 -}}
+{{- $cert := genSignedCert "speedscale-operator" nil $altNames 3650 $ca -}}
+{{- $cacrt = $ca.Cert -}}	
+{{- $crt = $cert.Cert -}}
+{{- $key = $cert.Key -}}
+{{- end -}}
+---
+apiVersion: v1
+data:
+  ca.crt: {{ $cacrt | b64enc }}
+  tls.crt: {{ $crt | b64enc }}
+  tls.key: {{ $key | b64enc }}
+kind: Secret
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+  creationTimestamp: null
+  name: speedscale-webhook-certs
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: speedscale-operator
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $cacrt | b64enc }}
+    service:
+      name: speedscale-operator
+      namespace: {{ .Release.Namespace }}
+      path: /mutate
+  failurePolicy: Ignore
+  name: sidecar.speedscale.com
+  namespaceSelector: {}
+  rules:
+  - apiGroups:
+    - apps
+    - batch
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - deployments
+    - statefulsets
+    - daemonsets
+    - jobs
+    - replicasets
+  sideEffects: None
+  timeoutSeconds: 10
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: speedscale-operator-replay
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $cacrt | b64enc }}
+    service:
+      name: speedscale-operator
+      namespace: {{ .Release.Namespace }}
+      path: /validate-speedscale-com-v1-trafficreplay
+  failurePolicy: Fail
+  name: replay.speedscale.com
+  namespaceSelector: {}
+  rules:
+  - apiGroups:
+    - speedscale.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - trafficreplays
+  sideEffects: None
+  timeoutSeconds: 10
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: speedscale-operator-replay
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $cacrt | b64enc }}
+    service:
+      name: speedscale-operator
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-speedscale-com-v1-trafficreplay
+  failurePolicy: Fail
+  name: replay.speedscale.com
+  namespaceSelector: {}
+  rules:
+  - apiGroups:
+    - speedscale.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - trafficreplays
+  sideEffects: None
+  timeoutSeconds: 10

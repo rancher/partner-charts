@@ -1,0 +1,114 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    operator.speedscale.com/ignore: "true"
+  creationTimestamp: null
+  labels:
+    app: speedscale-operator
+    controlplane.speedscale.com/component: operator
+  name: speedscale-operator
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: speedscale-operator
+      controlplane.speedscale.com/component: operator
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        checksum/config: |
+          {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      creationTimestamp: null
+      labels:
+        app: speedscale-operator
+        controlplane.speedscale.com/component: operator
+    spec:
+      containers:
+      - command:
+        - /operator
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        envFrom:
+        - configMapRef:
+            name: speedscale-operator
+        - secretRef:
+            name: speedscale-apikey
+            optional: false
+        image: '{{ .Values.image.registry }}/operator:{{ .Values.image.tag }}'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: health-check
+            scheme: HTTP
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        name: operator
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+        - containerPort: 8081
+          name: health-check
+        readinessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /readyz
+            port: health-check
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 100m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 2100
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
+        - mountPath: /etc/ssl/speedscale
+          name: speedscale-tls-out
+          readOnly: true
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: speedscale-operator
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - emptyDir: {}
+        name: tmp
+      - name: webhook-certs
+        secret:
+          secretName: speedscale-webhook-certs
+      - name: speedscale-tls-out
+        secret:
+          secretName: speedscale-certs
+status: {}
