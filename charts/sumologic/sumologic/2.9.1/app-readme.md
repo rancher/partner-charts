@@ -1,0 +1,1 @@
+Install SumoLogic Collection into your cluster!
