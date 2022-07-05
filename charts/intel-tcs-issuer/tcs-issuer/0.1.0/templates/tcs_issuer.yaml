@@ -1,0 +1,376 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tcs-issuer-serviceaccount
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tcs-leader-election-role
+  namespace: {{ .Release.Namespace | quote }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tcs-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tcs-proxy-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: tcs-role
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - certificates.k8s.io
+  resourceNames:
+  - tcsclusterissuer.tcs.intel.com/*
+  - tcsissuer.tcs.intel.com/*
+  resources:
+  - signers
+  verbs:
+  - sign
+- apiGroups:
+  - tcs.intel.com
+  resources:
+  - quoteattestations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tcs.intel.com
+  resources:
+  - quoteattestations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - tcs.intel.com
+  resources:
+  - quoteattestations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - tcs.intel.com
+  resources:
+  - tcsclusterissuers
+  - tcsissuers
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tcs.intel.com
+  resources:
+  - tcsclusterissuers/status
+  - tcsissuers/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tcs-leader-election-rolebinding
+  namespace: {{ .Release.Namespace | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tcs-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: tcs-issuer-serviceaccount
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tcs-proxy-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tcs-proxy-role
+subjects:
+- kind: ServiceAccount
+  name: tcs-issuer-serviceaccount
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tcs-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tcs-role
+subjects:
+- kind: ServiceAccount
+  name: tcs-issuer-serviceaccount
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: v1
+data:
+  tcs_issuer_config.yaml: |
+    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
+    kind: ControllerManagerConfig
+    health:
+      healthProbeBindAddress: :8083
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: bb9c3a43.sgx.intel.com
+kind: ConfigMap
+metadata:
+  name: tcs-config
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: v1
+data:
+  sopin: V0lwbUJCybc2Oc6M06Vz
+  userpin: U3BnbGIyTUl3ZV9lSHUy
+kind: Secret
+metadata:
+  name: tcs-issuer-pkcs11-conf
+  namespace: {{ .Release.Namespace | quote }}
+type: Opaque
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: tcs-issuer
+  name: tcs-metrics-service
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  ports:
+  - name: https
+    port: 8443
+    targetPort: https
+  selector:
+    control-plane: tcs-issuer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: tcs-issuer
+  name: tcs-controller
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: tcs-issuer
+  template:
+    metadata:
+      annotations:
+        sgx.intel.com/quote-provider: aesmd
+      labels:
+        control-plane: tcs-issuer
+    spec:
+      containers:
+      - args:
+        - --leader-elect
+        - --zap-devel
+        - --zap-log-level=5
+        - --metrics-bind-address=:8082
+        - --health-probe-bind-address=:8083
+        - --user-pin=$USER_PIN
+        - --so-pin=$SO_PIN
+        {{- if .Values.controllerExtraArgs }}
+        {{- with .Values.controllerExtraArgs }}
+        {{- tpl . $ | trim | nindent 8 }}
+        {{- end }}
+        {{- end }}
+        command:
+        - /tcs-issuer
+        env:
+        - name: USER_PIN
+          valueFrom:
+            secretKeyRef:
+              key: userpin
+              name: tcs-issuer-pkcs11-conf
+        - name: SO_PIN
+          valueFrom:
+            secretKeyRef:
+              key: sopin
+              name: tcs-issuer-pkcs11-conf
+        image: "{{ .Values.image.hub }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 180
+        name: tcs-issuer
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+            sgx.intel.com/enclave: 1
+            sgx.intel.com/epc: 512Ki
+          requests:
+            cpu: 100m
+            memory: 20Mi
+            sgx.intel.com/enclave: 1
+            sgx.intel.com/epc: 512Ki
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /home/tcs-issuer/tokens
+          name: tokens-dir
+      initContainers:
+      - command:
+        - /bin/chown
+        - -R
+        - 5000:5000
+        - /home/tcs-issuer/tokens
+        image: busybox
+        imagePullPolicy: IfNotPresent
+        name: init
+        volumeMounts:
+        - mountPath: /home/tcs-issuer/tokens
+          name: tokens-dir
+      serviceAccountName: tcs-issuer-serviceaccount
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - hostPath:
+          path: /var/lib/tcs-issuer/tokens
+          type: DirectoryOrCreate
+        name: tokens-dir
