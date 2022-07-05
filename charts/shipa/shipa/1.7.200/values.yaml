@@ -1,0 +1,555 @@
+# Default values for shipa.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## @section Common parameters
+##
+
+## @param nameOverride If provided, overrides the release name, for example, in the app.kubernetes.io/name label
+nameOverride: ""
+
+## @param fullnameOverride If provided, overrides the release name, for example, in the naming of resources (pods, deployments, etc.)
+fullnameOverride: ""
+
+## @param imagePullSecrets If provided, these will be configured as imagePullSecrets for pulling images directly included in this chart (the MongoDB(&reg;) sub-chart has its own imagePullSecrets configuration). The array is a list of Kubernetes secrets, likely of type `kubernetes.io/dockerconfigjson`. Example:<br/><code>imagePullSecrets:<br/>&nbsp;&nbsp;- name: image-pull-secret</code>
+## @example imagePullSecrets
+## imagePullSecrets:
+##   - name: image-pull-secret
+imagePullSecrets: []
+
+images:
+  ## @param images.shipaRepositoryDirname The base directory for Shipa Corp images. For Shipa Corp images this value has repositoryBasename and tag appended to it to determine the location to pull images from. This does not affect non-Shipa Corp images, such as k8s.gcr.io/ingress-nginx/controller, docker.io/postgres, k8s.gcr.io/mongodb-install, docker.io/mongo, and docker.io/busybox
+  shipaRepositoryDirname: docker.io/shipasoftware
+
+rbac:
+  ## @param rbac.enabled If enabled, a Shipa specific ServiceAccount will be used by resources, otherwise `"default"` is used
+  enabled: true
+
+## @section Initial Admin account credentials
+## @descriptionStart
+## `auth.adminUser` and `auth.adminPassword` are required for install and will not be changed and are not required on upgrade
+## @descriptionEnd
+##
+
+auth:
+  ## @param auth.adminUser is the login name for the initial admin
+  adminUser: ""
+
+  ## @param auth.adminPassword is the password for the initial admin
+  adminPassword: ""
+
+## @section Shipa API configuration
+shipaApi:
+  ## @param shipaApi.port Port to expose for HTTP traffic to the Shipa API pod
+  port: "8080"
+
+  ## @param shipaApi.securePort Port to expose for HTTPS traffic to the Shipa API pod
+  securePort: "8081"
+
+  ## @param shipaApi.servicePorts Ports to expose for HTTP traffic to the Shipa API Service
+  servicePorts:
+    - "80"
+
+  ## @param shipaApi.serviceSecurePorts Ports to expose for HTTPS traffic to the Shipa API Service
+  serviceSecurePorts:
+    - "443"
+
+  ## @param shipaApi.repositoryBasename The repository name to use for pulling the Shipa API image
+  repositoryBasename: api
+
+  ## @param shipaApi.tag The tag to use for pulling the Shipa API image
+  tag: 6e4a1bc373b4afffa1e5851813271cf61be6dd9a
+
+  ## @param shipaApi.pullPolicy Image pull policy to use for pulling the Shipa API image
+  pullPolicy: Always
+
+  ## @param shipaApi.debug Enables debug log level for the Shipa API
+  debug: false
+
+  ## @param shipaApi.resources Can be used to put resource limits on the Shipa API pod. Example:<br/><code>shipaApi:<br/>&nbsp;&nbsp;resources:<br/>&nbsp;&nbsp;&nbsp;&nbsp;requests:<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;memory: 16Mi<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cpu: 50m<br/>&nbsp;&nbsp;&nbsp;&nbsp;limits:<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;memory: 64Mi<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cpu: 250m</code>
+  ## @example shipaApi.resources
+  ## shipaApi:
+  ##   resources:
+  ##     requests:
+  ##       memory: 16Mi
+  ##       cpu: 50m
+  ##     limits:
+  ##       memory: 64Mi
+  ##       cpu: 250m
+  resources: {}
+
+  ## @param shipaApi.cnames If there are any DNS names that will be used they need to be specified here for appropriate ingress and cert provisioning. Example:<br/><code>shipaApi:<br/>&nbsp;&nbsp;cnames:<br/>&nbsp;&nbsp;&nbsp;&nbsp;- target.myshipa.lan<br/>&nbsp;&nbsp;&nbsp;&nbsp;- other-target.myshipa.lan</code>
+  ## @example shipaApi.cnames
+  ## shipaApi
+  ##   cnames:
+  ##     - target.myshipa.lan
+  ##     - other-target.myshipa.lan
+  cnames: []
+
+  ## @param shipaApi.allowRestartIngressControllers If set to false, disables the ability for a cluster update to restart the ingress controllers
+  allowRestartIngressControllers: true
+
+  ## @param shipaApi.isCAEndpointDisabled If set to true, the ca/certificates endpoint of the Shipa API will be disabled, which disallows the Shipa CLI from trusting invalid TLS certificates when connecting to this Shipa API
+  isCAEndpointDisabled: false
+
+  ## @param shipaApi.secureIngressOnly If set to true, all HTTP traffic to the Shipa API ingress will be redirected to HTTPS
+  secureIngressOnly: false
+
+  ## @param shipaApi.useInternalHost If true (recommended), the main shipa cluster will communicate with the Shipa API using the internal Kubernetes host name, rather than an external CNAME
+  useInternalHost: true
+
+  ## @param shipaApi.customSecretName If provided, this secret will be used as the TLS secret for the API ingress controller. Use this if you have a trusted certificate that you wish to use instead of the default, self-signed certificate
+  customSecretName: ""
+
+  ## @param shipaApi.customIngressAnnotations If provided, these annotations will be added to the Shipa API Ingress resources. Example:<br/><code>shipaApi<br/>&nbsp;&nbsp;customIngressAnnotations:<br/>&nbsp;&nbsp;&nbsp;&nbsp;custom-keys/first-key: "bbb"<br/>&nbsp;&nbsp;&nbsp;&nbsp;custom-keys/second-key: "ddd"</code>
+  ## @example shipaApi.customIngressAnnotations
+  ## shipaApi
+  ##   customIngressAnnotations:
+  ##     custom-keys/first-key: "bbb"
+  ##     custom-keys/second-key: "ddd"
+  customIngressAnnotations: {}
+
+## @section Shipa cluster access configuration
+##
+
+shipaCluster:
+  ## @param shipaCluster.clusterDomain The domain that your cluster uses internally, through coredns, kube-dns, etc.
+  clusterDomain: cluster.local
+
+  ingress:
+    ## @param shipaCluster.ingress.type ingress controller type. Supported values: (nginx, istio, traefik)
+    type: nginx
+
+    ## @param shipaCluster.ingress.image NGINX ingress controller image. If the ingress controller type is nginx and no ingress controller ip address is provided, an ingress controller will be deployed using this image
+    image: k8s.gcr.io/ingress-nginx/controller:v1.1.0
+
+    ## @param shipaCluster.ingress.serviceType ingress controller serviceType. When using shipa managed nginx, we reconcile looking for the right Host of LoadBalancer or ClusterIP based on what is provided here. When using non user managed ingress controller we use this just to store it in DB
+    serviceType: LoadBalancer
+
+    ## @param shipaCluster.ingress.ip Ingress controller ip address. If provided, we assume user provided ingress controller should be used and create api resources for it
+    ip: ""
+
+    ## @param shipaCluster.ingress.className Ingress controller class name. If undefined, in most places we set default: nginx, traefik, istio. If we detect that it's shipa managed nginx, we default to shipa-nginx-ingress
+    className: ""
+
+    ## @param shipaCluster.ingress.apiAccessOnIngressIp If enabled, we will create ingress controller resources to allow api to be accessible on root ip of ingress controller.<br/>NOTE: all ingresses require Host targeting instead of Path targeting for TLS. Also if you use nginxinc/kubernetes-ingress, using Ingress without host is not allowed until this is resolved: https://github.com/nginxinc/kubernetes-ingress/issues/209
+    apiAccessOnIngressIp: true
+
+    ## @section Shipa managed Nginx configs
+    ## @descriptionStart
+    ## These configurations only apply if you are using a Shipa managed Nginx ingress controller
+    ## @descriptionEnd
+    ##
+
+    ## @param shipaCluster.ingress.clusterIp Ingress controller ClusterIp address. If provided, it will be used for shipa managed nginx ingress controller
+    clusterIp: ""
+
+    ## @param shipaCluster.ingress.loadBalancerIp Ingress controller LoadBalancerIp address. If provided, it will be used for shipa managed nginx ingress controller
+    loadBalancerIp: ""
+
+    ## @param shipaCluster.ingress.nodePort If provided, it will be used as node port for shipa managed nginx ingress controller
+    nodePort: ""
+
+    ## @param shipaCluster.ingress.customNginxServiceAnnotations If provided, these annotations will be appended to the Shipa managed Nginx ingress controller Service resource. Example for configuring internet facing NLB in AWS:<br/>
+    ## <code>shipaCluster:<br/>&nbsp;&nbsp;ingress:<br/>&nbsp;&nbsp;&nbsp;&nbsp;customNginxServiceAnnotations:<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;service.beta.kubernetes.io/aws-load-balancer-type: nlb<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;service.beta.kubernetes.io/aws-load-balancer-eip-allocations: eipalloc-abcd1234</code>
+    ## @example shipaCluster.ingress.customNginxServiceAnnotations for configuring internet facing NLB in AWS:
+    ## shipaCluster:
+    ##   ingress:
+    ##     customNginxServiceAnnotations:
+    ##       service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    ##       service.beta.kubernetes.io/aws-load-balancer-eip-allocations: eipalloc-abcd1234
+    customNginxServiceAnnotations: {}
+
+    ## @param shipaCluster.ingress.config Configuration overrides for the Shipa managed Nginx ingress controller. Example (these are the defaults if you leave this empty):<br/><code>shipaCluster:<br/>&nbsp;&nbsp;ingress:<br/>&nbsp;&nbsp;&nbsp;&nbsp;config:<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;proxy-body-size: "512M"<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;proxy-read-timeout: "300"<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;proxy-connect-timeout: "300"<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;proxy-send-timeout: "300"<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;upstream-keepalive-timeout: "300"</code>
+    ## @example shipaCluster.ingress.config
+    ## shipaCluster:
+    ##   ingress:
+    ##     config:
+    ##       proxy-body-size: "512M"
+    ##       proxy-read-timeout: "300"
+    ##       proxy-connect-timeout: "300"
+    ##       proxy-send-timeout: "300"
+    ##       upstream-keepalive-timeout: "300"
+    config: {}
+
+## @section PostgreSQL configuration for use by Clair
+## @descriptionStart
+## `source` parameters pertain to both a Shipa managed in-cluster database, as well as a separately managed database, while `image` and `persistence` only relate to a Shipa managed database.
+## @descriptionEnd
+##
+
+postgres:
+  source:
+    ## @param postgres.source.host Host to connect to for Clair database. Leave blank to default to {{ template "shipa.fullname" . }}-postgres.{{ .Release.Namespace }}
+    host: ""
+
+    ## @param postgres.source.port Port to connect to for Clair database
+    port: 5432
+
+    ## @param postgres.source.user User to connect to for Clair database
+    user: postgres
+
+    ## @param postgres.source.password Password to connect to for Clair database. Leave blank to generate a random value
+    password: ""
+
+    ## @param postgres.source.sslmode The SSL mode to run PostgreSQL in. Options: "require", "verify-full", "verify-ca", or "disable
+    sslmode: disable
+
+  ## @param postgres.create Set to false to avoid creating a PostgreSQL instance, for example, if you are using an external PostgreSQL instance
+  create: true
+
+  ## @param postgres.image If postgres.create is set to true, this is the image that will be used
+  image: docker.io/postgres:13
+
+  persistence:
+    ## @param postgres.persistence.storageClass The storageClassName to use. Undefined or null will use the default provisioner, or "-" will to set storageClassName to "", disabling dynamic provisioning
+    storageClass: ""
+
+    ## @param postgres.persistence.accessMode The PVC access mode to use. Options: ReadWriteOnce, ReadOnlyMany or ReadWriteMany
+    accessMode: "ReadWriteOnce"
+
+    ## @param postgres.persistence.size The amount of storage to provision for the Clair database
+    size: 10Gi
+
+## @section cert-manager configuration
+##
+
+certManager:
+  ## @param certManager.installUrl When Shipa is installed, if cert-manager is not yet installed (existence of cert-manager ClusterIssuer CRD) it will be installed via the resources at the provided URL
+  installUrl: https://github.com/jetstack/cert-manager/releases/download/v1.5.3/cert-manager.yaml
+
+## @section Shipa Dashboard configuration
+##
+
+dashboard:
+  ## @param dashboard.enabled If set to false, the Shipa Dashboard will not be deployed
+  enabled: true
+
+  ## @param dashboard.repositoryBasename The repository name to use for pulling the dashboard image
+  repositoryBasename: dashboard
+
+  ## @param dashboard.tag The tag to use for pulling the dashboard image
+  tag: c18b7d0031047c48d8c3b4666d489a498ca58653
+
+## @section Shipa CLI configuration
+##
+
+cli:
+  ## @param cli.repositoryBasename The repository name to use for pulling the Shipa CLI image
+  repositoryBasename: cli
+
+  ## @param cli.tag The tag to use for pulling the Shipa CLI image
+  tag: eb516ebb0bb625748cd6baaa5312e8330469ae34
+
+  ## @param cli.pullPolicy Image pull policy to use for pulling the Shipa CLI image
+  pullPolicy: Always
+
+## @section Metrics configuration
+##
+
+metrics:
+  ## @param metrics.repositoryBasename The repository name to use for pulling the metrics image
+  repositoryBasename: metrics
+
+  ## @param metrics.tag The tag to use for pulling the metrics image
+  tag: v0.0.7
+
+  ## @param metrics.pullPolicy Image pull policy to use for pulling the metrics image
+  pullPolicy: Always
+
+  ## @param metrics.password Password to setup for connecting to the Shipa metrics. If left blank, a random value will be generated and used
+  password: ""
+
+  ## @param metrics.prometheusArgs Arguments to pass to Prometheus on starting the Shipa metrics
+  prometheusArgs: "--storage.tsdb.retention.time=1d"
+
+  ## @param metrics.extraPrometheusConfiguration Extra configuration to add to `prometheus.yaml`. Example for configuring remote reads and writes:<br/><code>metrics:<br/>&nbsp;&nbsp;extraPrometheusConfiguration: \|<br/>&nbsp;&nbsp;&nbsp;&nbsp;remote_read:<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- url: http://localhost:9268/read<br/>&nbsp;&nbsp;&nbsp;&nbsp;remote_write:<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- url: http://localhost:9268/write</code>
+  ## @example metrics.extraPrometheusConfiguration for remote read and write
+  ## metrics:
+  ##   extraPrometheusConfiguration: |
+  ##     remote_read:
+  ##       - url: http://localhost:9268/read
+  ##     remote_write:
+  ##       - url: http://localhost:9268/write
+  extraPrometheusConfiguration: ""
+
+## @section busybody configuration
+##
+
+busybody:
+  ## @param busybody.repositoryBasename The repository name to use for pulling the busybody image
+  repositoryBasename: bb
+
+  ## @param busybody.tag The tag to use for pulling the busybody image
+  tag: ead64d61a7dab4dca50bd90e18b908e6f44bb9f9
+
+## @section Shipa controller configuration
+##
+
+shipaController:
+  ## @param shipaController.repositoryBasename The repository name to use for pulling the Shipa controller image
+  repositoryBasename: shipa-controller
+
+  ## @param shipaController.tag The tag to use for pulling the Shipa controller image
+  tag: 5e7f221a1adce3bd40b5c352418d9da8de94ada2
+
+  ## @param shipaController.enableEventUpdater Shipa creates and shows more shipa events for discovered applications
+  enableEventUpdater: true
+
+  ## @param shipaController.enableNetworkPolicyViolation Enables network policy violations
+  enableNetworkPolicyViolation: true
+
+## @section prometheus-metrics-exporter configuration
+##
+
+prometheusMetricsExporter:
+  ## @param prometheusMetricsExporter.repositoryBasename The repository name to use for pulling the Prometheus exporter image
+  repositoryBasename: prometheus-metrics-exporter
+
+  ## @param prometheusMetricsExporter.tag The tag to use for pulling the Prometheus exporter image
+  tag: b123eb79bdbe56f83812b5ad3cfb8bbb568b2e3d
+
+## @section Clair configuration
+##
+
+clair:
+  ## @param clair.repositoryBasename The repository name to use for pulling the Clair image
+  repositoryBasename: clair
+
+  ## @param clair.tag The tag to use for pulling the Clair image
+  tag: v2.1.7
+
+## @section Ketch controller configuration
+##
+
+ketch:
+  ## @param ketch.repositoryBasename The repository name to use for pulling the Ketch controller image
+  repositoryBasename: ketch
+
+  ## @param ketch.tag The tag to use for pulling the Ketch controller image
+  tag: 4105c20ee2ca27c2ce4811764901565aa5035393
+
+  ## @param ketch.metricsAddress Address of where metrics will be sent. Leave empty to disable metrics for Ketch
+  metricsAddress: 127.0.0.1:8080
+
+## @section Shipa agent configuration
+##
+
+agent:
+  ## @param agent.repositoryBasename The repository name to use for pulling the Shipa agent image
+  repositoryBasename: shipa-cluster-agent
+
+  ## @param agent.tag The tag to use for pulling the Shipa agent image
+  tag: d130d858d71522bbbffbfaaba6097dceaba4c0d8
+
+## @section External MongoDB(&reg;) configuration
+## @descriptionStart
+## External MongoDB(&reg;) configuration allows Shipa to connect to your own instance. *This is highly recommended for production usage.*
+## `externalMongodb.url` must follow Standard Connection String Format as described here: https://docs.mongodb.com/manual/reference/connection-string/#standard-connection-string-format
+## Due to some limitations of the dependencies, we currently do not support url with _'DNS Seed List Connection Format'_, hence connection strings with `mongodb+srv` will not work and will instead need to be provided as a comma separated list of shards, e.g.:
+## &nbsp; &nbsp; `mongos0.example.com:27017,mongos1.example.com:27017,mongos2.example.com:27017`
+## @descriptionEnd
+##
+
+externalMongodb:
+  ## @param externalMongodb.url Connection URL for external MongoDB instance.
+  url: ""
+
+  auth:
+    ## @param externalMongodb.auth.username Username for authenticating to an external MongoDB instance
+    username: ""
+
+    ## @param externalMongodb.auth.password Password for authenticating to an external MongoDB instance
+    password: ""
+
+  tls:
+    ## @param externalMongodb.tls.enable Set to false to disable TLS when connecting to external DB instance.
+    enable: true
+
+#--------------------------------------------------------------------------------------------------------------------------
+# tags, mongodb, mongodb-replicaset Below config is for managing dependent charts specific to MongoDB.
+#   Note that the in-cluster MongoDB instance should be used for POC purposes only
+#--------------------------------------------------------------------------------------------------------------------------
+
+## @section Dependent chart tags
+## @descriptionStart
+## `tags` are used to enable or disable dependent charts.
+## _Note that the in-cluster MongoDB(&reg;) instance should be used for POC purposes only_
+## @descriptionEnd
+##
+
+tags:
+  ## @param tags.defaultDB Set defaultDB (and legacyMongoReplicaset) to `false` when using external DB to not install default DB. It will also prevent creating Persistent Volumes. This cannot be used with tags.legacyMongoReplicaset
+  defaultDB: true
+
+  ## @param tags.legacyMongoReplicaset (Deprecated) Set legacyMongoReplicaset to 'true' in order to use the deprecated https://charts.helm.sh/stable/mongodb-replicaset chart as an internal MongoDB. This cannot be used with tags.defaultDB
+  legacyMongoReplicaset: false
+
+## @section MongoDB(&reg;) dependent chart parameters
+## @descriptionStart
+## Default DB config, enabled by setting tag.defaultDB to true. This is not intended for production use, where externalMongodb should be used to connect to a operationally hardened database
+## Full list of configuration values can be found at https://github.com/bitnami/charts/blob/d997058e6f9c99826242c0ae6d19ccc1cdc2106a/bitnami/mongodb/values.yaml
+## @descriptionEnd
+##
+
+mongodb:
+  global:
+    ## @param mongodb.global.imageRegistry Global Docker image registry for MongoDB(&reg;) dependent chart
+    imageRegistry: ""
+    ## @param mongodb.global.imagePullSecrets Global Docker registry secret names as an array
+    imagePullSecrets: []
+  image:
+    ## @param mongodb.image.registry MongoDB(&reg;) image registry for MongoDB(&reg;) dependent chart
+    registry: docker.io
+    ## @param mongodb.image.repository MongoDB(&reg;) image registry for MongoDB(&reg;) dependent chart
+    repository: bitnami/mongodb
+    ## @param mongodb.image.tag MongoDB(&reg;) image tag (immutable tags are recommended) for MongoDB(&reg;) dependent chart
+    tag: 5.0.6-debian-10-r29
+    ## @param mongodb.image.pullPolicy MongoDB(&reg;) image pull policy for MongoDB(&reg;) dependent chart
+    pullPolicy: IfNotPresent
+    ## @param mongodb.image.pullSecrets Specify docker-registry secret names as an array for MongoDB(&reg;) dependent chart
+    pullSecrets: []
+  persistence:
+    ## @param mongodb.persistence.existingClaim Provide an existing `PersistentVolumeClaim` (only when `architecture=standalone`) for MongoDB(&reg;) dependent chart
+    existingClaim: ""
+    ## @param mongodb.persistence.size PVC Storage Request for MongoDB(&reg;) data volume for MongoDB(&reg;) dependent chart
+    size: "10Gi"
+  ## @param mongodb.architecture MongoDB(&reg;) architecture (`standalone` or `replicaset`) for MongoDB(&reg;) dependent chart
+  architecture: "standalone"
+  ## @param mongodb.useStatefulSet Set to true to use a StatefulSet instead of a Deployment (only when `architecture=standalone`) for MongoDB(&reg;) dependent chart
+  useStatefulSet: true
+  ## @param mongodb.replicaSetName Name of the replica set (only when `architecture=replicaset`) for MongoDB(&reg;) dependent chart
+  replicaSetName: rs0
+  service:
+    ## @param mongodb.service.port MongoDB(&reg;) service port for MongoDB(&reg;) dependent chart
+    port: 27017
+  ## @param mongodb.nodeSelector [object] MongoDB(&reg;) Node labels for pod assignment for MongoDB(&reg;) dependent chart
+  nodeSelector:
+    kubernetes.io/os: linux
+  arbiter:
+    podSecurityContext:
+      ## @param mongodb.arbiter.podSecurityContext.enabled Enable Arbiter pod(s)' Security Context for MongoDB(&reg;) dependent chart
+      enabled: true
+      ## @param mongodb.arbiter.podSecurityContext.fsGroup Group ID for the volumes of the Arbiter pod(s) for MongoDB(&reg;) dependent chart
+      fsGroup: 999
+    containerSecurityContext:
+      ## @param mongodb.arbiter.containerSecurityContext.enabled Enable Arbiter container(s)' Security Context for MongoDB(&reg;) dependent chart
+      enabled: true
+      ## @param mongodb.arbiter.containerSecurityContext.runAsUser User ID for the Arbiter container for MongoDB(&reg;) dependent chart
+      runAsUser: 999
+    ## @param mongodb.arbiter.nodeSelector [object] Arbiter Node labels for pod assignment for MongoDB(&reg;) dependent chart
+    nodeSelector:
+      kubernetes.io/os: linux
+  auth:
+    ## @param mongodb.auth.enabled Enable authentication for MongoDB(&reg;) dependent chart
+    enabled: false
+  tls:
+    ## @param mongodb.tls.enabled Enable MongoDB(&reg;) TLS support between nodes in the cluster as well as between mongo clients and nodes for MongoDB(&reg;) dependent chart
+    enabled: false
+    image:
+      ## @param mongodb.tls.image.registry Init container TLS certs setup image registry for MongoDB(&reg;) dependent chart
+      registry: docker.io
+      ## @param mongodb.tls.image.repository Init container TLS certs setup image repository for MongoDB(&reg;) dependent chart
+      repository: bitnami/nginx
+      ## @param mongodb.tls.image.tag Init container TLS certs setup image tag (immutable tags are recommended) for MongoDB(&reg;) dependent chart
+      tag: 1.21.6-debian-10-r30
+      ## @param mongodb.tls.image.pullPolicy Init container TLS certs setup image pull policy for MongoDB(&reg;) dependent chart
+      pullPolicy: IfNotPresent
+      ## @param mongodb.tls.image.pullSecrets Init container TLS certs specify docker-registry secret names as an array for MongoDB(&reg;) dependent chart
+      pullSecrets: []
+  externalAccess:
+    ## @param mongodb.externalAccess.enabled Enable Kubernetes external cluster access to MongoDB(&reg;) nodes (only for replicaset architecture) for MongoDB(&reg;) dependent chart
+    enabled: false
+    autoDiscovery:
+      ## @param mongodb.externalAccess.autoDiscovery.enabled Enable using an init container to auto-detect external IPs by querying the K8s API for MongoDB(&reg;) dependent chart
+      enabled: false
+      image:
+        ## @param mongodb.externalAccess.autoDiscovery.image.registry Init container auto-discovery image registry for MongoDB(&reg;) dependent chart
+        registry: docker.io
+        ## @param mongodb.externalAccess.autoDiscovery.image.repository Init container auto-discovery image repository for MongoDB(&reg;) dependent chart
+        repository: bitnami/kubectl
+        ## @param mongodb.externalAccess.autoDiscovery.image.tag Init container auto-discovery image tag (immutable tags are recommended) for MongoDB(&reg;) dependent chart
+        tag: 1.23.4-debian-10-r7
+        ## @param mongodb.externalAccess.autoDiscovery.image.pullPolicy Init container auto-discovery image pull policy for MongoDB(&reg;) dependent chart
+        pullPolicy: IfNotPresent
+        ## @param mongodb.externalAccess.autoDiscovery.image.pullSecrets Init container auto-discovery image pull secrets for MongoDB(&reg;) dependent chart
+        pullSecrets: []
+
+  volumePermissions:
+    ## @param mongodb.volumePermissions.enabled Enable init container that changes the owner and group of the persistent volume(s) mountpoint to `runAsUser:fsGroup` for MongoDB(&reg;) dependent chart
+    enabled: false
+    image:
+      ## @param mongodb.volumePermissions.image.registry Init container volume-permissions image registry for MongoDB(&reg;) dependent chart
+      registry: docker.io
+      ## @param mongodb.volumePermissions.image.repository Init container volume-permissions image repository for MongoDB(&reg;) dependent chart
+      repository: bitnami/bitnami-shell
+      ## @param mongodb.volumePermissions.image.tag Init container volume-permissions image tag (immutable tags are recommended) for MongoDB(&reg;) dependent chart
+      tag: 10-debian-10-r350
+      ## @param mongodb.volumePermissions.image.pullPolicy Init container volume-permissions image pull policy for MongoDB(&reg;) dependent chart
+      pullPolicy: IfNotPresent
+      ## @param mongodb.volumePermissions.image.pullSecrets Specify docker-registry secret names as an array for MongoDB(&reg;) dependent chart
+      pullSecrets: []
+  metrics:
+    ## @param mongodb.metrics.enabled Enable using a sidecar Prometheus exporter for MongoDB(&reg;) dependent chart
+    enabled: false
+    image:
+      ## @param mongodb.metrics.image.registry MongoDB(&reg;) Prometheus exporter image registry for MongoDB(&reg;) dependent chart
+      registry: docker.io
+      ## @param mongodb.metrics.image.repository MongoDB(&reg;) Prometheus exporter image repository for MongoDB(&reg;) dependent chart
+      repository: bitnami/mongodb-exporter
+      ## @param mongodb.metrics.image.tag MongoDB(&reg;) Prometheus exporter image tag (immutable tags are recommended) for MongoDB(&reg;) dependent chart
+      tag: 0.30.0-debian-10-r83
+      ## @param mongodb.metrics.image.pullPolicy MongoDB(&reg;) Prometheus exporter image pull policy for MongoDB(&reg;) dependent chart
+      pullPolicy: IfNotPresent
+      ## @param mongodb.metrics.image.pullSecrets Specify docker-registry secret names as an array for MongoDB(&reg;) dependent chart
+      pullSecrets: []
+  ## @param mongodb.extraFlags MongoDB(&reg;) additional command line flags for MongoDB(&reg;) dependent chart
+  extraFlags: "--dbpath=/bitnami/mongodb"
+  containerSecurityContext:
+    ## @param mongodb.containerSecurityContext.enabled Enable MongoDB(&reg;) container(s)' Security Context for MongoDB(&reg;) dependent chart
+    enabled: true
+    ## @param mongodb.containerSecurityContext.runAsUser User ID for the MongoDB(&reg;) container for MongoDB(&reg;) dependent chart
+    runAsUser: 999
+    ## @param mongodb.containerSecurityContext.runAsNonRoot Set MongoDB(&reg;) container's Security Context runAsNonRoot for MongoDB(&reg;) dependent chart
+    runAsNonRoot: true
+  podSecurityContext:
+    ## @param mongodb.podSecurityContext.enabled Enable MongoDB(&reg;) pod(s)' Security Context for MongoDB(&reg;) dependent chart
+    enabled: true
+    ## @param mongodb.podSecurityContext.fsGroup Group ID for the volumes of the MongoDB(&reg;) pod(s) for MongoDB(&reg;) dependent chart
+    fsGroup: 999
+
+## (Deprecated) DB config using deprecated dependent chart, enabled by setting tag.legacyMongoReplicaset to true. This is not intended for production use and will be removed in a future release
+## @skip mongodb-replicaset
+mongodb-replicaset:
+  replicaSetName: rs0
+  replicas: 1
+  port: 27017
+  nodeSelector:
+    kubernetes.io/os: linux
+  auth:
+    enabled: false
+  installImage:
+    repository: k8s.gcr.io/mongodb-install
+    tag: 0.6
+    pullPolicy: IfNotPresent
+  image:
+    repository: docker.io/mongo
+    tag: 5.0
+    pullPolicy: IfNotPresent
+  copyConfigImage:
+    repository: docker.io/busybox
+    tag: 1.29.3
+    pullPolicy: IfNotPresent
+  persistentVolume:
+    ## Persistent Volume Storage Class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.
+    ##
+    ## storageClass: ""
+    enabled: true
+    size: 10Gi
+  tls:
+    enabled: false
+  configmap: ""
