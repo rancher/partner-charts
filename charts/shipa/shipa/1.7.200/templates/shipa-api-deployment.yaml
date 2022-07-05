@@ -1,0 +1,236 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shipa.fullname" . }}-api
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+  annotations:
+    sidecar.istio.io/inject: {{ eq .Values.shipaCluster.ingress.type "istio" | quote }}
+    checksum/config: {{ include (print $.Template.BasePath "/shipa-api-configmap.yaml") . | sha256sum }}
+    checksum/secret: {{ include (print $.Template.BasePath "/shipa-secret.yaml") . | sha256sum }}
+    checksum/mongo-auth-secret: {{ include (print $.Template.BasePath "/shipa-mongo-auth-secrets.yaml") . | sha256sum }}
+spec:
+{{- if .Values.shipaApi.allowMigrationDowntime }}
+  strategy:
+    type: Recreate
+{{- end }}
+  selector:
+    matchLabels:
+      {{- include "shipa.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shipa.selectorLabels" . | nindent 8 }}
+      annotations:
+        timestamp: "{{ date "20060102150405" now }}"
+        sidecar.istio.io/inject: {{ eq .Values.shipaCluster.ingress.type "istio" | quote }}
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      {{- if .Values.rbac.enabled }}
+      serviceAccountName: {{ template "shipa.fullname" . }}
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      initContainers:
+        - name: bootstrap
+        {{- if .Values.cli.image }}
+          image: "{{ .Values.cli.image }}"
+        {{- else }}
+          image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.cli.repositoryBasename }}:{{ .Values.cli.tag }}"
+        {{- end }}
+          command:
+            - /scripts/bootstrap.sh
+          imagePullPolicy: {{ .Values.cli.pullPolicy }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: shipa-conf
+              mountPath: /etc/shipa-default/
+            - name: config-dir
+              mountPath: /etc/shipa/
+          env:
+            - name: RELEASE_NAME
+              value: {{ template "shipa.fullname" . }}
+            - name: INGRESS_TYPE
+              value: {{ default ( "nginx" ) .Values.shipaCluster.ingress.type | quote }}
+            - name: NGINX_SERVICE
+              value: {{ template "shipa.fullname" . }}-ingress-nginx
+            - name: SHIPA_PORT
+              value: {{ first .Values.shipaApi.servicePorts | quote }}
+            - name: SHIPA_API_CNAMES
+              value: {{ join "\",\"" (splitList "," (trimPrefix "\n" (include "shipa.cnames" .)) ) | quote }}
+            - name: SHIPA_INTERNAL_DNS
+              value:  "{{ template "shipa.fullname" . }}-api.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}"
+            - name: SHIPA_ORGANIZATION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shipa.fullname" . }}-defaults-configmap
+                  key: shipa-org-id 
+            - name: SHIPA_MAIN_TARGET
+              value: {{ template "shipa.GetMainTarget" . }}
+            - name: WAIT_FOR_NGINX
+              value: {{ and (eq .Values.shipaCluster.ingress.type "nginx") (not .Values.shipaCluster.ingress.ip) | quote }}
+            - name: INGRESS_IP
+              value: {{ .Values.shipaCluster.ingress.ip }}
+            - name: NGINX_DEPLOYMENT_NAME
+              value: {{ template "shipa.fullname" . }}-nginx-ingress
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+        - name: init
+        {{- if .Values.shipaApi.image }}
+          image: "{{ .Values.shipaApi.image }}"
+        {{- else }}
+          image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.shipaApi.repositoryBasename }}:{{ .Values.shipaApi.tag }}"
+        {{- end }}
+          # this init container creates an admin user.
+          # Let's avoid having ENV variables with admin credentials in the main shipa container.
+          command:
+            - /bin/shipad
+            - root
+            - user
+            - create
+            - --ignore-if-exists
+          imagePullPolicy: {{ .Values.shipaApi.pullPolicy }}
+          volumeMounts:
+            - name: config-dir
+              mountPath: /etc/shipa/
+            - name: certificates
+              mountPath: /certs/
+          env:
+          - name: SHIPA_ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shipa.fullname" . }}-api-init-secret
+                key: username
+          - name: SHIPA_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shipa.fullname" . }}-api-init-secret
+                key: password
+          {{- if not (or (.Values.tags.defaultDB) (.Values.tags.legacyMongoReplicaset)) }}
+          {{- if and ( .Values.externalMongodb.auth.username ) ( .Values.externalMongodb.auth.password ) }}
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shipa.fullname" . }}-mongo-auth-secret
+                key: username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shipa.fullname" . }}-mongo-auth-secret
+                key: password
+          {{- end }}
+          {{- end }}
+      containers:
+        - name: shipa
+        {{- if .Values.shipaApi.image }}
+          image: "{{ .Values.shipaApi.image }}"
+        {{- else }}
+          image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.shipaApi.repositoryBasename }}:{{ .Values.shipaApi.tag }}"
+        {{- end }}
+          imagePullPolicy: {{ .Values.shipaApi.pullPolicy }}
+          env:
+            - name: METRICS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shipa.fullname" . }}-secret
+                  key: metrics-password
+            - name: DASHBOARD_IMAGE
+            {{- if .Values.dashboard.image }}
+              value: "{{ .Values.dashboard.image }}"
+            {{- else }}
+              value: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.dashboard.repositoryBasename }}:{{ .Values.dashboard.tag }}"
+            {{- end }}
+            - name: DASHBOARD_ENABLED
+              value: "{{ .Values.dashboard.enabled }}"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          {{- if not (or (.Values.tags.defaultDB) (.Values.tags.legacyMongoReplicaset)) }}
+          {{- if and ( .Values.externalMongodb.auth.username ) ( .Values.externalMongodb.auth.password ) }}
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shipa.fullname" . }}-mongo-auth-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shipa.fullname" . }}-mongo-auth-secret
+                  key: password
+          {{- end }}
+          {{- end }}
+          ports:
+            - name: shipa
+              containerPort: {{ .Values.shipaApi.port }}
+              protocol: TCP
+            - name: shipa-secure
+              containerPort: {{ .Values.shipaApi.securePort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.shipaApi.port }}
+            periodSeconds: 2
+            failureThreshold: 4
+          startupProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.shipaApi.port }}
+            failureThreshold: 90
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.shipaApi.port }}
+            periodSeconds: 3
+            initialDelaySeconds: 5
+            failureThreshold: 50
+            successThreshold: 1
+          resources:
+            {{- toYaml .Values.shipaApi.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config-dir
+              mountPath: /etc/shipa/
+              readOnly: true
+            - name: certificates
+              mountPath: /certs/
+              readOnly: true
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      volumes:
+        - name: config-dir
+          emptyDir: {}
+        - name: shipa-conf
+          configMap:
+            name: {{ template "shipa.fullname" . }}-api-config
+            items:
+              - key: shipa.conf
+                path: shipa.conf
+        - name: certificates
+          secret:
+            secretName: shipa-certificates
+        - name: scripts
+          configMap:
+            defaultMode: 0755
+            name: {{ template "shipa.fullname" . }}-api-init-config
