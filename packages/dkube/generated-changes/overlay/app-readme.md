@@ -21,5 +21,10 @@ The following is the minimum configuration required to deploy DKube on a Rancher
   - For evaluation purposes, one of the worker nodes can be configured as the storage option. In this case the recommended size of storage on the worker node is 1 TB and a minimum size of 400 GB.
 - Dkube requires a Kubernetes version of 1.20.
 - Dkube images registry details are required for installation. Please send a mail to support@dkube.io for the details.
+- The following sections in the installation guide needs to be followed to prepare Rancher cluster for Dkube installation.
+  - [Getting the Dkube Files](https://dkube.io/install/install3_x/Install-Getting-Started.html#getting-the-dkube-files)
+  - [Setting up the Rancher Cluster](https://dkube.io/install/install3_x/Install-Rancher.html#setting-up-the-rancher-cluster)
+  - [Preparing the Rancher Cluster](https://dkube.io/install/install3_x/Install-Rancher.html#preparing-the-rancher-cluster).
+  - [Node Setup](https://dkube.io/install/install3_x/Install-Rancher.html#node-setup). This is optional for a non-GPU cluster.
 
 For more information on installation, refer to the [Dkube Installation Guide](https://dkube.io/install/install3_x/Install-Advanced.html).
