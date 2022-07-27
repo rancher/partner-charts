@@ -4,7 +4,10 @@
 
 NGINX Service Mesh is supported in Rancher 2.5+ when deploying from the Apps and Marketplace. NGINX Service Mesh is not currently supported on k3s.
 
-## Enabling telemetry
+## Observability
+NGINX Service Mesh can integrate with a number of tracing services using OpenTelemetry or OpenTracing.
+
+### Using OpenTelemetry
 
 Telemetry can only be enabled by editing the configuration YAML directly in the Rancher UI. When installing NGINX Service Mesh, select the `Edit YAML` option. To enable telemetry, set the `tracing` object to `{}` and fill out the `telemetry` object.
 The telemetry object expects a `samplerRatio`, and the `host` and `port` of your OTLP gRPC collector.
@@ -18,4 +21,21 @@ telemetry:
     otlp:
       host: "my-otlp-collector-host"
       port: 4317
+```
+
+### Using OpenTracing
+
+Note: OpenTracing is deprecated in favor of OpenTelemetry.
+
+Tracing can only be enabled if telemetry is not enabled. In order to enable tracing, edit the configuration YAML directly in the Rancher UI. When installing NGINX Service Mesh, select the `Edit YAML` option, set the `telemetry` object to `{}`, and fill out the `tracing` object.
+The tracing object expects a `sampleRate`, an `address` and a `backend`. The three options for backend are "jaeger", "zipkin", and "datadog".
+
+For example:
+
+```yaml
+telemetry: {}
+tracing:
+  sampleRate: 1
+  backend: "jaeger"
+  address: "jaeger.my-namespace:6831"
 ```
