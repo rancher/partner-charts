@@ -14,3 +14,5 @@ NeuVector integrates tightly with Rancher and Kubernetes to extend the built-in 
 Additional Notes:
 + Configure correct container runtime and runtime path under container runtime. Enable only one runtime.
 + Neuvector deployed from Partners chart repository do not support Single Sign On from Rancher Manager. Please deploy Neuvector from Rancher charts for Single Sign On to work.
++ For deploying on hardened RKE2 and K3s clusters, enable PSP and set user id from other configuration for Manager, Scanner and Updater deployments. User id can be any number other than 0.
++ For deploying on hardened RKE cluster, enable PSP from other configuration.
