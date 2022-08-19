@@ -8,11 +8,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CI_TOOLS_URL: https://github.com/samuelattwood/partner-charts-ci/releases/latest/download/partner-charts-ci-linux-amd64
 
     steps:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
+      - name: Fetch CI Tools
+        run: |
+          curl -s -L -o /usr/local/bin/partner-charts-ci $CI_TOOLS_URL
+          chmod +x /usr/local/bin/partner-charts-ci
 
       - name: Checkout into branch
         run: git checkout -b staging-pr-workflow
@@ -28,9 +35,6 @@ jobs:
       - name: Rebase to main-source
         run: git rebase origin/main-source
 
-      - name: Pull scripts
-        run: sudo make pull-scripts
-      
       - name: Validate 
-        if: "!contains(github.event.pull_request.title, '[modified annotations]')"
-        run: sudo make validate
+        if: "!contains(github.event.pull_request.title, '[modified charts]')"
+        run: partner-charts-ci validate
