@@ -1,0 +1,37 @@
+#!/bin/bash
+set -e
+
+CI_BINARY="partner-charts-ci"
+CI_BINARY_URL_BASE="https://github.com/samuelattwood/partner-charts-ci/releases/latest/download"
+CI_GIT_REPO="https://github.com/samuelattwood/partner-charts-ci.git"
+
+mkdir -p bin
+
+if [[ -f bin/${CI_BINARY} ]]; then
+ echo "bin/${CI_BINARY} exists. Skipping fetch..."
+ exit 0
+fi
+
+OS=$(uname -s)
+ARCH=$(uname -p)
+
+
+if [[ ${OS} == "Linux" ]] && [[ ${ARCH} == "x86_64" ]]; then
+    BINARY_NAME=partner-charts-ci-linux-amd64
+elif [[ ${OS} == "Darwin" ]]; then
+    BINARY_NAME=partner-charts-ci-darwin-universal
+else
+    #Fall back to local build
+    git clone --depth 1 -b main ${CI_GIT_REPO} src
+    cd src
+    make
+    mv bin/${CI_BINARY} ../bin
+    cd ..
+    rm -rf src
+fi
+
+if [[ ! -z ${BINARY_NAME} ]]; then
+    curl -s -L -o bin/${CI_BINARY} ${CI_BINARY_URL_BASE}/${BINARY_NAME}
+fi
+
+chmod +x bin/partner-charts-ci
