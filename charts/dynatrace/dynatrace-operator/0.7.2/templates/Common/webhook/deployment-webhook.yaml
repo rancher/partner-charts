@@ -1,0 +1,142 @@
+{{- $platformIsSet := printf "%s" (required "Platform needs to be set to kubernetes, openshift " (include "dynatrace-operator.platformSet" .))}}
+{{ if eq (include "dynatrace-operator.partial" .) "false" }}
+# Copyright 2021 Dynatrace LLC
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynatrace-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dynatrace-operator.webhookLabels" . | nindent 4 }}
+spec:
+  replicas: {{ (default false (.Values.webhook).highAvailability) | ternary 2 1 }}
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      {{- include "dynatrace-operator.webhookSelectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: webhook
+        {{- if (.Values.webhook).apparmor}}
+        container.apparmor.security.beta.kubernetes.io/webhook: runtime/default
+        {{- end }}
+      labels:
+        {{- include "dynatrace-operator.webhookLabels" . | nindent 8 }}
+        {{- include "dynatrace-operator.webhookSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- if (.Values.webhook).highAvailability }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: "topology.kubernetes.io/zone"
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: webhook
+              app.kubernetes.io/name: dynatrace-operator
+        - maxSkew: 1
+          topologyKey: "kubernetes.io/hostname"
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: webhook
+              app.kubernetes.io/name: dynatrace-operator
+      {{- end }}
+      volumes:
+      - emptyDir: {}
+        name: certs-dir
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                    {{- if ne .Values.platform "google-autopilot"}}
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - arm64
+                   {{- end }}
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+      containers:
+        - name: webhook
+          args:
+            - webhook-server
+            # OLM mounts the certificates here, so we reuse it for simplicity
+            - --certs-dir=/tmp/k8s-webhook-server/serving-certs/
+          image: {{- include "dynatrace-operator.image" . | nindent 12 }}
+          imagePullPolicy: Always
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if eq (default false .Values.olm) true}}
+            - name: DEPLOYED_VIA_OLM
+              value: "true"
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /livez
+              port: server-port
+              scheme: HTTPS
+          ports:
+            - name: server-port
+              containerPort: 8443
+          resources:
+            requests:
+              cpu: {{ default "300m" ((.Values.webhook).requests).cpu }}
+              memory: {{ default "128Mi" ((.Values.webhook).requests).memory }}
+            limits:
+              cpu: {{ default "300m" ((.Values.webhook).limits).cpu }}
+              memory: {{ default "128Mi" ((.Values.webhook).limits).memory }}
+          volumeMounts:
+            - name: certs-dir
+              mountPath: /tmp/k8s-webhook-server/serving-certs/
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop: ["all"]
+      serviceAccountName: dynatrace-webhook
+      {{- if (.Values.webhook).hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      {{- if .Values.customPullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.customPullSecret }}
+      {{- end }}
+      {{- if .Values.webhook.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.webhook.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.webhook.tolerations }}
+      tolerations: {{- toYaml .Values.webhook.tolerations | nindent 8 }}
+      {{- end -}}
+{{ end }}
