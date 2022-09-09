@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kubeslice-netop
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: app_net_op
+  template:
+    metadata:
+      annotations:
+        prometheus.io/port: "18080"
+        prometheus.io/scrape: "true"
+      labels:
+        app: app_net_op
+        kubeslice.io/pod-type: netop
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubeslice.io/node-type
+                operator: In
+                values:
+                - gateway
+      hostNetwork: true
+      serviceAccount: kubeslice-netop
+      containers:
+      - env:
+        - name: POD_TYPE
+          value: NETOP_POD
+        - name: NETWORK_INTERFACE
+          value: {{ .Values.netop.networkInterface }}
+        image: {{ .Values.netop.image }}:{{ .Values.netop.tag }}
+        imagePullPolicy: {{ .Values.netop.pullPolicy }}
+        name: avesha-sidecar
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - NET_ADMIN
+          privileged: true
+        {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
+      imagePullSecrets:
+      - name: kubeslice-image-pull-secret
+        {{- end }}
+      tolerations:
+        - key: "kubeslice.io/node-type"
+          operator: "Equal"
+          value: "gateway"
+          effect: "NoSchedule"
+        - key: "kubeslice.io/node-type"
+          operator: "Equal"
+          value: "gateway"
+          effect: "NoExecute"
