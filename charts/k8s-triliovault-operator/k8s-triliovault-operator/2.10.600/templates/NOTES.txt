@@ -1,0 +1,59 @@
+TrilioVault Operator is a helm based operator which install/upgrade/delete the helm Chart of the TrilioVault For Kubernetes.
+This operator watches over the entire helm application of TrilioVault for Kubernetes and has self-healing capabilities.
+
+To verify that TrilioVault Operator has started, run:
+
+    kubectl --namespace={{ .Release.Namespace }} wait --for=condition=ready pod -l "release={{ .Release.Name }}"
+
+{{ if .Values.installTVK.enabled }}
+In one click install, a cluster scope TVM custom resource triliovault-manager is created, you can check its
+configuration by running following command:
+
+    kubectl --namespace {{ .Release.Namespace }} get triliovaultmanagers.triliovault.trilio.io triliovault-manager -o yaml
+
+{{- else }}
+
+Once the Triliovault operator is in running state, you can create the TrilioVault for Kubernetes(TVK) with the
+following custom resource:
+
+    apiVersion: triliovault.trilio.io/v1
+    kind: TrilioVaultManager
+    metadata:
+      labels:
+        app: triliovault
+      name: triliovault-manager
+      namespace: {{ .Release.Namespace }}
+    spec:
+      trilioVaultAppVersion: latest
+      applicationScope: Cluster
+      ingressConfig:
+        host: ""
+      componentConfiguration:
+        ingress-controller:
+          enabled: true
+          service:
+            type: LoadBalancer
+
+Once the above CR has been created, you have to wait for the TVK pods to come up.
+{{- end }}
+
+To check all the TVK pods come into running state, run:
+
+    kubectl --namespace {{ .Release.Namespace }} wait --for=condition=ready pod -l "release=triliovault-manager-{{ .Release.Namespace }}"
+
+Once all the pods are in running state, you can access the TVK UI from your browser using following steps:
+
+{{- if .Values.installTVK.enabled }}
+{{- if eq .Values.installTVK.ComponentConfiguration.ingressController.service.type "LoadBalancer" }}
+    1. Find the external IP of the service `k8s-triliovault-ingress-nginx-controller`
+    2. Hit the URL in browser: https://<External IP of k8s-triliovault-ingress-nginx-controller>
+{{- else }}
+    1. Find the NodePort from the service `k8s-triliovault-ingress-nginx-controller`
+    2. Hit the URL in browser with NodePort: https://<Node IP>:<Node-Port>/
+{{- end }}
+{{- end }}
+
+For more details on how to access the TVK UI, follow this guide: https://docs.trilio.io/kubernetes/management-console-ui/accessing-the-ui
+
+You can start backup and restore of your application using TVK. For more details on how to do that, please follow our
+getting started guide: https://docs.trilio.io/kubernetes/getting-started-3/getting-started-with-management-console
