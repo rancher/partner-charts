@@ -1,1 +1,1 @@
-Install SumoLogic Collection
+sumologic-kubernetes-collection charts for Rancher MarketPlace
