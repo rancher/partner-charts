@@ -1,0 +1,1 @@
+sumologic-kubernetes-collection charts for Rancher marketplace
