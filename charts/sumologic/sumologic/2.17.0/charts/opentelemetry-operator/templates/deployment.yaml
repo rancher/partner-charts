@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: opentelemetry-operator
+    control-plane: controller-manager
+  name: {{ template "opentelemetry-operator.name" . }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opentelemetry-operator
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: opentelemetry-operator
+        control-plane: controller-manager
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      containers:
+        - args:
+            - --metrics-addr=127.0.0.1:8080
+            - --enable-leader-election
+            {{- if and .Values.manager.collectorImage.repository .Values.manager.collectorImage.tag }}
+            - --collector-image={{ .Values.manager.collectorImage.repository }}:{{ .Values.manager.collectorImage.tag }}
+            {{- end }}
+          command:
+            - /manager
+          {{- if .Values.manager.env }}
+          env:
+            {{- range $name, $value := .Values.manager.env  }}
+            - name: {{ $name }}
+              value: {{ $value | quote -}}
+            {{- end }}
+          {{- end }}
+          image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
+          name: manager
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{ toYaml .Values.manager.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+        - args:
+            - --secure-listen-address=0.0.0.0:8443
+            - --upstream=http://127.0.0.1:8080/
+            - --logtostderr=true
+            - --v=0
+          image: "{{ .Values.kubeRBACProxy.image.repository }}:{{ .Values.kubeRBACProxy.image.tag }}"
+          name: kube-rbac-proxy
+          ports:
+            - containerPort: 8443
+              name: https
+              protocol: TCP
+          {{- with .Values.kubeRBACProxy.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ template "opentelemetry-operator.name" . }}-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ template "opentelemetry-operator.name" . }}-controller-manager-service-cert
