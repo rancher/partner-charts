@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "knowledge-sensor.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "knowledge-sensor.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "knowledge-sensor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "knowledge-sensor.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "knowledge-sensor.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.initContainers }}
+      initContainers: {{ include "render-values" ( dict "value" .Values.initContainers "context" $) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          command:
+            - {{ .Values.command }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SYNC_INTERVAL
+              value: "{{ .Values.syncInterval }}"
+            - name: LOG_LEVEL
+              value: "{{ .Values.logLevel }}"
+            - name: IN_CLUSTER
+              value: "{{ .Values.inCluster }}"
+            - name: NAMESPACE
+              value: "{{ .Release.Namespace }}"
+            - name: ASSERTS_CONTROLLER_HOST
+              value: {{ include "render-values" ( dict "value" .Values.assertsControllerHost "context" $) }}
+            - name: ASSERTS_TENANT
+              value: "{{ .Values.assertsTenant }}"
+            - name: PROMETHEUS_RULES_CONFIGMAP
+              value: "{{ .Values.prometheusRulesConfigmapName }}"
+            - name: PROMETHEUS_RULES_TARGET_DIR
+              value: "{{ .Values.prometheusRulesTargetDir }}"
+            - name: PROMETHEUS_RELABEL_RULES_CONFIGMAP
+              value: "{{ .Values.prometheusRelabelRulesConfigmapName }}"
+            - name: PROMETHEUS_RELABEL_RULES_TARGET_DIR
+              value: "{{ .Values.prometheusRelabelRulesTargetDir }}"
+            {{- if .Values.promxyEnabled }}
+            - name: PROMXYUSER_CONFIGMAP
+              value: "{{ .Values.promxyUserConfigmapName }}"
+            - name: PROMXYRULER_CONFIGMAP
+              value: "{{ .Values.promxyRulerConfigmapName }}"
+            - name: PROMXY_CONFIG_TARGET_DIR
+              value: "{{ .Values.promxyConfigTargetDir }}"
+            {{- end }}
+            {{- if .Values.passwordSecret }}
+            - name: ASSERTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.assertsTenant }}-knowledge-sensor"
+                  key: password
+            {{- end }}
+            {{- if .Values.concurrency.enabled }}
+            - name: CONCURRENCY_CONFIG_PATH
+              value: "{{ .Values.concurrency.path }}"
+            {{- end }}
+
+          {{- if .Values.concurrency.enabled }}
+          volumeMounts:
+            - name: concurrency-config
+              mountPath: "{{ .Values.concurrency.path }}"
+              subPath: concurrency.yml
+              readOnly: true
+          {{- end }}
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          livenessProbe: {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe: {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- if .Values.concurrency.enabled }}
+      volumes:
+        - name: concurrency-config
+          configMap:
+            name: {{ include "knowledge-sensor.fullname" . }}-concurrency
+      {{- end }}
