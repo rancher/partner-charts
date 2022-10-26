@@ -1,0 +1,76 @@
+{{- if .Values.rbac.create -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "crate-operator.labels" . | nindent 4 }}
+  name: {{ template "crate-operator.fullname" . }}
+rules:
+# Framework: posting the events about the handlers progress/errors
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+# Application: watching & handling for the custom resources
+- apiGroups:
+  - cloud.crate.io
+  resources:
+  - cratedbs
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+# Application: other resources it produces and manipulates
+- apiGroups:
+  - ""
+  - apps
+  - batch
+  - policy
+  resources:
+  - configmaps
+  - cronjobs
+  - jobs
+  - deployments
+  - namespaces
+  - persistentvolumeclaims
+  - persistentvolumes
+  - pods
+  - secrets
+  - services
+  - statefulsets
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - "*"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    {{- include "crate-operator.labels" . | nindent 4 }}
+  name: {{ template "crate-operator.fullname" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ template "crate-operator.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ template "crate-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end -}}

@@ -1,0 +1,19 @@
+{{- $hpaCfg := (dict "global" $.Values.global.hpa "local" .Values.hpa "context" $) -}}
+---
+apiVersion: {{ template "gitlab.hpa.apiVersion" $hpaCfg }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ template "fullname" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "gitlab.standardLabels" . | nindent 4 }}
+    {{- include "gitlab.commonLabels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ template "fullname" . }}
+  minReplicas: {{ .Values.hpa.minReplicas | int }}
+  maxReplicas: {{ .Values.hpa.maxReplicas | int }}
+  {{- include "gitlab.hpa.metrics" $hpaCfg | nindent 2 }}
+  {{- include "gitlab.hpa.behavior" $hpaCfg | nindent 2 }}
