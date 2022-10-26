@@ -1,0 +1,146 @@
+{{- if .Values.k8s_sensor.deployment.enabled  -}}
+{{- if or .Values.agent.key .Values.agent.keysSecret -}}
+{{- if or .Values.zone.name .Values.cluster.name -}}
+
+{{- $user_name_password := "" -}}
+{{ if .Values.agent.proxyUser }}
+  {{- $user_name_password = print .Values.agent.proxyUser ":" .Values.agent.proxyPass "@" -}}
+{{ end}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8sensor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: k8sensor
+    {{- include "instana-agent.commonLabels" . | nindent 4 }}
+spec:
+  replicas: {{ default "1" .Values.k8s_sensor.deployment.replicas }}
+  selector:
+    matchLabels:
+      app: k8sensor
+      {{- include "instana-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+      {{- if .Values.agent.pod.labels }}
+        {{- toYaml .Values.agent.pod.labels | nindent 8 }}
+      {{- end }}
+        {{- include "instana-agent.commonLabels" . | nindent 8 }}
+        instana/agent-mode: KUBERNETES
+        app: k8sensor
+      annotations:
+      {{- if .Values.agent.pod.annotations }}
+        {{- toYaml .Values.agent.pod.annotations | nindent 8 }}
+      {{- end }}
+        # To ensure that changes to agent.configuration_yaml or agent.additional_backends trigger a Pod recreation, we keep a SHA here
+        # Unfortunately, we cannot use the lookup function to check on the values in the configmap, otherwise we break Helm < 3.2
+        instana-configuration-hash: {{ cat ( join "," .Values.agent.additionalBackends ) | sha1sum }}
+    spec:
+      serviceAccountName: k8sensor
+      {{- if .Values.k8s_sensor.deployment.pod.nodeSelector }}
+      nodeSelector:
+      {{- range $key, $value := .Values.k8s_sensor.deployment.pod.nodeSelector }}
+        {{ $key }}: {{ $value | quote }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.k8s_sensor.deployment.pod.priorityClassName }}
+      priorityClassName: {{ .Values.k8s_sensor.deployment.pod.priorityClassName | quote }}
+      {{- end }}
+      {{- if typeIs "[]interface {}" .Values.agent.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.agent.image.pullSecrets | nindent 8 }}
+      {{- else if .Values.agent.image.name | hasPrefix "containers.instana.io" }}
+      imagePullSecrets:
+        - name: containers-instana-io
+      {{- end }}
+      containers:
+        - name: instana-agent
+          image: {{ include "image" .Values.k8s_sensor.image | quote }}
+          imagePullPolicy: {{ .Values.k8s_sensor.image.pullPolicy }}
+          env:
+            - name: AGENT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "instana-agent.keysSecretName" . }}
+                  key: key
+            - name: BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: k8sensor
+                  key: backend
+            - name: BACKEND_URL
+              value: "https://$(BACKEND)"
+            - name: AGENT_ZONE
+              value: {{ empty .Values.cluster.name | ternary .Values.zone.name .Values.cluster.name}}
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            {{- if not (empty .Values.agent.proxyHost) }}
+            - name: HTTPS_PROXY
+              value: "http://{{ $user_name_password }}{{ .Values.agent.proxyHost }}:{{ .Values.agent.proxyPort }}"
+            - name: NO_PROXY
+              value: "kubernetes.default.svc"
+            {{- end }}
+          volumeMounts:
+            {{- include "instana-agent.commonVolumeMounts" . | nindent 12 }}
+            - name: kubernetes-sensor-configuration
+              subPath: configuration.yaml
+              mountPath: /root/configuration.yaml
+            {{- if .Values.agent.tls }}
+            {{- if or .Values.agent.tls.secretName (and .Values.agent.tls.certificate .Values.agent.tls.key) }}
+              {{- include "instana-agent.tls-volumeMounts" . | nindent 12 }}
+            {{- end }}
+            {{- end }}
+          resources:
+            requests:
+              {{- include "instana-agent.resources" .Values.k8s_sensor.deployment.pod.requests | nindent 14 }}
+            limits:
+              {{- include "instana-agent.resources" .Values.k8s_sensor.deployment.pod.limits | nindent 14 }}
+          ports:
+            - containerPort: 42699
+      {{- if .Values.k8s_sensor.deployment.pod.tolerations }}
+      tolerations:
+        {{- toYaml .Values.k8s_sensor.deployment.pod.tolerations | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          # Soft anti-affinity policy: try not to schedule multiple kubernetes-sensor pods on the same node.
+          # If the policy is set to "requiredDuringSchedulingIgnoredDuringExecution", if the cluster has
+          # fewer nodes than the amount of desired replicas, `helm install/upgrade --wait` will not return.
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: instana/agent-mode
+                  operator: In
+                  values: [ KUBERNETES ]
+              topologyKey: "kubernetes.io/hostname"
+      volumes:
+        {{- include "instana-agent.commonVolumes" . | nindent 8 }}
+        - name: kubernetes-sensor-configuration
+          configMap:
+            name: k8sensor
+        {{- if .Values.agent.tls }}
+        {{- if or .Values.agent.tls.secretName (and .Values.agent.tls.certificate .Values.agent.tls.key) }}
+          {{- include "instana-agent.tls-volume" . | nindent 8 }}
+        {{- end }}
+        {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
