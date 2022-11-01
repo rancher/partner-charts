@@ -39,3 +39,13 @@ tracing:
   backend: "jaeger"
   address: "jaeger.my-namespace:6831"
 ```
+### Automatic Sidecar Injection
+
+We recommend deploying the mesh with auto-injection disabled globally. You can then opt-in the namespaces where you would like auto-injection enabled.  This ensures that Pods are not automatically injected without your consent, especially in system namespaces.
+
+To opt-in a namespace you can label it with `injector.nsm.nginx.com/auto-inject=enabled` or provide a list of `enabledNamespaces` in YAML. For example:
+```yaml
+enabledNamespaces:
+- namespace1
+- namespace2
+```
