@@ -1,0 +1,56 @@
+{{- if .Values.ui.ingress.enabled -}}
+{{- $ingressApiIsStable := eq (include "ingress.isStable" .) "true" -}}
+{{- $ingressSupportsIngressClassName := eq (include "ingress.supportsIngressClassName" .) "true" -}}
+{{- $ingressSupportsPathType := eq (include "ingress.supportsPathType" .) "true" -}}
+{{- $serviceName := include "asserts.uiFullname" . }}
+{{- $servicePort := .Values.ui.service.port -}}
+{{- $ingressPath := .Values.ui.ingress.path -}}
+{{- $ingressPathType := .Values.ui.ingress.pathType -}}
+{{- $extraPaths := .Values.ui.ingress.extraPaths -}}
+apiVersion: {{ template "ingress.apiVersion" . }}
+kind: Ingress
+metadata:
+{{- if .Values.ui.ingress.annotations }}
+  annotations:
+{{ toYaml .Values.ui.ingress.annotations | indent 4 }}
+{{- end }}
+  labels:
+    {{- include "asserts.uiLabels" . | nindent 4 }}
+{{- range $key, $value := .Values.ui.ingress.extraLabels }}
+    {{ $key }}: {{ $value }}
+{{- end }}
+  name: {{ template "asserts.uiFullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  {{- if and $ingressSupportsIngressClassName .Values.ui.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.ui.ingress.ingressClassName }}
+  {{- end }}
+  rules:
+  {{- range .Values.ui.ingress.hosts }}
+    {{- $url := splitList "/" . }}
+    - host: {{ first $url }}
+      http:
+        paths:
+{{ if $extraPaths }}
+{{ toYaml $extraPaths | indent 10 }}
+{{- end }}
+          - path: {{ $ingressPath }}
+            {{- if $ingressSupportsPathType }}
+            pathType: {{ $ingressPathType }}
+            {{- end }}
+            backend:
+              {{- if $ingressApiIsStable }}
+              service:
+                name: {{ $serviceName }}
+                port:
+                  number: {{ $servicePort }}
+              {{- else }}
+              serviceName: {{ $serviceName }}
+              servicePort: {{ $servicePort }}
+              {{- end }}
+  {{- end -}}
+{{- if .Values.ui.ingress.tls }}
+  tls:
+{{ toYaml .Values.ui.ingress.tls | indent 4 }}
+  {{- end -}}
+{{- end -}}

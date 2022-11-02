@@ -1,0 +1,314 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
+  name: tailingsidecars.tailing-sidecar.sumologic.com
+spec:
+  group: tailing-sidecar.sumologic.com
+  names:
+    kind: TailingSidecar
+    listKind: TailingSidecarList
+    plural: tailingsidecars
+    singular: tailingsidecar
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: TailingSidecar is the Schema for the tailingsidecars API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TailingSidecarSpec defines the desired state of TailingSidecar
+            properties:
+              configs:
+                additionalProperties:
+                  properties:
+                    container:
+                      type: string
+                    file:
+                      type: string
+                    volume:
+                      type: string
+                  type: object
+                description: Configs contains configurations for tailing sidecars,
+                  map key indicates name of configuration which can be used in annotation
+                type: object
+            type: object
+          status:
+            description: TailingSidecarStatus defines the observed state of TailingSidecar
+            type: object
+        type: object
+    served: true
+    storage: true
+---
+{{- if .Values.certManager.enabled -}}
+{{- include "tailing-sidecar-operator.webhookWithCertManager" . }}
+{{- else }}
+{{- include "tailing-sidecar-operator.webhook" . }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-service-account
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-leader-election-role
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - configmaps/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - 7b555970.sumologic.com
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  creationTimestamp: null
+  name: tailing-sidecar-manager-role
+rules:
+- apiGroups:
+  - tailing-sidecar.sumologic.com
+  resources:
+  - tailingsidecars
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tailing-sidecar.sumologic.com
+  resources:
+  - tailingsidecars/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-proxy-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-leader-election-rolebinding
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tailing-sidecar-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: tailing-sidecar-service-account
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tailing-sidecar-manager-role
+subjects:
+- kind: ServiceAccount
+  name: tailing-sidecar-service-account
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-proxy-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tailing-sidecar-proxy-role
+subjects:
+- kind: ServiceAccount
+  name: tailing-sidecar-service-account
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: tailing-sidecar-operator-metrics-service
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - name: https
+    port: 8443
+    targetPort: https
+  selector:
+    {{- include "tailing-sidecar-operator.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: {{ include "tailing-sidecar-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - port: 443
+    targetPort: 9443
+  selector:
+    {{- include "tailing-sidecar-operator.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "tailing-sidecar-operator.labels" . | nindent 4 }}
+  name: {{ include "tailing-sidecar-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tailing-sidecar-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tailing-sidecar-operator.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --v=10
+        image: {{ .Values.kubeRbacProxy.image.repository }}:{{ .Values.kubeRbacProxy.image.tag }}
+        imagePullPolicy: {{ .Values.kubeRbacProxy.image.pullPolicy }}
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+      - args:
+        - --metrics-addr=127.0.0.1:8080
+        - --enable-leader-election
+        - --tailing-sidecar-image={{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag }}
+        command:
+        - /manager
+        image: {{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      serviceAccountName: tailing-sidecar-service-account
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert

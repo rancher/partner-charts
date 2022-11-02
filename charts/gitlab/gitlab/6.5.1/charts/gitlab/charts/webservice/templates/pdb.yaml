@@ -1,0 +1,29 @@
+{{- if .Values.enabled -}}
+{{- $pdbCfg := (dict "global" $.Values.global.pdb "local" .Values.pdb "context" $) -}}
+{{- include "webservice.datamodel.prepare" $ -}}
+{{/* BEGIN range deployments */}}
+{{- range $.Values.deployments -}}
+{{/*
+From here on:
+- `.` is `.deployments.xyz` value
+- `.name` is the key (xyz)
+*/}}
+---
+apiVersion: {{ template "gitlab.pdb.apiVersion" $pdbCfg }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ template "webservice.fullname.withSuffix" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "gitlab.standardLabels" $ | nindent 4 }}
+    {{- include "webservice.labels" . | nindent 4 }}
+    {{- include "webservice.commonLabels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .pdb.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "gitlab.selectorLabels" $ | nindent 6 }}
+      {{ include "webservice.labels" . | nindent 6 }}
+{{- end }}
+{{/* END range deployments */}}
+{{- end }}
