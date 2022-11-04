@@ -1,0 +1,23 @@
+{{- if eq (.Values.enableLoadBalancers | toString | lower) "true" }}
+{{- range untilStep 0 (.Values.replicas | int) 1 }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "dxemssql.fullname" $ }}-lb-{{ . }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    statefulset.kubernetes.io/pod-name: {{ template "dxemssql.fullname" $ }}-{{ . }}
+  ports:
+  - name: sql
+    protocol: TCP
+    port: 1433
+    targetPort: 1433
+  - name: dxe-admin
+    protocol: TCP
+    port: 7979
+    targetPort: 7979
+---
+{{- end }}
+{{- end }}
