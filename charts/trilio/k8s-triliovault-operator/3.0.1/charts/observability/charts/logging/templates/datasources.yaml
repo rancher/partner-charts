@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "logging.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "logging.name" . }}
+    chart: {{ template "logging.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ template "logging.name" . }}
+    {{- include "k8s-triliovault-operator.labels" . | nindent 4 }}
+    grafana_datasource: "1"
+data:
+  logging-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+{{- if .Values.loki.enabled }}
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://{{(include "loki.serviceName" .)}}:{{ .Values.loki.service.port }}
+      version: 1
+{{- end }}
