@@ -1,0 +1,76 @@
+{{- if .Values.enabled }}
+{{- include "webservice.datamodel.prepare" $ -}}
+{{/* BEGIN range deployments */}}
+{{- range $.Values.deployments -}}
+{{/*
+From here on:
+- `.` is `.deployments.xyz` value
+- `.name` is the key (xyz)
+*/}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "webservice.fullname.withSuffix" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "gitlab.standardLabels" $ | nindent 4 }}
+    {{- include "gitlab.serviceLabels" $ | nindent 4 }}
+    {{- include "webservice.labels" . | nindent 4 }}
+    {{- include "webservice.commonLabels" . | nindent 4 }}
+    {{- if .service.labels -}}
+    {{-   toYaml .service.labels | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- include "gitlab.serviceAnnotations" $ | nindent 4 }}
+    {{- if .service.annotations -}}
+    {{-   toYaml .service.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .service.type }}
+  {{- if (and (eq .service.type "LoadBalancer") (not (empty .service.loadBalancerIP))) }}
+  loadBalancerIP: {{ .service.loadBalancerIP }}
+  {{- end }}
+  {{- if (and (eq .service.type "LoadBalancer") (not (empty .service.loadBalancerSourceRanges))) }}
+  loadBalancerSourceRanges:
+    {{- range .service.loadBalancerSourceRanges }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  ports:
+    {{- if $.Values.http.enabled }}
+    - port: {{ $.Values.service.externalPort }}
+      targetPort: http-webservice
+      protocol: TCP
+      name: http-webservice
+    {{- end }}
+    - port: {{ $.Values.service.workhorseExternalPort }}
+      targetPort: http-workhorse
+      protocol: TCP
+      name: {{ $.Values.global.workhorse.tls.enabled | ternary "https" "http" }}-workhorse
+    {{- if $.Values.tls.enabled }}
+    - port: {{ $.Values.service.tls.externalPort }}
+      targetPort: https-ws
+      protocol: TCP
+      name: https-ws
+    {{- end }}
+
+  {{- if or $.Values.monitoring.exporter.enabled (and $.Values.metrics.enabled (eq $.Values.metrics.port $.Values.monitoring.exporter.port)) }}
+    - port: {{ $.Values.monitoring.exporter.port }}
+      targetPort: http-metrics-ws
+      protocol: TCP
+      name: {{ $.Values.metrics.tls.enabled | ternary "https" "http" }}-metrics-ws
+  {{- end }}
+  {{- if or $.Values.workhorse.monitoring.exporter.enabled $.Values.workhorse.metrics.enabled }}
+    - port: {{ $.Values.workhorse.monitoring.exporter.port }}
+      targetPort: http-metrics-wh
+      protocol: TCP
+      name: {{ $.Values.workhorse.monitoring.exporter.tls.enabled | ternary "https" "http" }}-metrics-wh
+  {{- end }}
+  selector:
+    app: {{ template "name" $ }}
+    release: {{ $.Release.Name }}
+    {{ include "webservice.labels" . | nindent 4 }}
+{{- end }}
+{{/* END range deployments */}}
+{{- end }}

@@ -1,0 +1,24 @@
+{{- if or (gt (.Values.defaultBackend.replicaCount | int) 1) (gt (.Values.defaultBackend.autoscaling.minReplicas | int) 1) }}
+{{- $pdbCfg := (dict "global" $.Values.global.pdb "local" .Values.pdb "context" $) -}}
+apiVersion: {{ template "gitlab.pdb.apiVersion" $pdbCfg }}
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    {{- include "gitlab.standardLabels" . | nindent 4 }}
+    {{- include "gitlab.commonLabels" . | nindent 4 }}
+    component: "{{ .Values.defaultBackend.name }}"
+    {{- include "ingress-nginx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: default-backend
+  name: {{ include "ingress-nginx.defaultBackend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ingress-nginx.selectorLabels" . | nindent 6 }}
+      component: "{{ .Values.defaultBackend.name }}"
+  {{- if .Values.defaultBackend.maxUnavailable }}
+  maxUnavailable: {{ .Values.defaultBackend.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ .Values.defaultBackend.minAvailable }}
+  {{- end }}
+{{- end }}
