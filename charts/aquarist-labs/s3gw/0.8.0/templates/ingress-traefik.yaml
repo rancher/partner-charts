@@ -1,0 +1,155 @@
+{{ if .Values.ingress.enabled }}
+---
+# TLS Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: '{{ .Chart.Name }}-tls'
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "s3gw.labels" . | indent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares:
+      '{{ .Release.Namespace }}-cors-header@kubernetescrd'
+spec:
+  tls:
+    - hosts:
+        - '{{ .Values.hostname }}'
+        - '*.{{ .Values.hostname }}'
+      secretName: 'certificates-{{ .Values.hostname }}'
+  rules:
+    - host: '{{ .Values.hostname }}'
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: '{{ .Chart.Name }}-svc'
+                port:
+                  number: 80
+    - host: '*.{{ .Values.hostname }}'
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: '{{ .Chart.Name }}-svc'
+                port:
+                  number: 80
+---
+# No TLS Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: '{{ .Chart.Name }}-no-tls'
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "s3gw.labels" . | indent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares:
+      '{{ .Release.Namespace }}-cors-header@kubernetescrd'
+spec:
+  rules:
+    - host: '{{ .Values.hostname }}'
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: '{{ .Chart.Name }}-svc'
+                port:
+                  number: 80
+    - host: '*.{{ .Values.hostname }}'
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: '{{ .Chart.Name }}-svc'
+                port:
+                  number: 80
+{{- if .Values.ui.enabled }}
+---
+# UI TLS Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: '{{ .Chart.Name }}-ui-tls'
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "s3gw.labels" . | indent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares:
+      '{{ .Release.Namespace }}-cors-header@kubernetescrd'
+spec:
+  tls:
+    - hosts:
+        - '{{ .Values.ui.hostname }}'
+      secretName: 'certificates-{{ .Values.ui.hostname }}'
+  rules:
+    - host: '{{ .Values.ui.hostname }}'
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: '{{ .Chart.Name }}-ui-svc'
+                port:
+                  number: 80
+---
+# UI No TLS Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: '{{ .Chart.Name }}-ui-no-tls'
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "s3gw.labels" . | indent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares:
+      '{{ .Release.Namespace }}-cors-header@kubernetescrd'
+spec:
+  rules:
+    - host: '{{ .Values.ui.hostname }}'
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: '{{ .Chart.Name }}-ui-svc'
+                port:
+                  number: 80
+{{- end }}
+---
+# Middleware for Traefik
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cors-header
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "s3gw.labels" . | indent 4 }}
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "DELETE"
+      - "GET"
+      - "HEAD"
+      - "POST"
+      - "PUT"
+      - "OPTIONS"
+    accessControlAllowOriginList:
+      - "*"
+    accessControlAllowHeaders:
+      - "*"
+    accessControlExposeHeaders:
+      - "ETag"
+{{- end }}
