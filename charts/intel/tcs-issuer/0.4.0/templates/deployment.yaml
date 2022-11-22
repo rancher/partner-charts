@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trusted-certificate-issuer.fullname" . }}
+  labels:
+    {{- include "trusted-certificate-issuer.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "trusted-certificate-issuer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "trusted-certificate-issuer.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "trusted-certificate-issuer.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - args:
+          - --leader-elect
+          - --zap-devel
+          - --zap-log-level=5
+          - --metrics-bind-address=:8082
+          - --health-probe-bind-address=:8083
+          - --user-pin=$USER_PIN
+          - --so-pin=$SO_PIN
+          {{- if .Values.controllerExtraArgs }}
+          {{- with .Values.controllerExtraArgs }}
+          {{- tpl . $ | trim | indent 8 }}
+          {{- end }}
+          {{- end }}
+          command:
+          - /tcs-issuer
+          env:
+          - name: USER_PIN
+            valueFrom:
+              secretKeyRef:
+                key: userpin
+                name: tcs-issuer-pkcs11-conf
+          - name: SO_PIN
+            valueFrom:
+              secretKeyRef:
+                key: sopin
+                name: tcs-issuer-pkcs11-conf
+          name: {{ .Chart.Name }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          image: "{{ .Values.image.hub }}/{{ .Values.image.name }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 180
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - mountPath: /home/tcs-issuer/tokens
+            name: tokens-dir
+      initContainers:
+      - command:
+        - /bin/chown
+        - -R
+        - 5000:5000
+        - /home/tcs-issuer/tokens
+        image: busybox
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: init
+        volumeMounts:
+        - mountPath: /home/tcs-issuer/tokens
+          name: tokens-dir
+      volumes:
+      - hostPath:
+          path: /var/lib/tcs-issuer/tokens
+          type: DirectoryOrCreate
+        name: tokens-dir
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
