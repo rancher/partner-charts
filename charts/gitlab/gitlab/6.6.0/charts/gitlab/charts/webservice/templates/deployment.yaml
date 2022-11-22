@@ -1,0 +1,548 @@
+{{- if $.Values.enabled }}
+{{- $imageCfg := dict "global" $.Values.global.image "local" $.Values.image -}}
+{{- $initImageCfg := dict "global" $.Values.global.busybox.image "local" $.Values.init.image -}}
+{{- include "database.datamodel.prepare" $ -}}
+{{- include "webservice.datamodel.prepare" $ -}}
+{{/* BEGIN range deployments */}}
+{{- range $.Values.deployments -}}
+{{/*
+From here on:
+- `.` is `.deployments.xyz` value
+- `.name` is the key (xyz)
+*/}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "webservice.fullname.withSuffix" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "gitlab.standardLabels" $ | nindent 4 }}
+    {{- include "webservice.labels" . | nindent 4 }}
+    {{- include "webservice.commonLabels" . | nindent 4 }}
+    {{- if .deployment.labels -}}
+    {{-   toYaml .deployment.labels | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- include "gitlab.deploymentAnnotations" $ | nindent 4 }}
+    {{- if .deployment.annotations -}}
+    {{-   toYaml .deployment.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  # Don't provide replicas when HPA are present
+  # replicas: {{ .hpa.minReplicas }}
+  selector:
+    matchLabels:
+      {{- include "gitlab.selectorLabels" $ | nindent 6 }}
+      {{ include "webservice.labels" . | nindent 6 }}
+  {{- if .deployment.strategy }}
+  strategy:
+    {{- .deployment.strategy | toYaml | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "gitlab.standardLabels" $ | nindent 8 }}
+        {{- include "webservice.labels" . | nindent 8 }}
+        {{- include "gitlab.podLabels" $ | nindent 8 }}
+        {{- include "webservice.commonLabels" . | nindent 8 }}
+        {{- include "webservice.podLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yml") $ | sha256sum }}
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      {{- range $key, $value := .pod.annotations }}
+        {{ $key }}: {{ $value | quote }}
+      {{- end }}
+      {{- if and $.Values.metrics.enabled (not $.Values.metrics.serviceMonitor.enabled) }}
+      {{- if $.Values.metrics.annotations }}
+        {{- toYaml $.Values.metrics.annotations | nindent 8 }}
+      {{- else }}
+        {{- if $.Values.metrics.tls.enabled }}
+        gitlab.com/prometheus_scheme: "https"
+        prometheus.io/scheme: "https"
+        {{- end }}
+        gitlab.com/prometheus_scrape: "true"
+        gitlab.com/prometheus_port: {{ $.Values.metrics.port | quote }}
+        gitlab.com/prometheus_path: {{ $.Values.metrics.path }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $.Values.metrics.port | quote }}
+        prometheus.io/path: {{ $.Values.metrics.path }}
+      {{- end }}
+      {{- end }}
+    spec:
+      {{- if .tolerations }}
+      tolerations:
+        {{- toYaml .tolerations | nindent 8 }}
+      {{- end }}
+      {{- $nodeSelectors := dict "Values" (dict "global" (dict "nodeSelector" $.Values.global.nodeSelector) "nodeSelector" .nodeSelector) -}}
+      {{- include "gitlab.nodeSelector" $nodeSelectors | nindent 6 }}
+      {{- $priorityClassName := dict "Values" (dict "global" (dict "priorityClassName" $.Values.global.priorityClassName) "priorityClassName" $.Values.priorityClassName) -}}
+      {{- include "gitlab.priorityClassName" $priorityClassName | nindent 6 }}
+      securityContext:
+        runAsUser: {{ $.Values.securityContext.runAsUser }}
+        fsGroup: {{ $.Values.securityContext.fsGroup }}
+      {{- if eq (default $.Values.global.antiAffinity $.Values.antiAffinity) "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: {{ default $.Values.global.affinity.podAntiAffinity.topologyKey $.Values.affinity.podAntiAffinity.topologyKey | quote }}
+              labelSelector:
+                matchLabels:
+                  {{- include "gitlab.selectorLabels" $ | nindent 18 }}
+                  {{- include "webservice.labels" . | nindent 18}}
+      {{- else if eq (default $.Values.global.antiAffinity $.Values.antiAffinity) "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: {{ default $.Values.global.affinity.podAntiAffinity.topologyKey $.Values.affinity.podAntiAffinity.topologyKey | quote }}
+              labelSelector:
+                matchLabels:
+                  {{- include "gitlab.selectorLabels" $ | nindent 18 }}
+                  {{- include "webservice.labels" . | nindent 18}}
+      {{- end }}
+      {{- if or $.Values.serviceAccount.enabled $.Values.global.serviceAccount.enabled }}
+      serviceAccountName: {{ include "gitlab.serviceAccount.name" $ }}
+      {{- end }}
+      automountServiceAccountToken: false
+      initContainers:
+        {{- include "gitlab.extraInitContainers" $ | nindent 8 }}
+        {{- include "gitlab.certificates.initContainer" $ | nindent 8 }}
+        - name: configure
+          command: ['sh']
+          args: [ '-c', 'sh -x /config-webservice/configure ; sh -x /config-workhorse/configure ; mkdir -p -m 3770 /tmp/gitlab']
+          image: {{ include "gitlab.busybox.image" (dict "local" $.Values.init "global" $.Values.global.busybox) | quote }}
+          {{- include "gitlab.image.pullPolicy" $initImageCfg | indent 10 }}
+          env:
+            {{- include "webservice.extraEnv" (dict "global" $.Values.global "local" .) | nindent 12 }}
+            {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" .) | nindent 12 }}
+          volumeMounts:
+          {{- include "gitlab.extraVolumeMounts" $ | nindent 10 }}
+          {{- include "gitlab.psql.ssl.volumeMount" $ | nindent 10 }}
+          {{- include "gitlab.geo.psql.ssl.volumeMount" $ | nindent 10 }}
+          - name: webservice-config
+            mountPath: /config-webservice
+            readOnly: true
+          - name: workhorse-config
+            mountPath: /config-workhorse
+            readOnly: true
+          - name: init-webservice-secrets
+            mountPath: /init-config
+            readOnly: true
+          - name: webservice-secrets
+            mountPath: /init-secrets
+            readOnly: false
+          - name: workhorse-secrets
+            mountPath: /init-secrets-workhorse
+            readOnly: false
+          - name: shared-tmp
+            mountPath: /tmp
+            readOnly: false
+          resources:
+            {{- toYaml $.Values.init.resources | nindent 12 }}
+        - name: dependencies
+          image: {{ include "webservice.image" $ }}
+          {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
+          args:
+            - /scripts/wait-for-deps
+          env:
+            - name: GITALY_FEATURE_DEFAULT_ON
+              value: "1"
+            - name: CONFIG_TEMPLATE_DIRECTORY
+              value: '/var/opt/gitlab/templates'
+            - name: CONFIG_DIRECTORY
+              value: '/srv/gitlab/config'
+            - name: WORKHORSE_ARCHIVE_CACHE_DISABLED
+              value: "1"
+            {{- if $.Values.global.rails.bootsnap.enabled }}
+            - name: ENABLE_BOOTSNAP
+              value: "1"
+            {{- end }}
+            {{- include "webservice.extraEnv" (dict "global" $.Values.global "local" .) | nindent 12 }}
+            {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" .) | nindent 12 }}
+          volumeMounts:
+            {{- include "gitlab.extraVolumeMounts" $ | nindent 12 }}
+            {{- include "gitlab.certificates.volumeMount" $ | nindent 12 }}
+            - name: webservice-config
+              mountPath: '/var/opt/gitlab/templates'
+            - name: webservice-secrets
+              mountPath: '/etc/gitlab'
+              readOnly: true
+            - name: webservice-secrets
+              mountPath: /srv/gitlab/config/secrets.yml
+              subPath: rails-secrets/secrets.yml
+              readOnly: true
+          resources:
+            {{- toYaml $.Values.init.resources | nindent 12 }}
+      {{- include "gitlab.image.pullSecrets" $imageCfg | indent 6 }}
+      containers:
+        {{- include "gitlab.extraContainers" $ | nindent 8 }}
+        - name: {{ $.Chart.Name }}
+          image: {{ include "webservice.image" $ }}
+          {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
+          ports:
+            {{- if $.Values.http.enabled }}
+            - containerPort: {{ $.Values.service.internalPort }}
+              name: http-webservice
+            {{- end }}
+            {{- if $.Values.tls.enabled }}
+            - containerPort: {{ $.Values.service.tls.internalPort }}
+              name: https-ws
+            {{- end }}
+          {{- if or $.Values.monitoring.exporter.enabled (and $.Values.metrics.enabled (eq $.Values.metrics.port $.Values.monitoring.exporter.port)) }}
+            - containerPort: {{ $.Values.monitoring.exporter.port }}
+              name: http-metrics-ws
+          {{- end }}
+          env:
+            - name: GITLAB_WEBSERVER
+              value: {{ $.Values.webServer }}
+            - name: TMPDIR
+              value: "/tmp/gitlab"
+            - name: GITALY_FEATURE_DEFAULT_ON
+              value: "1"
+            - name: CONFIG_TEMPLATE_DIRECTORY
+              value: '/var/opt/gitlab/templates'
+            - name: CONFIG_DIRECTORY
+              value: '/srv/gitlab/config'
+            {{- if $.Values.metrics.enabled }}
+            - name: prometheus_multiproc_dir
+              value: /metrics
+            {{- end }}
+            {{- if $.Values.global.rails.bootsnap.enabled }}
+            - name: ENABLE_BOOTSNAP
+              value: "1"
+            {{- end }}
+            - name: WORKER_PROCESSES
+              value: "{{ .workerProcesses }}"
+            - name: WORKER_TIMEOUT
+              value: "{{ $.Values.global.webservice.workerTimeout }}"
+            {{- if $.Values.http.enabled }}
+            - name: INTERNAL_PORT
+              value: "{{ $.Values.service.internalPort }}"
+            {{- end }}
+            {{- if $.Values.tls.enabled }}
+            - name: SSL_INTERNAL_PORT
+              value: {{ $.Values.service.tls.internalPort | quote }}
+            - name: PUMA_SSL_KEY
+              value: "/srv/gitlab/config/puma.key"
+            - name: PUMA_SSL_CERT
+              value: "/srv/gitlab/config/puma.crt"
+            {{- end }}
+            {{- if eq $.Values.webServer "puma" }}
+            - name: PUMA_THREADS_MIN
+              value: "{{ .puma.threads.min }}"
+            - name: PUMA_THREADS_MAX
+              value: "{{ .puma.threads.max }}"
+            - name: PUMA_WORKER_MAX_MEMORY
+              value: "{{ .puma.workerMaxMemory }}"
+            - name: DISABLE_PUMA_WORKER_KILLER
+              value: "{{ .puma.disableWorkerKiller }}"
+            {{- end }}
+            - name: SHUTDOWN_BLACKOUT_SECONDS
+              value: "{{ .shutdown.blackoutSeconds }}"
+            {{- include "gitlab.tracing.env" $ | nindent 12 }}
+            {{- if $.Values.global.tracing.urlTemplate }}
+            - name: GITLAB_TRACING_URL
+              value: {{ $.Values.global.tracing.urlTemplate | quote }}
+            {{- end }}
+            - name: WORKHORSE_ARCHIVE_CACHE_DISABLED
+              value: "true"
+            {{- include "webservice.extraEnv" (dict "global" $.Values.global "local" .) | nindent 12 }}
+            {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" .) | nindent 12 }}
+          volumeMounts:
+            {{- if .sshHostKeys.mount }}
+            - name: {{ .sshHostKeys.mountName }}
+              mountPath: /etc/ssh
+            {{- end }}
+            {{- if $.Values.metrics.enabled }}
+            - name: webservice-metrics
+              mountPath: '/metrics'
+            {{- end }}
+            - name: webservice-config
+              mountPath: '/var/opt/gitlab/templates'
+            - name: webservice-secrets
+              mountPath: '/etc/gitlab'
+              readOnly: true
+            - name: webservice-secrets
+              mountPath: /srv/gitlab/config/secrets.yml
+              subPath: rails-secrets/secrets.yml
+            {{- if $.Values.tls.enabled }}
+            - name: webservice-secrets
+              mountPath: /srv/gitlab/config/puma.crt
+              subPath: puma/puma.crt
+            - name: webservice-secrets
+              mountPath: /srv/gitlab/config/puma.key
+              subPath: puma/puma.key
+           {{- end }}
+            - name: webservice-config
+              mountPath: '/etc/krb5.conf'
+              subPath: krb5.conf
+            {{- include "gitlab.appConfig.kerberos.volumeMount" $ | nindent 12 }}
+            - name: webservice-config
+              mountPath: '/srv/gitlab/config/initializers/smtp_settings.rb'
+              subPath: smtp_settings.rb
+            - name: webservice-config
+              mountPath: '/srv/gitlab/INSTALLATION_TYPE'
+              subPath: installation_type
+            - name: shared-upload-directory
+              mountPath: /srv/gitlab/public/uploads/tmp
+              readOnly: false
+            - name: shared-tmp
+              mountPath: '/tmp'
+              readOnly: false
+            {{- if $.Values.global.email.smime.enabled }}
+            - name: smime-creds
+              mountPath: /home/git/gitlab
+              readOnly: true
+            {{- end }}
+            {{- include "gitlab.certificates.volumeMount" $ | nindent 12 }}
+            {{- include "gitlab.extraVolumeMounts" $ | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /-/liveness
+              {{- if and (not $.Values.http.enabled) $.Values.tls.enabled }}
+              scheme: HTTPS
+              port: {{ $.Values.service.tls.internalPort }}
+              {{- else }}
+              port: {{ $.Values.service.internalPort }}
+              {{- end }}
+            initialDelaySeconds: {{ .deployment.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .deployment.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .deployment.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .deployment.livenessProbe.successThreshold }}
+            failureThreshold: {{ .deployment.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /-/readiness
+              {{- if and (not $.Values.http.enabled) $.Values.tls.enabled }}
+              scheme: HTTPS
+              port: {{ $.Values.service.tls.internalPort }}
+              {{- else }}
+              port: {{ $.Values.service.internalPort }}
+              {{- end }}
+            initialDelaySeconds: {{ .deployment.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .deployment.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .deployment.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .deployment.readinessProbe.successThreshold }}
+            failureThreshold: {{ .deployment.readinessProbe.failureThreshold }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/bash", "-c", "pkill -SIGINT -o ruby"]
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+        - name: gitlab-workhorse
+          image: "{{ coalesce $.Values.workhorse.image (include "workhorse.repository" $) }}:{{ coalesce $.Values.workhorse.tag (include "gitlab.versionTag" $ ) }}"
+          {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
+          ports:
+            - containerPort: {{ $.Values.service.workhorseInternalPort }}
+              name: http-workhorse
+          {{- if or $.Values.workhorse.monitoring.exporter.enabled $.Values.workhorse.metrics.enabled }}
+            - containerPort: {{ $.Values.workhorse.monitoring.exporter.port }}
+              name: http-metrics-wh
+          {{- end }}
+          env:
+            - name: TMPDIR
+              value: "/tmp/gitlab"
+            - name: GITLAB_WORKHORSE_AUTH_BACKEND
+              value: "http://localhost:{{ $.Values.service.internalPort }}"
+            - name: GITLAB_WORKHORSE_EXTRA_ARGS
+              value: {{ .workhorse.extraArgs | quote }}
+            - name: GITLAB_WORKHORSE_LISTEN_PORT
+              value: {{ default 8181 $.Values.service.workhorseInternalPort | int | quote }}
+            - name: GITLAB_WORKHORSE_LOG_FORMAT
+              value: {{ .workhorse.logFormat | quote }}
+            - name: CONFIG_TEMPLATE_DIRECTORY
+              value: '/var/opt/gitlab/templates'
+            - name: CONFIG_DIRECTORY
+              value: '/srv/gitlab/config'
+            {{- if .workhorse.sentryDSN }}
+            - name: GITLAB_WORKHORSE_SENTRY_DSN
+              value: {{ .workhorse.sentryDSN }}
+            {{- end }}
+            {{- include "gitlab.tracing.env" $ | nindent 12 }}
+            {{- include "webservice.extraEnv" (dict "global" $.Values.global "local" .) | nindent 12 }}
+            {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" .) | nindent 12 }}
+          volumeMounts:
+            - name: workhorse-config
+              mountPath: '/var/opt/gitlab/templates'
+            - name: workhorse-secrets
+              mountPath: '/etc/gitlab'
+              readOnly: true
+            - name: shared-upload-directory
+              mountPath: /srv/gitlab/public/uploads/tmp
+              readOnly: false
+            - name: shared-tmp
+              mountPath: '/tmp'
+              readOnly: false
+            {{- include "gitlab.certificates.volumeMount" $ | nindent 12 }}
+            {{- include "gitlab.appConfig.kerberos.volumeMount" $ | nindent 12 }}
+            {{- include "gitlab.extraVolumeMounts" $ | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - /scripts/healthcheck
+            initialDelaySeconds: {{ .workhorse.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .workhorse.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .workhorse.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .workhorse.livenessProbe.successThreshold }}
+            failureThreshold: {{ .workhorse.livenessProbe.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+              - /scripts/healthcheck
+            initialDelaySeconds: {{ .workhorse.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .workhorse.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .workhorse.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .workhorse.readinessProbe.successThreshold }}
+            failureThreshold: {{ .workhorse.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .workhorse.resources | nindent 12 }}
+      {{- if .deployment.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .deployment.terminationGracePeriodSeconds | int }}
+      {{- end }}
+      volumes:
+      {{- if .sshHostKeys.mount }}
+      {{- include "webservice.sshHostKeys.volume" (dict "local" . "Release" $.Release "Values" $.Values) | nindent 6 }}
+      {{- end }}
+      {{- include "gitlab.extraVolumes" $ | nindent 6 }}
+      {{- include "gitlab.psql.ssl.volume" $ | nindent 6 }}
+      {{- include "gitlab.geo.psql.ssl.volume" $ | nindent 6 }}
+      {{- include "gitlab.appConfig.kerberos.volume" $ | nindent 6 }}
+      - name: shared-tmp
+        {{- include "gitlab.volume.emptyDir" .sharedTmpDir | nindent 8 }}
+      {{- if $.Values.metrics.enabled }}
+      - name: webservice-metrics
+        emptyDir:
+          medium: "Memory"
+      {{- end }}
+      - name: webservice-config
+        configMap:
+          name: {{ .fullname }}
+      - name: workhorse-config
+        configMap:
+            name: {{ $.Release.Name }}-workhorse-{{ .name }}
+      - name: init-webservice-secrets
+        projected:
+          defaultMode: 0400
+          sources:
+          - secret:
+              name: {{ template "gitlab.rails-secrets.secret" $ }}
+              items:
+                - key: secrets.yml
+                  path: rails-secrets/secrets.yml
+          - secret:
+              name: {{ template "gitlab.gitlab-shell.authToken.secret" $ }}
+              items:
+                - key: {{ template "gitlab.gitlab-shell.authToken.key" $ }}
+                  path: shell/.gitlab_shell_secret
+          {{- if $.Values.tls.enabled }}
+          - secret:
+              name: {{ template "webservice.tls.secret" $ }}
+              items:
+                - key: "tls.crt"
+                  path: "puma/puma.crt"
+                - key: "tls.key"
+                  path: "puma/puma.key"
+          {{- end }}
+          {{- if $.Values.global.workhorse.tls.enabled }}
+          - secret:
+              name: {{ include "workhorse.tls.secret" $ }}
+              items:
+                - key: "tls.crt"
+                  path: "gitlab-workhorse/tls.crt"
+                - key: "tls.key"
+                  path: "gitlab-workhorse/tls.key"
+          {{- end }}
+          {{- if $.Values.metrics.tls.enabled }}
+          - secret:
+              name: {{ template "webservice-metrics.tls.secret" $ }}
+              items:
+                - key: "tls.crt"
+                  path: "webservice-metrics/webservice-metrics.crt"
+                - key: "tls.key"
+                  path: "webservice-metrics/webservice-metrics.key"
+          {{- end }}
+          {{- if $.Values.global.appConfig.microsoft_graph_mailer.enabled }}
+          - secret:
+              name: {{ $.Values.global.appConfig.microsoft_graph_mailer.client_secret.secret | required "Missing required secret containing the OAuth2 Client ID for outgoing email. Make sure to set `global.appConfig.microsoft_graph_mailer.client_secret.secret`" }}
+              items:
+                - key: {{ $.Values.global.appConfig.microsoft_graph_mailer.client_secret.key }}
+                  path: microsoft_graph_mailer/client_secret
+          {{- end }}
+          {{- include "gitlab.appConfig.incomingEmail.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.appConfig.serviceDeskEmail.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.gitaly.clientSecrets" $ | nindent 10 }}
+          {{- include "gitlab.redis.secrets" $ | nindent 10 }}
+          {{- range $.Values.local.psql }}
+          {{-   include "gitlab.psql.secret" . | nindent 10 }}
+          {{- end }}
+          {{- if include "gitlab.geo.secondary" $ }}
+          - secret:
+              name: {{ template "gitlab.geo.psql.password.secret" $ }}
+              items:
+                - key: {{ template "gitlab.geo.psql.password.key" $ }}
+                  path: postgres/geo-psql-password
+          {{- end }}
+          - secret:
+              name: {{ template "gitlab.registry.certificate.secret" $ }}
+              items:
+                - key: registry-auth.key
+                  path: registry/gitlab-registry.key
+          {{- include "gitlab.registry.notificationSecret.mount" $ | nindent 10 }}
+          - secret:
+              name: {{ template "gitlab.workhorse.secret" $ }}
+              items:
+                - key: {{ template "gitlab.workhorse.key" $ }}
+                  path: gitlab-workhorse/secret
+          {{- include "gitlab.pages.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.kas.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.minio.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "object_store" "config" $.Values.global.appConfig.object_store) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "artifacts" "config" $.Values.global.appConfig.artifacts) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "lfs" "config" $.Values.global.appConfig.lfs) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "uploads" "config" $.Values.global.appConfig.uploads) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "packages" "config" $.Values.global.appConfig.packages) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "external_diffs" "config" $.Values.global.appConfig.externalDiffs) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "terraform_state" "config" $.Values.global.appConfig.terraformState) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "ci_secure_files" "config" $.Values.global.appConfig.ciSecureFiles) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "dependency_proxy" "config" $.Values.global.appConfig.dependencyProxy) | nindent 10 }}
+          {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "pages" "config" $.Values.global.pages.objectStore) | nindent 10 }}
+          {{- include "gitlab.appConfig.ldap.servers.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.appConfig.omniauth.mountSecrets" $ | nindent 10 }}
+          {{- if and $.Values.global.smtp.enabled $.Values.global.smtp.authentication }}
+          - secret:
+              name: {{ $.Values.global.smtp.password.secret | required "Missing required secret containing the SMTP password. Make sure to set `global.smtp.password.secret`" }}
+              items:
+                - key: {{ $.Values.global.smtp.password.key }}
+                  path: smtp/smtp-password
+          {{- end }}
+          {{- if and $.Values.global.appConfig.smartcard.enabled $.Values.global.appConfig.smartcard.CASecret }}
+          - secret:
+              name: {{ $.Values.global.appConfig.smartcard.CASecret }}
+              items:
+                - key: "ca.crt"
+                  path: rails-secrets/smartcard-ca.crt
+          {{- end }}
+      {{- if $.Values.global.email.smime.enabled }}
+      - name: smime-creds
+        secret:
+          secretName: {{ $.Values.global.email.smime.secretName }}
+          items:
+            - key: {{ $.Values.global.email.smime.keyName }}
+              path: .gitlab_smime_key
+            - key: {{ $.Values.global.email.smime.certName }}
+              path: .gitlab_smime_cert
+      {{- end }}
+      - name: webservice-secrets
+        emptyDir:
+          medium: "Memory"
+      - name: workhorse-secrets
+        emptyDir:
+          medium: "Memory"
+      - name: shared-upload-directory
+        {{- include "gitlab.volume.emptyDir" .sharedUploadDir | nindent 8 }}
+      {{- include "gitlab.certificates.volumes" $ | nindent 6 }}
+{{- end }}{{/* END range deployments */}}
+{{- end }}

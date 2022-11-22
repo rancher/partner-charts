@@ -1,0 +1,103 @@
+# Default values for spamcheck.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+annotations: {}
+# global:
+#   spamcheck:
+#     enabled: false
+
+hpa:
+  maxReplicas: 10
+  minReplicas: 1
+  # targetAverageValue: 100m  # DEPRECATED: in favor of `hpa.cpu.targetAverageValue` below
+  cpu:
+    targetType: AverageValue  # Utilization or AverageValue
+    targetAverageValue: 100m
+    # targetAverageUtilization: 75
+  # memory:
+  #   targetType: Utilization  # Utilization or AverageValue
+  #   targetAverageValue: 1G
+  #   targetAverageUtilization: 75
+  # Note that the HPA is limited to autoscaling/v2beta1, autoscaling/v2beta2 and autoscaling/v2
+  customMetrics: []  # Overrides HPA metrics definition
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+
+image:
+  repository: registry.gitlab.com/gitlab-com/gl-security/engineering-and-research/automation-team/spam/spamcheck
+
+service:
+  type: ClusterIP
+  externalPort: 8001
+  internalPort: 8001
+
+deployment:
+  livenessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 60
+    timeoutSeconds: 30
+    successThreshold: 1
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 2
+    successThreshold: 1
+    failureThreshold: 3
+  strategy: {}
+
+init:
+  image: {}
+    # repository:
+    # tag:
+  resources:
+    requests:
+      cpu: 50m
+
+logging:
+  format: "json"
+  level: "info"
+
+## For PodDisruptionBudget, how many pods can be unavailable at one time
+maxUnavailable: 1
+
+# Priority class assigned to pods
+priorityClassName: ""
+
+podLabels: {}
+common:
+  labels: {}
+serviceLabels: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 100M
+
+metrics:
+  enabled: true
+  port: 8003
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8003"
+    prometheus.io/path: "/metrics"
+
+## Enable deployment to use a serviceAccount
+serviceAccount:
+  enabled: false
+  create: false
+
+# Tolerations for pod scheduling
+tolerations: []
+
+## Allow to overwrite under which User and Group we're running.
+securityContext:
+  runAsUser: 1000
+  fsGroup: 1000
+
+affinity:
+  podAntiAffinity:
+    topologyKey:
+
+storageUrl: https://storage.googleapis.com/glsec-spamcheck-ml-artifacts/spam-classifier/0.4.2/model/issues/tflite/model.tflite
