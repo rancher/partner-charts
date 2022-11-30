@@ -1,0 +1,354 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "asserts.serverFullname" . }}
+  labels: {{- include "asserts.serverLabels" . | nindent 4 }}
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 -}}
+    {{- end }}
+  {{- if .Values.annotations }}
+  annotations:
+  {{- toYaml .Values.annotations | nindent 4 -}}
+  {{- end }}
+data:
+  application.yml: |-
+    server:
+      port: {{.Values.server.service.port}}
+      max-http-header-size: 32KB
+      servlet:
+        context-path: "/api-server"
+
+    base:
+      metrics:
+        presence:
+          check:
+            enabled: true
+            window: 24h
+      rules:
+        applicable:
+          check:
+            enabled: false
+
+    # enable Prometheus metrics
+    management:
+      endpoint:
+        health:
+          show-details: when-authorized
+        prometheus:
+          enabled: true
+      endpoints:
+        web:
+          exposure:
+            include: info, health, prometheus
+      metrics:
+        distribution:
+          percentiles-histogram:
+            http:
+              server:
+                requests: true
+
+    index:
+      searchDefinition:
+        refresh:
+          initialDelay: 240000 # 4 minutes
+          fixedDelay: 120000 # 2 minutes
+
+    redis:
+      search:
+        pool:
+          maxTotal: 20
+
+    rules:
+      root: file:///opt/asserts/
+      pattern: model_rules/**/*.yml
+      provider: local
+
+    search:
+      definition:
+        path: "file:///opt/asserts/search-definitions/*.yml"
+      store: local
+
+    prometheus_client:
+      metric:
+        uri: "/assertion-metrics"
+
+    proxy:
+      grafana:
+        prefix: http://localhost:{{.Values.server.service.port}}/api-server/v1/grafana
+
+    logging:
+      level:
+        root: INFO
+      pattern:
+        console: '%-5p %d{ISO8601,UTC}  %t  %c{0}  %mdc%n      %m%n%rEx'
+
+    tenant:
+      cache_seconds: 5
+      mode: config
+    cluster:
+      tenant:
+        selector: config
+
+    enterprise:
+      prometheus:
+        reloadEnabled: 'false'
+
+    asserts:
+      identityprovider:
+        tenant: {{ include "asserts.tenant" . }}
+      standalone:
+        promxy:
+          ruler:
+            global:
+              evaluation_interval: 30s
+              # ensuring the tenant label is attached for alerting purposes
+              external_labels:
+                tenant: {{ include "asserts.tenant" . }}
+            alerting:
+              alertmanagers:
+                - static_configs:
+                    - targets:
+                        - {{.Release.Name}}-alertmanager.{{ include "domain" . }}:9093
+            remote_write:
+              - url: http://{{.Release.Name}}-tsdb-server.{{ include "domain" . }}:8428/api/v1/write
+                queue_config:
+                  capacity: 20000
+                  max_samples_per_send: 10000
+                  max_shards: 30
+            rule_files:
+              - /opt/asserts/rules/*.yml
+              - /opt/asserts/extra-rules/*.yml
+          shared:
+            # shared Asserts tsdb server_group config
+            serverGroupConfig:
+              anti_affinity: 10s
+              http_client:
+                dial_timeout: 1s
+                tls_config:
+                  insecure_skip_verify: true
+              ignore_error: true
+              query_params:
+                nocache: 1
+              remote_read: false
+              scheme: http
+              static_configs:
+                - targets:
+                  - {{.Release.Name}}-tsdb-server.{{ include "domain" . }}:8428
+        tenant:
+          enabled: 'true'
+          name: Asserts Bootstrap
+          grafana:
+            admin_password: "${GRAFANA_ADMIN_PASSWORD}"
+            orgId: '1'
+            dataSource: Prometheus
+            password: "${GRAFANA_ADMIN_PASSWORD}"
+            username: admin
+            url: http://{{.Release.Name}}-grafana.{{include "domain" .}}:{{.Values.grafana.service.port}}
+            admin_username: admin
+          tsdb:
+            tsdbUrl: http://{{.Release.Name}}-promxyruler.{{include "domain" .}}:8082
+            password: ''
+            username: ''
+            accountId: ''
+          graph:
+            server: {{.Values.redisgraph.fullnameOverride}}-master.{{include "domain" .}}
+            port: '6379'
+            sentinel_mode: {{ ternary "'1'" "'0'" (.Values.redisgraph.sentinel.enabled)}}
+            master_name: mymaster
+            sentinels: {{ include "asserts.graphSentinelHosts" . }}
+          search:
+            server: {{.Values.redisearch.fullnameOverride}}-master.{{include "domain" .}}
+            port: '6379'
+            sentinel_mode: {{ ternary "'1'" "'0'" (.Values.redisearch.sentinel.enabled)}}
+            master_name: mymaster
+            sentinels: {{ include "asserts.searchSentinelHosts" . }}
+      tsdb:
+        url: http://{{.Release.Name}}-tsdb-server.{{include "domain" .}}:8428
+      oauth2:
+        cookie:
+          domain: localhost
+          secure: false
+      security:
+        hmac:
+          currentSymmetricKey: muS5uSK2ZjexXhbaqNm18ktqaCAICI51
+        oauth2:
+          internal:
+            enabled: false
+        permissions:
+          - description: Read only user access
+            name: USER
+          - description: Can configure rule thresholds
+            name: RULE_THRESHOLD
+          - description: Can manage alerts
+            name: MANAGE_ALERTS
+          - description: Can create custom dashboards
+            name: CUSTOM_DASHBOARD
+          - description: Can manage SLOs
+            name: MANAGE_SLO
+          - description: Can manage integrations
+            name: MANAGE_INTEGRATIONS
+          - description: Can list all users and roles
+            name: LIST_USERS
+          - description: Can change other user roles
+            name: MANAGE_USER_ROLES
+          - description: Can read raw tenant and base rules
+            name: READ_TENANT_RULES
+          - description: Can generate starting point for recording rules
+            name: RULE_GENERATOR
+          - description: Can manage other tenants
+            name: TENANT_MANAGER
+          - description: Can configure Prometheus rules
+            name: CONFIG_PROM_RULES
+          - description: Can (Dis/En)able Prometheus rules
+            name: DISABLE_PROM_RULES
+          - description: Can generate SLO rules
+            name: GENERATE_SLO_RULES
+          - description: Can create their own API access credentials
+            name: ACCESS_KEY_ALLOWED
+          - description: Can invite new users
+            name: INVITE_USERS
+          - description: Can configure Prometheus relabel rules
+            name: CONFIG_RELABEL_RULES
+          - description: Has admin privileges for Grafana api calls
+            name: GRAFANA_ADMIN
+          - description: Can configure AWS CloudWatch
+            name: CONFIG_AWS_CLOUDWATCH
+          - description: Can configure AWS exporter configuration
+            name: CONFIG_AWS_EXPORTER
+          - description: Can edit tenant OAuth2 configuration
+            name: CONFIG_AUTH
+          - description: Can manage license info
+            name: MANAGE_LICENSE_INFO
+          - description: Can configure customer Prometheus
+            name: CONFIG_PROMETHEUS
+          - description: Can configure Asserts model rules
+            name: CONFIG_MODEL_RULES
+          - description: Can configure own tenant's credential
+            name: CONFIG_TENANT_CREDENTIAL
+          - description: Can write Prometheus rules
+            name: WRITE_PROM_RULES
+          - description: Can write Prometheus relabel rules
+            name: WRITE_RELABEL_RULES
+          - description: Can create/modify tenant OAuth2 configuration
+            name: WRITE_AUTH
+          - description: Can write customer Prometheus
+            name: WRITE_PROMETHEUS
+          - description: Can write Asserts model rules
+            name: WRITE_MODEL_RULES
+          - description: Can write AWS CloudWatch
+            name: WRITE_AWS_CLOUDWATCH
+          - description: Can write AWS exporter configuration
+            name: WRITE_AWS_EXPORTER
+          - description: Can write integrations
+            name: WRITE_INTEGRATIONS
+          - description: Can write SLOs
+            name: WRITE_SLO
+          - description: Can modify rule thresholds
+            name: WRITE_RULE_THRESHOLD
+          - description: Can write alerts
+            name: WRITE_ALERTS
+          - description: Can read trace config
+            name: READ_TRACE_CONFIG
+          - description: Can write trace config
+            name: WRITE_TRACE_CONFIG
+
+        roleToPermissionMap:
+          API_INTEGRATION: "{OWNER}, {KNOWLEDGE_SENSOR}"
+          ASSERTS: "{OWNER}, {KNOWLEDGE_SENSOR}, RULE_GENERATOR, TENANT_MANAGER, GENERATE_SLO_RULES"
+          ASSERTS_READONLY: "{VIEWER}"
+          KNOWLEDGE_SENSOR: "READ_TENANT_RULES"
+          OWNER: "{EDITOR}, MANAGE_USER_ROLES, DISABLE_PROM_RULES, INVITE_USERS, GRAFANA_ADMIN, CONFIG_AWS_CLOUDWATCH, WRITE_AWS_CLOUDWATCH, CONFIG_AUTH, WRITE_AUTH, MANAGE_LICENSE_INFO, CONFIG_PROMETHEUS, WRITE_PROMETHEUS, READ_TENANT_RULES, CONFIG_TENANT_CREDENTIAL"
+          EDITOR: "{VIEWER}, RULE_THRESHOLD, MANAGE_ALERTS, WRITE_ALERTS, CUSTOM_DASHBOARD, MANAGE_SLO, MANAGE_INTEGRATIONS, LIST_USERS, CONFIG_PROM_RULES, ACCESS_KEY_ALLOWED, CONFIG_RELABEL_RULES, CONFIG_AWS_EXPORTER, CONFIG_MODEL_RULES, WRITE_MODEL_RULES, WRITE_PROM_RULES, WRITE_RELABEL_RULES, WRITE_AWS_EXPORTER, WRITE_INTEGRATIONS, WRITE_SLO, WRITE_RULE_THRESHOLD, READ_TRACE_CONFIG, WRITE_TRACE_CONFIG"
+          VIEWER: "USER"
+        roles:
+          - description: Owner
+            name: OWNER
+            visibility: PUBLIC
+          - description: Editor
+            name: EDITOR
+            visibility: PUBLIC
+          - description: Viewer
+            name: VIEWER
+            visibility: PUBLIC
+          - description: Asserts Support
+            name: ASSERTS
+            visibility: INTERNAL
+          - description: Asserts Read Only
+            name: ASSERTS_READONLY
+            visibility: INTERNAL
+          - description: Knowledge Sensor
+            name: KNOWLEDGE_SENSOR
+            visibility: INTERNAL
+          - description: Api integration credential
+            name: API_INTEGRATION
+            visibility: INTERNAL
+
+    store:
+      owner:
+        datasource:
+          hikari:
+            maximum-pool-size: 1
+          url: jdbc:postgresql://{{.Values.postgres.fullnameOverride}}.{{include "domain" .}}:5432/asserts
+          username: postgres
+          password: ${POSTGRES_RDB_PASSWORD}
+      user:
+        datasource:
+          url: ${store.owner.datasource.url}
+          username: tenant_user
+          password: ${POSTGRES_RDB_PASSWORD}
+
+      keyValue: "local"
+      fileSystem:
+        rootDirectory: {{ .Values.server.dataPath }}
+        mergedPromRulesDir: /opt/asserts/prom-rules
+        relabelRulesDir: /opt/asserts/relabel-rules
+        relabelRulesFile: relabel.yml
+
+    spring:
+      jackson:
+        # exclude nulls from api responses
+        default-property-inclusion: NON_NULL
+      jpa:
+        database: POSTGRESQL
+        open-in-view: false
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQL92Dialect
+            physical_naming_strategy: org.springframework.boot.orm.jpa.hibernate.SpringPhysicalNamingStrategy
+            implicit_naming_strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+      liquibase:
+        enabled: true
+        changeLog: classpath:/db/changelog/db.changelog-master.yaml
+        parameters:
+          database: asserts
+          schema: public
+          username: ${store.user.datasource.username}
+          password: ${store.user.datasource.password}
+          bootstrap_enabled: "true"
+
+    springdoc:
+      pathsToMatch: "/v*/**"        
+
+    prometheus:
+      client:
+        timeout: 30s
+      metric:
+        metadata:
+          root: file:///opt/asserts/api-server/conf/prometheus/metric_metadata
+      rules:
+        provider: local
+        root: file:///opt/asserts/prometheus/
+        record:
+          metric:
+            regex: ".*"
+
+    assertion:
+      metric:
+        specs:
+          root: file:///opt/asserts/api-server/conf/
+      ui:
+        config:
+          root: file:///opt/asserts/api-server/conf/
+
+
+
