@@ -1,0 +1,279 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumes" ]
+    verbs: [ "create", "delete", "get", "list", "watch", "update" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumesclaims" ]
+    verbs: [ "get", "list", "watch", "update" ]
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch" ]
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "get", "list", "watch", "update", "patch" ]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "volumeattachments" ]
+    verbs: [ "get", "list", "watch", "update" ]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "storageclasses" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "volumeattachments" ]
+    verbs: [ "get", "list", "watch", "update" ]
+  - apiGroups: [ "security.openshift.io" ]
+    resourceNames: [ "privileged" ]
+    resources: [ "securitycontextconstraints" ]
+    verbs: [ "use" ]
+{{- if .Values.podmon.enabled }}
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list", "watch", "update", "delete" ]
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "get", "watch", "list", "delete", "update", "create" ]
+{{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-node
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-node
+  apiGroup: rbac.authorization.k8s.io
+---
+{{ $releaseName := .Release.Name }}
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-node
+{{- if .Values.podmon.enabled }}
+        driver.dellemc.com: dell-storage
+{{- end }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-node
+      {{- if .Values.node.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.node.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.node.tolerations }}
+      tolerations:
+      {{- toYaml .Values.node.tolerations | nindent 8 }}
+      {{- end }}
+      hostIPC: true
+      hostNetwork: true
+      dnsPolicy: {{ .Values.node.dnsPolicy }}
+      containers:
+{{- if .Values.podmon.enabled }}
+        - name: podmon
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          args:
+          {{- toYaml .Values.podmon.node.args | nindent 12 }}
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: X_CSI_PRIVATE_MOUNT_DIR
+              value: "{{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com/disks"
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: kubelet-pods
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com
+              mountPropagation: "Bidirectional"
+            - name: volumedevices-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: usr-bin
+              mountPath: /usr-bin
+            - name: var-run
+              mountPath: /var/run
+            - name: unity-config
+              mountPath: /unity-config
+{{- end }}
+        - name: driver
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: "{{ required "Must provide the driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}"
+          args:
+            - "--driver-name=csi-unity.dellemc.com"
+            - "--driver-config=/unity-config/driver-config-params.yaml"
+            - "--driver-secret=/unity-secret/config"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: CSI_ENDPOINT
+              value: {{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com/csi_sock
+            - name: X_CSI_MODE
+              value: node
+            - name: X_CSI_UNITY_AUTOPROBE
+              value: "true"
+            - name: X_CSI_UNITY_ALLOW_MULTI_POD_ACCESS
+              value: {{ .Values.allowRWOMultiPodAccess | default "false" | lower | quote }}
+            - name: X_CSI_PRIVATE_MOUNT_DIR
+              value: "{{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com/disks"
+            - name: X_CSI_EPHEMERAL_STAGING_PATH
+              value: "{{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/pv/"
+            - name: X_CSI_ISCSI_CHROOT
+              value: {{ .Values.ISCSIChroot | default "/noderoot" }}
+            - name: X_CSI_UNITY_NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: X_CSI_UNITY_NODENAME_PREFIX
+              value: {{ .Values.nodeNamePrefix }}
+            - name: SSL_CERT_DIR
+              value: /certs
+            - name: X_CSI_UNITY_SYNC_NODEINFO_INTERVAL
+              value: {{ .Values.syncNodeInfoInterval | default "15" | quote }}
+            {{- if hasKey .Values.node "healthMonitor" }}
+            {{- if eq .Values.node.healthMonitor.enabled true }}
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.node.healthMonitor.enabled }}"
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com
+            - name: volumedevices-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi
+              mountPropagation: "Bidirectional"
+            - name: pods-path
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: noderoot
+              mountPath: /noderoot
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            - name: unity-config
+              mountPath: /unity-config
+            - name: unity-secret
+              mountPath: /unity-secret
+        - name: registrar
+          image: {{ required "Must provide the CSI registrar container image." ( include "csi-unity.registrarImage" . ) }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - --kubelet-registration-path={{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com/csi_sock
+          env:
+            - name: ADDRESS
+              value: /csi/csi_sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: registration-dir
+              mountPath: /registration
+            - name: driver-path
+              mountPath: /csi
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: driver-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/unity.emc.dell.com
+            type: DirectoryOrCreate
+        - name: volumedevices-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi
+            type: DirectoryOrCreate
+        - name: pods-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/pods
+            type: Directory
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: noderoot
+          hostPath:
+            path: /
+            type: Directory
+        - name: certs
+          projected:
+            sources:
+{{- range $i, $e := until (int .Values.certSecretCount ) }}
+              - secret:
+                  name: {{ print $releaseName "-certs-" $e }}
+                  items:
+                    - key: cert-{{ $e }}
+                      path: cert-{{ $e }}
+{{- end }}
+        - name: unity-config
+          configMap:
+              name: {{ .Release.Name }}-config-params
+        - name: unity-secret
+          secret:
+              secretName: {{ .Release.Name }}-creds
+{{- if .Values.podmon.enabled }}
+        - name: usr-bin
+          hostPath:
+            path: /usr/bin
+            type: Directory
+        - name: kubelet-pods
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/pods
+            type: Directory
+        - name: var-run
+          hostPath:
+            path: /var/run
+            type: Directory
+{{- end }}

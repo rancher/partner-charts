@@ -1,0 +1,357 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  {{- if hasKey .Values.controller "vgsnapshot" }}
+  {{- if eq .Values.controller.vgsnapshot.enabled true }}
+  - apiGroups: ["volumegroup.storage.dell.com"]
+    resources: ["dellcsivolumegroupsnapshots","dellcsivolumegroupsnapshots/status"]
+    verbs: ["create", "list", "watch", "delete", "update"]
+  {{- end }}
+  {{- end }} 
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create", "get", "list", "watch", "update", "delete", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshots/status"]
+  {{- if hasKey .Values.controller "vgsnapshot" }}
+  {{- if eq .Values.controller.vgsnapshot.enabled true }}
+    verbs: ["get", "list", "watch", "update", "create", "delete"]
+  {{- else }}
+    verbs: ["get", "list", "watch", "update"]
+  {{- end }}
+  {{- end }}    
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create", "list", "watch", "delete"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  # below for resizer
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+  # below for dell-csi-replicator
+  {{- if hasKey .Values.controller "replication" }}
+  {{- if eq .Values.controller.replication.enabled true}}
+  - apiGroups: ["replication.storage.dell.com"]
+    resources: ["dellcsireplicationgroups"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["replication.storage.dell.com"]
+    resources: ["dellcsireplicationgroups/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+  {{- end}}
+  {{- end}}
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-controller
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-controller
+  {{- if lt (.Values.controller.controllerCount | toString | atoi ) 1 -}}
+  {{- fail "value for .Values.controller.controllerCount should be atleast 1" }}
+  {{- else }}
+  replicas: {{ required "Must provide the number of controller instances to create." .Values.controller.controllerCount }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Release.Name }}-controller
+    spec:
+      {{ if .Values.controller.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.controller.nodeSelector | nindent 8 }}
+      {{ end }}
+      {{ if .Values.controller.tolerations }}
+      tolerations:
+      {{- toYaml .Values.controller.tolerations | nindent 6 }}
+      {{ end }}
+      serviceAccountName: {{ .Release.Name }}-controller
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "name"
+                    operator: In
+                    values:
+                      - {{ .Release.Name }}-controller
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+        {{- if hasKey .Values "dev" }}
+        {{ if .Values.dev.enableTracing }}{{- include "pstore.tracing" . | nindent 8 }}{{ end }}
+        {{- end }}
+        - name: attacher
+          image: {{ required "Must provide the CSI attacher container image." ( include "csi-powerstore.attacherImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--leader-election"
+            - "--worker-threads=130"
+            - "--resync=10s"
+            - "--timeout=130s"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- if hasKey .Values.controller "resizer" }}
+        {{- if eq .Values.controller.resizer.enabled true }}
+        - name: resizer
+          image: {{ required "Must provide the CSI resizer container image."  ( include "csi-powerstore.resizerImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{end}}
+        {{end}}
+        - name: provisioner
+          image: {{ required "Must provide the CSI provisioner container image." ( include "csi-powerstore.provisionerImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--volume-name-prefix={{ required "Must provide a value to prefix to driver created volume names" .Values.controller.volumeNamePrefix }}"
+            - "--volume-name-uuid-length=10"
+            - "--v=5"
+            - "--leader-election"
+            - "--default-fstype={{ .Values.defaultFsType | default "ext4" }}"
+            - "--extra-create-metadata"
+            - "--feature-gates=Topology=true"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- if hasKey .Values.controller "snapshot" }}
+        {{- if eq .Values.controller.snapshot.enabled true }}
+        - name: snapshotter
+          image: {{ required "Must provide the CSI snapshotter container image." ( include "csi-powerstore.snapshotterImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--leader-election"
+            - "--snapshot-name-prefix={{ required "Must privided a Snapshot Name Prefix" .Values.controller.snapshot.snapNamePrefix }}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{end}}
+        {{end}}
+        {{- if hasKey .Values.controller "vgsnapshot" }}
+        {{- if eq .Values.controller.vgsnapshot.enabled true }}
+        - name: vg-snapshotter
+          image: {{ required "Must provide the vgsnapshotter container image." .Values.controller.vgsnapshot.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        {{- if hasKey .Values.controller "replication" }}
+        {{- if eq .Values.controller.replication.enabled true}}
+        - name: dell-csi-replicator
+          image: {{ required "Must provide the Dell CSI Replicator image." .Values.controller.replication.image}}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+            - "--worker-threads=2"
+            - "--retry-interval-start=1s"
+            - "--retry-interval-max=300s"
+            - "--timeout=300s"
+            - "--context-prefix={{ .Values.controller.replication.replicationContextPrefix}}"
+            - "--prefix={{ .Values.controller.replication.replicationPrefix}}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+            - name: X_CSI_REPLICATION_CONFIG_DIR
+              value: /powerstore-config-params
+            - name: X_CSI_REPLICATION_CONFIG_FILE_NAME
+              value: driver-config-params.yaml
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: powerstore-config-params
+              mountPath: /powerstore-config-params
+        {{- end }}
+        {{- end }}
+        {{- if hasKey .Values.controller "healthMonitor" }}
+        {{- if eq .Values.controller.healthMonitor.enabled true}}
+        - name: csi-external-health-monitor-controller
+          image: {{ required "Must provide the CSI external health monitor controller image." ( include "csi-powerstore.healthmonitorImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--http-endpoint=:8080"
+            - "--enable-node-watcher=true"
+            - "--monitor-interval={{ .Values.controller.healthMonitor.volumeHealthMonitorInterval | default "60s" }}"
+            - "--timeout=180s"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        - name: csi-metadata-retriever
+          image: {{ required "Must provide the CSI Metadata retriever container image." .Values.controller.metadataretriever }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [ "/csi-metadata-retriever" ]
+          env:
+            {{- if hasKey .Values "dev" }}
+            - name: ENABLE_TRACING
+              value: {{ .Values.dev.enableTracing | quote }}
+            {{ if .Values.dev.enableTracing }}{{- include "pstore.tracingenvvars" . | nindent 12 }}{{ end }}
+            {{- end }}
+            - name: CSI_RETRIEVER_ENDPOINT
+              value: /var/run/csi/csi_retriever.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        - name: driver
+          image: {{ required "Must provide the PowerStore driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [ "/csi-powerstore" ]
+          env:
+            {{- if hasKey .Values "dev" }}
+            - name: ENABLE_TRACING
+              value: {{ .Values.dev.enableTracing | quote }}
+            {{ if .Values.dev.enableTracing }}{{- include "pstore.tracingenvvars" . | nindent 12 }}{{ end }}
+            {{- end }}
+            - name: CSI_ENDPOINT
+              value: /var/run/csi/csi.sock
+            - name: CSI_RETRIEVER_ENDPOINT
+              value: /var/run/csi/csi_retriever.sock
+            - name: X_CSI_MODE
+              value: controller
+            - name: X_CSI_DRIVER_NAME
+              value: {{ .Values.driverName }}
+            - name: X_CSI_POWERSTORE_EXTERNAL_ACCESS
+              value: {{ .Values.externalAccess }}
+            - name: X_CSI_NFS_ACLS
+              value: "{{ .Values.nfsAcls }}"
+            - name: X_CSI_POWERSTORE_CONFIG_PATH
+              value: /powerstore-config/config
+            - name: X_CSI_POWERSTORE_CONFIG_PARAMS_PATH
+              value: /powerstore-config-params/driver-config-params.yaml
+            {{- if hasKey .Values.controller "replication" }}
+            {{- if eq .Values.controller.replication.enabled true}}
+            - name: X_CSI_REPLICATION_CONTEXT_PREFIX
+              value: {{ .Values.controller.replication.replicationContextPrefix | default "powerstore"}}
+            - name: X_CSI_REPLICATION_PREFIX
+              value: {{ .Values.controller.replication.replicationPrefix | default "replication.storage.dell.com"}}
+            {{- end }}
+            {{- end }}
+            {{- if hasKey .Values.controller "healthMonitor" }}
+            {{- if eq .Values.controller.healthMonitor.enabled true}}
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.controller.healthMonitor.enabled }}"
+            {{- end }}
+            {{- end }}
+            - name: GOPOWERSTORE_DEBUG
+              value: "true"
+            - name: CSI_AUTO_ROUND_OFF_FILESYSTEM_SIZE
+              value: "{{ .Values.allowAutoRoundOffFilesystemSize | default false }}"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: powerstore-config
+              mountPath: /powerstore-config
+            - name: powerstore-config-params
+              mountPath: /powerstore-config-params
+      volumes:
+        - name: socket-dir
+          emptyDir:
+        - name: powerstore-config-params
+          configMap:
+            name: {{ .Release.Name }}-config-params
+        - name: powerstore-config
+          secret:
+            secretName: {{ .Release.Name }}-config
