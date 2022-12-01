@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-datahub
+  name: alameda-datahub
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-datahub
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-datahub
+      name: alameda-datahub
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaDatahub.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: ALAMEDA_DATAHUB_INFLUXDB_ADDRESS
+          value: https://alameda-influxdb.{{ .Release.Namespace }}.svc:8086
+        - name: ALAMEDA_DATAHUB_INFLUXDB_USERNAME
+          value: admin
+        - name: ALAMEDA_DATAHUB_INFLUXDB_PASSWORD
+          value: adminpass
+        - name: ALAMEDA_DATAHUB_RABBITMQ_URL
+          value: amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672
+        - name: ALAMEDA_DATAHUB_FEDEMETER_ADDRESS
+          value: http://fedemeter-api.{{ .Release.Namespace }}.svc:8888
+        - name: ALAMEDA_DATAHUB_FEDEMETER_USERNAME
+          value: fedemeter
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-datahub-ubi:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /init.sh liveness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: alameda-datahub
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /init.sh readiness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaDatahub.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: alameda-datahub-log-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaDatahub.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-datahub
+      serviceAccountName: alameda-datahub
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaDatahub.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: alameda-datahub-data-storage
+      - name: alameda-datahub-log-storage
+        persistentVolumeClaim:
+          claimName: alameda-datahub-log.pvc

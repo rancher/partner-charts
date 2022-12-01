@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-recommender-worker
+  name: federatorai-recommender-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-recommender-worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-recommender-worker
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiRecommenderWorker.affinity "context" .) | nindent 8 }}
+      containers:
+      - command:
+        - /usr/local/bin/federatorai-recommender
+        - worker
+        env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-recommender-ubi:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-recommender
+            - worker
+            - --mode=livenessprob
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: federatorai-recommender-worker
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-recommender
+            - worker
+            - --mode=readinessprob
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiRecommenderWorker.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/lib/alameda
+          name: federatorai-recommender-worker-data-storage
+        - mountPath: /var/log/alameda
+          name: federatorai-recommender-worker-log-storage
+        - mountPath: /etc/alameda/federatorai-recommendation/worker.toml
+          name: federatorai-recommender-worker-config
+          subPath: worker.toml
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiRecommenderWorker.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-recommender-worker
+      serviceAccountName: federatorai-recommender-worker
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiRecommenderWorker.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - name: federatorai-recommender-worker-data-storage
+        persistentVolumeClaim:
+          claimName: federatorai-recommender-worker-data.pvc
+      - name: federatorai-recommender-worker-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-recommender-worker-log.pvc
+      - configMap:
+          defaultMode: 420
+          name: federatorai-recommender-worker-config
+        name: federatorai-recommender-worker-config

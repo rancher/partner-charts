@@ -1,0 +1,21 @@
+{{- if .Values.kspm.deploy }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sysdig.fullname" . }}-kspm-collector
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+data:
+{{- $env := "PRODUCTION" -}}
+{{ if .Values.kspmCollector.debug }}
+  {{- $env = "DEVELOPMENT" -}}
+{{ end}}
+  environment: {{ $env }}
+  included_namespaces: {{ .Values.kspmCollector.settings.namespaces.included | quote}}
+  excluded_namespaces: {{ .Values.kspmCollector.settings.namespaces.excluded | quote }}
+  included_workloads: {{ .Values.kspmCollector.settings.workloads.included | quote }}
+  excluded_workloads: {{ .Values.kspmCollector.settings.workloads.excluded | quote }}
+  health_interval_minutes: {{ .Values.kspmCollector.settings.healthIntervalMin | default 5 | quote }}
+  external_nats_url: {{ include "sysdig.natsUrl" . }}
+  cluster_name: {{ required "A valid .Values.clusterName is required" .Values.clusterName }}
+{{- end }}

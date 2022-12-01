@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+    "helm.sh/hook-weight": "1000"
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    name: federatorai-operator
+    app: Federator.ai
+  name: federatorai-operator
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      name: federatorai-operator
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        name: federatorai-operator
+        app: Federator.ai
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiOperator.affinity "context" .) | nindent 8 }}
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiOperator.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccountName: federatorai-operator
+      initContainers:
+        - name: upgrader
+          {{- if .Values.federatoraiOperator.image }}
+          image: {{ .Values.federatoraiOperator.image }}
+          {{- else }}
+          image: "{{ .Values.global.imageRegistry }}/federatorai-operator-ubi:{{ .Values.global.imageTag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+          - "upgrade"
+          env:
+            - name: DO_NOT_DEPLOY_ASSETS
+              value: "true"
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: FEDERATORAI_OPERATOR_INFLUXDB_ADDRESS
+              value: ""
+            - name: FEDERATORAI_OPERATOR_INFLUXDB_SERVICE_NAME
+              value: alameda-influxdb
+            - name: FEDERATORAI_OPERATOR_INFLUXDB_SERVICE_PORT
+              value: "8086"
+            - name: FEDERATORAI_OPERATOR_INFLUXDB_USERNAME
+              value: admin
+            - name: FEDERATORAI_OPERATOR_INFLUXDB_PASSWORD
+              value: adminpass
+          resources:
+          {{- if .Values.global.resourcesEnabled }}
+            {{ include "render-value" ( dict "value" .Values.federatoraiOperator.resources "context" .) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          - mountPath: /var/log/alameda
+            name: log
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: cert
+            readOnly: true
+      containers:
+        - name: federatorai-operator
+          # Replace this with the built image name
+          {{- if .Values.federatoraiOperator.image }}
+          image: {{ .Values.federatoraiOperator.image }}
+          {{- else }}
+          image: "{{ .Values.global.imageRegistry }}/federatorai-operator-ubi:{{ .Values.global.imageTag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: DO_NOT_DEPLOY_ASSETS
+              value: "true"
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "federatorai-operator"
+            # OVERRIDE_CR_VERSION=true means always overwrite the spec.version value inside alamedaservice CR
+            - name: OVERRIDE_CR_VERSION
+              value: "false"
+          readinessProbe:
+            failureThreshold: 20
+            httpGet:
+              path: /readyz
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+          {{- if .Values.global.resourcesEnabled }}
+            {{ include "render-value" ( dict "value" .Values.federatoraiOperator.resources "context" .) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          - mountPath: /var/log/alameda
+            name: log
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: cert
+            readOnly: true
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiOperator.tolerations "context" .) | nindent 6 }}
+      volumes:
+        - name: log
+          emptyDir: {}
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: federatorai-operator-service-cert

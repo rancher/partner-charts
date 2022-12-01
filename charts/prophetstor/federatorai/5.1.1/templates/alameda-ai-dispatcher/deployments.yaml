@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-ai-dispatcher
+  name: alameda-ai-dispatcher
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-ai-dispatcher
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-ai-dispatcher
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaAiDispatcher.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: ALAMEDA_AI_DISPATCHER_DATAHUB_ADDRESS
+          value: alameda-datahub.{{ .Release.Namespace }}.svc:50050
+        - name: ALAMEDA_AI_DISPATCHER_QUEUE_URL
+          value: amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-ai-dispatcher:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/ai-dispatcher
+            - probe
+            - --type=liveness
+          failureThreshold: 5
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 300
+        name: ai-dispatcher
+        ports:
+        - containerPort: 9091
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/ai-dispatcher
+            - probe
+            - --type=readiness
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 60
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaAiDispatcher.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: alameda-dispatcher-log-storage
+        - mountPath: /etc/alameda/ai-dispatcher/ai-dispatcher.toml
+          name: alameda-ai-dispatcher-config
+          subPath: ai-dispatcher.toml
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaAiDispatcher.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-ai-dispatcher
+      serviceAccountName: alameda-ai-dispatcher
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaAiDispatcher.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: alameda-ai-dispatcher-config
+        name: alameda-ai-dispatcher-config
+      - emptyDir: {}
+        name: alameda-dispatcher-data-storage
+      - name: alameda-dispatcher-log-storage
+        persistentVolumeClaim:
+          claimName: alameda-dispatcher-log.pvc

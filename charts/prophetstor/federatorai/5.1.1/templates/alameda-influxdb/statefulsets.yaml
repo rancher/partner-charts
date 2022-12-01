@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-influxdb
+  name: alameda-influxdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-influxdb
+  serviceName: ""
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-influxdb
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: INFLUXDB_REPORTING_DISABLED
+          value: "true"
+        - name: INFLUXDB_HTTP_HTTPS_ENABLED
+          value: "true"
+        - name: INFLUXDB_HTTP_AUTH_ENABLED
+          value: "true"
+        - name: INFLUXDB_ADMIN_USER
+          value: admin
+        - name: INFLUXDB_ADMIN_PASSWORD
+          value: adminpass
+        - name: INFLUXDB_USER
+          value: user
+        - name: INFLUXDB_USER_PASSWORD
+          value: userpass
+        - name: INFLUXDB_LOGGING_LEVEL
+          value: warn
+        - name: INFLUXDB_DATA_MAX_VALUES_PER_TAG
+          value: "0"
+        - name: INFLUXDB_DATA_MAX_SERIES_PER_DATABASE
+          value: "0"
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-influxdb:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /init.sh liveness
+          failureThreshold: 3
+          initialDelaySeconds: 600
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: influxdb
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /init.sh readiness
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaInfluxdb.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/influxdb
+          name: influxdb-log-storage
+          subPath: influxdb
+        - mountPath: /var/lib/influxdb
+          name: influxdb-data-storage
+          subPath: influxdb
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-influxdb
+      serviceAccountName: alameda-influxdb
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - name: influxdb-data-storage
+        persistentVolumeClaim:
+          claimName: my-alameda.influxdb-data.pvc
+      - name: influxdb-log-storage
+        persistentVolumeClaim:
+          claimName: my-alameda.influxdb-log.pvc
+  updateStrategy:
+    type: RollingUpdate

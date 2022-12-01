@@ -1,0 +1,214 @@
+# global values are in generated_values.yaml
+# run `codefresh runner init --generate-helm-values-file` first
+global:
+  namespace: ""
+  codefreshHost: ""
+  agentToken: ""
+  # Existing secret (name-of-existing-secret) with API token from Codefresh (supersedes value for global.agentToken; secret must contain `codefresh.token` key)
+  existingAgentToken: ""
+  agentId: ""
+  agentName: ""
+  accountId: ""
+  runtimeName: ""
+  # Existing secret (name has to be `codefresh-certs-server`) (supersedes value for global.keys; secret must contain `server-cert.pem` `server-key.pem` and `ca.pem`` keys)
+  existingDindCertsSecret: ""
+  keys:
+    key: ""
+    csr: ""
+    ca: ""
+    serverCert: ""
+
+dockerRegistry: "quay.io" # Registry prefix for the runtime images (default quay.io)
+## e.g:
+# dockerRegistry: "docker.io"
+newRelicLicense: "" # NEWRELIC_LICENSE_KEY (for app-proxy and runner deployments)
+
+runner: # Runner Deployment
+  image: "codefresh/venona:1.7.8"
+  env: {}
+  ## e.g:
+  # env:
+  #   HTTP_PROXY: 10.20.0.35:8080
+  #   HTTPS_PROXY: 10.20.0.35:8080
+  #   NO_PROXY: 10.20.0.*
+  resources: {}
+  ## e.g:
+  # resources:
+  #   limits:
+  #     cpu: 400m
+  #     memory: 1200Mi
+  #   requests:
+  #     cpu: 200m
+  #     memory: 500Mi
+  nodeSelector: {}
+  ## e.g:
+  # nodeSelector:
+  #   foo: bar
+  tolerations: []
+  ## e.g:
+  # tolerations:
+  # - key: codefresh
+  #   operator: Equal
+  #   value: dind
+  #   effect: NoSchedule
+
+volumeProvisioner: # Volume-Provisioner Deployment
+  image: "codefresh/dind-volume-provisioner:1.31.9"
+  serviceAccount: {} # annotate volume-provisioner service account
+  ## e.g:
+  # serviceAccount:
+  #   annotations:
+  #     eks.amazonaws.com/role-arn: "arn:aws:iam::<ACCOUNT_ID>:role/<IAM_ROLE_NAME>"
+  nodeSelector: {}
+  resources: {}
+  tolerations: []
+  env: {}
+  ## e.g:
+  # env:
+  #   PRIVILEGED_CONTAINER: true
+  ### https://codefresh.io/docs/docs/administration/codefresh-runner/#installing-on-aks
+  # mountAzureJson: true
+
+storage: # Storage parameters for Volume-Provisioner
+  backend: local    # volume type: local(default), ebs, gcedisk or azuredisk
+  fsType: "ext4"    # filesystem type: ext4(default) or xfs
+
+  # Storage example for local volumes on the K8S nodes filesystem
+  # https://kubernetes.io/docs/concepts/storage/volumes/#local
+  local:
+    volumeParentDir: /var/lib/codefresh/dind-volumes
+
+  localVolumeMonitor: # lv-monitor DaemonSet (only for `storage.backend: local`)
+    nodeSelector: {}
+    resources: {}
+    tolerations: []
+    env: {}
+
+  # Storage example for aws ebs disks
+  # https://aws.amazon.com/ebs/
+  # https://codefresh.io/docs/docs/administration/codefresh-runner/#installing-on-aws
+  ebs:
+    volumeType: "" # gp2(default), gp3 or io1
+    availabilityZone: "" # valid aws zone
+    encrypted: "" # encrypt volume (false by default)
+    kmsKeyId: "" # (Optional) KMS Key ID
+    accessKeyId: "" # (Optional) AWS_ACCESS_KEY_ID
+    secretAccessKey: "" # (Optional) AWS_SECRET_ACCESS_KEY
+  ## e.g:
+  # ebs:
+  #   volumeType: gp3
+  #   availabilityZone: us-east-1c
+  #   encrypted: false
+  #   iops: "5000"
+  #   # I/O operations per second. Only effetive when gp3 volume type is specified.
+  #   # Default value - 3000.
+  #   # Max - 16,000
+  #   throughput: "500"
+  #   # Throughput in MiB/s. Only effective when gp3 volume type is specified.
+  #   # Default value - 125.
+  #   # Max - 1000.
+  # ebs:
+  #   volumeType: gp2
+  #   availabilityZone: us-east-1c
+  #   encrypted: true
+  #   kmsKeyId: "1234abcd-12ab-34cd-56ef-1234567890ab"
+  #   accessKeyId: "AKIAIOSFODNN7EXAMPLE"
+  #   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+  # Storage example for gce disks
+  # https://cloud.google.com/compute/docs/disks#pdspecs
+  # https://codefresh.io/docs/docs/administration/codefresh-runner/#installing-on-google-kubernetes-engine
+  gcedisk:
+    volumeType: "" # pd-ssd(default) or pd-standard
+    availabilityZone: "" # valid gcp zone
+    serviceAccountJson: "" # (Optional) Google SA JSON key
+  ## e.g:
+  # gcedisk:
+  #   volumeType: pd-ssd
+  #   availabilityZone: us-central1-c
+  #   serviceAccountJson: |-
+  #          {
+  #           "type": "service_account",
+  #           "project_id": "...",
+  #           "private_key_id": "...",
+  #           "private_key": "...",
+  #           "client_email": "...",
+  #           "client_id": "...",
+  #           "auth_uri": "...",
+  #           "token_uri": "...",
+  #           "auth_provider_x509_cert_url": "...",
+  #           "client_x509_cert_url": "..."
+  #           }
+
+  # Storage example for Azure Disks
+  # https://codefresh.io/docs/docs/administration/codefresh-runner/#installing-on-aks
+  azuredisk:
+    skuName: Premium_LRS #default
+    cachingMode: None
+    # location: westcentralus
+    # resourceGroup:
+    # DiskIOPSReadWrite: 500
+    # DiskMBpsReadWrite: 100
+
+
+re:
+  # Optionally add an AWS IAM role to your pipelines
+  # More info: https://codefresh.io/docs/docs/administration/codefresh-runner/#injecting-aws-arn-roles-into-the-cluster
+  ## e.g:
+  # re:
+  #   serviceAccount:
+  #     annotations:   # will be set on codefresh-engine service account
+  #       eks.amazonaws.com/role-arn: "arn:aws:iam::<ACCOUNT_ID>:role/<IAM_ROLE_NAME>"
+  dindDaemon: # dind daemon config
+    hosts:
+      - unix:///var/run/docker.sock
+      - tcp://0.0.0.0:1300
+    storage-driver: overlay2
+    tlsverify: true
+    tls: true
+    tlscacert: /etc/ssl/cf-client/ca.pem
+    tlscert: /etc/ssl/cf/server-cert.pem
+    tlskey: /etc/ssl/cf/server-key.pem
+    insecure-registries:
+      - 192.168.99.100:5000
+    metrics-addr: 0.0.0.0:9323
+    experimental: true
+
+appProxy: # App-Proxy Deployment
+  enabled: false
+  image: "codefresh/cf-app-proxy:latest"
+  env: {}
+  ## e.g:
+  # env:
+  #   LOG_LEVEL: debug
+  ingress:
+    pathPrefix: ""      # Specify path prefix for ingress (default is '/')
+    class: ""           # Specify ingress class
+    host: ""            # Specify DNS hostname the ingress will use
+    tlsSecret: ""       # Specify k8s tls secret for the ingress object
+    annotations: {}     # Specify extra annotations for ingress object
+  ## e.g:
+  # ingress:
+  #   pathPrefix: "/app-proxy"
+  #   class: "nginx"
+  #   host: "mydomain.com"
+  #   tlsSecret: "tls-cert-app-proxy"
+  #   annotations:
+  #     nginx.ingress.kubernetes.io/whitelist-source-range: 123.123.123.123/130
+  resources: {}
+  serviceAccount:
+    annotations: {}
+
+monitor: # Monitor Deployment
+  enabled: false
+  image: "codefresh/agent:stable"
+  helm3: true
+  useNamespaceWideRole: false     # Use ClusterRole(false) or Role(true)
+  clusterId: ""                   # Cluster name as it registered in account
+  token: ""                       # API token from Codefresh
+  existingMonitorToken: ""        # Existing secret (name-of-existing-secret) with API token from Codefresh (supersedes value of monitor.token; secret must contain `codefresh.token` key)
+  env: {}
+  resources: {}
+  serviceAccount:
+    annotations: {}
+

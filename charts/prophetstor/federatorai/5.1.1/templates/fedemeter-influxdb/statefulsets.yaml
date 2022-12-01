@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: fedemeter-influxdb
+  name: fedemeter-influxdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: fedemeter-influxdb
+  serviceName: fedemeter-influxdb
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: fedemeter-influxdb
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.fedemeterInfluxdb.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: INFLUXDB_LOGGING_LEVEL
+          value: warn
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/fedemeter-influxdb:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - /run.sh liveness
+          failureThreshold: 3
+          initialDelaySeconds: 300
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 300
+        name: fedemeter-influxdb
+        ports:
+        - containerPort: 8086
+          protocol: TCP
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.fedemeterInfluxdb.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/influxdb
+          name: fedemeter-influxdb-log-storage
+          subPath: influxdb
+        - mountPath: /influxdb
+          name: fedemeter-influxdb-data-storage
+          subPath: influxdb
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.fedemeterInfluxdb.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: fedemeter-influxdb
+      serviceAccountName: fedemeter-influxdb
+      tolerations: {{- include "render-value" ( dict "value" .Values.fedemeterInfluxdb.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - name: fedemeter-influxdb-data-storage
+        persistentVolumeClaim:
+          claimName: fedemeter.influxdb-data.pvc
+      - name: fedemeter-influxdb-log-storage
+        persistentVolumeClaim:
+          claimName: fedemeter.influxdb-log.pvc
+  updateStrategy:
+    type: RollingUpdate

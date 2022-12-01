@@ -1,0 +1,86 @@
+# Copyright 2021-2022 TriggerMesh Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if .Values.serviceAccount.create }}
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "triggermesh-core.fullname" . }}
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "triggermesh-core.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: triggermesh-core-controller
+
+---
+
+# Controller must be granted the same permissions it assigns
+# to the broker deployment.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "triggermesh-core.fullname" . }}-for-brokers
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "triggermesh-core.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: triggermesh-broker
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "triggermesh-core.fullname" . }}-resolver
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "triggermesh-core.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: addressable-resolver-triggermesh
+
+---
+
+# If Knative Eventing is installed, use also the addressable-resolver.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "triggermesh-core.fullname" . }}-resolver-knative
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "triggermesh-core.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: addressable-resolver
+
+{{- end }}

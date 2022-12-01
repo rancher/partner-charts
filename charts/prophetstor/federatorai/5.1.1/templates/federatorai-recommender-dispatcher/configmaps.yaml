@@ -1,0 +1,63 @@
+apiVersion: v1
+data:
+  dispatcher.toml: |-
+    [Common]
+    log_file_path = "/var/log/alameda/recommender-dispatcher.log" # empty string means only log to stdout
+    http_port = 9090
+    cache_max_capacity = 50000 # 0 means no cache
+
+    [logging]
+    # fatal | error | warn | info | debug
+    main = "info"
+    planning = "info"
+    hpa = "info"
+    kafka = "info"
+    nginx = "info"
+
+    [datahub]
+    address = "alameda-datahub.{{ .Release.Namespace }}.svc"
+    port = 50050
+
+    [queue]
+    url = "amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672"
+
+    [tracing]
+    mode = "agent" # collector | agent | noop
+    collector_url = "http://federatorai-telemetry.{{ .Release.Namespace }}.svc:14268/api/traces"
+    agent_host = "127.0.0.1"
+    agent_port = "6831"
+    sample_ratio = 1.0
+
+    [planning]
+    daily_disable = false
+    daily_interval = 180
+    weekly_disable = false
+    weekly_interval = 180
+    monthly_disable = false
+    monthly_interval = 180
+    yearly_disable = false
+    yearly_interval = 180
+    cache_ttl = 3600 # 0 means no ttl
+
+    [hpa]
+    disable = false
+    interval = 180
+    cache_ttl = 3600 # 0 means no ttl
+
+    [kafka]
+    disable = false
+    interval = 300
+    cache_ttl = 3600 # 0 means no ttl
+
+    [nginx]
+    disable = false
+    interval = 60
+    cache_ttl = 3600 # 0 means no ttl
+kind: ConfigMap
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+  name: federatorai-recommender-dispatcher-config
+  namespace: {{ .Release.Namespace }}

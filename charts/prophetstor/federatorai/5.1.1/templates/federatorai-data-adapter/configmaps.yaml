@@ -1,0 +1,2058 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+  name: federatorai-data-adapter-config
+  namespace: {{ .Release.Namespace }}
+data:
+    telegraf.conf: |+
+      [global_tags]
+
+      [agent]
+        interval = "1m"
+        ## DA will try to reload user configuration periodically
+        # configuration_reload_interval = "1h", DA will reload user configuration every hour
+        # configuration_reload_interval = "0s", DA will disabled this feature. And DA only reload user configuration when receiving configuration change notification
+        configuration_reload_interval = "$CONFIGURATION_RELOAD_INTERVAL"
+        delay_query_interval = "$DELAY_QUERY_INTERVAL"
+        round_interval = true
+        metric_batch_size = 10000
+        metric_buffer_limit = 100000
+        collection_jitter = "5s"
+        flush_interval = "20s"
+        flush_jitter = "0s"
+        precision = "1us"
+        debug = $DEBUG
+        aggregator_queue = 200000
+        max_rpc_receive_size = $MAX_RPC_RECEIVE_SIZE
+        logfile = "/var/log/telegraf.log"
+        logfile_rotation_interval = "1d"
+        logfile_rotation_max_archives = 10
+        logfile_rotation_max_size = "200MB"
+        logfile_compress_archives = true
+        logfile_total_max_size = "$FEDERATORAI_MAXIMUM_LOG_SIZE"
+        logfile_queue_size = $MAX_LOG_QUEUE_SIZE
+        logfile_queue_trace_interval = "$LOG_QUEUE_TRACE_INTERVAL"
+        logfile_enabled_async_logger = $ENABLED_ASYNC_LOGGER
+        ## Data adapter will flush log queue to console if queue is full
+        enable_logfile_flush_to_console = $ENABLE_FLUSH_LOG_TO_CONSOLE
+        logfile_flush_to_console_level = "$LOG_FLUSH_TO_CONSOLE_LEVEL"
+        ## Query will retry if some metrics hasn't returned yet.
+        max_retry = 1
+        retry_interval = "10s"
+        max_request_line = $MAX_REQUEST_LINE
+        sysdig_max_char_per_chunk = $SYSDIG_MAX_CHAR_PER_CHUNK
+        # sysdig_max_query_per_chunk accepted value [1-20], default value is 10 if not setted
+        sysdig_max_query_per_chunk = $SYSDIG_MAX_QUERY_PER_CHUNK
+        quiet = false
+        hostname = ""
+        omit_hostname = false
+        alamedascaler_enable = true
+        enable_historical_data_collection = false
+        force_reload_configuration = false
+        fed_rest_url = "$FED_REST_URL"
+        fed_rest_port = "$FED_REST_PORT"
+        datahub_url = "$DATAHUB_URL"
+        datahub_port = "$DATAHUB_PORT"
+        rabbitmq_url = "$RABBITMQ_URL"
+        rabbitmq_port = "$RABBITMQ_PORT"
+        rabbitmq_subscriber = "data_adapter"
+        expired_time = "$DATA_EXPIRED_TIME"
+        event_cache_expired_time = "$POST_EVENT_INTERVAL"
+
+        ## set collect_metadata_only=false to collect resource metadata and metrics
+        ## set collect_metadata_only=true to only collect resource metadata
+        collect_metadata_only = $COLLECT_METADATA_ONLY
+
+        # Default disable integration metrics setting
+        # Cost Analysis related metrics
+        cost_analysis_metrics = ["federatorai.cost_analysis.instance.cost","federatorai.cost_analysis.namespace.cost","federatorai.prediction.namespace.cost","federatorai.recommendation.instance","federatorai.cost_analysis.resource_alloc_cost.cluster","federatorai.cost_analysis.resource_alloc_cost.node","federatorai.cost_analysis.resource_alloc_cost.namespace","federatorai.cost_analysis.resource_usage_cost.cluster","federatorai.cost_analysis.resource_usage_cost.node","federatorai.cost_analysis.resource_usage_cost.namespace","federatorai.cost_analysis.cost_per_day.cluster","federatorai.cost_analysis.cost_per_day.node","federatorai.cost_analysis.cost_per_day.namespace","federatorai.cost_analysis.cost_per_week.cluster","federatorai.cost_analysis.cost_per_week.node","federatorai.cost_analysis.cost_per_week.namespace","federatorai.cost_analysis.cost_per_month.cluster","federatorai.cost_analysis.cost_per_month.node","federatorai.cost_analysis.cost_per_month.namespace","federatorai.recommendation.cost_analysis.cost_per_day.cluster","federatorai.recommendation.cost_analysis.cost_per_day.node","federatorai.recommendation.cost_analysis.cost_per_day.namespace","federatorai.recommendation.cost_analysis.cost_per_week.cluster","federatorai.recommendation.cost_analysis.cost_per_week.node","federatorai.recommendation.cost_analysis.cost_per_week.namespace","federatorai.recommendation.cost_analysis.cost_per_month.cluster","federatorai.recommendation.cost_analysis.cost_per_month.node","federatorai.recommendation.cost_analysis.cost_per_month.namespace","federatorai.cost_analysis.cost_efficiency_per_day.cluster","federatorai.cost_analysis.cost_efficiency_per_day.node","federatorai.cost_analysis.cost_efficiency_per_day.namespace","federatorai.cost_analysis.cost_efficiency_per_week.cluster","federatorai.cost_analysis.cost_efficiency_per_week.node","federatorai.cost_analysis.cost_efficiency_per_week.namespace","federatorai.cost_analysis.cost_efficiency_per_month.cluster","federatorai.cost_analysis.cost_efficiency_per_month.node","federatorai.cost_analysis.cost_efficiency_per_month.namespace","federatorai.recommendation.cost_analysis.cost_efficiency_per_day.cluster","federatorai.recommendation.cost_analysis.cost_efficiency_per_day.namespace","federatorai.recommendation.cost_analysis.cost_efficiency_per_week.cluster","federatorai.recommendation.cost_analysis.cost_efficiency_per_week.namespace","federatorai.recommendation.cost_analysis.cost_efficiency_per_month.cluster","federatorai.recommendation.cost_analysis.cost_efficiency_per_month.namespace"]
+
+        ## Dashboard
+        check_sysdig_dashboard_interval = "$CHECK_SYSDIG_DASHBOARD_INTERVAL"
+        enable_sysdig_dashboard = $ENABLE_SYSDIG_DASHBOARD
+        sysdig_dashboards = ["/etc/telegraf/dashboards/sysdig/kafka-overview.json", "/etc/telegraf/dashboards/sysdig/application-overview.json", "/etc/telegraf/dashboards/sysdig/cluster-overview.json"]
+
+        ## Automation
+        enable_dump_mock_data = false
+        testing_mode = false
+        configuration_mock_data_path = "/var/log/mock_server/mock_data/configuration"
+        datadog_mock_data_path = "/var/log/mock_server/mock_data/datadog"
+        sysdig_mock_data_path = "/var/log/mock_server/mock_data/sysdig"
+        prometheus_mock_data_path = "/var/log/mock_server/mock_data/prometheus"
+        expected_result_path = "/var/log/mock_server/mock_data/expected_result"
+        test_mode_result_path = "mock_server/mock_data/test_mode_result"
+
+        ## Datadog tag mapping table
+        # if enable_autodiscover_datadog_cluster_name_tag_key=true, agent uses datadog_default_cluster_tag_key to autodiscover cluster name tag key
+        # if enable_autodiscover_datadog_cluster_name_tag_key=false, agent uses the cluster name tag key defined in agent.datadog_cluster_tag_mapping.
+        enable_autodiscover_datadog_cluster_name_tag_key = true
+        #DD_CLUSTER_NAME_TAG_KEYS is "cluster_name,kube_cluster_name,kube_cluster" by default.
+        datadog_default_cluster_tag_keys  = "$DD_CLUSTER_NAME_TAG_KEYS"
+        [agent.datadog_cluster_tag_mapping]
+          # Datadog cluster name tag = ["<cluster_name>"]
+          kube_cluster = []
+          cluster_name = []
+          kube_cluster_name = []
+
+      #############################
+      ### Aggregator Basicstats ###
+      #############################
+
+      # Datadog metrics
+      [[aggregators.basicstats]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["datadog_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "datadog_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      ## Openshift Prometheus integration: aggregator ##
+      [[aggregators.basicstats]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["openshift_prometheus_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "openshift_prometheus_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      ## Federation Prometheus/Prometheus integration: aggregator ##
+      [[aggregators.basicstats]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["prometheus_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "prometheus_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      ## Sysdig integration: aggregator ##
+      [[aggregators.basicstats]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["sysdig_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "sysdig_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      ## VMware integration: aggregator ##
+      [[aggregators.basicstats]]
+        grace = "5m"
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["vmware_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "vmware_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      # AWS Cloudwatch metrics
+      [[aggregators.basicstats]]
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["aws_cloudwatch_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "aws_cloudwatch_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      # Dashboard Datadog metrics
+      [[aggregators.basicstats]]
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["federatorai_datadog_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "federatorai_datadog_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      # Dashboard Sysdig metrics
+      [[aggregators.basicstats]]
+        period = "1m"
+        drop_original = true
+        # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
+        traverse_all_rules = false
+        # By default, data adapter send all the metrics through basicstats
+        namepass = ["federatorai_sysdig_cluster_collection_done"]
+        # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
+        namedrop = []
+
+        [[aggregators.basicstats.metric]]
+          groups = ["*"]
+          measurement_name = "federatorai_sysdig_cluster_collection_done"
+          aggregation_method = ""
+          fields = [""]
+
+      ##################
+      ### Processors ###
+      ##################
+
+      [[processors.filter_out]]
+        order = 1
+        namepass = ["kafka_topic_partition_current_offset", "kafka_consumer_group_current_offset", "node_disk_io_util", "sysdig_kafka_topic_partition_current_offset", "sysdig_kafka_consumergroup_current_offset", "openshift_prometheus_kube_pod_owner", "prometheus_kube_pod_owner", "openshift_prometheus_kube_replicationcontroller_spec_replicas", "openshift_prometheus_kube_replicationcontroller_status_available_replicas", "datadog_node_pod_phase", "datadog_kubernetes_pod_cpu_limit", "datadog_kubernetes_pod_memory_limit", "datadog_kubernetes_pod_cpu_requests", "datadog_kubernetes_pod_memory_requests", "datadog_kubernetes_container_cpu_limit", "datadog_kubernetes_container_memory_limit", "datadog_kubernetes_container_cpu_requests", "datadog_kubernetes_container_memory_requests", "datadog_pod_cpu_request_usage", "datadog_pod_cpu_limit_usage", "datadog_pod_memory_request", "datadog_pod_memory_limit", "sysdig_kube_pod_resource_limits_cpu_cores", "sysdig_kube_pod_resource_limits_memory_bytes", "sysdig_kube_pod_resource_requests_cpu_cores", "sysdig_kube_pod_resource_requests_memory_bytes", "sysdig_pod_cpu_limit_usage", "sysdig_pod_memory_limit", "sysdig_pod_cpu_request_usage", "sysdig_pod_memory_request","sysdig_kube_pod_status_phase"]
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kafka_topic_partition_current_offset"
+          fields = ["kafka_topic_partition_current_offset"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kafka_consumergroup_current_offset"
+          fields = ["kafka_consumergroup_current_offset"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "kafka_topic_partition_current_offset"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "kafka_consumer_group_current_offset"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "node_disk_io_util"
+          fields = ["value"]
+          aggregation_method = "set_max_value"
+          max_value = 100.0
+        [[processors.filter_out.metric]]
+          measurement_name = "prometheus_kube_pod_owner"
+          fields = ["owner_name"]
+          aggregation_method = "trim_last_index"
+          match_string = "-"
+          [processors.filter_out.metric.condition]
+            owner_kind = "ReplicaSet"
+        [[processors.filter_out.metric]]
+          measurement_name = "prometheus_kube_pod_owner"
+          fields = ["owner_name"]
+          aggregation_method = "trim_last_index"
+          match_string = "-"
+          [processors.filter_out.metric.condition]
+            owner_kind = "ReplicationController"
+        [[processors.filter_out.metric]]
+          measurement_name = "openshift_prometheus_kube_pod_owner"
+          fields = ["owner_name"]
+          aggregation_method = "trim_last_index"
+          match_string = "-"
+          [processors.filter_out.metric.condition]
+            owner_kind = "ReplicaSet"
+        [[processors.filter_out.metric]]
+          measurement_name = "openshift_prometheus_kube_pod_owner"
+          fields = ["owner_name"]
+          aggregation_method = "trim_last_index"
+          match_string = "-"
+          [processors.filter_out.metric.condition]
+            owner_kind = "ReplicationController"
+        [[processors.filter_out.metric]]
+          measurement_name = "openshift_prometheus_kube_replicationcontroller_spec_replicas"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "openshift_prometheus_kube_replicationcontroller_status_available_replicas"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "openshift_prometheus_kube_replicationcontroller_spec_replicas"
+          fields = ["replicationcontroller"]
+          aggregation_method = "trim_last_index"
+          match_string = "-"
+        [[processors.filter_out.metric]]
+          measurement_name = "openshift_prometheus_kube_replicationcontroller_status_available_replicas"
+          fields = ["replicationcontroller"]
+          aggregation_method = "trim_last_index"
+          match_string = "-"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_node_pod_phase"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        # Drop Datadog cpu/memory limits/requests
+        #     For metadata(pod, container and kafka_consumer_group)
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_pod_cpu_limit"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_pod_memory_limit"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_pod_cpu_requests"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_pod_memory_requests"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_container_cpu_limit"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_container_memory_limit"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_container_cpu_requests"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_kubernetes_container_memory_requests"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        # Drop Datadog cpu/memory limits/requests
+        #     For metrics data(pod_cpu_limit, pod_cpu_request, pod_memory_limit and pod_memory_request)
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_pod_cpu_request_usage"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_pod_cpu_limit_usage"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_pod_memory_request"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "datadog_pod_memory_limit"
+          fields = ["value"]
+          aggregation_method = "drop_zero_value"
+        # Drop Sysdig cpu/memory limits/requests
+        #    For metadata(pod, container and kafka_consumer_group)
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kube_pod_resource_limits_cpu_cores"
+          fields = ["kubernetes.pod.resourceLimits.cpuCores"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kube_pod_resource_limits_memory_bytes"
+          fields = ["kubernetes.pod.resourceLimits.memBytes"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kube_pod_resource_requests_cpu_cores"
+          fields = ["kubernetes.pod.resourceRequests.cpuCores"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kube_pod_resource_requests_memory_bytes"
+          fields = ["kubernetes.pod.resourceRequests.memBytes"]
+          aggregation_method = "drop_zero_value"
+        # Drop Sysdig cpu/memory limits/requests
+        #    For metrics data(pod_cpu_limit, pod_cpu_request, pod_memory_limit and pod_memory_request)
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_pod_cpu_limit_usage"
+          fields = ["kubernetes.pod.resourceLimits.cpuCores"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_pod_memory_limit"
+          fields = ["kubernetes.pod.resourceLimits.memBytes"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_pod_cpu_request_usage"
+          fields = ["kubernetes.pod.resourceRequests.cpuCores"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_pod_memory_request"
+          fields = ["kubernetes.pod.resourceRequests.memBytes"]
+          aggregation_method = "drop_zero_value"
+        [[processors.filter_out.metric]]
+          measurement_name = "sysdig_kube_pod_status_phase"
+          fields = ["kube_pod_status_phase"]
+          aggregation_method = "drop_zero_value"
+
+      ## Datadog integration: processors
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["datadog_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/datadog_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["datadog_*", "alameda_*", "aws_cloudwatch_vm", "aws_cloudwatch_cluster_collection_done"]
+        schema_file = "/etc/telegraf/schema/datadog_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["datadog_namespace_*"]
+        schema_file = "/etc/telegraf/schema/datadog_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "datadog"
+        aggregator_processor = true
+        namepass = ["datadog_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/datadog_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## Openshift Prometheus integration: processors ##
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["openshift_prometheus_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/openshift_prometheus_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["openshift_prometheus_*", "alameda_*", "aws_cloudwatch_vm", "aws_cloudwatch_cluster_collection_done"]
+        schema_file = "/etc/telegraf/schema/openshift_prometheus_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["openshift_prometheus_alameda_config_cluster_namespace", "openshift_prometheus_node_cpu_usage_seconds_total", "openshift_prometheus_node_memory_usage_bytes", "openshift_prometheus_kube_node_status_capacity_cpu_cores", "openshift_prometheus_namespace_*"]
+        schema_file = "/etc/telegraf/schema/openshift_prometheus_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "prometheus"
+        aggregator_processor = true
+        namepass = ["openshift_prometheus_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/openshift_prometheus_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## Federation Prometheus/Prometheus integration: processors ##
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["prometheus_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/prometheus_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["prometheus_*", "alameda_*", "aws_cloudwatch_vm", "aws_cloudwatch_cluster_collection_done"]
+        schema_file = "/etc/telegraf/schema/prometheus_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["prometheus_alameda_config_cluster_namespace", "prometheus_node_cpu_usage_seconds_total", "prometheus_node_memory_usage_bytes", "prometheus_kube_node_status_capacity_cpu_cores", "prometheus_nginx_http_average_response_time_ms", "prometheus_namespace_*"]
+        schema_file = "/etc/telegraf/schema/prometheus_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "prometheus"
+        aggregator_processor = true
+        namepass = ["prometheus_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/prometheus_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## Sysdig integration: processors ##
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["sysdig_*", "alameda_*", "federatorai.kafka.consumer_lag", "federatorai.kafka.consumer_offset_rate", "federatorai.kafka.broker_offset_rate", "federatorai.prediction.kafka", "federatorai.recommendation",  "federatorai.prediction.controller", "federatorai.prediction.controller.max", "federatorai.prediction.controller.min", "federatorai.prediction.controller.avg", "federatorai.prediction.node", "federatorai.prediction.node.max", "federatorai.prediction.node.min", "federatorai.prediction.node.avg", "federatorai.resource_planning.node", "federatorai.resource_planning.controller", "federatorai.kubernetes.cpu.usage.total.node", "federatorai.kubernetes.cpu.usage.total.controller", "federatorai.kubernetes.memory.usage.node", "federatorai.kubernetes.memory.usage.controller", "federatorai.kubernetes.cpu.usage.total.node_rollup_3600sec", "federatorai.kubernetes.cpu.usage.total.controller_rollup_3600sec", "federatorai.kubernetes.memory.usage.node_rollup_3600sec", "federatorai.kubernetes.memory.usage.controller_rollup_3600sec", "federatorai.kubernetes.cpu.usage.total.node_rollup_21600sec", "federatorai.kubernetes.cpu.usage.total.controller_rollup_21600sec", "federatorai.kubernetes.memory.usage.node_rollup_21600sec", "federatorai.kubernetes.memory.usage.controller_rollup_21600sec", "federatorai.kubernetes.cpu.usage.total.node_rollup_86400sec", "federatorai.kubernetes.cpu.usage.total.controller_rollup_86400sec", "federatorai.kubernetes.memory.usage.node_rollup_86400sec", "federatorai.kubernetes.memory.usage.controller_rollup_86400sec"]
+        schema_file = "/etc/telegraf/schema/sysdig_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["sysdig_*", "alameda_*", "aws_cloudwatch_vm", "aws_cloudwatch_cluster_collection_done"]
+        schema_file = "/etc/telegraf/schema/sysdig_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["sysdig_alameda_config_cluster_namespace", "sysdig_namespace_*", "sysdig_kube_container_resource_limits_cpu_cores", "sysdig_kube_container_resource_requests_cpu_cores", "sysdig_alameda_config_namespace_metric_instance_config_info"]
+        schema_file = "/etc/telegraf/schema/sysdig_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "sysdig"
+        aggregator_processor = true
+        namepass = ["sysdig_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/sysdig_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## VMware integration: processors
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["vmware_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/vmware_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["vmware_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/vmware_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = [""]
+        schema_file = "/etc/telegraf/schema/vmware_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "vmware"
+        aggregator_processor = true
+        namepass = ["vmware_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/vmware_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## AWS Cloudwatch integration: processors
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["aws_cloudwatch_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/aws_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["aws_cloudwatch_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/aws_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["aws_cloudwatch_alameda_config_cluster_vm", "aws_cloudwatch_node_group_*"]
+        schema_file = "/etc/telegraf/schema/aws_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "aws"
+        aggregator_processor = true
+        namepass = ["aws_cloudwatch_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/aws_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## Datadog Dashboard integration: processors
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["federatorai_datadog_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_datadog_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["federatorai_datadog_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_datadog_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["federatorai_datadog_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_datadog_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "datadog"
+        aggregator_processor = true
+        namepass = ["federatorai_datadog_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_datadog_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ## Sysdig Dashboard integration: processors
+      [[processors.metrics_decorator]]
+        order = 2
+        namepass = ["federatorai_sysdig_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_sysdig_pre_metric_decorator.json"
+
+      [[processors.metrics_grouping]]
+        order = 3
+        namepass = ["federatorai_sysdig_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_sysdig_grouping_rules.json"
+
+      [[processors.metrics_decorator]]
+        order = 4
+        namepass = ["federatorai_sysdig_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_sysdig_post_metric_decorator.json"
+
+      [[processors.schema_mapping]]
+        order = 5
+        datasource = "sysdig"
+        aggregator_processor = true
+        namepass = ["federatorai_sysdig_*", "alameda_*"]
+        schema_file = "/etc/telegraf/schema/federatorai_sysdig_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+        ## Set default cloud information ifneeded
+        enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+        default_provider = "$DEFAULT_PROVIDER"
+        default_region = "$DEFAULT_REGION"
+        default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+        default_instance_id = "$DEFAULT_INSTANCE_ID"
+        default_zone = "$DEFAULT_ZONE"
+
+      ##############################
+      ### Aggregator Federatorai ###
+      ##############################
+
+      [[aggregators.federatorai]]
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/basic_aggregator_schema.json"
+        namepass = [""]
+
+      ## Datadog metrics ##
+      [[aggregators.federatorai]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/datadog_aggregator_schema.json"
+        namepass = ["datadog_*"]
+
+      ## Openshift Prometheus integration: aggregator ##
+      [[aggregators.federatorai]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/openshift_prometheus_aggregator_schema.json"
+        namepass = ["openshift_prometheus_*"]
+
+      ## Federation Prometheus/Prometheus integration: aggregator ##
+      [[aggregators.federatorai]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/prometheus_aggregator_schema.json"
+        namepass = ["prometheus_*"]
+
+      ## Sysdig integration: aggregator ##
+      [[aggregators.federatorai]]
+        grace = "2m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/sysdig_aggregator_schema.json"
+        namepass = ["sysdig_*"]
+
+      ## VMware integration: aggregator ##
+      [[aggregators.federatorai]]
+        grace = "5m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/vmware_aggregator_schema.json"
+        namepass = ["vmware_*"]
+
+      ## AWS Cloudwatch metrics ##
+      [[aggregators.federatorai]]
+        grace = "1m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/aws_aggregator_schema.json"
+        namepass = ["aws_cloudwatch_*"]
+
+      ## Federatorai Metrics - Datadog metrics ##
+      [[aggregators.federatorai]]
+        grace = "1m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/federatorai_datadog_aggregator_schema.json"
+        namepass = ["federatorai_datadog_*"]
+
+      ## Federatorai Metrics - Sysdig metrics ##
+      [[aggregators.federatorai]]
+        grace = "1m"
+        period = "1m"
+        drop_original = true
+        concurrent_job = 3
+        schema_file = "/etc/telegraf/schema/federatorai_sysdig_aggregator_schema.json"
+        namepass = ["federatorai_sysdig_*"]
+
+      ############################
+      ### Input/Output Plugins ###
+      ############################
+
+      [[outputs.datadog]]
+        User-Agent = "Federator.ai/4.2"
+        kafka_dashboards = ["/etc/telegraf/dashboards/datadog/kafka/overview.json"]
+        general_dashboards = ["/etc/telegraf/dashboards/datadog/kubernetes/application-overview.json", "/etc/telegraf/dashboards/datadog/kubernetes/cluster-overview.json", "/etc/telegraf/dashboards/datadog/cost/cost-analysis-overview.json", "/etc/telegraf/dashboards/datadog/cost/cost-management-cluster-overview.json", "/etc/telegraf/dashboards/datadog/cost/cost-management-node-overview.json", "/etc/telegraf/dashboards/datadog/cost/cost-management-namespace-overview.json"]
+        enable_kafka_dashboard = $ENABLE_DD_DASHBOARD
+        enable_general_dashboard = $ENABLE_DD_DASHBOARD
+        namepass = ["federatorai_datadog_*"]
+        namedrop= ["federatorai_datadog_cluster_collection_done"]
+        metric_prefix = "federatorai_datadog_"
+
+        [[outputs.datadog.clusters]]
+          cluster_name = "cluster"
+          user_agent = "Federatorai/5.0"
+          api_key = "$DATADOG_API_KEY"
+          application_key = "$DATADOG_APPLICATION_KEY"
+          url = "https://api.datadoghq.com/api/v1/series"
+          rest_url = "https://api.datadoghq.com/api/v1"
+
+        # This pattern support federatorai.integration.status, federatorai.recommendation and federatorai.prediction.*
+        [[outputs.datadog.integration_metrics]]
+          name="federatorai.*"
+          aggregation_type="raw"
+
+      ## Alameda Configuration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0h" #Support s(second),m(minute),h(hour)
+        collection_jitter = "0s"
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "alameda_datahub"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = true
+        overwrite_query_delay_interval = true
+        delay_query_interval = "1s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/alameda_config_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Openshift Prometheus integration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: prometheus
+        source = "prometheus"
+        ## which collector to handle the data collection
+        collector = "prometheus"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "http://prometheus-prometheus-oper-prometheus.default.svc:9090"
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/openshift_prometheus_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## Federation Prometheus integration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: prometheus
+        source = "prometheus"
+        ## which collector to handle the data collection
+        collector = "prometheus"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "http://prometheus-prometheus-oper-prometheus.default.svc:9090"
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federation_prometheus_metrics.json"]
+        target_label = "clusterID: cluster1"
+        cluster_name = "default"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## Rancher Prometheus integration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: prometheus
+        source = "prometheus"
+        ## which collector to handle the data collection
+        collector = "prometheus"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "http://prometheus-prometheus-oper-prometheus.default.svc:9090"
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/rancher_prometheus_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## Prometheus integration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: prometheus
+        source = "prometheus"
+        ## which collector to handle the data collection
+        collector = "prometheus"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "http://prometheus-prometheus-oper-prometheus.default.svc:9090"
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/prometheus_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## Datadog integration: inputs.data_collector
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: prometheus, datadog, sysdig
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "datadog"
+        ## authenticated token path
+        token= "${DD-API-KEY}"
+        application_key = "${DD-APPLICATION-KEY}"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "https://api.datadoghq.com/api/v1/query"
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/datadog_metrics.json"]
+        cluster_name = "default"
+
+      ## Sysdig integration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m"
+        ## data source type from which to query data
+        ## accept values: sysdig
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "sysdig"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= "${SYSDIG_API_TOKEN}"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "${SYSDIG_API_URL}/data/batch"
+        ## Set batch query parameters
+        max_query_per_chunk = $DATADOG_MAX_QUERY_PER_CHUNK
+        max_characters_per_chunk = $DATADOG_MAX_CHAR_PER_CHUNK
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/sysdig_metrics.json"]
+        target_label = ""
+        cluster_name = "${CLUSTER_NAME}"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## VMware integration: inputs.data_collector ##
+      # This plugin is for list vm in one minute
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: vmware
+        source = "vmware"
+        ## which collector to handle the data collection
+        collector = "vmware"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= ""
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "${VMWARE_API_URL}"
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/vmware_list_metrics.json"]
+        target_label = ""
+        cluster_name = "${CLUSTER_NAME}"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## VMware integration: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "5m"
+        query_start_time_offset = "-5m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: vmware
+        source = "vmware"
+        ## which collector to handle the data collection
+        collector = "vmware"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= ""
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = "${VMWARE_API_URL}"
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/vmware_metrics.json"]
+        target_label = ""
+        cluster_name = "${CLUSTER_NAME}"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## AWS Cloudwatch integration: inputs.data_collector
+      # This plugin is for list vm in one minute
+      [[inputs.data_collector]]
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: vmware
+        source = "aws"
+        ## which collector to handle the data collection
+        collector = "aws"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= ""
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/aws_list_metrics.json"]
+        cluster_name = "${CLUSTER_NAME}"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ## AWS Cloudwatch integration: inputs.data_collector
+      [[inputs.data_collector]]
+        interval = "5m"
+        query_start_time_offset = "-10m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: vmware
+        source = "aws"
+        ## which collector to handle the data collection
+        collector = "aws"
+        ## account name
+        account = ""
+        ## authenticated token path
+        token= ""
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/aws_metrics.json"]
+        cluster_name = "${CLUSTER_NAME}"
+        discover_path = ""
+        controller_name = []
+        node_uids = []
+        group_names = []
+
+      ### Federatorai Metrics ###
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "3m"
+        use_query_timestamp = true
+        query_start_time_offset = "-3m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "10s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_3_mins_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "3m"
+        use_query_timestamp = true
+        query_start_time_offset = "-3m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "10s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_previous_3_mins_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "-23h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_1_day_cost_metrics_3600s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = true
+        query_start_time_offset = "-59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_1_hour_aggregation_metrics.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_1_hour_cost_metrics_3600s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = true
+        query_start_time_offset = "-59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_previous_1_hour_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "-167h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_7_days_cost_metrics_21600s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_6H"
+        use_query_timestamp = true
+        query_start_time_offset = "-5h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_6_hours_aggregation_metrics.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_6_hours_cost_metrics_21600s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_6H"
+        use_query_timestamp = true
+        query_start_time_offset = "-5h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_previous_6_hours_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "-719h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_30_days_cost_metrics_86400s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_24H"
+        use_query_timestamp = true
+        query_start_time_offset = "-23h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_24_hours_aggregation_metrics.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_24_hours_cost_metrics_86400s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_24H"
+        use_query_timestamp = true
+        query_start_time_offset = "-23h59m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_previous_24_hours_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "24h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_1_day_aggregation_metrics.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_1_day_cost_metrics_3600s.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_1_day_planning_metrics_3600s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "24h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_next_1_day_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_6H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "168h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_7_days_aggregation_metrics.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "168h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_7_days_cost_metrics_21600s.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_7_days_planning_metrics_21600s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_6H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "168h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_next_7_days_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_24H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "720h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_30_days_aggregation_metrics.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "720h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = [
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_30_days_cost_metrics_86400s.json",
+            "/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_30_days_planning_metrics_86400s.json"
+        ]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_24H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "720h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_next_30_days_aggregation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "1m"
+        use_query_timestamp = true
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "10s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_1_min_prediction_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "1m"
+        use_query_timestamp = true
+        query_start_time_offset = "-1m"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "10s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_previous_1_min_prediction_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "1m"
+        use_query_timestamp = true
+        query_start_time_offset = "-2m"
+        query_end_time_offset = "-1m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "10s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_2_mins_observation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Sysdig : inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "1m"
+        use_query_timestamp = true
+        query_start_time_offset = "-2m"
+        query_end_time_offset = "-1m" #Support s(second),m(minute),h(hour)
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "sysdig"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "10s"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_sysdig_previous_2_mins_observation_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "720h1m"
+        query_end_time_offset = "744h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_30_days_recommendation_instance.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "-48h"
+        query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_previous_2_days_aggregation_cost_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ## Federatorai Metrics - Datadog: inputs.data_collector ##
+      [[inputs.data_collector]]
+        interval = "$COLLECTION_INTERVAL_1H"
+        use_query_timestamp = false
+        query_start_time_offset = "1m"
+        query_end_time_offset = "720h" #Support s(second),m(minute),h(hour)
+        retry_interval = "$FEDERATORAI_METRICS_RETRY_INTERVAL"
+        max_retry_times = $FEDERATORAI_METRICS_MAX_RETRY_TIMES
+        ## data source type from which to query data
+        ## accept values: alameda_datahub
+        source = "datadog"
+        ## which collector to handle the data collection
+        collector = "alameda_datahub"
+        ## authenticated token path
+        token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ## TLS Insecure skip verify
+        insecure_skip_verify = true
+        ## Alameda Read Configuration used
+        configuration_only = false
+        overwrite_query_delay_interval = true
+        delay_query_interval = "$FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL"
+        ## one URL from which to read formatted metrics
+        url = ""
+        ## Load metric instance configs from Datahub or not
+        skip_metric_instance_configs = true
+        ## metrics schema path
+        metric_path = ["/etc/telegraf/schema/federatorai_metrics/federatorai_datadog_next_30_days_aggregation_cost_metrics.json"]
+        target_label = ""
+        cluster_name = "default"
+        discover_path = ""
+        node_uids = []
+        group_names = []
+
+      ### Sync database metadata
+      #[[outputs.alameda_datahub]]
+      #  namedrop = ["*"]
+      #  enable_sync_metadata = true
+      #  sync_metadata_schema_file = "/etc/telegraf/schema/sync_metadata_schema.json"
+
+      ## Openshift Prometheus integration: outputs.alameda_datahub ##
+      [[outputs.alameda_datahub]]
+        namepass = ["openshift_prometheus_*"]
+        metric_prefix = "openshift_prometheus_"
+        datasource = "prometheus"
+        concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      ## Federation Prometheus/Prometheus integration: outputs.alameda_datahub ##
+      [[outputs.alameda_datahub]]
+        namepass = ["prometheus_*"]
+        metric_prefix = "prometheus_"
+        datasource = "prometheus"
+        concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      ## Sysdig integration: outputs.alameda_datahub ##
+      [[outputs.alameda_datahub]]
+        namepass = ["sysdig_*"]
+        metric_prefix = "sysdig_"
+        datasource = "sysdig"
+        concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      ## Datadog integration: outputs.alameda_datahub ##
+      [[outputs.alameda_datahub]]
+        namepass = ["datadog_*"]
+        metric_prefix = "datadog_"
+        datasource = "datadog"
+        concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      ## VMware integration: outputs.alameda_datahub ##
+      [[outputs.alameda_datahub]]
+        namepass = ["vmware_*"]
+        metric_prefix = "vmware_"
+        datasource = "vmware"
+        concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      ## AWS Cloudwatch integration: outputs.alameda_datahub
+      [[outputs.alameda_datahub]]
+        namepass = ["aws_cloudwatch_*"]
+        metric_prefix = "aws_cloudwatch_"
+        datasource = "aws"
+        concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      ## Post Datahub event
+      [[outputs.alameda_datahub]]
+        namepass = ["datahub_event"]
+        metric_prefix = "datahub_"
+        post_event_interval = "$POST_EVENT_INTERVAL"
+        schema_file = "/etc/telegraf/schema/datahub_schema.json"
+        cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+      [[outputs.prometheus_client]]
+        namepass = ["federatorai_sysdig_*"]
+        collectors_exclude = ["gocollector", "process"]
+        export_all_metrics = true
+        ## Address to listen on
+        listen = ":8080"
+        ## Path to publish the metrics on.
+        path = "/metrics"
+        metric_prefix = "federatorai_sysdig_"
+        expiration_interval = "5m"
+
+      ## Test only: export DA's Prometheus metrics for automation tests
+      [[outputs.prometheus_client]]
+        namepass = ["prometheus_*"]
+        collectors_exclude = ["gocollector", "process"]
+        enable_default_value = ["prometheus_cluster", "prometheus_node", "prometheus_application", "prometheus_namespace", "prometheus_controller", "prometheus_pod", "prometheus_container", "prometheus_kafka_topic", "prometheus_kafka_consumer_group", "prometheus_nginx_web_service"]
+        default_value = -1
+        export_all_metrics = true
+        ## Address to listen on
+        listen = ":8081"
+        ## Path to publish the metrics on.
+        path = "/test-metrics"
+        metric_prefix = ""
+        expiration_interval = "5m"
+
+      ## Test only: export DA's Datadog metrics for automation tests
+      [[outputs.prometheus_client]]
+        namepass = ["datadog_*", "federatorai_datadog_*"]
+        collectors_exclude = ["gocollector", "process"]
+        enable_default_value = ["datadog_cluster", "datadog_node", "datadog_application", "datadog_namespace", "datadog_controller", "datadog_pod", "datadog_container", "datadog_kafka_topic", "datadog_kafka_consumer_group", "datadog_nginx_web_service"]
+        default_value = -1
+        export_all_metrics = true
+        ## Address to listen on
+        listen = ":8082"
+        ## Path to publish the metrics on.
+        path = "/test-metrics"
+        metric_prefix = "federatorai_datadog_"
+        expiration_interval = "5m"
+
+      ## Test only: export DA's Sysdig metrics for automation tests
+      [[outputs.prometheus_client]]
+        namepass = ["sysdig_*", "federatorai_sysdig_*"]
+        collectors_exclude = ["gocollector", "process"]
+        enable_default_value = ["sysdig_cluster", "sysdig_node", "sysdig_application", "sysdig_namespace", "sysdig_controller", "sysdig_pod", "sysdig_container", "sysdig_kafka_topic", "sysdig_kafka_consumer_group", "sysdig_nginx_web_service"]
+        default_value = -1
+        export_all_metrics = true
+        ## Address to listen on
+        listen = ":8083"
+        ## Path to publish the metrics on.
+        path = "/test-metrics"
+        metric_prefix = "federatorai_sysdig_"
+        expiration_interval = "5m"

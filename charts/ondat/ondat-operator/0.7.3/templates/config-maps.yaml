@@ -1,0 +1,108 @@
+apiVersion: v1
+data:
+  operator_config.yaml: |
+    apiVersion: config.storageos.com/v1
+    kind: OperatorConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: storageos-operator
+    webhookCertRefreshInterval: 15m
+    webhookServiceName: storageos-operator-webhook
+    webhookSecretRef: storageos-operator-webhook
+    validatingWebhookConfigRef: storageos-operator-validating-webhook
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "storageos.name" . }}
+    app.kubernetes.io/component: operator
+    chart: {{ template "storageos.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: storageos-operator
+  namespace: {{ .Release.Namespace }}
+---
+
+apiVersion: v1
+data:
+  {{- if and .Values.images.apiManager.image .Values.images.apiManager.tag }}
+  RELATED_IMAGE_API_MANAGER: "{{ .Values.images.apiManager.registry}}/{{ .Values.images.apiManager.image }}:{{ .Values.images.apiManager.tag }}"
+  {{- end }}
+  {{- if and .Values.images.csiV1ExternalAttacherV3.image .Values.images.csiV1ExternalAttacherV3.tag }}
+  RELATED_IMAGE_CSIV1_EXTERNAL_ATTACHER_V3: "{{ .Values.images.csiV1ExternalAttacherV3.registry}}/{{ .Values.images.csiV1ExternalAttacherV3.image }}:{{ .Values.images.csiV1ExternalAttacherV3.tag }}"
+  {{- end }}
+  {{- if and .Values.images.csiV1ExternalProvisioner.image .Values.images.csiV1ExternalProvisioner.tag }}
+  RELATED_IMAGE_CSIV1_EXTERNAL_PROVISIONER: "{{ .Values.images.csiV1ExternalProvisioner.registry}}/{{ .Values.images.csiV1ExternalProvisioner.image }}:{{ .Values.images.csiV1ExternalProvisioner.tag }}"
+  {{- end }}
+  {{- if and .Values.images.csiV1ExternalResizer.image .Values.images.csiV1ExternalResizer.tag }}
+  RELATED_IMAGE_CSIV1_EXTERNAL_RESIZER: "{{ .Values.images.csiV1ExternalResizer.registry}}/{{ .Values.images.csiV1ExternalResizer.image }}:{{ .Values.images.csiV1ExternalResizer.tag }}"
+  {{- end }}
+  {{- if and .Values.images.csiV1ExternalSnapshotter.image .Values.images.csiV1ExternalSnapshotter.tag }}
+  RELATED_IMAGE_CSIV1_EXTERNAL_SNAPSHOTTER: "{{ .Values.images.csiV1ExternalSnapshotter.registry}}/{{ .Values.images.csiV1ExternalSnapshotter.image }}:{{ .Values.images.csiV1ExternalSnapshotter.tag }}"
+  {{- end }}
+  {{- if and .Values.images.csiV1LivenessProbe.image .Values.images.csiV1LivenessProbe.tag }}
+  RELATED_IMAGE_CSIV1_LIVENESS_PROBE: "{{ .Values.images.csiV1LivenessProbe.registry}}/{{ .Values.images.csiV1LivenessProbe.image }}:{{ .Values.images.csiV1LivenessProbe.tag }}"
+  {{- end }}
+  {{- if and .Values.images.csiV1NodeDriverRegistrar.image .Values.images.csiV1NodeDriverRegistrar.tag }}
+  RELATED_IMAGE_CSIV1_NODE_DRIVER_REGISTRAR: "{{ .Values.images.csiV1NodeDriverRegistrar.registry}}/{{ .Values.images.csiV1NodeDriverRegistrar.image }}:{{ .Values.images.csiV1NodeDriverRegistrar.tag }}"
+  {{- end }}
+  {{- if and .Values.images.kubeScheduler.image .Values.images.kubeScheduler.tag }}
+  RELATED_IMAGE_KUBE_SCHEDULER: "{{ .Values.images.kubeScheduler.registry}}/{{ .Values.images.kubeScheduler.image }}:{{ .Values.images.kubeScheduler.tag }}"
+  {{- end }}
+  {{- if and .Values.images.metricsExporter.image .Values.images.metricsExporter.tag }}
+  RELATED_IMAGE_METRICS_EXPORTER: "{{ .Values.images.metricsExporter.registry}}/{{ .Values.images.metricsExporter.image }}:{{ .Values.images.metricsExporter.tag }}"
+  {{- end }}
+  {{- if and .Values.images.nodeManager.image .Values.images.nodeManager.tag }}
+  RELATED_IMAGE_NODE_MANAGER: "{{ .Values.images.nodeManager.registry}}/{{ .Values.images.nodeManager.image }}:{{ .Values.images.nodeManager.tag }}"
+  {{- end }}
+  {{- if and .Values.images.portalManager.image .Values.images.portalManager.tag }}
+  RELATED_IMAGE_PORTAL_MANAGER: "{{ .Values.images.portalManager.registry}}/{{ .Values.images.portalManager.image }}:{{ .Values.images.portalManager.tag }}"
+  {{- end }}
+  {{- if and .Values.images.init.image .Values.images.init.tag }}
+  RELATED_IMAGE_STORAGEOS_INIT: "{{ .Values.images.init.registry}}/{{ .Values.images.init.image }}:{{ .Values.images.init.tag }}"
+  {{- end }}
+  {{- if and .Values.images.node.image .Values.images.node.tag }}
+  RELATED_IMAGE_STORAGEOS_NODE: "{{ .Values.images.node.registry}}/{{ .Values.images.node.image }}:{{ .Values.images.node.tag }}"
+  {{- end }}
+  {{- if and .Values.images.nodeGuard.image .Values.images.nodeGuard.tag }}
+  RELATED_IMAGE_NODE_GUARD: "{{ .Values.images.nodeGuard.registry}}/{{ .Values.images.nodeGuard.image }}:{{ .Values.images.nodeGuard.tag }}"
+  {{- end }}
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "storageos.name" . }}
+    app.kubernetes.io/component: operator
+    chart: {{ template "storageos.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: storageos-related-images
+  namespace: {{ .Release.Namespace }}
+---
+
+apiVersion: v1
+data:
+  portal_config.yaml: |
+    apiVersion: storageos.com/v1alpha1
+    kind: PortalConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceNamespace: storageos
+      resourceName: storageos-portal-manager
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "storageos.name" . }}
+    app.kubernetes.io/component: portal-manager
+  name: storageos-portal-manager
+  namespace: {{ template "cluster.namespace" . }}

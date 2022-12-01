@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-recommender-dispatcher
+  name: federatorai-recommender-dispatcher
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-recommender-dispatcher
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-recommender-dispatcher
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiRecommenderDispatcher.affinity "context" .) | nindent 8 }}
+      containers:
+      - command:
+        - /usr/local/bin/federatorai-recommender
+        - dispatcher
+        env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-recommender-ubi:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-recommender
+            - dispatcher
+            - --mode=livenessprob
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: federatorai-recommender-dispatcher
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-recommender
+            - dispatcher
+            - --mode=readinessprob
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiRecommenderDispatcher.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: federatorai-recommender-dispatcher-log-storage
+        - mountPath: /etc/alameda/federatorai-recommendation/dispatcher.toml
+          name: federatorai-recommender-dispatcher-config
+          subPath: dispatcher.toml
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiRecommenderDispatcher.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-recommender-dispatcher
+      serviceAccountName: federatorai-recommender-dispatcher
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiRecommenderDispatcher.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: federatorai-recommender-dispatcher-data-storage
+      - name: federatorai-recommender-dispatcher-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-recommender-dispatcher-log.pvc
+      - configMap:
+          defaultMode: 420
+          name: federatorai-recommender-dispatcher-config
+        name: federatorai-recommender-dispatcher-config

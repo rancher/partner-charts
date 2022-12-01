@@ -1,0 +1,107 @@
+[![New Relic Experimental header](https://github.com/newrelic/opensource-website/raw/master/src/images/categories/Experimental.png)](https://opensource.newrelic.com/oss-category/#new-relic-experimental)
+
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
+
+## Example
+
+Make sure you have [added the New Relic chart repository.](../../README.md#install)
+
+Because of metrics configuration, we recommend to use an external values file to deploy the chart. An example with the required parameters looks like:
+
+```yaml
+cluster: ClusterName
+personalAPIKey: <Personal API Key>
+config:
+  accountID: <Account ID>
+  externalMetrics:
+    nginx_average_requests:
+      query: "FROM Metric SELECT average(nginx.server.net.requestsPerSecond) SINCE 2 MINUTES AGO"
+```
+
+Then, to install this chart, run the following command:
+
+```sh
+helm upgrade --install [release-name] newrelic/newrelic-k8s-metrics-adapter --values [values file path]
+```
+
+Once deployed the metric `nginx_average_requests` will be available to use by any HPA. This is and example of an HPA yaml using this metric:
+
+```yaml
+kind: HorizontalPodAutoscaler
+apiVersion: autoscaling/v2beta2
+metadata:
+  name: nginx-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: nginx_average_requests
+          selector:
+            matchLabels:
+              k8s.namespaceName: nginx
+        target:
+          type: Value
+          value: 10000
+```
+
+The NRQL query that will be run to get the `nginx_average_requests` value will be:
+
+```sql
+FROM Metric SELECT average(nginx.server.net.requestsPerSecond) WHERE clusterName='ClusterName' AND `k8s.namespaceName`='nginx' SINCE 2 MINUTES AGO
+```
+
+## External Metrics
+
+An example of multiple external metrics defined:
+
+```yaml
+externalMetrics:
+    nginx_average_requests:
+      query: "FROM Metric SELECT average(nginx.server.net.requestsPerSecond) SINCE 2 MINUTES AGO"
+    container_average_cores_utilization:
+      query: "FROM Metric SELECT average(`k8s.container.cpuCoresUtilization`) SINCE 2 MINUTES AGO"
+```
+
+## Resources
+
+The default set of resources assigned to the newrelic-k8s-metrics-adapter pods is shown below:
+
+```yaml
+resources:
+  limits:
+    memory: 80M
+  requests:
+    cpu: 100m
+    memory: 30M
+```
+
+{{ if .Maintainers }}
+## Maintainers
+{{ range .Maintainers }}
+{{- if .Name }}
+{{- if .Url }}
+* [{{ .Name }}]({{ .Url }})
+{{- else }}
+* {{ .Name }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

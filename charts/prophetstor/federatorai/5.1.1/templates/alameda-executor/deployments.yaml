@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-executor
+  name: alameda-executor
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-executor
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-executor
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaExecutor.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-executor-ubi:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-executor
+            - probe
+            - --type=liveness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: alameda-executor
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-executor
+            - probe
+            - --type=readiness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaExecutor.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: alameda-executor-log-storage
+        - mountPath: /etc/alameda/federatorai-execution/config.toml
+          name: alameda-executor-config
+          subPath: config.toml
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaExecutor.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-executor
+      serviceAccountName: alameda-executor
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaExecutor.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: alameda-executor-data-storage
+      - name: alameda-executor-log-storage
+        persistentVolumeClaim:
+          claimName: alameda-executor-log.pvc
+      - configMap:
+          defaultMode: 420
+          name: alameda-executor-config
+        name: alameda-executor-config

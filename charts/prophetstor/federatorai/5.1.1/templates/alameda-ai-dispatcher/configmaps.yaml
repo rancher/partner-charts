@@ -1,0 +1,47 @@
+apiVersion: v1
+data:
+  ai-dispatcher.toml: |-
+    [serviceSetting]
+    numPredictionQueue = 4
+
+    [watchdog]
+    delayedSec = 120
+      [watchdog.model]
+      directory = "/tmp/model"
+      [watchdog.predict]
+      directory = "/tmp/predict"
+
+    [datahub]
+    address = "datahub.alameda.svc:50050"
+    connRetry = 5
+    connTimeout = 30 # seconds
+      [datahub.aggregation]
+      rollupFunction = "pctl_95"
+
+      [datahub.query]
+      retry = 3
+      retryInterval = 10 # seconds
+
+    [queue]
+    url = "amqp://admin:adminpass@rabbitmq.alameda.svc:5672"
+      [queue.retry]
+      publishTime = 5
+      publishIntervalMs = 3000
+      consumeTime = 5
+      consumeIntervalMs = 3000
+      connectIntervalMs = 3000
+      ackTimeoutSec = 3
+      [queue.consumer]
+      reconnectInterval = 30 #seconds
+
+    [log]
+    setLogcallers = true
+    outputLevel = "info" # debug, info, warn, error, fatal, none
+kind: ConfigMap
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+  name: alameda-ai-dispatcher-config
+  namespace: {{ .Release.Namespace }}

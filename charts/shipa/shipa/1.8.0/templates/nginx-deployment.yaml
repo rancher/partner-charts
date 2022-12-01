@@ -1,0 +1,99 @@
+{{ if and (eq .Values.shipaCluster.ingress.type "nginx") (not .Values.shipaCluster.ingress.ip) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "shipa.fullname" . }}-nginx-ingress
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+    shipa.io/shipa-api-ingress-controller: "true"
+    shipa.io/component: nginx
+    shipa.io/cluster: shipa-cluster
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: {{ template "shipa.fullname" . }}-nginx-ingress
+  template:
+    metadata:
+      labels:
+        name: {{ template "shipa.fullname" . }}-nginx-ingress
+        shipa.io/component: nginx
+        shipa.io/cluster: shipa-cluster
+      annotations:
+        sidecar.istio.io/inject: "false"
+        prometheus.io/port: "10254"
+        prometheus.io/scrape: "true"
+    spec:
+      # wait up to 30 seconds for the drain of connections
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: {{ template "shipa.fullname" . }}-nginx-ingress-serviceaccount
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: nginx-ingress-controller
+          image: {{ .Values.shipaCluster.ingress.image }}
+          args:
+            - /nginx-ingress-controller
+            - --election-id={{ template "shipa.fullname" . }}-leader
+            - --configmap=$(POD_NAMESPACE)/{{ template "shipa.fullname" . }}-nginx
+            - --tcp-services-configmap=$(POD_NAMESPACE)/{{ template "shipa.fullname" . }}-nginx-tcp-services
+            - --publish-service=$(POD_NAMESPACE)/{{ template "shipa.fullname" . }}-ingress-nginx
+            - --ingress-class={{ default ( include "shipa.defaultNginxClassName" .  | trim) .Values.shipaCluster.ingress.className }}
+            - --default-ssl-certificate={{ .Release.Namespace }}/{{ template "shipa.fullname" . }}-api-ingress-secret
+            - --controller-class=k8s.io/internal-ingress-nginx
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+            runAsUser: 101
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            {{- if not .Values.shipaApi.secureIngressOnly }}
+            {{ range $i, $servicePort := .Values.shipaApi.servicePorts }}
+            - name: shipa-{{ $i }}
+              containerPort: {{ $servicePort }}
+              protocol: TCP
+            {{- end }}
+            {{- end }}
+            {{ range $i, $servicePort := .Values.shipaApi.serviceSecurePorts }}
+            - name: shipa-secure-{{ $i }}
+              containerPort: {{ $servicePort }}
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /wait-shutdown
+{{- end }}

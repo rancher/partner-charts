@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-rest
+  name: federatorai-rest
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-rest
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-rest
+      name: federatorai-rest
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiRest.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: INFLUXDB_ADDRESS
+          value: https://alameda-influxdb.{{ .Release.Namespace }}.svc:8086
+        - name: INFLUXDB_USERNAME
+          value: admin
+        - name: INFLUXDB_PASSWORD
+          value: adminpass
+        - name: DATAHUB_ADDRESS
+          value: alameda-datahub.{{ .Release.Namespace }}.svc:50050
+        - name: BINDADDRESS
+          value: :5055
+        - name: FEDEMETER_ADDRESS
+          value: http://fedemeter-api.{{ .Release.Namespace }}.svc:8888/fedemeter-api
+        - name: FEDEMETER_USERNAME
+          value: fedemeter
+        - name: FEDEMETER_PASSWORD
+          value: $6$pOwGiawPSjz7qLaN$fnMXEhwzWnUw.bOKohdAhB5K5iCCOJJaZXxQkhzH4URsHP8qLTT4QeBPUKjlOAeAHbKsqlf.fyuL2pNRmR6oQD1
+        - name: NOTIFIER_USERNAME
+          value: admin
+        - name: NOTIFIER_PASSWORD
+          value: adminpass
+        - name: NOTIFIER_ADDRESS
+          value: alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/federatorai-rest-ubi:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-rest
+            - probe
+            - --type=liveness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: federatorai-rest
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/federatorai-rest
+            - probe
+            - --type=readiness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiRest.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: federatorai-rest-log-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        #{#{ include "render-value" ( dict "value" .Values.federatoraiRest.podSecurityContext "context" .) | nindent 10 }}
+      serviceAccount: federatorai-rest
+      serviceAccountName: federatorai-rest
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiRest.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: federatorai-rest-data-storage
+      - name: federatorai-rest-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-rest-log.pvc

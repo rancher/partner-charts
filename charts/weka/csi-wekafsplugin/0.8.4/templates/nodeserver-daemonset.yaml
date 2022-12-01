@@ -1,0 +1,162 @@
+{{- if or (eq (.Values.selinuxSupport | default "off") "off") (eq (.Values.selinuxSupport | toString) "mixed") }}
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-node
+        component: {{ .Release.Name }}-node
+        release: {{ .Release.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: {{ .Values.selinuxNodeLabel }}
+                    operator: NotIn
+                    values:
+                      - "true"
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8}}
+      {{- end }}
+      serviceAccountName: {{ .Release.Name }}-node
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      hostNetwork: true
+      containers:
+        - name: wekafs
+          securityContext:
+            privileged: true
+          image: {{ .Values.images.csidriver }}:v{{ .Values.images.csidriverTag }}
+          imagePullPolicy: Always
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--drivername=$(CSI_DRIVER_NAME)"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+            - "--dynamic-path=$(CSI_DYNAMIC_PATH)"
+            - "--csimode=$(X_CSI_MODE)"
+          ports:
+            - containerPort: 9898
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+          env:
+            - name: CSI_DRIVER_NAME
+              value: {{ required "Provide CSI Driver Name"  .Values.csiDriverName }}
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_DYNAMIC_PATH
+              value: {{ required "Provide CSI Driver Dynamic Volume Creation Path"  .Values.dynamicProvisionPath }}
+            - name: X_CSI_MODE
+              value: node
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath:  {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+            - mountPath:  {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+              mountPropagation: Bidirectional
+              name: plugins-dir
+            - mountPath: /var/lib/csi-wekafs-data
+              name: csi-data-dir
+            - mountPath: /dev
+              name: dev-dir
+{{- if .Values.legacyVolumeSecretName }}
+            - mountPath: /legacy-volume-access
+              name: legacy-volume-access
+              readOnly: true
+{{- end }}
+        - name: liveness-probe
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          image: {{ required "Provide Liveness Probe image." .Values.images.livenessprobesidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--health-port=$(HEALTH_PORT)"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+            - name: HEALTH_PORT
+              value: "9898"
+
+        - name: csi-registrar
+          image: {{ required "Provide the csi node registrar sidecar container image." .Values.images.registrarsidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=$(KUBELET_REGISTRATION_PATH)"
+          securityContext:
+            privileged: true
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+            - name: KUBELET_REGISTRATION_PATH
+              value: "{{ (.Values.kubeletPath | default "/var/lib/kubelet") | toString }}/plugins/csi-wekafs-node/csi.sock"
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /registration
+              name: registration-dir
+            - mountPath: /var/lib/csi-wekafs-data
+              name: csi-data-dir
+      {{- with .Values.nodePluginTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+            type: DirectoryOrCreate
+          name: mountpoint-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins_registry
+            type: Directory
+          name: registration-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+            type: Directory
+          name: plugins-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins/csi-wekafs-node
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            # 'path' is where PV data is persisted on host.
+            # using /tmp is also possible while the PVs will not available after plugin container recreation or host reboot
+            path: /var/lib/csi-wekafs-data/
+            type: DirectoryOrCreate
+          name: csi-data-dir
+        - hostPath:
+            path: /dev
+            type: Directory
+          name: dev-dir
+{{- if .Values.legacyVolumeSecretName }}
+        - name: legacy-volume-access
+          secret:
+            secretName: {{ .Values.legacyVolumeSecretName }}
+{{- end }}
+{{- end }}
