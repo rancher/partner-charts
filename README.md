@@ -29,80 +29,81 @@ files on top of it.
 * Chart must be in a hosted [Helm repository](https://helm.sh/docs/topics/chart_repository/) that we can reference.
 
 * Chart must have the following Rancher specific add-ons (More details on this below).
-    * Rancher Labels & Annotations for Partners
     * kubeVersion set in the chart's metadata
     * app-readme.md
     * questions.yaml (Optional)
 
 ## Workflow
 
-### 1. Fork the repository
-
-Fork the repository, checkout the `main-source` branch and pull the latest changes.
-Then create a new branch off of `main-source` (e.g. `git checkout -b <name-of-new-branch>`) and execute
-`make` commands from next steps at the repository's root level.
-
-### 2. Set up your package to track an upstream chart (**SKIP if upgrading existing package**)
-
-Create a directory for your package in the `packages` directory and a `package.yaml` file inside (Replace `{PACKAGE_NAME}` for your chart's name).
-
-```text
-partner-charts                     # Repo root level
-└── packages
-    └── {PACKAGE_NAME}
-        └── package.yaml           # Metadata manifest containing upstream location version
-```
-
-Set up the following in your `package.yaml` to track your upstream chart:
-
-- `url` - the URL that references your upstream chart's tarball hosted in a Helm repository.
-
-- `packageVersion` - The version of the package. This is used along with your upstream chart's name and version to generate a filename with the format `{PACKAGE_NAME}-{VERSION}{packageVersion}.tgz` for the package's tarball that gets generated.
-
-  For example, an upstream chart `chart-0.1.2.tgz` and the `package.yaml` from below would generate an asset with the name `chart-0.1.201.tgz`.
-
-  ```yaml
-  url: https://example.com/helm-repo/chart-0.1.2.tgz
-  packageVersion: 01
-  ```
-
-More information of what can be specified can be found in [packages/README.md](packages/README.md).
-
-### 3. Prepare for changes
-
-Run to pull in the upstream chart tracked by the `package.yaml`. If any `generated-changes` are defined,
-it will be applied onto the upstream chart after it is pulled in as part of the `prepare` step.
-
+### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
+### 2. Clone your fork and ensure the main-source branch is checked out
 ```bash
-export PACKAGE={PACKAGE_NAME} # Only need to run once
-make prepare
+git clone -b main-source git@github.com:<your_github>/partner-charts.git
+```
+### 3. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
+```bash
+cd partner-charts
+mkdir -p packages/suse/kubewarden-controller
+
+```
+### 4. Create your [upstream.yaml](#configuration-file)
+Some [examples](#examples) are provided below
+```bash
+cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
+HelmRepo: https://charts.kubewarden.io
+HelmChart: kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
+EOF
+```
+### 5. [Create 'overlay' files](#overlay)
+Create any add-on files such as an app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
+```bash
+mkdir packages/suse/kubewarden-controller/overlay
+echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
+```
+### 6. Commit your packages directory
+```bash
+git add packages/suse/kubewarden-controller
+git commit -m "Submitting suse/kubewarden-controller"
+```
+### 7. [Test your configuration](#testing-your-configuration)
+### 8. Push your commit and open a pull request
+```bash
+git push origin main-source
+
+# Open Your Pull Request
 ```
 
-### 4. Make changes
+## Testing your configuration
+If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-ci-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
 
-Any modifications to your upstream chart like **adding the partner label** will be done in the auto-generated `charts` directory. If you are adding a new package, you will need to set a `kubeVersion`, add the required annotations, an icon, and a `app-readme.md` file. Optionally, you may add a `questions.yaml` file as well (more details below).
-
-#### Set the kubeVersion and annotations (**For new packages only**)
-
-Set the `kubeVersion` and annotations in `packages/{PACKAGE_NAME}/charts/Chart.yaml`. A closed range (E.g `kubeVersion: "1.18 - 1.21"`) is preferred, but an open-ended range is also acceptable if you need it (E.g `kubeVersion: ">= 1.19"`). 
-
-**Please be aware Kubernetes may introduce breaking changes that may suddenly make your chart incompatible; therefore, it is important that you test the compatibility of your chart with every new Kubernetes release and update it accordingly if you are using an open-ended range.**
-
-```yaml
-kubeVersion: # A SemVer range of compatible Kubernetes versions. E.g "1.18 - 1.21", ">= 1.19", etc
-annotations:
-  catalog.cattle.io/certified: partner # Enables the "partner" badge in the UI for easier identification
-  catalog.cattle.io/release-name: chart-name-here # Your chart's name in kebab-case, this is used for deployment
-  catalog.cattle.io/display-name: Fancy Chart Name Here # The chart's name you want displayed in the UI
+### 1. Download the binary
+```bash
+scripts/pull-ci-scripts
+```
+### 2. Set the **PACKAGE** environment variable to your chart
+You can confirm the package entry with `bin/partner-charts-ci list` which will list all detected charts with a configuration file.
+```bash
+export PACKAGE=<vendor>/<chart>
+```
+### 3. Run the 'auto' or 'stage' function
+The 'auto' subcommand will run the complete CI process.
+The 'stage' subcommand will do the same process but will not create a git commit when it completes.
+```bash
+bin/partner-charts-ci auto
+```
+### 4. Validate your changes
+```bash
+bin/partner-charts-ci validate
 ```
 
-### Add an icon (**For new packages only**)
+## Overlay
 
-Add a reference to an icon in `packages/{PACKAGE_NAME}/charts/Chart.yaml`. Alternatively, if you don't have an hosted icon that you can use, you may add one to the repository's assets in `assets/logos/{PACKAGE_NAME}.png` and reference it as `https://partner-charts.rancher.io/assets/logos/{PACKAGE_NAME}.png`.
-
-#### Add the overlay files (**For new packages only**)
-
-Add the `app-readme.md` file, and optional `questions.yaml` in `packages/{PACKAGE_NAME}/charts/`.
+Any files placed in the `packages/<vendor>/<chart>/overlay` directory will be overlayed onto the chart. This allows for adding or overwriting files within the chart as needed. The primary intended purpose is for adding the optional app-readme.md and questions.yaml files but it may be used for adding or replacing any chart files.
 
 - `app-readme.md` - Write a brief description of the app and how to use it. It's recommended to keep
 it short as the longer `README.md` in your chart will be displayed in the UI as detailed description.
@@ -111,6 +112,7 @@ it short as the longer `README.md` in your chart will be displayed in the UI as 
 answer them and configure the chart using the UI instead of modifying the chart's values file directly.
 
 #### Questions example
+[Variable Reference](https://docs.ranchermanager.rancher.io/how-to-guides/new-user-guides/helm-charts-in-rancher/create-apps#question-variable-reference)
 ```yaml
 questions:
 - variable: password
@@ -140,117 +142,86 @@ questions:
     label: Service NodePort
 ```
 
-#### Questions variable reference
+## Configuration File
 
-| Variable  | Type | Required | Description |
-| ------------- | ------------- | --- |------------- |
-| 	variable          | string  | true    |  define the variable name specified in the `values.yaml`file, using `foo.bar` for nested object. |
-| 	label             | string  | true      |  define the UI label. |
-| 	description       | string  | false      |  specify the description of the variable.|
-| 	type              | string  | false      |  default to `string` if not specified (current supported types are string, multiline, boolean, int, enum, password, storageclass, hostname, pvc, and secret).|
-| 	required          | bool    | false      |  define if the variable is required or not (true \| false)|
-| 	default           | string  | false      |  specify the default value. |
-| 	group             | string  | false      |  group questions by input value. |
-| 	min_length        | int     | false      | min character length.|
-| 	max_length        | int     | false      | max character length.|
-| 	min               | int     | false      |  min integer length. |
-| 	max               | int     | false      |  max integer length. |
-| 	options           | []string | false     |  specify the options when the vriable type is `enum`, for example: options:<br> - "ClusterIP" <br> - "NodePort" <br> - "LoadBalancer"|
-| 	valid_chars       | string   | false     |  regular expression for input chars validation. |
-| 	invalid_chars     | string   | false     |  regular expression for invalid input chars validation.|
-| 	subquestions      | []subquestion | false|  add an array of subquestions.|
-| 	show_if           | string      | false  | show current variable if conditional variable is true, for example `show_if: "serviceType=Nodeport"` |
-| 	show\_subquestion_if |  string  | false     | show subquestions if is true or equal to one of the options. for example `show_subquestion_if: "true"`|
+The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chartyaml-file).
 
-**subquestions**: `subquestions[]` cannot contain `subquestions` or `show_subquestions_if` keys, but all other keys in the above table are supported.
 
-### 5. Save your changes
+Options for `upstream.yaml`
+| Variable | Requires | Description |
+| ------------- | ------------- |------------- |
+| ArtifactHubPackage | ArtifactHubRepo | Defines the package to pull from the defined ArtifactHubRepo
+| ArtifactHubRepo | ArtifactHubPackage | Defines the repo to access on Artifact Hub
+| AutoInstall | | Allows setting a required additional chart to deploy prior to current chart, such as a dedicated CRDs chart
+| ChartMetadata | | Allows setting/overriding the value of any valid [Chart.yaml variable](https://helm.sh/docs/topics/charts/#the-chartyaml-file)
+| DisplayName | | Sets the name the chart will be listed under in the Rancher UI
+| Experimental | | Adds the 'experimental' annotation which adds a flag on the UI entry
+| Fetch | HelmChart, HelmRepo | Selects set of charts to pull from upstream.<br />- **latest** will pull only the latest chart version *default*<br />- **newer** will pull all newer versions than currently stored<br />- **all** will pull all versions
+| GitBranch | GitRepo | Defines which branch to pull from the upstream GitRepo
+| GitHubRelease | GitRepo | If true, will pull latest GitHub release from repo. Requires GitHub URL
+| GitRepo | | Defines the git repo to pull from
+| GitSubdirectory | GitRepo | Allows selection of a subdirectory of the upstream git repo to pull the chart from
+| HelmChart | HelmRepo | Defines which chart to pull from the upstream Helm repo
+| HelmRepo | HelmChart | Defines the upstream Helm repo to pull from
+| Hidden | | Adds the 'hidden' annotation which hides the chart from the Rancher UI
+| Namespace | | Addes the 'namespace' annotation which hard-codes a deployment namespace for the chart
+| PackageVersion | | Used to generate new patch version of chart
+| ReleaseName | | Sets the value of the release-name Rancher annotation. Defaults to the chart name
+| TrackVersions | HelmChart, HelmRepo | Allows selection of multiple *Major.Minor* versions to track from upstream independently.
+| Vendor | | Sets the vendor name providing the chart
 
-Run to save the changes to a `generated-changes` directory once you are done making changes.
-This directory will automatically be created and populated if any changes are detected and will be used to
-set up the chart on a `make prepare` in a future change.
-
-```bash
-export PACKAGE={PACKAGE_NAME} # Only need to run once
-make patch
-```
-
-### 6. Update package to track a new upstream (Maintenance)
-
-There are two ways you can update a package, one is to track a new updated upstream chart
-and the other is to do small modifications/fixes.
-
-#### Update package to track a new upstream chart
-
-Update the `url` to reference the new upstream chart. If your chart uses `packageVersion`, reset it to `01` in `package.yaml`, in order for `PACKAGE={PACKAGE_NAME} make prepare` to pull in the new upstream chart and apply the patch if one exists. You might need to run `PACKAGE={PACKAGE_NAME} make patch` to ensure the patch can be applied on the new upstream. If applying the patch fails, there's currently no method for rebasing to a new upstream when the patch gets broken as a result.
-
-For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
-can be updated to track the new `url: https://example.com/helm-repo/chart-0.1.3.tgz`, and a new package
-`chart-0.1.301.tgz` will be generated.
-
+## Examples
+### Helm Repo
 ```yaml
-url: https://example.com/helm-repo/chart-0.1.3.tgz
-packageVersion: 01
+---
+HelmRepo: https://charts.kubewarden.io
+HelmChart: kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+Fetch: newer
+TrackVersions:
+  - 0.4
+  - 1.0
+  - 1.1
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 
-Dependencies are not automatically updated when rebasing a chart, therefore the `url` of each dependency will
-need to be manually updated as well. To update the dependencies go to your package's `generated-changes` directory and
-update the `url` to reference the new dependency's upstream chart in `dependencies/{DEPENDENCY_CHART_NAME}/dependency.yaml`.
-
-Take for example, a chart `example-chart` with a postgresql 0.1.2 dependency that needs to be updated to 0.1.3. To update it
-you would need to update the `url` in `example-chart/generated-changes/dependencies/postgresql/dependency.yaml` from
-`https://example.com/helm-repo/postgresql-0.1.2.tgz` to `https://example.com/helm-repo/postgresql-0.1.3.tgz`.
-
-#### Update existing package to introduce a small change
-
-If your chart uses `packageVersion`, increase the `packageVersion` in `package.yaml` without updating the `url`. This will
-create a new version of a package tracking the same upstream chart.
-
-For example, an existing package tracking an upstream chart `url: https://example.com/helm-repo/chart-0.1.2.tgz`
-generated a package `chart-0.1.201.tgz`. Increasing the `packageVersion` without changing the `url`
-will generate a new package `chart-0.1.202.tgz` based off of the same upstream chart.
-
-### 7. Test your changes
-
-#### Generate modified chart
-
-Run to generate a chart and a tarball of your modified chart.
-
-```
-export PACKAGE={PACKAGE_NAME} # Only need to run once
-make charts
+### Artifact Hub
+```yaml
+---
+ArtifactHubRepo: kubewarden
+ArtifactHubPackage: kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 
-This will create the following two directories, and several files (e.g. `index.html`, `index.yaml`, etc.)
-to set up a Helm repo in your current branch.
-
-- `charts/{PACKAGE_NAME}/{PACKAGE_NAME}/{VERSION}` - Contains an unarchived version of your modified chart
-- `assets/{PACKAGE_NAME}/` - Contains an archived (tarball) version of your modified chart
-named `{PACKAGE_NAME}-{VERSION}{packageVersion}.tgz`
-
-#### Test modified chart
-To test your changes, just push the generated files to your fork as a separate commit and add your
-fork / branch as a Repository in the Dashboard UI. Your chart will then show up as an App in
-`Apps & Marketplace` under the Repository that you configured.Make sure that you revert the generated files commit before submitting a PR!
-
-Alternatively, Python and Ngrok can be used if you rather avoid the push and revert commit approach. Use `python -m SimpleHTTPServer` to host the generated files locally, and expose them using Ngrok. Then add the Ngrok URL as a Repository in the Dashboard UI the same way you would add a fork / branch.
-
-### 8. Pull Request
-
-Run to clean up your working directory before staging your changes.
-
-*Note: Any changes added to `packages/{PACKAGE_NAME}/charts` will be lost when you run `make clean`, so always make sure to run `make patch PACKAGE={PACKAGE_NAME}` to save your changes before running `make clean`.*
-
-```
-export PACKAGE={PACKAGE_NAME} # Only need to run once
-make clean
+### Git Repo
+```yaml
+---
+GitRepo: https://github.com/kubewarden/helm-charts.git
+GitBranch: main
+GitSubdirectory: charts/kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 
-Ensure that you've already saved your changes with `PACKAGE={PACKAGE_NAME} make patch` and cleaned up your working directory with `PACKAGE={PACKAGE_NAME} make clean`. Then, commit all the remaining changes to `packages/{PACKAGE_NAME}`.
-
-Once you've committed all your changes in your package directory, run `make charts` and add everything that gets updated to a second commit (usually `assets`, `charts` and in some cases `index.yaml` as well) so that your Pull Request's contents are as following:
-
-    1st commit: Changes in package to add or update your chart
-    2nd commit: Result of running `make charts`
-
-Lastly, run `make validate` to make sure everything is correct. If no problems arised, you are ready to submit a Pull Request to the `main-source` branch for review.
+### GitHub Release
+```yaml
+---
+GitRepo: https://github.com/kubewarden/helm-charts.git
+GitHubRelease: true
+GitSubdirectory: charts/kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
+```
