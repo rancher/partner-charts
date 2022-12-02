@@ -2,7 +2,7 @@
 
 This repository is reserved for partner charts in the Rancher's v2.5+ catalog. As part of this catalog,
 all charts will benefit of a cloud native packaging system that directly references an upstream chart
-from a Helm repository and automates applying Rancher specific modifications and adding overlay
+from a Helm or git repository and automates applying Rancher specific modifications and adding overlay
 files on top of it.
 
 ## Requirements
@@ -26,7 +26,7 @@ files on top of it.
     * Managing CRDs and best practices: https://helm.sh/docs/chart_best_practices/custom_resource_definitions/
     * Semver Rules: https://semver.org/
 
-* Chart must be in a hosted [Helm repository](https://helm.sh/docs/topics/chart_repository/) that we can reference.
+* Chart must be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/) or Git repository that we can reference.
 
 * Chart must have the following Rancher specific add-ons (More details on this below).
     * kubeVersion set in the chart's metadata
@@ -35,18 +35,18 @@ files on top of it.
 
 ## Workflow
 
-### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
-### 2. Clone your fork and ensure the main-source branch is checked out
+#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
+#### 2. Clone your fork and ensure the main-source branch is checked out
 ```bash
 git clone -b main-source git@github.com:<your_github>/partner-charts.git
 ```
-### 3. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
+#### 3. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
 ```bash
 cd partner-charts
 mkdir -p packages/suse/kubewarden-controller
 
 ```
-### 4. Create your [upstream.yaml](#configuration-file)
+#### 4. Create your [upstream.yaml](#configuration-file)
 Some [examples](#examples) are provided below
 ```bash
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
@@ -59,19 +59,19 @@ ChartMetadata:
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF
 ```
-### 5. [Create 'overlay' files](#overlay)
+#### 5. [Create 'overlay' files](#overlay)
 Create any add-on files such as an app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
 ```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
 ```
-### 6. Commit your packages directory
+#### 6. Commit your packages directory
 ```bash
 git add packages/suse/kubewarden-controller
 git commit -m "Submitting suse/kubewarden-controller"
 ```
-### 7. [Test your configuration](#testing-your-configuration)
-### 8. Push your commit and open a pull request
+#### 7. [Test your configuration](#testing-your-configuration)
+#### 8. Push your commit and open a pull request
 ```bash
 git push origin main-source
 
@@ -81,22 +81,22 @@ git push origin main-source
 ## Testing your configuration
 If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-ci-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
 
-### 1. Download the binary
+#### 1. Download the binary
 ```bash
 scripts/pull-ci-scripts
 ```
-### 2. Set the **PACKAGE** environment variable to your chart
+#### 2. Set the **PACKAGE** environment variable to your chart
 You can confirm the package entry with `bin/partner-charts-ci list` which will list all detected charts with a configuration file.
 ```bash
 export PACKAGE=<vendor>/<chart>
 ```
-### 3. Run the 'auto' or 'stage' function
+#### 3. Run the 'auto' or 'stage' function
 The 'auto' subcommand will run the complete CI process.
 The 'stage' subcommand will do the same process but will not create a git commit when it completes.
 ```bash
 bin/partner-charts-ci auto
 ```
-### 4. Validate your changes
+#### 4. Validate your changes
 ```bash
 bin/partner-charts-ci validate
 ```
