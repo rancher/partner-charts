@@ -172,8 +172,15 @@ Options for `upstream.yaml`
 
 ## Examples
 ### Helm Repo
+#### Minimal Requirements
 ```yaml
----
+HelmRepo: https://charts.kubewarden.io
+HelmChart: kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+```
+#### Multiple Release Streams
+```yaml
 HelmRepo: https://charts.kubewarden.io
 HelmChart: kubewarden-controller
 Vendor: SUSE
@@ -190,7 +197,6 @@ ChartMetadata:
 
 ### Artifact Hub
 ```yaml
----
 ArtifactHubRepo: kubewarden
 ArtifactHubPackage: kubewarden-controller
 Vendor: SUSE
@@ -202,7 +208,6 @@ ChartMetadata:
 
 ### Git Repo
 ```yaml
----
 GitRepo: https://github.com/kubewarden/helm-charts.git
 GitBranch: main
 GitSubdirectory: charts/kubewarden-controller
@@ -215,7 +220,6 @@ ChartMetadata:
 
 ### GitHub Release
 ```yaml
----
 GitRepo: https://github.com/kubewarden/helm-charts.git
 GitHubRelease: true
 GitSubdirectory: charts/kubewarden-controller
