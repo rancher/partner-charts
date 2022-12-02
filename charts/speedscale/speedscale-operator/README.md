@@ -10,7 +10,7 @@ the helm chart is installed.
 
 - Kubernetes 1.16+
 - Helm 3+
-- Appropriate [network and firewall configuration](http://docs.speedscale.com/reference/networking) for Speedscale cloud and webhook traffic
+- Appropriate [network and firewall configuration](https://docs.speedscale.com/reference/networking) for Speedscale cloud and webhook traffic
 
 ## Get Repo Info
 
@@ -101,10 +101,10 @@ _See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documen
 A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an
 incompatible breaking change needing manual actions.
 
-### Upgrade to 1.2.4
+### Upgrade to 1.2.5
 
 ```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.2.4/templates/crds/trafficreplays.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.2.5/templates/crds/trafficreplays.yaml
 ```
 
 ### Upgrade to 1.1.0
