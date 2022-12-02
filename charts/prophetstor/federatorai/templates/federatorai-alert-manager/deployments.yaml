@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alert-manager
+  name: federatorai-alert-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alert-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alert-manager
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.affinity "context" .) | nindent 8 }}
+      containers:
+      - command:
+        - /opt/federatorai/alert-manager/bin/alertmgr
+        env:
+        - name: ALERT_DATAHUB_HOST
+          value: alameda-datahub.federatorai.svc
+        - name: ALERT_DATAHUB_PORT
+          value: "50050"
+        - name: ALERT_RABBITMQ_HOST
+          value: alameda-rabbitmq.federatorai.svc
+        - name: ALERT_RABBITMQ_PORT
+          value: "5672"
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/federatorai-alert-manager:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /opt/federatorai/alert-manager/bin/mgrctl
+            - probe
+            - --type
+            - liveness
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: alert-manager
+        readinessProbe:
+          exec:
+            command:
+            - /opt/federatorai/alert-manager/bin/mgrctl
+            - probe
+            - --type
+            - readiness
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiAlertManager.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: federatorai-alert-manager-log-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-alert-manager
+      serviceAccountName: federatorai-alert-manager
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: federatorai-alert-manager-data-storage
+      - name: federatorai-alert-manager-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-alert-manager-log.pvc

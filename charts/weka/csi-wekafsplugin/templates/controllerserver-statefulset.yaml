@@ -1,0 +1,173 @@
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+    component: {{ .Release.Name }}-controller
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  serviceName: {{ .Release.Name }}-controller
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-controller
+        component: {{ .Release.Name }}-controller
+        release: {{ .Release.Name }}
+    spec:
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8}}
+      {{- end }}
+      serviceAccountName: {{ .Release.Name }}-controller
+      containers:
+        - name: csi-attacher
+          image: {{ required "csi attacher sidercar image." .Values.images.attachersidecar }}
+          securityContext:
+            privileged: true
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v={{ .Values.logLevel | default 5 }}"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-provisioner
+          image: {{ required "csi provisioner sidecar container image." .Values.images.provisionersidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--feature-gates=Topology=true"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: "/csi"
+        - name: csi-resizer
+          image: {{ required "csi attacher sidercar image." .Values.images.resizersidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+
+        - name: wekafs
+          securityContext:
+            privileged: true
+          image: {{ .Values.images.csidriver }}:v{{ .Values.images.csidriverTag }}
+          imagePullPolicy: Always
+          args:
+            - "--drivername=$(CSI_DRIVER_NAME)"
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+            - "--dynamic-path=$(CSI_DYNAMIC_PATH)"
+            - "--csimode=$(X_CSI_MODE)"
+          ports:
+            - containerPort: 9898
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: CSI_DRIVER_NAME
+              value: {{ required "Provide CSI Driver Name"  .Values.csiDriverName }}
+            - name: CSI_DRIVER_VERSION
+              value: {{ required "Provide CSI Driver version"  .Values.csiDriverVersion }}
+            - name: X_CSI_MODE
+              value: controller
+            - name: CSI_DYNAMIC_PATH
+              value: {{ required "Provide CSI Driver Dynamic Volume Creation Path"  .Values.dynamicProvisionPath }}
+            - name: X_CSI_DEBUG
+              value: "false"
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath:  {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+            - mountPath:  {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+              mountPropagation: Bidirectional
+              name: plugins-dir
+            - mountPath: /var/lib/csi-wekafs-data
+              name: csi-data-dir
+            - mountPath: /dev
+              name: dev-dir
+{{- if .Values.legacyVolumeSecretName }}
+            - mountPath: /legacy-volume-access
+              name: legacy-volume-access
+              readOnly: true
+{{- end }}
+        - name: liveness-probe
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          image: {{ required "Provide Liveness Probe image." .Values.images.livenessprobesidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--health-port=$(HEALTH_PORT)"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+            - name: HEALTH_PORT
+              value: "9898"
+      {{- with .Values.controllerPluginTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins/csi-wekafs-controller
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+            type: DirectoryOrCreate
+          name: mountpoint-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins_registry
+            type: Directory
+          name: registration-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+            type: Directory
+          name: plugins-dir
+        - hostPath:
+            # 'path' is where PV data is persisted on host.
+            # using /tmp is also possible while the PVs will not available after plugin container recreation or host reboot
+            path: /var/lib/csi-wekafs-data/
+            type: DirectoryOrCreate
+          name: csi-data-dir
+        - hostPath:
+            path: /dev
+            type: Directory
+          name: dev-dir
+{{- if .Values.legacyVolumeSecretName }}
+        - name: legacy-volume-access
+          secret:
+            secretName: {{ .Values.legacyVolumeSecretName }}
+{{- end }}

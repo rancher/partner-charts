@@ -1,0 +1,84 @@
+{{- if and (not (include "deploy-nia" .)) .Values.nodeAnalyzer.deploy (not .Values.gke.autopilot) (or .Values.nodeAnalyzer.runtimeScanner.deploy .Values.secure.vulnerabilityManagement.newEngineOnly) .Values.nodeAnalyzer.runtimeScanner.eveConnector.deploy }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sysdig.fullname" . }}-eveconnector-api
+  labels:
+    app.kubernetes.io/name: {{ include "sysdig.name" . }}-eveconnector
+{{ include "sysdig.labels" . | indent 4 }}
+{{ include "nodeAnalyzer.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.nodeAnalyzer.runtimeScanner.eveConnector.settings.replicas }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "sysdig.name" . }}-eveconnector
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/runtimeScanner/eveconnector-api-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/runtimeScanner/sysdig-eve-secret.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: {{ include "sysdig.name" . }}-eveconnector
+{{ include "sysdig.labels" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "sysdig.serviceAccountName" .}}
+      containers:
+      - name: {{ include "sysdig.name" . }}-eveconnector-api
+        image: {{ template "sysdig.image.eveConnector" . }}
+        imagePullPolicy: {{ .Values.nodeAnalyzer.runtimeScanner.eveConnector.image.pullPolicy }}
+        ports:
+          - name: api
+            containerPort: 7000
+            protocol: TCP
+        resources:
+{{ toYaml .Values.nodeAnalyzer.runtimeScanner.eveConnector.resources | indent 10 }}
+        env:
+          # authentication token for Snyk to EVE client communication taken from secret
+          - name: CLIENT_AUTH_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: sysdig-eve-secret
+                key: token
+          # DNS name used in self-signed certificate
+          - name: CERT_DNS_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-eveconnector
+                key: cert_dns_name
+          # kubernetes cluster name where EVE Client and Snyk are installed
+          - name: CLUSTER_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-eveconnector
+                key: cluster_name
+          # agent authentication token for EVE client to Sysdig BE comm.
+          - name: SYSDIG_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                {{- if not .Values.sysdig.existingAccessKeySecret }}
+                name: {{ template "sysdig.fullname" . }}
+                {{- else }}
+                name: {{ .Values.sysdig.existingAccessKeySecret }}
+                {{- end }}
+                key: access-key
+          # base URL for Sysdig Secure
+          - name: SYSDIG_API_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-eveconnector
+                key: api_endpoint
+          # whether to check SSL certificate of Sysdig
+          - name: SYSDIG_API_VERIFY_CERTIFICATE
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-eveconnector
+                key: ssl_verify_certificate
+                optional: true
+{{- end }}

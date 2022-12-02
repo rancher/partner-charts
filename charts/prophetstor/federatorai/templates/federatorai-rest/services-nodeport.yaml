@@ -1,0 +1,27 @@
+{{- if eq .Values.federatoraiRest.service.type "NodePort" }}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  {{- with .Values.federatoraiRest.service.annotations }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-rest
+  name: federatorai-rest-public
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - name: restapi-nodeport
+    {{- if and .Values.federatoraiRest.service.nodePort }}
+    nodePort: {{ .Values.federatoraiRest.service.nodePort }}
+    {{- end }}
+    port: 5056
+    protocol: TCP
+    targetPort: {{ .Values.federatoraiRest.service.targetPort }}
+  selector:
+    component: federatorai-rest
+  type: NodePort
+{{- end }}

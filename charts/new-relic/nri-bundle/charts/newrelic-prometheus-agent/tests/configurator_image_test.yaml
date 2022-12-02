@@ -1,0 +1,32 @@
+suite: test image
+templates:
+  - templates/statefulset.yaml
+  - templates/configmap.yaml
+tests:
+  - it: configurator image is set
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      images:
+        configurator:
+          tag: "test"
+          pullPolicy: Never
+        prometheus:
+          tag: "test-2"
+    asserts:
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "newrelic/newrelic-prometheus-configurator:test"
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: "Never"
+        template: templates/statefulset.yaml
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].image
+          value: "quay.io/prometheus/prometheus:test-2"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "IfNotPresent"
+        template: templates/statefulset.yaml

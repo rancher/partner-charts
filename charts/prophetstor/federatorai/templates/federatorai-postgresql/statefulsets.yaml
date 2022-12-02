@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-postgresql
+  name: federatorai-postgresql
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-postgresql
+  serviceName: federatorai-postgresql
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-postgresql
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiPostgresql.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: federatorai
+        - name: POSTGRES_PASSWORD
+          value: adminpass
+        - name: POSTGRES_USER
+          value: postgres
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/federatorai-postgresql:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /init.sh liveness
+          failureThreshold: 3
+          initialDelaySeconds: 600
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: federatorai-postgresql
+        ports:
+        - containerPort: 5432
+          name: postgres
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /init.sh readiness
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiPostgresql.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/postgresql
+          name: federatorai-postgresql-log-storage
+          subPath: postgresql
+        - mountPath: /var/lib/postgresql/data
+          name: federatorai-postgresql-data-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiPostgresql.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-postgresql
+      serviceAccountName: federatorai-postgresql
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiPostgresql.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - name: federatorai-postgresql-data-storage
+        persistentVolumeClaim:
+          claimName: federatorai-postgresql-data.pvc
+      - name: federatorai-postgresql-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-postgresql-log.pvc
+  updateStrategy:
+    type: RollingUpdate

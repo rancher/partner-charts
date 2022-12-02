@@ -1,0 +1,68 @@
+{{- if .Values.federatoraiDashboardFrontend.ingress.enabled }}
+apiVersion: {{ template "ingress.apiVersion" . }}
+kind: Ingress
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  {{- with .Values.federatoraiDashboardFrontend.ingress.annotations }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-dashboard-frontend
+  name: federatorai-dashboard-frontend
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if .Values.federatoraiDashboardFrontend.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.federatoraiDashboardFrontend.ingress.ingressClassName | quote }}
+  {{- end }}
+  rules:
+    {{- if .Values.federatoraiDashboardFrontend.ingress.hostname }}
+    - host: {{ .Values.federatoraiDashboardFrontend.ingress.hostname }}
+      http:
+        paths:
+          {{- if .Values.federatoraiDashboardFrontend.ingress.extraPaths }}
+          {{- toYaml .Values.federatoraiDashboardFrontend.ingress.extraPaths | nindent 10 }}
+          {{- end }}
+          - path: {{ .Values.federatoraiDashboardFrontend.ingress.path }}
+            pathType: {{ .Values.federatoraiDashboardFrontend.ingress.pathType }}
+            backend:
+              {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.Version }}
+              service:
+                name: federatorai-dashboard-frontend
+                port:
+                  number: 9000
+              {{- else }}
+              serviceName: federatorai-dashboard-frontend
+              servicePort: 9000
+              {{- end }}
+    {{- end }}
+    {{- range .Values.federatoraiDashboardFrontend.ingress.extraHosts }}
+    - host: {{ .name | quote }}
+      http:
+        paths:
+          - path: {{ default "/" .path }}
+            pathType: {{ default "ImplementationSpecific" .pathType }}
+            backend:
+              {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.Version }}
+              service:
+                name: federatorai-dashboard-frontend
+                port:
+                  number: 9000
+              {{- else }}
+              serviceName: federatorai-dashboard-frontend
+              servicePort: 9000
+              {{- end }}
+    {{- end }}
+  {{- if or .Values.federatoraiDashboardFrontend.ingress.tls .Values.federatoraiDashboardFrontend.ingress.extraTls }}
+  tls:
+    {{- if .Values.federatoraiDashboardFrontend.ingress.tls }}
+    - hosts:
+        - {{ .Values.federatoraiDashboardFrontend.ingress.hostname }}
+      secretName: federatorai-ingress-tls
+    {{- end }}
+    {{- if .Values.federatoraiDashboardFrontend.ingress.extraTls }}
+    {{- include "render-value" ( dict "value" .Values.federatoraiDashboardFrontend.ingress.extraTls "context" .) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,41 @@
+{{- if eq .Values.federatoraiDashboardFrontend.service.type "LoadBalancer" }}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  {{- with .Values.federatoraiDashboardFrontend.service.annotations }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-dashboard-frontend
+  name: federatorai-dashboard-frontend-public
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if .Values.federatoraiDashboardFrontend.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.federatoraiDashboardFrontend.service.externalTrafficPolicy }}
+  {{- end }}
+  {{- if and (eq .Values.federatoraiDashboardFrontend.service.externalTrafficPolicy "Local") .Values.federatoraiDashboardFrontend.service.healthCheckNodePort }}
+  healthCheckNodePort: {{ .Values.federatoraiDashboardFrontend.service.healthCheckNodePort }}
+  {{- end }}
+  {{- if .Values.federatoraiDashboardFrontend.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.federatoraiDashboardFrontend.service.loadBalancerIP }}
+  {{- end }}
+  {{- if .Values.federatoraiDashboardFrontend.service.loadBalancerSourceRanges }}
+  {{- with .Values.federatoraiDashboardFrontend.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  ports:
+  - name: frontend-loadbalancer
+    port: {{ .Values.federatoraiDashboardFrontend.service.port }}
+    protocol: TCP
+    targetPort: {{ .Values.federatoraiDashboardFrontend.service.targetPort }}
+    {{- if and .Values.federatoraiDashboardFrontend.service.nodePort }}
+    nodePort: {{ .Values.federatoraiDashboardFrontend.service.nodePort }}
+    {{- end }}
+  selector:
+    component: federatorai-dashboard-frontend
+  type: LoadBalancer
+{{- end }}

@@ -1,0 +1,398 @@
+# Copyright 2022 TriggerMesh Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if .Values.rbac.create }}
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: triggermesh-core-namespaced-admin
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources: ["*"]
+    verbs: ["*"]
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: triggermesh-core-namespaced-edit
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources: ["*"]
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: triggermesh-core-namespaced-view
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups:
+      - eveinting.triggermesh.io
+    resources: ["*"]
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: triggermesh-core-addressable-resolver
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    duck.knative.dev/addressable: 'true'
+rules:
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources:
+      - memorybrokers
+      - redisbrokers
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: triggermesh-core-controller
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+
+rules:
+
+  # Record Kubernetes events
+  - apiGroups:
+      - ''
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+
+  # Manage broker deployments
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+
+  # Manage broker services, endpoints and secrets (for configuration)
+  - apiGroups:
+      - ''
+    resources:
+      - services
+      - endpoints
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+
+  # Read reconciled TriggerMesh core resources and update their statuses
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources:
+      - memorybrokers
+      - redisbrokers
+      - triggers
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources:
+      - memorybrokers/status
+      - redisbrokers/status
+      - triggers/status
+    verbs:
+      - update
+
+  # Ensure compatibility with the OwnerReferencesPermissionEnforcement Admission Controller
+  # https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources:
+      - memorybrokers/finalizers
+      - redisbrokers/finalizers
+      - triggers/finalizers
+    verbs:
+      - update
+
+  # Set finalizers
+  - apiGroups:
+      - eventing.triggermesh.io
+    resources:
+      - memorybrokers
+      - redisbrokers
+      - triggers
+    verbs:
+      - patch
+
+  # Manage resource-specific ServiceAccounts and RoleBindings
+  - apiGroups:
+      - ''
+    resources:
+      - serviceaccounts
+      - serviceaccounts/finalizers
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+    verbs:
+      - list
+      - watch
+      - create
+
+  # Read configuration/credentials
+  - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - get
+
+  # Read controller configurations
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    resourceNames:
+      - config-logging
+      - config-observability
+      - config-leader-election
+    verbs:
+      - get
+
+  # Acquire leases for leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: triggermesh-broker
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+rules:
+
+  # Read broker configuration, including credentials.
+  - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - list
+      - watch
+      - get
+
+  # Read observability configuration.
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+      - get
+
+---
+
+# source: https://github.com/triggermesh/triggermesh-core/blob/main/config/200-kn-clusterrole-addressable-resolvers.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  # There might be an addressable-resolver ClusterRole if Knative Eventing is installed.
+  # This would be a duplicate for TriggerMesh's brokers that would add support for scenarios
+  # where Knative Eventing is not installed but Knative Serving is.
+  name: addressable-resolver-triggermesh
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        duck.knative.dev/addressable: "true"
+rules: [] # Rules are automatically filled in by the controller manager.
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: service-addressable-resolver-triggermesh
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    duck.knative.dev/addressable: "true"
+# Do not use this role directly. These rules will be added to the "addressable-resolver" role.
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: serving-addressable-resolver-triggermesh
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    duck.knative.dev/addressable: "true"
+# Do not use this role directly. These rules will be added to the "addressable-resolver" role.
+rules:
+  - apiGroups:
+      - serving.knative.dev
+    resources:
+      - routes
+      - routes/status
+      - services
+      - services/status
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: channel-addressable-resolver-triggermesh
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    duck.knative.dev/addressable: "true"
+# Do not use this role directly. These rules will be added to the "addressable-resolver" role.
+rules:
+  - apiGroups:
+      - messaging.knative.dev
+    resources:
+      - channels
+      - channels/status
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - messaging.knative.dev
+    resources:
+      - channels/finalizers
+    verbs:
+      - update
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: broker-addressable-resolver-triggermesh
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    duck.knative.dev/addressable: "true"
+# Do not use this role directly. These rules will be added to the "addressable-resolver" role.
+rules:
+  - apiGroups:
+      - eventing.knative.dev
+    resources:
+      - brokers
+      - brokers/status
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: flows-addressable-resolver-triggermesh
+  labels:
+    {{- include "triggermesh-core.labels" . | nindent 4 }}
+    duck.knative.dev/addressable: "true"
+# Do not use this role directly. These rules will be added to the "addressable-resolver" role.
+rules:
+  - apiGroups:
+      - flows.knative.dev
+    resources:
+      - sequences
+      - sequences/status
+      - parallels
+      - parallels/status
+    verbs:
+      - get
+      - list
+      - watch
+
+{{- end }}

@@ -1,0 +1,41 @@
+{{- if eq .Values.federatoraiRest.service.type "LoadBalancer" }}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  {{- with .Values.federatoraiRest.service.annotations }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-rest
+  name: federatorai-rest-public
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if .Values.federatoraiRest.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.federatoraiRest.service.externalTrafficPolicy }}
+  {{- end }}
+  {{- if and (eq .Values.federatoraiRest.service.externalTrafficPolicy "Local") .Values.federatoraiRest.service.healthCheckNodePort }}
+  healthCheckNodePort: {{ .Values.federatoraiRest.service.healthCheckNodePort }}
+  {{- end }}
+  {{- if .Values.federatoraiRest.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.federatoraiRest.service.loadBalancerIP }}
+  {{- end }}
+  {{- if .Values.federatoraiRest.service.loadBalancerSourceRanges }}
+  {{- with .Values.federatoraiRest.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  ports:
+  - name: restapi-loadbalancer
+    port: {{ .Values.federatoraiRest.service.port }}
+    protocol: TCP
+    targetPort: {{ .Values.federatoraiRest.service.targetPort }}
+    {{- if and .Values.federatoraiRest.service.nodePort }}
+    nodePort: {{ .Values.federatoraiRest.service.nodePort }}
+    {{- end }}
+  selector:
+    component: federatorai-rest
+  type: LoadBalancer
+{{- end }}

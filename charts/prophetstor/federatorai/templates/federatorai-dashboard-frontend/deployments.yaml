@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-dashboard-frontend
+  name: federatorai-dashboard-frontend
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-dashboard-frontend
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-dashboard-frontend
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiDashboardFrontend.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: FEDERATORAI_DASHBOARD_FRONTEND_PORT
+          value: "9000"
+        - name: FEDERATORAI_DASHBOARD_BACKEND_URL
+          value: http://federatorai-dashboard-backend.{{ .Release.Namespace }}.svc:8081
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/federatorai-dashboard-frontend:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /probe.sh
+            - --type=liveness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: federatorai-dashboard-frontend
+        ports:
+        - containerPort: 9000
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /probe.sh
+            - --type=readiness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiDashboardFrontend.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: federatorai-frontend-log-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiDashboardFrontend.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-dashboard-frontend
+      serviceAccountName: federatorai-dashboard-frontend
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiDashboardFrontend.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: federatorai-frontend-data-storage
+      - name: federatorai-frontend-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-frontend-log.pvc

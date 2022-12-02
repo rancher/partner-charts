@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-rabbitmq
+  name: alameda-rabbitmq
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-rabbitmq
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-rabbitmq
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: RABBITMQ_DEFAULT_USER
+          value: admin
+        - name: RABBITMQ_DEFAULT_PASS
+          value: adminpass
+        - name: TRACE_ENABLED
+          value: "false"
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-rabbitmq:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /prob.sh liveness
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 15
+        name: rabbitmq
+        ports:
+        - containerPort: 15672
+          name: http
+          protocol: TCP
+        - containerPort: 5672
+          name: amqp
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /prob.sh readiness
+          failureThreshold: 3
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaRabbitmq.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /definitions.json
+          name: rabbitmq-config
+          subPath: definitions.json
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-rabbitmq
+      serviceAccountName: alameda-rabbitmq
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: rabbitmq-config
+        name: rabbitmq-config

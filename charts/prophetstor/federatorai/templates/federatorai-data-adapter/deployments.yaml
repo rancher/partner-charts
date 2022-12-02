@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-data-adapter
+  name: federatorai-data-adapter
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-data-adapter
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-data-adapter
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiDataAdapter.affinity "context" .) | nindent 8 }}
+      containers:
+      - args:
+        - -c
+        - /entrypoint.sh
+        command:
+        - /bin/bash
+        env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        - name: CONFIGURATION_RELOAD_INTERVAL
+          value: "1h"
+        - name: DELAY_QUERY_INTERVAL
+          value: 10s
+        - name: DELAY_HISTORICAL_QUERY
+          value: 3m
+        - name: FED_REST_URL
+          value: federatorai-rest.{{ .Release.Namespace }}
+        - name: FED_REST_PORT
+          value: "5059"
+        - name: DATAHUB_URL
+          value: alameda-datahub.{{ .Release.Namespace }}
+        - name: DATAHUB_PORT
+          value: "50050"
+        - name: WRITE_DATAHUB_CONCURRENT_JOB
+          value: "3"
+        - name: RABBITMQ_URL
+          value: alameda-rabbitmq.{{ .Release.Namespace }}
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: DATA_EXPIRED_TIME
+          value: 5m
+        - name: POST_EVENT_INTERVAL
+          value: 1h
+        - name: LOG_QUEUE_TRACE_INTERVAL
+          value: 5m
+        - name: MAX_LOG_QUEUE_SIZE
+          value: "50000"
+        - name: ENABLED_ASYNC_LOGGER
+          value: "true"
+        - name: ENABLE_FLUSH_LOG_TO_CONSOLE
+          value: "false"
+        - name: LOG_FLUSH_TO_CONSOLE_LEVEL
+          value: ERROR
+        - name: SYSDIG_API_URL
+          value: https://app.sysdigcloud.com
+        - name: DD_CLUSTER_NAME_TAG_KEYS
+          value: kube_cluster_name,cluster_name,kube_cluster
+        - name: ENABLE_DD_DASHBOARD
+          value: "false"
+        - name: CHECK_SYSDIG_DASHBOARD_INTERVAL
+          value: 2m
+        - name: ENABLE_SYSDIG_DASHBOARD
+          value: "true"
+        - name: ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+          value: "false"
+        - name: DEFAULT_PROVIDER
+          value: aws
+        - name: DEFAULT_REGION
+          value: us-west-1
+        - name: DEFAULT_INSTANCE_TYPE
+          value: m5.4xlarge
+        - name: DEFAULT_INSTANCE_ID
+          value: i-00cd730e045190cad
+        - name: DEFAULT_ZONE
+          value: us-west-1a
+        - name: COLLECT_METADATA_ONLY
+          value: "false"
+        - name: DEBUG
+          value: "false"
+        - name: MAX_REQUEST_LINE
+          value: "5000"
+        - name: DATADOG_MAX_CHAR_PER_CHUNK
+          value: "7000"
+        - name: DATADOG_MAX_QUERY_PER_CHUNK
+          value: "35"
+        - name: SYSDIG_MAX_CHAR_PER_CHUNK
+          value: "10000"
+        - name: SYSDIG_MAX_QUERY_PER_CHUNK
+          value: "20"
+        - name: DATADOG_API_KEY
+        - name: DATADOG_APPLICATION_KEY
+        - name: SYSDIG_API_TOKEN
+        - name: COLLECTION_INTERVAL_1H
+          value: 1h
+        - name: COLLECTION_INTERVAL_6H
+          value: 6h
+        - name: COLLECTION_INTERVAL_24H
+          value: 24h
+        - name: FEDERATORAI_METRIC_DELAY_QUERY_INTERVAL
+          value: 10s
+        - name: FEDERATORAI_METRICS_RETRY_INTERVAL
+          value: 5m
+        - name: FEDERATORAI_METRICS_MAX_RETRY_TIMES
+          value: "6"
+        - name: MAX_RPC_RECEIVE_SIZE
+          value: "134217728"
+        - name: HISTORICAL_DATA_RESTART_LIMIT
+          value: "5"
+        - name: HANDLE_MISSING_DATA_TIMES
+          value: "1"
+        image: {{ .Values.global.imageRegistry }}/federatorai-data-adapter:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - /livenessProbe.sh
+          failureThreshold: 10
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: federatorai-data-adapter
+        ports:
+        - containerPort: 8080
+          name: export-metrics
+          protocol: TCP
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiDataAdapter.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /etc/telegraf/telegraf.conf
+          name: federatorai-data-adapter-config
+          subPath: telegraf.conf
+        - mountPath: /etc/telegraf/telegraf_historical.conf
+          name: federatorai-data-adapter-historical-config
+          subPath: telegraf_historical.conf
+        - mountPath: /var/log
+          name: federatorai-data-adapter-log-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiDataAdapter.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-data-adapter
+      serviceAccountName: federatorai-data-adapter
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiDataAdapter.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: federatorai-data-adapter-config
+        name: federatorai-data-adapter-config
+      - configMap:
+          defaultMode: 420
+          name: federatorai-data-adapter-historical-config
+        name: federatorai-data-adapter-historical-config
+      - emptyDir: {}
+        name: federatorai-data-adapter-data-storage
+      - name: federatorai-data-adapter-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-data-adapter-log.pvc

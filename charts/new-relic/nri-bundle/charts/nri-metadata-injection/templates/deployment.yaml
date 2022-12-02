@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "newrelic.common.naming.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- /* We cannot use the common library here because of a legacy issue */}}
+      {{- /* `selector` is immutable  and the previous chart did not have all the idiomatic labels */}}
+      app.kubernetes.io/name: {{ include "newrelic.common.naming.name" . }}
+  template:
+    metadata:
+      {{- if .Values.podAnnotations }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "newrelic.common.labels.podLabels" . | nindent 8 }}
+    spec:
+      {{- with include "nri-metadata-injection.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 -}}
+      {{- end }}
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+      hostNetwork: {{ include "newrelic.common.hostNetwork.value" . }}
+      {{- if include "newrelic.common.hostNetwork" . }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" ( list .Values.image.pullSecrets ) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 -}}
+      {{- end }}
+      containers:
+      - name: {{ include "newrelic.common.naming.name" . }}
+        image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with include "newrelic.common.securityContext.container" . }}
+        securityContext:
+          {{- . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: clusterName
+          value: {{ include "newrelic.common.cluster" . }}
+        ports:
+          - containerPort: 8443
+            protocol: TCP
+        volumeMounts:
+        - name: tls-key-cert-pair
+          mountPath: /etc/tls-key-cert-pair
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 1
+          periodSeconds: 1
+        {{- if .Values.resources }}
+        resources:
+          {{ toYaml .Values.resources | nindent 10 }}
+        {{- end }}
+      volumes:
+      - name: tls-key-cert-pair
+        secret:
+          secretName: {{ include "nri-metadata-injection.fullname.admission" . }}
+      {{- with include "newrelic.common.nodeSelector" . }}
+      nodeSelector:
+        {{- . | nindent 8 -}}
+      {{- end }}
+      {{- with include "newrelic.common.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 -}}
+      {{- end }}
+      {{- with include "newrelic.common.affinity" . }}
+      affinity:
+        {{- . | nindent 8 -}}
+      {{- end }}

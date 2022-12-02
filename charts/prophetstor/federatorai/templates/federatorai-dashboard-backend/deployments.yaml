@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-dashboard-backend
+  name: federatorai-dashboard-backend
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-dashboard-backend
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-dashboard-backend
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: FEDERATORAI_DASHBOARD_BACKEND_SERVICE_NAME
+          value: federatorai-dashboard-backend
+        - name: FEDERATORAI_DASHBOARD_BACKEND_PORT
+          value: "8081"
+        - name: FEDERATORAI_DASHBOARD_ENABLE_PLANNING_REC
+          value: "false"
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/federatorai-dashboard-backend:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /probe.sh
+            - --type=liveness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: federatorai-dashboard-backend
+        ports:
+        - containerPort: 8081
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /probe.sh
+            - --type=readiness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: federatorai-backend-log-storage
+        - mountPath: /federatorai-portal/server/config
+          name: federatorai-dashboard-backend-config
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: federatorai-dashboard-backend
+      serviceAccountName: federatorai-dashboard-backend
+      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: federatorai-dashboard-backend-config
+        name: federatorai-dashboard-backend-config
+      - emptyDir: {}
+        name: federatorai-backend-data-storage
+      - name: federatorai-backend-log-storage
+        persistentVolumeClaim:
+          claimName: federatorai-backend-log.pvc

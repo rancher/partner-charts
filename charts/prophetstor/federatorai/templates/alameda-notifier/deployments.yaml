@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-notifier
+  name: alameda-notifier
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-notifier
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-notifier
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaNotifier.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: ALAMEDA_NOTIFIER_DATAHUB_ADDRESS
+          value: alameda-datahub.{{ .Release.Namespace }}.svc:50050
+        - name: ALAMEDA_NOTIFIER_RABBITMQ_URL
+          value: amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-notifier-ubi:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/notifier
+            - --liveness-probe
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: alameda-notifier
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/notifier
+            - --readiness-probe
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaNotifier.resources "context" .) | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/log/alameda
+          name: alameda-notifier-log-storage
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaNotifier.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-notifier
+      serviceAccountName: alameda-notifier
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaNotifier.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - emptyDir: {}
+        name: alameda-notifier-data-storage
+      - name: alameda-notifier-log-storage
+        persistentVolumeClaim:
+          claimName: alameda-notifier-log.pvc

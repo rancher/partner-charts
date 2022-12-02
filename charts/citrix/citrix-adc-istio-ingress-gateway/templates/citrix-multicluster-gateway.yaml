@@ -1,0 +1,46 @@
+{{- if eq .Values.ingressGateway.multiClusterIngress true }}
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  annotations:
+  labels:
+    app: {{ .Values.ingressGateway.label | default "citrix-ingressgateway" }}
+{{- if eq .Values.citrixCPX true }}
+    deployment: "cpx-ingressgateway" # This label is useful in ServiceGraph
+{{- end }}
+  name: citrix-multicluster-ingressgateway
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Values.ingressGateway.label | default "citrix-ingressgateway" }}
+  servers:
+    - port:
+        name: tls-mc-port
+        number: {{ .Values.ingressGateway.multiClusterListenerPort }}
+        protocol: tls
+      tls:
+        mode: PASSTHROUGH
+      hosts:
+        - {{ printf "'*.%s'" .Values.ingressGateway.multiClusterSvcDomain }}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: citrix-multicluster-ingressgateway
+spec:
+  hosts:
+  - {{ printf "'*.%s'" .Values.ingressGateway.multiClusterSvcDomain }}
+  gateways:
+  - citrix-multicluster-ingressgateway
+  tls:
+  - match:
+    - port: {{ .Values.ingressGateway.multiClusterListenerPort }}
+      sniHosts:
+      - {{ printf "'*.%s'" .Values.ingressGateway.multiClusterSvcDomain }}
+    route:
+    - destination:
+        host: {{ template "generate-name" (list . (dict "suffixname" "citrix-ingress-svc")) }}
+        port:
+          number: {{ .Values.ingressGateway.multiClusterListenerPort }}
+---
+{{- end }}

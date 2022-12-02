@@ -1,0 +1,83 @@
+apiVersion: v1
+data:
+  worker.toml: |-
+    [Common]
+    log_file_path = "/var/log/alameda/recommender-worker.log" # empty string means only log to stdout
+    http_port = 9091
+    worker_cnt = 9
+
+    [logging]
+    # fatal | error | warn | info | debug
+    main = "info"
+    planning = "info"
+    hpa = "info"
+    kafka = "info"
+    nginx = "info"
+
+    [datahub]
+    address = "alameda-datahub.{{ .Release.Namespace }}.svc"
+    port = 50050
+
+    [fedemeter]
+    base_url = "http://fedemeter-api.{{ .Release.Namespace }}.svc:8888/fedemeter-api/v2"
+    user = "fedemeter"
+    passwd = "$6$pOwGiawPSjz7qLaN$fnMXEhwzWnUw.bOKohdAhB5K5iCCOJJaZXxQkhzH4URsHP8qLTT4QeBPUKjlOAeAHbKsqlf.fyuL2pNRmR6oQD1"
+
+    [queue]
+    url = "amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672"
+
+    [tracing]
+    mode = "agent" # collector | agent | noop
+    collector_url = "http://federatorai-telemetry.{{ .Release.Namespace }}.svc:14268/api/traces"
+    agent_host = "127.0.0.1"
+    agent_port = "6831"
+    sample_ratio = 1.0
+
+    [planning]
+    general_cpu_upper_limit_factor = 4
+    general_cpu_lower_limit_factor = 1
+    general_mem_lower_limit_factor = 1.1
+    node_cpu_upper_limit_factor = 2
+    node_cpu_lower_limit_factor = 1.25
+    node_mem_lower_limit_factor = 1.1
+    cpu_req_percentile = 25
+    mem_req_percentile = 25
+
+    [hpa]
+    obs_pt_cnt = 5
+    margin = 1.25
+    apply_after = 60
+
+    [kafka]
+    algorithm = "pareto" # pcc | pareto
+    obs_pt_cnt = 5
+    pred_pt_cnt = 5
+    apply_after = 60
+      [kafka.pareto]
+      model_dir = "/var/lib/alameda/kafka/pareto"
+      latency_threshold = 5.0
+      cons_lag_weight = 0.5
+      max_history = 1000
+      max_valid_history = 100
+
+    [nginx]
+    model_dir = "/var/lib/alameda/nginx"
+    max_history = 1000
+    scp_factor = 0.5
+    dtw_dist_threshold = 0.7
+    ks_dist_threshold = 0.5
+    dtw_dist_pt_cnt = 20
+    long_term_pt_cnt = 60
+    short_term_pt_cnt = 2
+    kpi_bandwidth = 2
+    kpi_target = 0 # 0 means auto
+    error_ratio_threshold = 0.001
+    apply_after = 60
+kind: ConfigMap
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+  name: federatorai-recommender-worker-config
+  namespace: {{ .Release.Namespace }}

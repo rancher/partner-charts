@@ -1,0 +1,52 @@
+# Default values for csi-wekafsplugin.
+
+# -- Directory in root of file system where dynamic volumes are provisioned
+dynamicProvisionPath: "csi-volumes"
+# -- Name of the driver (and provisioner)
+csiDriverName: "csi.weka.io"
+# -- CSI driver version
+csiDriverVersion: &csiDriverVersion 0.8.4
+images:
+  # -- CSI liveness probe sidecar image URL
+  livenessprobesidecar: k8s.gcr.io/sig-storage/livenessprobe:v2.6.0
+  # -- CSI attacher sidecar image URL
+  attachersidecar: k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
+  # -- CSI provisioner sidecar image URL
+  provisionersidecar: k8s.gcr.io/sig-storage/csi-provisioner:v3.1.0
+  # -- CSI registrar sidercar
+  registrarsidecar: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.0
+  # -- CSI provisioner sidecar image URL
+  resizersidecar: k8s.gcr.io/sig-storage/csi-resizer:v1.4.0
+  # -- CSI driver main image URL
+  csidriver: quay.io/weka.io/csi-wekafs
+  # -- CSI driver tag
+  csidriverTag: *csiDriverVersion
+# -- Tolerations for all CSI driver components
+globalPluginTolerations: &globalPluginTolerations
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+# -- Tolerations for CSI controller component only (by default same as global)
+controllerPluginTolerations: *globalPluginTolerations
+# -- Tolerations for CSI node component only (by default same as global)
+nodePluginTolerations: *globalPluginTolerations
+# -- Optional nodeSelector for CSI plugin deployment on certain Kubernetes nodes only
+nodeSelector: {}
+# -- Log level of CSI plugin
+logLevel: 5
+# -- for migration of pre-CSI 0.7.0 volumes only, default API secret. Must reside in same namespace as the plugin
+legacyVolumeSecretName: ""
+# -- Optional CSI Plugin priorityClassName
+priorityClassName: ""
+# -- Support SELinux labeling for Persistent Volumes, may be either `off`, `mixed`, `enforced` (default off)
+#    In `enforced` mode, CSI node components will only start on nodes having a label `selinuxNodeLabel` below
+#    In `mixed` mode, separate CSI node components will be installed on SELinux-enabled and regular hosts
+#    In `off` mode, only non-SELinux-enabled node components will be run on hosts without label.
+#    WARNING: if SELinux is not enabled, volume provisioning and publishing might fail!
+selinuxSupport: off
+# -- This label must be set to "true" on SELinux-enabled Kubernetes nodes,
+#    e.g., to run the node server in secure mode on SELinux-enabled node, the node must have label
+#    csi.weka.io/selinux_enabled="true"
+selinuxNodeLabel: "csi.weka.io/selinux_enabled"
+# -- kubelet path, in cases Kubernetes is installed not in default folder
+kubeletPath: "/var/lib/kubelet"

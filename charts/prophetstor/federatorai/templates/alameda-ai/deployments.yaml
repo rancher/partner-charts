@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-ai
+  name: alameda-ai
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-ai
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-ai
+      name: alameda-ai
+    spec:
+      affinity: {{- include "render-value" ( dict "value" .Values.alamedaAi.affinity "context" .) | nindent 8 }}
+      containers:
+      - env:
+        - name: NAMESPACE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: DATAHUB_ADDRESS
+          value: alameda-datahub.{{ .Release.Namespace }}.svc:50050
+        - name: PREDICT_QUEUE_URL
+          value: amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672
+        - name: MAX_CPU_USAGE_PERCENTAGE
+          value: "0.5"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+          value: "1932735283"
+        image: {{ .Values.global.imageRegistry }}/alameda-ai:{{ .Values.global.imageTag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - /probe.sh
+            - --type=liveness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: alameda-ai-engine
+        ports:
+        - containerPort: 9091
+          name: ai-metrics
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /probe.sh
+            - --type=readiness
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 30
+        resources:
+        {{- if .Values.global.resourcesEnabled }}
+          {{ include "render-value" ( dict "value" .Values.alamedaAi.resources "context" .) | nindent 10 }}
+        {{- else }}
+          requests:
+            cpu: "2"
+            memory: 1000Mi
+        {{- end }}
+        volumeMounts:
+        - mountPath: /var/lib/alameda
+          name: alameda-ai-data-storage
+        - mountPath: /var/log/alameda
+          name: alameda-ai-log-storage
+        - mountPath: /etc/alameda/alameda-ai/config.yaml
+          name: alameda-ai-config
+          subPath: config.yaml
+      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      securityContext:
+        fsGroup: 1001
+        {{- include "render-value" ( dict "value" .Values.alamedaAi.podSecurityContext "context" .) | nindent 8 }}
+      serviceAccount: alameda-ai
+      serviceAccountName: alameda-ai
+      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaAi.tolerations "context" .) | nindent 6 }}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: alameda-ai-config
+        name: alameda-ai-config
+      - name: alameda-ai-data-storage
+        persistentVolumeClaim:
+          claimName: alameda-ai-data.pvc
+      - name: alameda-ai-log-storage
+        persistentVolumeClaim:
+          claimName: alameda-ai-log.pvc

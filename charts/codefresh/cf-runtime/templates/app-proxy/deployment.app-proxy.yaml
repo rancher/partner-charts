@@ -1,0 +1,58 @@
+{{ if .Values.appProxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cf-app-proxy.fullname" . }}
+  labels: {{- include "cf-app-proxy.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:  {{- include "cf-app-proxy.selectorLabels" . | nindent 6 }}
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels: {{- include "cf-app-proxy.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "cf-app-proxy.fullname" . }}
+      containers:
+        - name: app-proxy
+          image: {{ include "cf-app-proxy.docker-image" . }}
+          imagePullPolicy: Always
+          resources:
+{{ toYaml .Values.appProxy.resources | indent 12 }}
+          env:
+            {{- if .Values.appProxy.env }}
+            {{- range $key, $value := .Values.appProxy.env }}
+            - name: {{ $key }}
+              value: "{{ $value}}"
+            {{- end}}
+            {{- end}}
+            - name: PORT
+              value: "3000"
+            - name: CODEFRESH_HOST
+              value: {{ .Values.global.codefreshHost }}
+            {{ if .Values.appProxy.ingress.pathPrefix }}
+            - name: API_PATH_PREFIX
+              value: {{ .Values.appProxy.ingress.pathPrefix }}
+            {{ end }}
+            {{- if .Values.newRelicLicense }}
+            - name: NEWRELIC_LICENSE_KEY
+              value: {{ .Values.newRelicLicense }}
+          {{- end }}
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+{{end}}

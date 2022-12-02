@@ -1,0 +1,46 @@
+apiVersion: v1
+data:
+  config.yaml: |-
+    service_setting:
+      predictor: SARIMAX
+      max_cpu_usage_percentage: 0.5
+      worker_monitor:
+        interval_seconds: 30
+        update_num_worker_interval_seconds: 300
+      worker:
+        timeout_seconds: 60
+        rabbitmq_restart_times: 5
+        cache_primary_workload_metrics_data: True
+      log_level: info
+
+    predictor:
+      SARIMAX:
+        type: SARIMAX
+        module: .sarimax_predictor
+        class: SARIMAXPredictor
+        trained: True # model training and prediction are performed by the same process
+        saved: True   # no need for saving models
+        order:
+          p: [0,1,2]
+          q: [0,1,2]
+        seasonal_order:
+          P: [0,1,2]
+          D: [0,1]
+          Q: [0,1]
+        confidence_level: 99 # 90, 95, 98, 99
+        fft: True
+        minimal_sample_size: 100
+      VAR:
+        minimal_metric_size: 10
+      TF:
+        observation_scaled: True
+      CORRELATION_IMPACT:
+        minimal_metric_size: 10
+kind: ConfigMap
+metadata:
+  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+  name: alameda-ai-config
+  namespace: {{ .Release.Namespace }}
