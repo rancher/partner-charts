@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "asserts.uiFullname" . }}
+  labels: {{- include "asserts.uiLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ui.replicaCount }}
+  selector:
+    matchLabels: {{- include "asserts.uiSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "asserts.uiSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/ui/configmap.yaml") . | sha256sum }}
+      {{- with .Values.extraPodAnnotations }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+    {{- with .Values.ui.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "asserts.serviceAccountName" . }}
+      containers:
+        - name: {{ include "asserts.uiFullname" . }}
+
+          {{- with .Values.ui.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ui.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+          imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+              readOnly: true
+            {{- with .Values.ui.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.ui.service.port }}
+              protocol: TCP
+          {{- with .Values.ui.livenessProbe }}
+          livenessProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ui.readinessProbe }}
+          readinessProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ui.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.ui.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ui.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ui.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "asserts.uiFullname" . }}
+            items:
+              - key: default.conf
+                path: default.conf
+        {{- with .Values.ui.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
