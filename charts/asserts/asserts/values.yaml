@@ -3,9 +3,11 @@
 ## This will override any available parameters in this chart
 ## as well as dependent charts
 ##
-## Current available global parameters: storageClass
+## Current available global parameters: storageClass, secureCookie
 global:
   storageClass: ""
+  # set to true if oauth is configured on Asserts and exclusively using https
+  secureCookie: false
 
 nameOverride: ""
 fullnameOverride: ""
@@ -49,6 +51,12 @@ serviceMonitor:
       relabelings:
         - sourceLabels: [job]
           regex: "{{.Release.Name}}-server"
+          action: keep
+    - port: http
+      path: /authorization/actuator/prometheus
+      relabelings:
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-authorization"
           action: keep
     - port: http
       path: /metrics
@@ -125,6 +133,8 @@ pagerduty:
 server:
   nameOverride: ""
   fullnameOverride: ""
+
+  replicaCount: 1
 
   image:
     repository: asserts/asserts-server
@@ -205,12 +215,72 @@ server:
     ## When set, will use the existing PVC for persistence
     existingClaim: ""
 
+## Asserts authorization server configuration
+##
+authorization:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  replicaCount: 1
+
+  image:
+    repository: asserts/authorization
+    pullPolicy: IfNotPresent
+    ## Overrides the image tag whose default is the chart appVersion.
+    tag: v0.2.415
+
+  initContainers:
+    - name: wait-for-postgres
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Values.postgres.fullnameOverride}}.{{.Release.Namespace}}.{{.Values.clusterDomain}}:5432"
+        - "-t"
+        - "420"
+
+  imagePullSecrets: []
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {}
+
+  service:
+    type: ClusterIP
+    port: 8070
+
+  resources: {}
+
+  ## environment variables to add to the asserts-server pod
+  extraEnv: []
+
+  ## environment variables from secrets or configmaps to add to the asserts-server pod
+  extraEnvFrom: []
+
+  annotations: {}
+
+  extraLabels: {}
+
+  extraPodLabels: {}
+
+  extraPodAnnotations: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  extraVolumeMounts: []
+
+  extraVolumes: []
 
 ## Asserts ui configuration
 ##
 ui:
   nameOverride: ""
   fullnameOverride: ""
+
+  replicaCount: 1
 
   image:
     repository: asserts/asserts-ui

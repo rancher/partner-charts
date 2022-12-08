@@ -1,5 +1,13 @@
 # Datadog changelog
 
+## 3.5.1
+
+* Removing default value placeholder for the API Key in the values.yaml.
+
+## 3.5.0
+
+* Remove runtime compilation-related config values `enableKernelHeaderDownload` and `enableRuntimeCompiler` in the system-probe.
+
 ## 3.4.0
 
 * Add `datadog.systemProbe.btfPath` for mounting user-provided BTF files (see datadog-agent PRs #13962 and #14096 for more context).
