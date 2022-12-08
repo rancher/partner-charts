@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "asserts.authorizationFullname" . }}
+  labels: {{- include "asserts.authorizationLabels" . | nindent 4 }}
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 -}}
+    {{- end }}
+  {{- if .Values.annotations }}
+  annotations:
+  {{- toYaml .Values.annotations | nindent 4 -}}
+  {{- end }}
+data:
+  application.yml: |-
+    server:
+      port: {{.Values.authorization.service.port}}
+      max-http-header-size: 32KB
+      servlet:
+        context-path: "/authorization"
+
+    management:
+      endpoint:
+        health:
+          show-details: when-authorized
+        info:
+          enabled: true
+        prometheus:
+          enabled: true
+      endpoints:
+        web:
+          exposure:
+            include: info, health, prometheus
+
+    logging:
+      level:
+        root: INFO
+      pattern:
+        console: '%-5p %d{ISO8601,UTC}  %t  %c{0}  %mdc%n      %m%n%rEx'
+
+    tenant:
+      cache_seconds: 5
+      mode: config
+    cluster:
+      tenant:
+        selector: config
+
+    asserts:
+      identityprovider:
+        tenant: {{ include "asserts.tenant" . }}
+      standalone:
+        tenant:
+          enabled: 'true'
+          name: Asserts Bootstrap
+          grafana:
+            admin_password: "${GRAFANA_ADMIN_PASSWORD}"
+            orgId: '1'
+            dataSource: Prometheus
+            password: "${GRAFANA_ADMIN_PASSWORD}"
+            username: admin
+            url: http://{{.Release.Name}}-grafana.{{include "domain" .}}:{{.Values.grafana.service.port}}
+            admin_username: admin
+          tsdb:
+            tsdbUrl: http://{{.Release.Name}}-promxyruler.{{include "domain" .}}:8082
+            password: ''
+            username: ''
+            accountId: ''
+          graph:
+            server: {{.Values.redisgraph.fullnameOverride}}-master.{{include "domain" .}}
+            port: '6379'
+            sentinel_mode: {{ ternary "'1'" "'0'" (.Values.redisgraph.sentinel.enabled)}}
+            master_name: mymaster
+            sentinels: {{ include "asserts.graphSentinelHosts" . }}
+          search:
+            server: {{.Values.redisearch.fullnameOverride}}-master.{{include "domain" .}}
+            port: '6379'
+            sentinel_mode: {{ ternary "'1'" "'0'" (.Values.redisearch.sentinel.enabled)}}
+            master_name: mymaster
+            sentinels: {{ include "asserts.searchSentinelHosts" . }}
+      tsdb:
+        url: http://{{.Release.Name}}-tsdb-server.{{include "domain" .}}:8428
+      oauth2:
+        cookie:
+          domain: ""
+          secure: {{ .Values.global.secureCookie }}
+      security:
+        hmac:
+          currentSymmetricKey: muS5uSK2ZjexXhbaqNm18ktqaCAICI51
+        assertsReadOnlyRoleName: ASSERTS
+        oauth2:
+          internal:
+            enabled: false
+    store:
+      owner:
+        datasource:
+          hikari:
+            maximum-pool-size: 1
+          url: jdbc:postgresql://{{.Values.postgres.fullnameOverride}}.{{include "domain" .}}:5432/asserts
+          username: postgres
+          password: ${POSTGRES_RDB_PASSWORD}
+      user:
+        datasource:
+          url: ${store.owner.datasource.url}
+          username: tenant_user
+          password: ${POSTGRES_RDB_PASSWORD}
+
+    spring:
+      jackson:
+        # exclude nulls from api responses
+        default-property-inclusion: NON_NULL
+      jpa:
+        database: POSTGRESQL
+        open-in-view: false
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQL92Dialect
+            physical_naming_strategy: org.springframework.boot.orm.jpa.hibernate.SpringPhysicalNamingStrategy
+            implicit_naming_strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+      liquibase:
+        enabled: true
+        changeLog: classpath:/db/changelog/db.changelog-master.yaml
+        parameters:
+          database: asserts
+          schema: public
+          username: ${store.user.datasource.username}
+          password: ${store.user.datasource.password}
+          bootstrap_enabled: "true"
+

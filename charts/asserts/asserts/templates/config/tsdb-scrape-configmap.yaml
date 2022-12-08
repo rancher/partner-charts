@@ -227,6 +227,109 @@ data:
         action: replace
       {{- end }}
 
+    - job_name: {{ .Release.Name }}-authorization
+      kubernetes_sd_configs:
+      - namespaces:
+          names:
+          - {{ .Release.Namespace }}
+        role: endpoints
+      honor_timestamps: true
+      metrics_path: /authorization/actuator/prometheus
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+        separator: ;
+        regex: asserts
+        replacement: $1
+        action: keep
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_instance]
+        separator: ;
+        regex: {{ .Release.Name }}
+        replacement: $1
+        action: keep
+      - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+        separator: ;
+        regex: authorization
+        replacement: $1
+        action: keep
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        separator: ;
+        regex: http
+        replacement: $1
+        action: keep
+      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
+        separator: ;
+        regex: Node;(.*)
+        target_label: node
+        replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
+        separator: ;
+        regex: Pod;(.*)
+        target_label: pod
+        replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_namespace]
+        separator: ;
+        regex: (.*)
+        target_label: namespace
+        replacement: $1
+        action: replace
+      - source_labels: [__meta_kubernetes_service_name]
+        separator: ;
+        regex: (.*)
+        target_label: service
+        replacement: $1
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_name]
+        separator: ;
+        regex: (.*)
+        target_label: pod
+        replacement: $1
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        separator: ;
+        regex: (.*)
+        target_label: container
+        replacement: $1
+        action: replace
+      - source_labels: [__meta_kubernetes_service_name]
+        separator: ;
+        regex: (.*)
+        target_label: job
+        replacement: ${1}
+        action: replace
+      - separator: ;
+        regex: (.*)
+        target_label: endpoint
+        replacement: http
+        action: replace
+      - separator: ;
+        regex: (.*)
+        target_label: endpoint
+        replacement: http
+        action: replace
+      # add tenant, asserts_env, & asserts_site
+      # to all remaining values metrics if applicable
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
+      {{- if .Values.assertsClusterEnv }}
+      - separator: ;
+        regex: (.*)
+        target_label: asserts_env
+        replacement: {{ .Values.assertsClusterEnv }}
+        action: replace
+      {{- end }}
+      {{- if .Values.assertsClusterSite }}
+      - separator: ;
+        regex: (.*)
+        target_label: asserts_site
+        replacement: {{ .Values.assertsClusterSite }}
+        action: replace
+      {{- end }}
+
     - job_name: {{ .Release.Name }}-tsdb-server
       kubernetes_sd_configs:
       - namespaces:

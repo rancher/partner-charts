@@ -22,7 +22,7 @@ This chart installs the following:
 - KubeSlice Manager
 - Kubeslice dashboard for user interactions.
 
-📖 For step-by-step instructions, go to [documentation](https://docs.avesha.io/documentation/enterprise/0.1.0/deployment-partners/deploying-kubeslice-on-rancher/).
+📖 For step-by-step instructions, go to [documentation](https://docs.avesha.io/documentation/enterprise/0.2.0/deployment-partners/deploying-kubeslice-on-rancher/).
 
 This chart will install our enterprise edition of KubeSlice. 
 
