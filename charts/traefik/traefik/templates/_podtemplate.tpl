@@ -117,10 +117,17 @@
           {{- range $name, $config := .Values.ports }}
           {{- if $config }}
           - "--entrypoints.{{$name}}.address=:{{ $config.port }}/{{ default "tcp" $config.protocol | lower }}"
+          {{- with $config.asDefault }}
+          {{- if eq ($.Values.experimental.v3.enabled | toString) "false" }}
+            {{- fail "ERROR: Default entrypoints are only available on Traefik v3. Please set `experimental.v3.enabled` to true and update `image.tag` to `v3.0`." }}
+          {{- end }}
+          - "--entrypoints.{{$name}}.asDefault={{ . }}"
+          {{- end }}
           {{- end }}
           {{- end }}
           - "--api.dashboard=true"
           - "--ping=true"
+
           {{- if .Values.metrics }}
           {{- with .Values.metrics.datadog }}
           - "--metrics.datadog=true"
@@ -143,6 +150,7 @@
           - "--metrics.datadog.addServicesLabels=false"
           {{- end }}
           {{- end }}
+
           {{- with .Values.metrics.influxdb }}
           - "--metrics.influxdb=true"
           - "--metrics.influxdb.address={{ .address }}"
@@ -175,6 +183,7 @@
           - "--metrics.influxdb.addServicesLabels=false"
           {{- end }}
           {{- end }}
+
           {{- with .Values.metrics.influxdb2 }}
           - "--metrics.influxdb2=true"
           - "--metrics.influxdb2.address={{ .address }}"
@@ -238,6 +247,58 @@
           {{- end }}
 
           {{- end }}
+
+          {{- with .Values.metrics.openTelemetry }}
+          {{- if eq ($.Values.experimental.v3.enabled | toString) "false" }}
+            {{- fail "ERROR: OpenTelemetry features are only available on Traefik v3. Please set `experimental.v3.enabled` to true and update `image.tag` to `v3.0`." }}
+          {{- end }}
+          - "--metrics.openTelemetry=true"
+          - "--metrics.openTelemetry.address={{ .address }}"
+          {{- with .addEntryPointsLabels }}
+          - "--metrics.openTelemetry.addEntryPointsLabels={{ . }}"
+          {{- end }}
+          {{- with .addRoutersLabels }}
+          - "--metrics.openTelemetry.addRoutersLabels={{ . }}"
+          {{- end }}
+          {{- with .addServicesLabels }}
+          - "--metrics.openTelemetry.addServicesLabels={{ . }}"
+          {{- end }}
+          {{- with .explicitBoundaries }}
+          - "--metrics.openTelemetry.explicitBoundaries={{ join "," . }}"
+          {{- end }}
+          {{- with .headers }}
+          {{- range $name, $value := . }}
+          - "--metrics.openTelemetry.headers.{{ $name }}={{ $value }}"
+          {{- end }}
+          {{- end }}
+          {{- with .insecure }}
+          - "--metrics.openTelemetry.insecure={{ . }}"
+          {{- end }}
+          {{- with .pushInterval }}
+          - "--metrics.openTelemetry.pushInterval={{ . }}"
+          {{- end }}
+          {{- with .path }}
+          - "--metrics.openTelemetry.path={{ . }}"
+          {{- end }}
+          {{- with .tls }}
+          {{- with .ca }}
+          - "--metrics.openTelemetry.tls.ca={{ . }}"
+          {{- end }}
+          {{- with .cert }}
+          - "--metrics.openTelemetry.tls.cert={{ . }}"
+          {{- end }}
+          {{- with .key }}
+          - "--metrics.openTelemetry.tls.key={{ . }}"
+          {{- end }}
+          {{- with .insecureSkipVerify }}
+          - "--metrics.openTelemetry.tls.insecureSkipVerify={{ . }}"
+          {{- end }}
+          {{- end }}
+          {{- with .grpc }}
+          - "--metrics.openTelemetry.grpc={{ . }}"
+          {{- end }}
+          {{- end }}
+
           {{- if .Values.tracing }}
           {{- if .Values.tracing.instana }}
           - "--tracing.instana=true"
