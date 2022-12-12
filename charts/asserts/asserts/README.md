@@ -22,7 +22,7 @@ This chart bootstraps an [Asserts](https://www.asserts.ai) deployment on a [Kube
 ```bash
 helm repo add asserts https://asserts.github.io/helm-charts
 helm repo update
-helm install asserts asserts/asserts -n asserts --create-namespace
+helm upgrade --install asserts asserts/asserts -n asserts --create-namespace
 ```
 
 ### You ARE NOT running Prometheus-Operator in the same cluster as where Asserts is installed
@@ -51,21 +51,24 @@ serviceMonitor:
 ```bash
 helm repo add asserts https://asserts.github.io/helm-charts
 helm repo update
-helm install asserts asserts/asserts -n asserts -f values.yaml --create-namespace
+helm upgrade --install asserts asserts/asserts -n asserts -f values.yaml --create-namespace
 ```
+
+When Asserts is spinning up for the first time, it usually takes about 3-4 minutes
+but could take longer depending on the hardware resources allocated (e.g. a kind cluster).
 
 ## Verify and Access
 
 Once all containers are initialized and running:
 
 ```bash
-kubectl get pods -l app.kubernetes.io/instance=asserts
+kubectl get pods -l app.kubernetes.io/instance=asserts -n asserts
 ```
 
 You can then login to the asserts-ui by running:
 
 ```bash
-kubectl port-forward svc/asserts-ui 8080
+kubectl port-forward svc/asserts-ui 8080 -n asserts
 ```
 
 And opening your browser to [http://localhost:8080](http://localhost:8080)
@@ -82,7 +85,7 @@ and query by following [these instructions](https://docs.asserts.ai/integrations
 To uninstall/delete the `asserts` deployment:
 
 ```console
-helm delete asserts
+helm delete asserts -n asserts
 ```
 
 The command removes all the Kubernetes components but PVC's associated with the chart and deletes the release.
@@ -90,7 +93,7 @@ The command removes all the Kubernetes components but PVC's associated with the 
 To delete the PVC's associated with `asserts`:
 
 ```bash
-kubectl delete pvc -l app.kubernetes.io/instance=asserts
+kubectl delete pvc -l app.kubernetes.io/instance=asserts -n asserts
 ```
 
 > **Note**: Deleting the PVC's will delete all asserts related data as well.
