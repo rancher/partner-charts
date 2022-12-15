@@ -9,6 +9,10 @@ Expand the name of the chart.
     {{- printf "%s-%s" (include "cf-runtime.fullname" .) "volume-provisioner" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "cf-vp.volumeCleanupCronName" -}}
+    {{- printf "%s-%s" (include "cf-runtime.fullname" .) "volume-cleanup" | trunc 52 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "cf-vp.provisionerName" -}}
     {{- printf "%s-%s" (include "cf-runtime.fullname" .) "volume-provisioner" | trunc 63 | trimSuffix "-" }}
 {{- end }}

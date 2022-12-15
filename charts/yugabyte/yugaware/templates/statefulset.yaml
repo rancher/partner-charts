@@ -25,6 +25,9 @@ spec:
 {{- end }}
       labels:
         app: {{ .Release.Name }}-yugaware
+{{- if .Values.yugaware.pod.labels }}                                                           
+{{ toYaml .Values.yugaware.pod.labels | indent 8 }}                                             
+{{- end }}
     spec:
       serviceAccountName: {{ .Release.Name }}
       imagePullSecrets:
@@ -35,6 +38,30 @@ spec:
         {{- if (semverCompare ">=1.20-x" .Capabilities.KubeVersion.Version) }}
         fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
         {{- end }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8}}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- end }}
+      {{- if .Values.zoneAffinity }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: failure-domain.beta.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
       {{- end }}
       volumes:
         - name: yugaware-storage
@@ -88,6 +115,12 @@ spec:
           secret:
             secretName: {{ .Release.Name }}-yugaware-tls-cert
         {{- end }}
+        - name: pg-upgrade-11-to-14
+          configMap:
+            name: {{ .Release.Name }}-yugaware-pg-upgrade
+            items:
+              - key: pg-upgrade-11-to-14.sh
+                path: pg-upgrade-11-to-14.sh
       initContainers:
         - image: {{ include "full_yugaware_image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -118,11 +151,31 @@ spec:
           - name: init-container-script
             mountPath: /init-container
           {{- end }}
+        - image: {{ include "full_image" (dict "containerName" "postgres-upgrade" "root" .) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: postgres-upgrade
+          command:
+          - 'bash'
+          - '-c'
+          - /bin/bash /pg_upgrade_11_to_14/pg-upgrade-11-to-14.sh;
+          volumeMounts:
+          - name: yugaware-storage
+            mountPath: /var/lib/postgresql/11/data
+            subPath: postgres_data/pgdata
+          - name: yugaware-storage
+            mountPath: /var/lib/postgresql/14/data
+            subPath: postgres_data_14/pgdata
+          - name: pg-upgrade-11-to-14
+            mountPath: /pg_upgrade_11_to_14
+          - name: yugaware-storage
+            mountPath: /pg_upgrade_logs
+            subPath: postgres_data_14
       containers:
         {{ if not .Values.postgres.external.host }}
         - name: postgres
           image: {{ include "full_image" (dict "containerName" "postgres" "root" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-c", "huge_pages=off"]
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -153,7 +206,7 @@ spec:
           volumeMounts:
             - name: yugaware-storage
               mountPath: /var/lib/postgresql/data
-              subPath: postgres_data
+              subPath: postgres_data_14
         {{ end }}
         - name: prometheus
           image: {{ include "full_image" (dict "containerName" "prometheus" "root" .) }}
@@ -195,6 +248,9 @@ spec:
             - --web.enable-admin-api
             - --web.enable-lifecycle
             - --storage.tsdb.retention.time={{ .Values.prometheus.retentionTime }}
+            - --query.max-concurrency={{ .Values.prometheus.queryConcurrency }}
+            - --query.max-samples={{ .Values.prometheus.queryMaxSamples }}
+            - --query.timeout={{ .Values.prometheus.queryTimeout }}
           ports:
             - containerPort: 9090
         - name: yugaware
@@ -253,6 +309,9 @@ spec:
           - name: yugaware-storage
             mountPath: /opt/yugabyte/releases/
             subPath: releases
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/ybc/releases/
+            subPath: ybc_releases
           # old path for backward compatibility
           - name: yugaware-storage
             mountPath: /opt/releases/
