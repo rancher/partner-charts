@@ -8,7 +8,7 @@ image:
   # including the yugaware image
 
   repository: quay.io/yugabyte/yugaware
-  tag: 2.14.5.0-b18
+  tag: 2.16.0.0-b90
   pullPolicy: IfNotPresent
   pullSecret: yugabyte-k8s-pull-secret
   ## Docker config JSON File name
@@ -22,12 +22,17 @@ image:
 
   postgres:
     registry: ""
-    tag: 11.5
+    tag: '14.4'
     name: postgres
+
+  postgres-upgrade:
+    registry: ""
+    tag: "11-to-14"
+    name: tianon/postgres-upgrade
 
   prometheus:
     registry: ""
-    tag: v2.37.0
+    tag: v2.39.0
     name: prom/prometheus
 
   nginx:
@@ -53,6 +58,7 @@ yugaware:
     type: "LoadBalancer"
   pod:
     annotations: {}
+    labels: {}
   health:
     username: ""
     password: ""
@@ -64,7 +70,7 @@ yugaware:
   enableProxyMetricsAuth: true
   ## List of additional alowed CORS origins in case of complex rev-proxy
   additionAllowedCorsOrigins: []
-  proxyEndpointTimeoutMs: 1 minute
+  proxyEndpointTimeoutMs: 3 minute
   ## Enables features specific for cloud deployments
   cloud:
     enabled: false
@@ -145,6 +151,8 @@ nginx:
       cpu: 0.25
       memory: 300Mi
 
+  proxyReadTimeoutSec: 600
+
 rbac:
   ## Set this to false if you don't have enough permissions to create
   ## ClusterRole and Binding, for example an OpenShift cluster. When
@@ -160,11 +168,41 @@ ocpCompatibility:
 # Extra containers to add to the pod.
 sidecars: []
 
+## Following two controls for placement of pod - nodeSelector and AZ affinity.
+## Note: Remember to also provide a yugaware.StorageClass that has a olumeBindingMode of
+## WaitForFirstConsumer so that the PVC is created in the right topology visible to this pod.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+## eg.
+## nodeSelector:
+##   topology.kubernetes.io/region: us-west1
+nodeSelector: {}
+
+## Affinity to a particular zone for the pod.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+## eg.
+## nodeAffinity:
+##   requiredDuringSchedulingIgnoredDuringExecution:
+##     nodeSelectorTerms:
+##       - matchExpressions:
+##         - key: failure-domain.beta.kubernetes.io/zone
+##           operator: In
+##           values:
+##           - us-west1-a
+##           - us-west1-b
+zoneAffinity: {}
+
+## The tolerations that the pod should have.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+tolerations: []
+
 ## Don't want prometheus to scrape nodes and evaluate alert rules in some cases (for example - cloud).
 prometheus:
   scrapeNodes: true
   evaluateAlertRules: true
   retentionTime: 15d
+  queryConcurrency: 20
+  queryMaxSamples: 5000000
+  queryTimeout: 30s
 
   resources:
     requests:

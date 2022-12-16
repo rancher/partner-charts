@@ -1,5 +1,6 @@
 # What's Changed
 
-### New Features
-- [f4cb189](https://github.com/sysdiglabs/charts/commit/f4cb189afba6833fd458f99dcfcc0121f9d9dfa2)]: unify changelog headers ([#787](https://github.com/sysdiglabs/charts/issues/787))
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.5.12...sysdig-1.15.61
+### Chores
+- **sysdig** [0e014c2](https://github.com/sysdiglabs/charts/commit/0e014c2a2ebd285edd0e9c45422df6d98827cfc4): bump agent version to 12.10.0 ([#814](https://github.com/sysdiglabs/charts/issues/814))
+
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.5.18...sysdig-1.15.62

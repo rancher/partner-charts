@@ -180,7 +180,7 @@ data:
 {{- end }}
       proxy_http_version 1.1;
       proxy_set_header X-Real-IP  $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header Host $host;
 
@@ -198,6 +198,25 @@ data:
         client_max_body_size {{ .Values.nginx.upload_size }};
       }
     }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-pg-upgrade
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  pg-upgrade-11-to-14.sh: |
+    #!/bin/bash
+
+    if [ ! "$(ls -A /var/lib/postgresql/14/data)" ] && [ "$(ls -A /var/lib/postgresql/11/data)" ];
+    then
+      docker-upgrade pg_upgrade >> /pg_upgrade_logs/pg_upgrade_11_to_14.log;
+      echo "host all all all scram-sha-256" >> /var/lib/postgresql/14/data/pg_hba.conf;
+    fi
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -225,6 +244,8 @@ data:
       fastcgi_temp_path /tmp/fastcgi_temp;
       uwsgi_temp_path /tmp/uwsgi_temp;
       scgi_temp_path /tmp/scgi_temp;
+
+      proxy_read_timeout {{ .Values.nginx.proxyReadTimeoutSec }};
 
       include       /etc/nginx/mime.types;
       default_type  application/octet-stream;
@@ -328,6 +349,13 @@ data:
           target_label: __metrics_path__
           replacement: /api/v1/nodes/${1}/proxy/metrics
         metric_relabel_configs:
+          # Only keep the metrics which we care about
+          - source_labels: ["__name__"]
+            regex: "kubelet_volume_stats_used_bytes|kubelet_volume_stats_capacity_bytes"
+            action: keep
+          - source_labels: ["persistentvolumeclaim"]
+            regex: "(.*)-yb-(.*)"
+            action: keep
           # Save the name of the metric so we can group_by since we cannot by __name__ directly...
           - source_labels: ["__name__"]
             regex: "(.*)"
@@ -346,6 +374,10 @@ data:
         static_configs:
         - targets: ['kube-state-metrics.kube-system.svc.{{.Values.domainName}}:8080']
         metric_relabel_configs:
+          # Only keep the metrics which we care about
+          - source_labels: ["__name__"]
+            regex: "kube_pod_container_resource_requests_cpu_cores"
+            action: keep
           # Save the name of the metric so we can group_by since we cannot by __name__ directly...
           - source_labels: ["__name__"]
             regex: "(.*)"
@@ -359,6 +391,10 @@ data:
             regex: "(.*)"
             target_label: "container_name"
             replacement: "$1"
+          # Keep metrics from YugabyteDB pods, discard everything else
+          - source_labels: ["pod_name"]
+            regex: "(.*)yb-(.*)"
+            action: keep
 
       - job_name: 'kubernetes-cadvisor'
 
@@ -381,6 +417,10 @@ data:
           target_label: __metrics_path__
           replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
         metric_relabel_configs:
+          # Only keep the metrics which we care about
+          - source_labels: ["__name__"]
+            regex: "container_cpu_usage_seconds_total|container_memory_working_set_bytes"
+            action: keep
           # Save the name of the metric so we can group_by since we cannot by __name__ directly...
           - source_labels: ["__name__"]
             regex: "(.*)"
@@ -394,6 +434,10 @@ data:
             regex: "(.*)"
             target_label: "container_name"
             replacement: "$1"
+          # Keep metrics from YugabyteDB pods, discard everything else
+          - source_labels: ["pod_name"]
+            regex: "(.*)yb-(.*)"
+            action: keep
 
       {{- end }}
 

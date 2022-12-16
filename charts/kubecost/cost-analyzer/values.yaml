@@ -90,14 +90,14 @@ global:
         #   threshold: 5              # Send Alert if health scores changes by 5 or more
 
         # Kubecost Health Diagnostic
-        # - type: diagnostic          # Alerts when kubecost is is unable to compute costs - ie: Prometheus unreachable
+        # - type: diagnostic          # Alerts when kubecost is unable to compute costs - ie: Prometheus unreachable
         #   window: 10m
 
     alertmanager: # Supply an alertmanager FQDN to receive notifications from the app.
       enabled: false # If true, allow kubecost to write to your alertmanager
       fqdn: http://cost-analyzer-prometheus-server.default.svc #example fqdn. Ignored if prometheus.enabled: true
 
-   # Set saved report(s) accessible from reports.html
+   # Set saved Cost Allocation report(s) accessible from /reports
    # Ref: http://docs.kubecost.com/saved-reports
   savedReports:
     enabled: false # If true, overwrites report parameters set through UI
@@ -129,7 +129,7 @@ global:
         accumulate: true # entire window resolution
         filters: [] # if no filters, specify empty array
 
-  # Set saved report(s) accessible from reports.html
+  # Set saved Asset report(s) accessible from /reports
   # Ref: http://docs.kubecost.com/saved-reports
   assetReports:
     enabled: false # If true, overwrites report parameters set through UI
@@ -141,6 +141,20 @@ global:
       filters:
         - property: "cluster"
           value: "cluster-one"
+
+  # Set saved Advanced report(s) accessible from /reports
+  # Ref: http://docs.kubecost.com/saved-reports
+  advancedReports:
+    enabled: false # If true, overwrites report parameters set through UI
+    reports:
+    - title: "Example Advanced Report 0"
+      window: "7d"
+      aggregateBy: "namespace"
+      filters:
+        - property: "cluster"
+          value: "cluster-one"
+      cloudBreakdown: "service"
+      cloudJoin: "label:kubernetes_namespace"
 
   podAnnotations: {}
     # iam.amazonaws.com/role: role-arn
@@ -218,6 +232,8 @@ kubecostFrontend:
   # extraEnv:
   # - name: NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE
   #   value: "1"
+  # securityContext:
+  #   readOnlyRootFilesystem: true
   resources:
     requests:
       cpu: "10m"
@@ -304,6 +320,8 @@ kubecostModel:
   # extraEnv:
   # - name: SOME_VARIABLE
   #   value: "some_value"
+  # securityContext:
+  #   readOnlyRootFilesystem: true
   # Enables the emission of the kubecost_cloud_credit_total and
   # kubecost_cloud_expense_total metrics
   outOfClusterPromMetricsEnabled: false
@@ -488,7 +506,7 @@ prometheus:
     #   memory: 512Mi
     global:
       scrape_interval: 1m
-      scrape_timeout: 10s
+      scrape_timeout: 60s
       evaluation_interval: 1m
       external_labels:
         cluster_id: cluster-one # Each cluster should have a unique ID
@@ -570,7 +588,7 @@ networkCosts:
   enabled: false
   podSecurityPolicy:
     enabled: false
-  image: gcr.io/kubecost1/kubecost-network-costs:v16.2
+  image: gcr.io/kubecost1/kubecost-network-costs:v16.3
   imagePullPolicy: Always
   updateStrategy:
     type: RollingUpdate
@@ -582,13 +600,18 @@ networkCosts:
   # Traffic Logging will enable logging the top 5 destinations for each source
   # every 30 minutes.
   trafficLogging: true
+
   # Port will set both the containerPort and hostPort to this value.
   # These must be identical due to network-costs being run on hostNetwork
   port: 3001
-  resources: {}
-    #requests:
-    #  cpu: "50m"
-    #  memory: "20Mi"
+  # this daemonset can use significant resources on large clusters: https://guide.kubecost.com/hc/en-us/articles/4407595973527-Network-Traffic-Cost-Allocation
+  resources:
+    limits: # remove the limits by setting limits: {}
+      cpu: 500m # can be less, will depend on cluster size
+      # memory: it is not recommended to set a memory limit
+    requests:
+     cpu: 50m
+     memory: 20Mi
   extraArgs: []
   config:
     # Configuration for traffic destinations, including specific classification
@@ -687,8 +710,12 @@ kubecostDeployment:
 # Kubecost Cluster Controller for Right Sizing and Cluster Turndown
 clusterController:
   enabled: false
-  image: gcr.io/kubecost1/cluster-controller:v0.1.0
+  image: gcr.io/kubecost1/cluster-controller:v0.5.0
   imagePullPolicy: Always
+  kubescaler:
+    # If true, will cause all (supported) workloads to be have their requests
+    # automatically right-sized on a regular basis.
+    defaultResizeAll: false
 #  fqdn: kubecost-cluster-controller.kubecost.svc.cluster.local:9731
 
 reporting:
@@ -769,12 +796,12 @@ awsstore:
 
 federatedETL:
   # federatedCluster indicates whether this cluster should push data to the Federated store
-  federatedCluster: false 
+  federatedCluster: false
   # primaryCluster indicates whether this cluster should load data from the combined section of the Federated store
-  primaryCluster: false 
+  primaryCluster: false
   # redirectS3Backup changes the dir of S3 backup to the Federated combined store, for using Thanos-federated data in the Federated ETL
   # Note S3 backup should be enabled separately for this.
-  redirectS3Backup: false 
+  redirectS3Backup: false
   # useExistingS3Config will attempt to use existing object-store.yaml configs for S3 backup/Thanos as config for the Federated store
   useExistingS3Config: false
   federator:
@@ -875,7 +902,6 @@ federatedETL:
 #  azureTenantID: 72faf3ff-7a3f-4597-b0d9-7b0b201bb23a
 #  azureClientPassword: fake key # Only use if your values.yaml are stored encrypted. Otherwise provide an existing secret via serviceKeySecretName
 #  azureOfferDurableID: "MS-AZR-0003p"
-#  azureStorageSecretName: "azure-storage-config" # Name of Kubernetes Secret where Azure Storage Configuration is stored
 #  discount: "" # percentage discount applied to compute
 #  negotiatedDiscount: "" # custom negotiated cloud provider discount
 #  defaultIdle: false
