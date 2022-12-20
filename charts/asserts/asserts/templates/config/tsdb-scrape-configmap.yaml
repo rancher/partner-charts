@@ -122,7 +122,7 @@ data:
       scrape_interval: 30s
       scrape_timeout: 15s
 
-    {{- if or (not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1")) (not (.Values.serviceMonitor.enabled)) }}
+    {{- if and (not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1")) (.Values.selfScrape) }}
     ### asserts services ###
     - job_name: {{ .Release.Name }}-server
       kubernetes_sd_configs:
@@ -153,17 +153,24 @@ data:
         regex: http
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -205,27 +212,17 @@ data:
         target_label: endpoint
         replacement: http
         action: replace
-      # add tenant, asserts_env, & asserts_site
-      # to all remaining values metrics if applicable
+      # add tenant & asserts_env labels
       - separator: ;
         regex: (.*)
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{ .Release.Name }}-authorization
       kubernetes_sd_configs:
@@ -256,17 +253,24 @@ data:
         regex: http
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -315,20 +319,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{ .Release.Name }}-tsdb-server
       kubernetes_sd_configs:
@@ -354,17 +355,24 @@ data:
         regex: http
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -408,20 +416,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{ .Release.Name }}-grafana
       kubernetes_sd_configs:
@@ -447,17 +452,24 @@ data:
         regex: http
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -501,20 +513,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{ .Release.Name }}-alertmanager
       kubernetes_sd_configs:
@@ -540,17 +549,24 @@ data:
         regex: http
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -594,20 +610,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{.Values.postgres.fullnameOverride}}
       kubernetes_sd_configs:
@@ -638,17 +651,24 @@ data:
         regex: http-metrics
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -692,20 +712,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{ .Release.Name }}-promxyruler
       kubernetes_sd_configs:
@@ -726,17 +743,24 @@ data:
         regex: {{ .Release.Name }}
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -780,20 +804,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{ .Release.Name }}-promxyuser
       kubernetes_sd_configs:
@@ -814,17 +835,24 @@ data:
         regex: {{ .Release.Name }}
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -868,20 +896,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{.Values.redisgraph.fullnameOverride}}
       kubernetes_sd_configs:
@@ -912,17 +937,24 @@ data:
         regex: http-metrics
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -966,20 +998,17 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
 
     - job_name: {{.Values.redisearch.fullnameOverride}}
       kubernetes_sd_configs:
@@ -1010,17 +1039,24 @@ data:
         regex: http-metrics
         replacement: $1
         action: keep
-      - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
-        separator: ;
-        regex: Node;(.*)
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        regex: (.*)
         target_label: node
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_controller_kind]
+        regex: (.*)
+        target_label: created_by_kind
         action: replace
       - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
         separator: ;
         regex: Pod;(.*)
         target_label: pod
         replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.*)
+        target_label: pod_ip
         action: replace
       - source_labels: [__meta_kubernetes_namespace]
         separator: ;
@@ -1064,19 +1100,16 @@ data:
         target_label: tenant
         replacement: {{ include "asserts.tenant" . }}
         action: replace
-      {{- if .Values.assertsClusterEnv }}
+      # add tenant & asserts_env labels
+      - separator: ;
+        regex: (.*)
+        target_label: tenant
+        replacement: {{ include "asserts.tenant" . }}
+        action: replace
       - separator: ;
         regex: (.*)
         target_label: asserts_env
-        replacement: {{ .Values.assertsClusterEnv }}
+        replacement: asserts
         action: replace
-      {{- end }}
-      {{- if .Values.assertsClusterSite }}
-      - separator: ;
-        regex: (.*)
-        target_label: asserts_site
-        replacement: {{ .Values.assertsClusterSite }}
-        action: replace
-      {{- end }}
       {{- end }}
 {{- end }}
