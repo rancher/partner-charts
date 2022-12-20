@@ -184,6 +184,15 @@ spec:
     protocol: TCP
   {{- end }}
   {{- if (hasKey . "stream") }}
+    {{- $defaultProtocol := "TCP" }}
+    {{- if (hasSuffix "udp-proxy" .serviceName) }}
+      {{- $defaultProtocol = "UDP" }}
+    {{- end }}
+    {{- range $index, $streamEntry := .stream }}
+      {{- if (not (hasKey $streamEntry "protocol")) }}
+        {{- $_ := set $streamEntry "protocol" $defaultProtocol }}
+      {{- end }}
+    {{- end }}
   {{- range .stream }}
   - name: stream{{ if (eq (default "TCP" .protocol) "UDP") }}udp{{ end }}-{{ .containerPort }}
     port: {{ .servicePort }}
@@ -1365,5 +1374,15 @@ networking.k8s.io/v1
 networking.k8s.io/v1beta1
 {{- else -}}
 extensions/v1beta1
+{{- end -}}
+{{- end -}}
+
+{{- define "kong.autoscalingVersion" -}}
+{{- if (.Capabilities.APIVersions.Has "autoscaling/v2") -}}
+autoscaling/v2
+{{- else if (.Capabilities.APIVersions.Has "autoscaling/v2beta2") -}}
+autoscaling/v2beta2
+{{- else -}}
+autoscaling/v1
 {{- end -}}
 {{- end -}}
