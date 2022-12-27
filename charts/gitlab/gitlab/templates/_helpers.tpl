@@ -527,8 +527,8 @@ Constructs busybox image name.
     # be used.
 */}}
 {{- if kindIs "map" .local.image }}
-{{- $image := default .global.image.repository .local.image.repository }}
-{{- $tag := default .global.image.tag .local.image.tag }}
+{{- $image := default .global.busybox.image.repository .local.image.repository }}
+{{- $tag := default .global.busybox.image.tag .local.image.tag }}
 {{- printf "%s:%s" $image $tag -}}
 {{- else }}
 {{- printf "DEPRECATED:DEPRECATED" -}}

@@ -68,8 +68,8 @@ codefresh.io/application: pv-cleanup
 
 {{- define "cf-vp.docker-image-volume-utils" -}}
 {{- if ne .Values.dockerRegistry ""}}
-{{- .Values.dockerRegistry }}/codefresh/dind-volume-utils:1.29.0
-{{- else }}codefresh/dind-volume-utils:1.29.0
+{{- .Values.dockerRegistry }}/codefresh/dind-volume-utils:1.29.2
+{{- else }}codefresh/dind-volume-utils:1.29.2
 {{- end}}
 {{- end }}
 

@@ -74,15 +74,15 @@ Version helpers for the image tag
 {{- define "s3gw.image" -}}
 {{- $defaulttag := printf "v%s" .Chart.Version }}
 {{- $tag := default $defaulttag .Values.imageTag }}
-{{- $name := default "aquarist-labs/s3gw" .Values.imageName }}
-{{- $registry := default "ghcr.io" .Values.imageRegistry }}
+{{- $name := default "s3gw/s3gw" .Values.imageName }}
+{{- $registry := default "quay.io" .Values.imageRegistry }}
 {{- printf "%s/%s:%s" $registry $name $tag }}
 {{- end }}
 
 {{- define "s3gw-ui.image" -}}
 {{- $tag := default (printf "v%s" .Chart.Version) .Values.ui.imageTag }}
-{{- $name := default "aquarist-labs/s3gw-ui" .Values.ui.imageName }}
-{{- $registry := default "ghcr.io" .Values.imageRegistry }}
+{{- $name := default "s3gw/s3gw-ui" .Values.ui.imageName }}
+{{- $registry := default "quay.io" .Values.imageRegistry }}
 {{- printf "%s/%s:%s" $registry $name $tag }}
 {{- end }}
 

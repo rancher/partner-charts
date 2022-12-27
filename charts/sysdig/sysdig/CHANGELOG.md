@@ -10,6 +10,9 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.15.67
+### Chores
+* **sysdig** [577e003](https://github.com/sysdiglabs/charts/commit/577e003eddd43e6e9a71bb89e4265a3a2d131262): bump agent version to 12.10.1 ([#849](https://github.com/sysdiglabs/charts/issues/849))
 # v1.15.66
 ### New Features
 * **sysdig** [be92144](https://github.com/sysdiglabs/charts/commit/be92144be843bc46377c949c7f8c88a4b5df5fc4): Update legacy engine NIA/HostAnalyzer components with security updates ([#843](https://github.com/sysdiglabs/charts/issues/843))
