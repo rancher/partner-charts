@@ -1,8 +1,6 @@
 # What's Changed
 
-### New Features
-- **sysdig** [be92144](https://github.com/sysdiglabs/charts/commit/be92144be843bc46377c949c7f8c88a4b5df5fc4): Update legacy engine NIA/HostAnalyzer components with security updates ([#843](https://github.com/sysdiglabs/charts/issues/843))
+### Chores
+- **sysdig** [577e003](https://github.com/sysdiglabs/charts/commit/577e003eddd43e6e9a71bb89e4265a3a2d131262): bump agent version to 12.10.1 ([#849](https://github.com/sysdiglabs/charts/issues/849))
 
-    * Security updates (December 2022) for NodeImageAnalyzer and HostAnalyzer components
-
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.5.29...sysdig-1.15.66
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.5.31...sysdig-1.15.67

@@ -53,6 +53,11 @@ gitlab_kas:
 {{- end -}}
 {{- end -}}
 
+{{- define "gitlab.appConfig.suggested_reviewers" -}}
+suggested_reviewers:
+  secret_file: /etc/gitlab/suggested_reviewers/.gitlab_suggested_reviewers_secret
+{{- end -}}
+
 {{- define "gitlab.appConfig.shell" -}}
 gitlab_shell:
   path: /home/git/gitlab-shell/

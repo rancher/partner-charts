@@ -84,7 +84,7 @@ set in the Gitlab values.yaml, otherwise returns the Enterprise Edition
 image repository.
 */}}
 {{- define "webservice.image" -}}
-{{ coalesce $.Values.image.repository (include "image.repository" .) }}:{{ coalesce .Values.image.tag (include "gitlab.versionTag" . ) }}
+{{ coalesce $.Values.image.repository (include "image.repository" .) }}:{{ coalesce .Values.image.tag (include "gitlab.versionTag" . ) }}{{ include "gitlab.image.tagSuffix" . }}
 {{- end -}}
 
 {{/*

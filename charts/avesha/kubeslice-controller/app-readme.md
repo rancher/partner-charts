@@ -1,29 +1,12 @@
 # Kubeslice Controller
 
-## Introduction
+## Components
+KubeSlice platform consists of two components – KubeSlice Controller installed on a cluster and KubeSlice Worker installed on a fleet of clusters which act as workers. To start using KubeSlice, you need to install the controller and the worker components.
 
-The KubeSlice Controller orchestrates the creation and management of slices on worker clusters.
-The KubeSlice Controller components and the worker cluster components can coexist on a cluster. Hence, the cluster running the KubeSlice controller can also be used as a worker cluster.
+## Features
+- Single application control plane across a fleet of clusters deployed in any cloud,   on-prem, edge, bare metal
+- Multi-cluster connectivity without using API gateway or firewalls
+- Multi-tenancy with  resource quotas, RBAC, node affinity, network and resource isolation, network policy enforcement,  control plane isolation (coming soon) - across single or multi-cluster
+- Service discovery and secure communication across multi-cluster
+- Integrated IPAM and location aware DNS
 
-The user is required to register themselves to receive a token that is required to install the KubeSlice Controller and Worker Operator.
-
-Instructions for registration will be provided during the installation steps.
-
-## Chart Details
-
-This chart installs the following:
-
-- KubeSlice Controller specific ClusterResourceDefinition (CRD)
-- ClusterRole, ServiceAccount and ClusterRoleBinding for KubeSlice Controller
-- A role and RoleBinding for KubeSlice Controller Leader Election
-- KubeSlice Controller workload
-- Kubernetes Dashboard
-- KubeSlice Controller API Gateway
-- KubeSlice Manager
-- Kubeslice dashboard for user interactions.
-
-📖 For step-by-step instructions, go to [documentation](https://docs.avesha.io/documentation/enterprise/0.2.0/deployment-partners/deploying-kubeslice-on-rancher/).
-
-This chart will install our enterprise edition of KubeSlice. 
-
-🟠 Note: KubeSlice is an opensource project. We encourage you to use, connect with the community, and contribute to the [opensource edition of KubeSlice](https://github.com/kubeslice). 

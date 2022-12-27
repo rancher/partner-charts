@@ -1,41 +1,47 @@
 # Kubeslice Enterprise Worker Helm Charts
 
+## Prerequisites 
+- KubeSlice Controller needs to be installed
+- Create and configure the worker cluster following instructions in prerequisites and "registering the worker cluster" sections [documentation](https://staging2-docs.avesha.io/documentation/enterprise/0.4.0/deployment-partners/deploying-kubeslice-on-rancher/installing-the-worker-operator-on-rancher)
+- Copy the chart version from the upper right hand section of this page [VERSION parameter need during install and upgrade]
+- Click on the download link from the upper right hand section of this page, save it to location available from command prompt <LOCATION OF DOWNLOADED CHART.tgz>
+- Untar the chart to get the values.yaml file and edit the following fields 
+  - controllerSecret: namespace, endpoint, ca.crt, token 
+  - cluster: name, nodeIp, endpoint 
+  - imagePullSecrets: username, passowrd and email [use the same info from KubeSlice Controller install]
 
 
-The Slice Operator, also known as a Kubeslice Worker is a Kubernetes Operator component that manages the life-cycle of the KubeSlice related Custom Resource Definitions (CRDs). Please refer to the [documentation](https://docs.avesha.io/documentation/enterprise/0.2.0/architecture) for more details.
+# Installation
 
-# Usage
-
-[Helm](https://helm.sh) must be installed to use the charts.
-Please refer to Helm's [documentation](https://helm.sh/docs/) to get started.
-
-Once Helm is set up properly, add the repo as follows:
-
-```console
-helm repo add kubeslice https://kubeslice.aveshalabs.io/repository/kubeslice-helm-ent-prod/ 
-```
-
-You can then run `helm search repo kubeslice` to see the charts.
-
-## Setting Up Kubeslice Worker
-
-### Install Chart
-
-See [Kubeslice Worker Installation](https://docs.avesha.io/documentation/enterprise/0.2.0/getting-started-with-kind-clusters) for instructions on istalling worker operator on [`kind`](https://kind.sigs.k8s.io/) for non-production use.
-
-For setting up Worker Operator on other cloud platforms, refer to the [Kubeslice Worker Installation on Cloud](https://docs.avesha.io/documentation/enterprise/0.2.0/getting-started-with-cloud-clusters/).
-
-### Uninstall Chart
-
-Please refer the following Kubeslice Worker [uninstallation](https://docs.avesha.io/documentation/enterprise/0.2.0/getting-started-with-cloud-clusters/uninstalling-kubeslice/) steps
-
-### Upgrading Chart
+Add the repo:
 
 ```console
-helm upgrade [RELEASE_NAME] kubeslice/kubeslice-worker [flags]
+helm repo add kubeslice-rancher https://kubeslice.github.io/rancher-avesha-charts/
 ```
 
-Guide
----
-A full and comprehensive documentation is available on our enterprise [documentation](https://docs.avesha.io/documentation/enterprise/0.2.0/) website.
+### Install Kubeslice Worker
 
+```console
+export KUBECONFIG=<WORKER CLUSTER KUBECONFIG>
+helm install --namespace=kubeslice-system --create-namespace kubeslice-worker kubeslice-rancher/kubeslice-worker --timeout=10m0s --values=<LOCATION OF values.yaml>  --version=<VERSION> --wait=true 
+```
+
+### Upgrading Kubeslice Worker
+  
+```console
+export KUBECONFIG=<WORKER CLUSTER KUBECONFIG>
+helm upgrade --history-max=5 --namespace=kubeslice-system kubeslice-worker kubeslice-rancher/kubeslice-worker --timeout=10m0s --values=<LOCATION OF values.yaml> --version=<VERSION> --wait=true
+```
+
+### Uninstall Kubeslice Worker
+- Follow instructions [documentation](https://staging2-docs.avesha.io/documentation/enterprise/0.2.0/getting-started-with-cloud-clusters/uninstalling-kubeslice/deregistering-the-worker-cluster)
+  
+```console
+export KUBECONFIG=<WORKER CLUSTER KUBECONFIG>
+helm uninstall  --namespace=kubeslice-system --timeout=10m0s --wait=true kubeslice-worker 
+kubectl delete crd serviceexports.networking.kubeslice.io
+kubectl delete crd serviceimports.networking.kubeslice.io
+kubectl delete crd slice.networking.kubeslice.io
+kubectl delete crd slicegateways.networking.kubeslice.io
+kubectl delete ns kubeslice-system
+```

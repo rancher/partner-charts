@@ -1,10 +1,10 @@
-{{ if .Values.ingress.enabled }}
+{{- if .Values.ingress.enabled }}
 ---
-# TLS Ingress
+# S3 Ingress
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: '{{ .Chart.Name }}-tls'
+  name: '{{ .Chart.Name }}'
   namespace: {{ .Release.Namespace }}
   labels:
 {{ include "s3gw.labels" . | indent 4 }}
@@ -12,35 +12,36 @@ metadata:
     traefik.ingress.kubernetes.io/router.tls: "true"
     traefik.ingress.kubernetes.io/router.middlewares:
       '{{ .Release.Namespace }}-cors-header@kubernetescrd'
+    cert-manager.io/cluster-issuer: {{ default .Values.tlsIssuer .Values.customTlsIssuer | quote }}
 spec:
   tls:
     - hosts:
-        - '{{ .Values.hostname }}'
-        - '*.{{ .Values.hostname }}'
-      secretName: 'certificates-{{ .Values.hostname }}'
+        - '{{ .Values.serviceName }}.{{ .Values.publicDomain }}'
+        - '*.{{ .Values.serviceName }}.{{ .Values.publicDomain }}'
+      secretName: s3gw-ingress-tls
   rules:
-    - host: '{{ .Values.hostname }}'
+    - host: '{{ .Values.serviceName }}.{{ .Values.publicDomain }}'
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: '{{ .Chart.Name }}-svc'
+                name: '{{ .Values.serviceName }}'
                 port:
                   number: 80
-    - host: '*.{{ .Values.hostname }}'
+    - host: '*.{{ .Values.serviceName }}.{{ .Values.publicDomain }}'
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: '{{ .Chart.Name }}-svc'
+                name: '{{ .Values.serviceName }}'
                 port:
                   number: 80
 ---
-# No TLS Ingress
+# S3 No TLS Ingress
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -53,33 +54,33 @@ metadata:
       '{{ .Release.Namespace }}-cors-header@kubernetescrd'
 spec:
   rules:
-    - host: '{{ .Values.hostname }}'
+    - host: '{{ .Values.serviceName }}.{{ .Values.publicDomain }}'
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: '{{ .Chart.Name }}-svc'
+                name: '{{ .Values.serviceName }}'
                 port:
                   number: 80
-    - host: '*.{{ .Values.hostname }}'
+    - host: '*.{{ .Values.serviceName }}.{{ .Values.publicDomain }}'
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: '{{ .Chart.Name }}-svc'
+                name: '{{ .Values.serviceName }}'
                 port:
                   number: 80
 {{- if .Values.ui.enabled }}
 ---
-# UI TLS Ingress
+# UI Ingress
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: '{{ .Chart.Name }}-ui-tls'
+  name: '{{ .Chart.Name }}-ui'
   namespace: {{ .Release.Namespace }}
   labels:
 {{ include "s3gw.labels" . | indent 4 }}
@@ -87,20 +88,21 @@ metadata:
     traefik.ingress.kubernetes.io/router.tls: "true"
     traefik.ingress.kubernetes.io/router.middlewares:
       '{{ .Release.Namespace }}-cors-header@kubernetescrd'
+    cert-manager.io/cluster-issuer: {{ default .Values.tlsIssuer .Values.customTlsIssuer | quote }}
 spec:
   tls:
     - hosts:
-        - '{{ .Values.ui.hostname }}'
-      secretName: 'certificates-{{ .Values.ui.hostname }}'
+        - '{{ .Values.ui.serviceName }}.{{ .Values.ui.publicDomain }}'
+      secretName: s3gw-ui-ingress-tls
   rules:
-    - host: '{{ .Values.ui.hostname }}'
+    - host: '{{ .Values.ui.serviceName }}.{{ .Values.ui.publicDomain }}'
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: '{{ .Chart.Name }}-ui-svc'
+                name: '{{ .Values.ui.serviceName }}'
                 port:
                   number: 80
 ---
@@ -117,14 +119,14 @@ metadata:
       '{{ .Release.Namespace }}-cors-header@kubernetescrd'
 spec:
   rules:
-    - host: '{{ .Values.ui.hostname }}'
+    - host: '{{ .Values.ui.serviceName }}.{{ .Values.ui.publicDomain }}'
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: '{{ .Chart.Name }}-ui-svc'
+                name: '{{ .Values.ui.serviceName }}'
                 port:
                   number: 80
 {{- end }}
