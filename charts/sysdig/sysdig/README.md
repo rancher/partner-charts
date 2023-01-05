@@ -57,9 +57,9 @@ To find the values:
 
 - YOUR-KEY-HERE: This is the agent access key. You can retrieve this from Settings > Agent Installation in the Sysdig
   UI.
-- COLLECTOR_URL: This value is region-dependent in SaaS and is auto-completed on the Get Started page in the UI. (It is
+- COLLECTOR_URL: This value is region-dependent in SaaS and is auto-completed in install snippets in the UI. (It is
   a custom value in on-prem installations.)
-- API_ENDPOINT: This is the base URL (region-dependent) for Sysdig Secure and is auto-completed on the Get Started page.
+- API_ENDPOINT: This is the base URL (region-dependent) for Sysdig Secure and is auto-completed in install snippets in the UI.
   E.g. secure.sysdig.com, us2.app.sysdig.com, eu1.app.sysdig.com.
 
 After a few seconds, you should see hosts and containers appearing in Sysdig Monitor and Sysdig Secure.
@@ -73,8 +73,6 @@ To uninstall/delete the `sysdig-agent` deployment:
 ```bash
 $ helm delete --namespace sysdig-agent sysdig-agent
 ```
-
-> **Tip**: Use `helm delete --namespace sysdig-agent --purge sysdig-agent` to completely remove the release from Helm internal storage
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
