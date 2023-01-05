@@ -100,16 +100,15 @@ spec:
             - name: INSTANA_KUBERNETES_REDACT_SECRETS
               value: {{ .Values.agent.redactKubernetesSecrets | quote }}
             {{- end }}
+            {{- if .Values.agent.configuration_yaml }}
+            - name: CONFIG_PATH
+              value: /root
+            {{- end }}
+
           volumeMounts:
-            {{- include "instana-agent.commonVolumeMounts" . | nindent 12 }}
-            - name: kubernetes-sensor-configuration
+            - name: configuration
               subPath: configuration.yaml
               mountPath: /root/configuration.yaml
-            {{- if .Values.agent.tls }}
-            {{- if or .Values.agent.tls.secretName (and .Values.agent.tls.certificate .Values.agent.tls.key) }}
-              {{- include "instana-agent.tls-volumeMounts" . | nindent 12 }}
-            {{- end }}
-            {{- end }}
           resources:
             requests:
               {{- include "instana-agent.resources" .Values.k8s_sensor.deployment.pod.requests | nindent 14 }}
@@ -117,6 +116,10 @@ spec:
               {{- include "instana-agent.resources" .Values.k8s_sensor.deployment.pod.limits | nindent 14 }}
           ports:
             - containerPort: 42699
+      volumes:
+        - name: configuration
+          configMap:
+            name: {{ include "instana-agent.fullname" . }}
       {{- if .Values.k8s_sensor.deployment.pod.tolerations }}
       tolerations:
         {{- toYaml .Values.k8s_sensor.deployment.pod.tolerations | nindent 8 }}
@@ -135,16 +138,6 @@ spec:
                   operator: In
                   values: [ KUBERNETES ]
               topologyKey: "kubernetes.io/hostname"
-      volumes:
-        {{- include "instana-agent.commonVolumes" . | nindent 8 }}
-        - name: kubernetes-sensor-configuration
-          configMap:
-            name: k8sensor
-        {{- if .Values.agent.tls }}
-        {{- if or .Values.agent.tls.secretName (and .Values.agent.tls.certificate .Values.agent.tls.key) }}
-          {{- include "instana-agent.tls-volume" . | nindent 8 }}
-        {{- end }}
-        {{- end }}
 {{- end -}}
 {{- end -}}
 {{- end -}}
