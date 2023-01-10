@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+Nothing yet.
+
+## 2.14.0
+
+Note: KIC 2.8 does include several updates to CRDs, but only for documentation and validation.
+You can [upgrade CRDs](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#updates-to-crds),
+but doing so is not required.
+
+### Improvements
+
+* Default Kong and KIC versions bumped to 3.1 and 2.8.
+* UDP proxy (udpProxy) assumes the UDP protocol by default for stream entries (udpProxy.stream). 
+  This can be still overridden to TCP by specifying the protocol explicitly, but it is not recommended to do so.
+  [#682](https://github.com/Kong/charts/pull/682)
+* Supported `autoscaling/v2` API
+  ([#679](https://github.com/Kong/charts/pull/679))
+* Add support for specifying the minium number of seconds for which newly created pods should be ready without
+  any of its container crashing, for it to be considered available. (`deployment.minReadySeconds`)
+  ([#688](https://github.com/Kong/charts/pull/688))
+* Increased the default memory requests and limits for the Kong pod to 2G
+  ([#690](https://github.com/Kong/charts/pull/690))
+* Add a rule for `KongIngress` to the ValidatingWebhookConfiguration.
+  ([#702](https://github.com/Kong/charts/pull/702))
+
+### Fixed
+
+* Removed `PodSecurityPolicy` if the API is not supported in k8s cluster
+  to be compatible to k8s 1.25+.
+  [#680](https://github.com/Kong/charts/pull/680)
+
+
 ## 2.13.1
 
 ### Improvements
@@ -11,7 +44,7 @@
 ### Improvements
 
 * Added cert-manager issuer support for proxy default and cluster mtls certificates
-  ([592](https://github.com/Kong/charts/pull/592))
+  ([#592](https://github.com/Kong/charts/pull/592))
 * Updated CRDs with the new ordering field for KongPlugins, the new
   IngressClassParameters resource, and assorted field description updates.
   These [require a manual update](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#updates-to-crds).

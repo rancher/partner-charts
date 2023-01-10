@@ -303,7 +303,7 @@ scenario and several settings that are useful when using multiple controllers:
   service, e.g. `namespace/my-release-kong-proxy`.
 * `ingressController.ingressClass` should be set to a different value for each
   instance of the controller.
-* `ingressController.env.admin_filter_tag` should be set to a different value
+* `ingressController.env.kong_admin_filter_tag` should be set to a different value
   for each instance of the controller.
 * If using Kong Enterprise, `ingressController.env.kong_workspace` can
   optionally create configuration in a workspace other than `default`.
@@ -618,7 +618,7 @@ directory.
 #### Kong Service Parameters
 
 The various `SVC.*` parameters below are common to the various Kong services
-(the admin API, proxy, Kong Manger, the Developer Portal, and the Developer
+(the admin API, proxy, Kong Manager, the Developer Portal, and the Developer
 Portal API) and define their listener configuration, K8S Service properties,
 and K8S Ingress properties. Defaults are listed only if consistent across the
 individual services: see values.yaml for their individual default values.
@@ -752,6 +752,7 @@ kong:
 | ---------------------------------- | ------------------------------------------------------------------------------------- | ------------------- |
 | namespace                          | Namespace to deploy chart resources                                                   |                     |
 | deployment.kong.enabled            | Enable or disable deploying Kong                                                      | `true`              |
+| deployment.minReadySeconds         | Minimum number of seconds for which newly created pods should be ready without any of its container crashing, for it to be considered available. |                     |
 | deployment.initContainers          | Create initContainers. Please go to Kubernetes doc for the spec of the initContainers |                     |
 | deployment.daemonset               | Use a DaemonSet instead of a Deployment                                               | `false`             |
 | deployment.hostNetwork             | Enable hostNetwork, which binds to the ports to the host                              | `false`             |
@@ -766,8 +767,8 @@ kong:
 | autoscaling.minReplicas            | Set minimum number of replicas                                                        | `2`                 |
 | autoscaling.maxReplicas            | Set maximum number of replicas                                                        | `5`                 |
 | autoscaling.behavior               | Sets the [behavior for scaling up and down](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior) | `{}`                |
-| autoscaling.targetCPUUtilizationPercentage | Target Percentage for when autoscaling takes affect. Only used if cluster doesnt support `autoscaling/v2beta2` | `80`  |
-| autoscaling.metrics                | metrics used for autoscaling for clusters that support autoscaling/v2beta2`           | See [values.yaml](values.yaml) |
+| autoscaling.targetCPUUtilizationPercentage | Target Percentage for when autoscaling takes affect. Only used if cluster does not support `autoscaling/v2` or `autoscaling/v2beta2` | `80`  |
+| autoscaling.metrics                | metrics used for autoscaling for clusters that supports `autoscaling/v2` or `autoscaling/v2beta2`           | See [values.yaml](values.yaml) |
 | updateStrategy                     | update strategy for deployment                                                        | `{}`                |
 | readinessProbe                     | Kong readiness probe                                                                  |                     |
 | livenessProbe                      | Kong liveness probe                                                                   |                     |

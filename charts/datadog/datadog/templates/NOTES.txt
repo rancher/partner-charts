@@ -1,4 +1,4 @@
-{{- if (or (.Values.datadog.apiKeyExistingSecret) (not (eq .Values.datadog.apiKey "<DATADOG_API_KEY>"))) }}
+{{- if (or (.Values.datadog.apiKeyExistingSecret) (.Values.datadog.apiKey)) }}
 Datadog agents are spinning up on each node in your cluster. After a few
 minutes, you should see your agents starting in your event stream:
     https://app.datadoghq.com/event/explorer
@@ -6,7 +6,6 @@ minutes, you should see your agents starting in your event stream:
   {{- if .Values.datadog.apiKeyExistingSecret }}
 You disabled creation of Secret containing API key, therefore it is expected
 that you create Secret named '{{ .Values.datadog.apiKeyExistingSecret }}' which includes a key called 'api-key' containing the API key.
-  {{- else if not (eq .Values.datadog.apiKey "<DATADOG_API_KEY>") }}
   {{- end }}
 
 {{- else }}
@@ -134,6 +133,16 @@ The Datadog Agent is listening on port {{ $apmPort }} for APM service.
 
 The option `datadog.apm.enabled` is deprecated, please use `datadog.apm.portEnabled` to enable TCP communication to the trace-agent.
 The option `datadog.apm.socketEnabled` is enabled by default and can be used to rely on unix socket or name-pipe communication.
+
+{{- end }}
+
+{{- if or .Values.datadog.systemProbe.enableKernelHeaderDownload .Values.datadog.systemProbe.enableRuntimeCompiler }}
+
+#################################################################
+####               WARNING: Deprecation notice               ####
+#################################################################
+
+The `enableKernelHeaderDownload` and `enableRuntimeCompiler` options are not supported anymore, in order to enable the runtime compiler, set the environment variable `DD_ENABLE_KERNEL_HEADER_DOWNLOAD` and `DD_ENABLE_RUNTIME_COMPILER` in the system probe.
 
 {{- end }}
 
@@ -308,7 +317,7 @@ are enabled:
 * Failure policy of the Admission Controller is set to "Fail"
 {{- end }}
 
-To run in high availability mode, our recommandation is to update the chart
+To run in high availability mode, our recommendation is to update the chart
 configuration with:
 * set `clusterAgent.replicas` value to `2` replicas .
 * set `clusterAgent.createPodDisruptionBudget` to `true`.
@@ -438,4 +447,13 @@ To send OTLP data to the Agent use the Service created by specifying "http://{{ 
 You have enabled OTLP Ingest for the HTTP port without the Host Port enabled.
 
 To send OTLP data to the Agent use the Service created by specifying "http://{{ template "localService.name" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.datadog.otlp.receiver.protocols.http.endpoint | regexFind ":[0-9]+$" | trimPrefix ":" }}" as the endpoint.
+{{- end }}
+
+{{- if and (or .Values.clusterAgent.podSecurity.podSecurityPolicy.create .Values.agents.podSecurity.podSecurityPolicy.create) (not (.Capabilities.APIVersions.Has "policy/v1beta1/PodSecurityPolicy")) }}
+#################################################################
+####               WARNING: Incompatibility                  ####
+#################################################################
+You have enabled creataion of PodSecurityPolicy, however PSP have been removed from Kubernetes >= 1.25, thus PSP will not be created.
+
+You should deactivate these options: clusterAgent.podSecurity.podSecurityPolicy.create and/or agents.podSecurity.podSecurityPolicy.create
 {{- end }}

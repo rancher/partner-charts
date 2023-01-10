@@ -78,6 +78,8 @@ spec:
             defaultMode: 420
             secretName: kubecost-thanos
       {{- end }}
+        - name: tmp
+          emptyDir: {}
         - name: nginx-conf
           configMap:
             name: nginx-conf
@@ -322,6 +324,10 @@ spec:
           args:
           {{- toYaml .Values.kubecostModel.extraArgs | nindent 12 }}
         {{- end }}
+        {{- if .Values.kubecostModel.securityContext }}
+          securityContext:
+            {{- toYaml .Values.kubecostModel.securityContext | nindent 12 -}}
+        {{ end }}
         {{- if .Values.kubecostModel.imagePullPolicy }}
           imagePullPolicy: {{ .Values.kubecostModel.imagePullPolicy }}
         {{- else }}
@@ -706,6 +712,18 @@ spec:
               value: {{ (quote .Values.kubecostModel.etlAssetReconciliationEnabled) | default (quote true) }}
             - name: ETL_USE_UNBLENDED_COST
               value: {{ (quote .Values.kubecostModel.etlUseUnblendedClost) | default (quote false) }}
+            {{- with .Values.kubecostModel.cloudCost }}
+            - name: CLOUD_COST_ENABLED
+              value: {{ (quote .enabled) | default (quote false) }}
+            {{- with .labelList }}
+            - name: CLOUD_COST_IS_INCLUDE_LIST
+              value: {{ (quote .IsIncludeList) | default (quote false) }}
+            - name: CLOUD_COST_LABEL_LIST
+              value: {{ (quote .labels) }}
+            {{- end }}
+            - name: CLOUD_COST_TOP_N
+              value: {{ (quote .topNItems) | default (quote 1000) }}
+            {{- end }}
             - name: CONTAINER_STATS_ENABLED
               value: {{ (quote .Values.kubecostModel.containerStatsEnabled) | default (quote false) }}
             - name: RECONCILE_NETWORK
@@ -920,7 +938,13 @@ spec:
             {{ toYaml .Values.kubecostFrontend.extraEnv | nindent 12 }}
             {{- end }}
           name: cost-analyzer-frontend
+        {{- if .Values.kubecostFrontend.securityContext }}
+          securityContext:
+            {{- toYaml .Values.kubecostFrontend.securityContext | nindent 12 }}
+        {{ end }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d/
             {{- if .Values.kubecostFrontend.tls }}

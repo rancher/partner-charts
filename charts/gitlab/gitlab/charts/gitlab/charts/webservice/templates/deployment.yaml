@@ -112,7 +112,7 @@ spec:
         - name: configure
           command: ['sh']
           args: [ '-c', 'sh -x /config-webservice/configure ; sh -x /config-workhorse/configure ; mkdir -p -m 3770 /tmp/gitlab']
-          image: {{ include "gitlab.busybox.image" (dict "local" $.Values.init "global" $.Values.global.busybox) | quote }}
+          image: {{ include "gitlab.busybox.image" (dict "local" $.Values.init "global" $.Values.global) | quote }}
           {{- include "gitlab.image.pullPolicy" $initImageCfg | indent 10 }}
           env:
             {{- include "webservice.extraEnv" (dict "global" $.Values.global "local" .) | nindent 12 }}
@@ -333,7 +333,7 @@ spec:
           resources:
             {{- toYaml .resources | nindent 12 }}
         - name: gitlab-workhorse
-          image: "{{ coalesce $.Values.workhorse.image (include "workhorse.repository" $) }}:{{ coalesce $.Values.workhorse.tag (include "gitlab.versionTag" $ ) }}"
+          image: "{{ coalesce $.Values.workhorse.image (include "workhorse.repository" $) }}:{{ coalesce $.Values.workhorse.tag (include "gitlab.versionTag" $ ) }}{{ include "gitlab.image.tagSuffix" $ }}"
           {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
           ports:
             - containerPort: {{ $.Values.service.workhorseInternalPort }}
@@ -498,6 +498,7 @@ spec:
                   path: gitlab-workhorse/secret
           {{- include "gitlab.pages.mountSecrets" $ | nindent 10 }}
           {{- include "gitlab.kas.mountSecrets" $ | nindent 10 }}
+          {{- include "gitlab.suggestedReviewers.mountSecrets" $ | nindent 10 }}
           {{- include "gitlab.minio.mountSecrets" $ | nindent 10 }}
           {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "object_store" "config" $.Values.global.appConfig.object_store) | nindent 10 }}
           {{- include "gitlab.appConfig.objectStorage.mountSecrets" (dict "name" "artifacts" "config" $.Values.global.appConfig.artifacts) | nindent 10 }}

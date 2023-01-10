@@ -2,6 +2,36 @@
 documentation](doc/development/changelog.md) for instructions on adding your own
 entry.
 
+## 6.7.0 (2022-12-21)
+
+### Added (2 changes)
+
+- [Add `global.image.tagSuffix` as a helm values option](gitlab-org/charts/gitlab@3121e20827686340a12df2a5181d18e4807c13d4) ([merge request](gitlab-org/charts/gitlab!2881))
+- [Add suggested reviewers secret and configurations](gitlab-org/charts/gitlab@5e5ae509458443db6ad7b7233ba9d0e0ef98a172) ([merge request](gitlab-org/charts/gitlab!2875))
+
+### Fixed (1 change)
+
+- [Fix MS Graph Mailer configuration and handling](gitlab-org/charts/gitlab@db172742491bea2ffe8a809c179cfe8f42911714) ([merge request](gitlab-org/charts/gitlab!2882))
+
+### Changed (8 changes)
+
+- [Update gitlab-org/charts/gitlab-runner from 0.47.1 to 0.48.0](gitlab-org/charts/gitlab@a1dd9edc0d32227922ecad687e844a2bc742ebdc) ([merge request](gitlab-org/charts/gitlab!2889))
+- [Update gitlab-org/container-registry from 3.62.0-gitlab to 3.63.0-gitlab](gitlab-org/charts/gitlab@1a2bd28c62dd2b5cfe4cbf7a20cf108ed9cab860) ([merge request](gitlab-org/charts/gitlab!2885))
+- [Update gitlab-org/container-registry from 3.61.0-gitlab to 3.62.0-gitlab](gitlab-org/charts/gitlab@ee34bbb67372942fff76909803726c23534e84cb) ([merge request](gitlab-org/charts/gitlab!2879))
+- [Update gitlab-org/charts/gitlab-runner from 0.47.0 to 0.47.1](gitlab-org/charts/gitlab@5697ae4eef892034017d3681d5296cd8c838a188) ([merge request](gitlab-org/charts/gitlab!2869))
+- [Set Sidekiq default max concurrency to 20](gitlab-org/charts/gitlab@d60dba0a6c7cd1187e7c4428a5292ce46feb6a30) ([merge request](gitlab-org/charts/gitlab!2868))
+- [Update gitlab-org/charts/gitlab-runner from 0.46.1 to 0.47.0](gitlab-org/charts/gitlab@4d7f34bec4b461e0480794b5e0c1a484b68274ba) ([merge request](gitlab-org/charts/gitlab!2865))
+- [Refine .helmignore](gitlab-org/charts/gitlab@5a91ceb6b30369778092e6bb00d09913ef540c76) ([merge request](gitlab-org/charts/gitlab!2864))
+- [Change the order of KAS Ingress Rules](gitlab-org/charts/gitlab@5fb28d69e17fd20578214696f4bf3b06ceb83c9b) by @rfinch ([merge request](gitlab-org/charts/gitlab!2738))
+
+### Other (1 change)
+
+- [Use kubectl image with kubectl 1.24.7, yq 4.30.1](gitlab-org/charts/gitlab@e0c892e060ac405d8a2c90f7b4d632e1b3512728) ([merge request](gitlab-org/charts/gitlab!2871))
+
+## 6.6.2 (2022-12-05)
+
+No changes.
+
 ## 6.6.1 (2022-11-30)
 
 No changes.
@@ -38,6 +68,14 @@ No changes.
 ### Removed (1 change)
 
 - [Container Registry: remove testslowimport migration setting](gitlab-org/charts/gitlab@b433267a4a406dc7dbfd22c72de930cf62994eea) ([merge request](gitlab-org/charts/gitlab!2818))
+
+## 6.5.7 (2022-12-07)
+
+No changes.
+
+## 6.5.6 (2022-11-30)
+
+No changes.
 
 ## 6.5.5 (2022-11-11)
 
@@ -87,6 +125,10 @@ No changes.
 
 - [Update nokogiri from 1.11.2 to 1.13.8](gitlab-org/charts/gitlab@4ca05285a0120d69a708d6fb406c441199ea3d9e) ([merge request](gitlab-org/charts/gitlab!2780))
 - [Update activesupport from 6.0.3.4 to 7.0.4](gitlab-org/charts/gitlab@184a94790f7de95aec576ad273d4fb9a9ec2722e) ([merge request](gitlab-org/charts/gitlab!2781))
+
+## 6.4.6 (2022-11-30)
+
+No changes.
 
 ## 6.4.5 (2022-11-15)
 

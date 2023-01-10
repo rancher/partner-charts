@@ -1,20 +1,122 @@
 ---
 questions:
   # General settings
+
+  - variable: useCertManager
+    label: Use cert-manager
+    default: "true"
+    description: "Use cert-manager to provision TLS certificates"
+    type: boolean
+    group: "General"
+
+  - variable: tls.publicDomain.crt
+    show_if: "useCertManager=false"
+    description: "S3 TLS certificate (Public Domain)"
+    label: "S3 TLS certificate (Public Domain)"
+    type: string
+    group: "General"
+
+  - variable: tls.publicDomain.key
+    show_if: "useCertManager=false"
+    description: "S3 TLS key (Public Domain)"
+    label: "S3 TLS key (Public Domain)"
+    type: string
+    group: "General"
+
+  - variable: tls.privateDomain.crt
+    show_if: "useCertManager=false"
+    description: "S3 TLS certificate (Private Domain)"
+    label: "S3 TLS certificate (Private Domain)"
+    type: string
+    group: "General"
+
+  - variable: tls.privateDomain.key
+    show_if: "useCertManager=false"
+    description: "S3 TLS key (Private Domain)"
+    label: "S3 TLS key (Private Domain)"
+    type: string
+    group: "General"
+
+  - variable: tls.ui.publicDomain.crt
+    show_if: "useCertManager=false"
+    description: "UI TLS certificate"
+    label: "UI TLS certificate"
+    type: string
+    group: "General"
+
+  - variable: tls.ui.publicDomain.key
+    show_if: "useCertManager=false"
+    description: "UI TLS key"
+    label: "UI TLS key"
+    type: string
+    group: "General"
+
+  - variable: certManagerNamespace
+    show_if: "useCertManager=true"
+    label: cert-manager's namespace
+    default: "cert-manager"
+    description: "cert-manager's namespace"
+    type: string
+    required: false
+
+  - variable: useCustomTlsIssuer
+    show_if: "useCertManager=true"
+    label: Use your own TLS issuer
+    default: "false"
+    description: "Use your own TLS issuer"
+    type: boolean
+    group: "General"
+    show_subquestion_if: true
+    subquestions:
+    - variable: customTlsIssuer
+      label: Custom TLS issuer
+      description: "Name of the custom TLS issuer to use"
+      type: string
+      required: false
+
+  - variable: tlsIssuer
+    show_if: "useCertManager=true&&useCustomTlsIssuer=false"
+    label: TLS issuer
+    description: "Name of the predefined TLS issuer to use"
+    type: enum
+    required: false
+    group: "General"
+    options:
+      - "s3gw-issuer"
+      - "s3gw-letsencrypt-issuer"
+
+  - variable: email
+    show_if: "useCertManager=true&&tlsIssuer=s3gw-letsencrypt-issuer"
+    label: email address to use with s3gw-letsencrypt-issuer
+    description: "email address to use with s3gw-letsencrypt-issuer"
+    type: string
+    required: false
+    group: "General"
+
+  - variable: serviceName
+    default: s3gw
+    description: "S3 Service Name"
+    label: "S3 Service Name"
+    required: true
+    type: string
+    group: "General"
+
   - variable: accessKey
     default: test
     description: "S3 Access Key"
-    label: "Default Access Key"
+    label: "S3 Access Key"
     required: true
     type: string
     group: "General"
+
   - variable: secretKey
     default: test
     description: "S3 Secret Key"
-    label: "Default Secret Key"
+    label: "S3 Secret Key"
     required: true
     type: string
     group: "General"
+
   - variable: ingress.enabled
     default: true
     description: "Deploy an Ingress (Required for TLS and UI)"
@@ -22,14 +124,24 @@ questions:
     required: true
     type: boolean
     group: "General"
-  - variable: hostname
+
+  - variable: publicDomain
     show_if: ingress.enabled=true
-    default: s3gw.local
-    description: "Hostname of the S3 Service (FQDN)"
-    label: "Hostname"
+    default: be.127.0.0.1.omg.howdoi.website
+    description: "Public domain of the S3 Service used by the Ingress"
+    label: "Public Domain"
     required: true
     type: string
     group: "General"
+
+  - variable: privateDomain
+    default: svc.cluster.local
+    description: "Private domain of the S3 Service used inside the Kubernetes cluster"
+    label: "Private Domain"
+    required: true
+    type: string
+    group: "General"
+
   - variable: ui.enabled
     default: false
     description: "UI Enabled"
@@ -37,43 +149,23 @@ questions:
     required: true
     type: boolean
     group: "General"
-  - variable: ui.hostname
-    show_if: ui.enabled=true && ingress.enabled=true
-    default: s3gw-ui.local
-    description: "Hostname of the S3 UI (FQDN)"
-    label: "UI Hostname"
+
+  - variable: ui.serviceName
+    default: s3gw-ui
+    description: "UI Service Name"
+    label: "UI Service Name"
+    required: true
     type: string
     group: "General"
 
-  # TLS settings
-  - variable: tls.crt
+  - variable: ui.publicDomain
     show_if: ingress.enabled=true
-    description: |
-      TLS Certificate for the Gateway (base64 encoded, CN must match hostname)
-    label: "TLS Cert"
-    required: false
+    default: fe.127.0.0.1.omg.howdoi.website
+    description: "Public domain of the UI Service used by the Ingress"
+    label: "UI Public Domain"
+    required: true
     type: string
-    group: "TLS"
-  - variable: tls.key
-    show_if: ingress.enabled=true
-    description: "TLS Key for the Gateway (base64 encoded)"
-    label: "TLS Key"
-    required: false
-    type: string
-    group: "TLS"
-  - variable: ui.tls.crt
-    show_if: ui.enabled=true && ingress.enabled=true
-    description: |
-      TLS Certificate for the UI (base64 encoded, CN must match ui.hostname)
-    label: "TLS Cert"
-    type: string
-    group: "TLS"
-  - variable: ui.tls.key
-    show_if: ui.enabled=true && ingress.enabled=true
-    description: "TLS Key for the UI (base64 encoded)"
-    label: "TLS Key"
-    type: string
-    group: "TLS"
+    group: "General"
 
   # Storage
   - variable: storageSize
@@ -82,6 +174,7 @@ questions:
     default: 10Gi
     label: "Storage Size"
     group: "Storage"
+
   - variable: storageClass.name
     description: "Storage Class Name"
     type: string
@@ -89,6 +182,7 @@ questions:
     required: true
     label: "Storage Class"
     group: "Storage"
+
   - variable: storageClass.create
     description: |
       Create a new opinionated storage class backed by longhorn.io
@@ -166,6 +260,14 @@ questions:
     default:
     description: "UI Image Tag"
     label: "UI Image Tag"
+    required: false
+    type: string
+    group: "Advanced"
+
+  - variable: logLevel
+    default: "1"
+    description: "s3gw pod log level, lower values are less verbose"
+    label: "s3gw pod log level"
     required: false
     type: string
     group: "Advanced"

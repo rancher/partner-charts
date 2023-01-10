@@ -26,29 +26,42 @@ spec:
           image: {{ include "s3gw.image" . | quote }}
           imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
           args:
-{{- if .Values.ingress.enabled }}
             - "--rgw-dns-name"
-            - {{ .Values.hostname }}
+{{- if .Values.ingress.enabled }}
+            - {{ .Values.serviceName }}.{{ .Values.publicDomain }},
+              {{ .Values.serviceName }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
+{{- else}}
+            - {{ .Values.serviceName }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
 {{- end }}
             - "--rgw-backend-store"
-            - $(RGW_BACKEND_STORE)
+            - sfs
             - "--debug-rgw"
-            - $(DEBUG_RGW)
+            - '{{ .Values.logLevel }}'
+            - "--rgw_frontends"
+            - "beast port=7480 ssl_port=7481
+                ssl_certificate=/s3gw-cluster-ip-tls/tls.crt
+                ssl_private_key=/s3gw-cluster-ip-tls/tls.key"
           ports:
             - containerPort: 7480
               name: s3
+            - containerPort: 7481
+              name: s3-tls
           envFrom:
-            - configMapRef:
-                name: s3gw-config
             - secretRef:
                 name: s3gw-secret
           volumeMounts:
             - name: s3gw-lh-store
               mountPath: /data
+            - name: s3gw-cluster-ip-tls
+              mountPath: /s3gw-cluster-ip-tls
       volumes:
         - name: s3gw-lh-store
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-pvc
+        - name: s3gw-cluster-ip-tls
+          secret:
+            secretName: s3gw-cluster-ip-tls
+            optional: false
 {{- if .Values.ui.enabled }}
 ---
 apiVersion: apps/v1

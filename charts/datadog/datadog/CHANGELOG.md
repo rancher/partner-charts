@@ -1,5 +1,55 @@
 # Datadog changelog
 
+## 3.6.8
+
+* Add missing RBAC rules for collection of Vertical Pod Autoscaler resources in the Orchestrator Explorer.
+
+## 3.6.7
+
+* Default `Agent` and `Cluster-Agent` image tags to `7.41.1`.
+
+## 3.6.6
+
+* Fix missing volumeMount in `security-agent` container when `datadog.kubelet.hostCAPath` is provided.
+
+## 3.6.5
+
+* Fix missing Cluster Agent configuration in `security-agent` if CSPM is not actived.
+
+## 3.6.4
+
+* Change nesting for `providers.aks.enabled` parameter in Helm template.
+
+## 3.6.3
+
+* Add `datadog.kubeStateMetricsCore.annotationsAsTags` that expose the `annotations_as_tags` parameter of the KSM core check.
+  This parameter exists only in agent 7.42.0 and above and cluster-agent 7.42.0 and above.
+
+# 3.6.2
+
+* Add CRDs to the cluster agent RBAC to be able to collect them using the Orchestrator Explorer.
+
+## 3.6.1
+
+* Add `providers.aks.enabled` parameter to activate specific configuration options for AKS.
+
+## 3.6.0
+
+* Update "Agent" and "Cluster-Agent" versions to `7.41.0` by default.
+
+## 3.5.2
+
+* Fix API Key check in NOTES.txt following change of default value for `datadog.apiKey`.
+* Fix failure if PSP activated in Kubernetes 1.25 (PSP have been removed).
+
+## 3.5.1
+
+* Removing default value placeholder for the API Key in the values.yaml.
+
+## 3.5.0
+
+* Remove runtime compilation-related config values `enableKernelHeaderDownload` and `enableRuntimeCompiler` in the system-probe.
+
 ## 3.4.0
 
 * Add `datadog.systemProbe.btfPath` for mounting user-provided BTF files (see datadog-agent PRs #13962 and #14096 for more context).

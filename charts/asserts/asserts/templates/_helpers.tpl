@@ -66,6 +66,28 @@ bootstrap
 {{- end }}
 
 {{/*
+redisgraph service endpoint depending if in standalone or sentinel mode
+*/}}
+{{- define "asserts.redisgraphServiceEndpoint" -}}
+{{- if .Values.redisgraph.sentinel.enabled -}}
+{{ .Values.redisgraph.fullnameOverride }}.{{ include "domain"  . }}:26379
+{{- else -}}
+{{.Values.redisgraph.fullnameOverride}}-master.{{ include "domain"  . }}:6379
+{{- end }}
+{{- end }}
+
+{{/*
+redisearch service endpoint depending if in standalone or sentinel mode
+*/}}
+{{- define "asserts.redisearchServiceEndpoint" -}}
+{{- if .Values.redisearch.sentinel.enabled -}}
+{{.Values.redisearch.fullnameOverride}}.{{ include "domain"  . }}:26379
+{{- else -}}
+{{.Values.redisearch.fullnameOverride}}-master.{{ include "domain"  . }}:6379
+{{- end }}
+{{- end }}
+
+{{/*
 Get KubeVersion removing pre-release information.
 */}}
 {{- define "kubeVersion" -}}

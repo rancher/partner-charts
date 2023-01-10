@@ -9,6 +9,10 @@ Expand the name of the chart.
     {{- printf "%s-%s" (include "cf-runtime.fullname" .) "volume-provisioner" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "cf-vp.volumeCleanupCronName" -}}
+    {{- printf "%s-%s" (include "cf-runtime.fullname" .) "volume-cleanup" | trunc 52 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "cf-vp.provisionerName" -}}
     {{- printf "%s-%s" (include "cf-runtime.fullname" .) "volume-provisioner" | trunc 63 | trimSuffix "-" }}
 {{- end }}
@@ -64,8 +68,8 @@ codefresh.io/application: pv-cleanup
 
 {{- define "cf-vp.docker-image-volume-utils" -}}
 {{- if ne .Values.dockerRegistry ""}}
-{{- .Values.dockerRegistry }}/codefresh/dind-volume-utils:1.29.0
-{{- else }}codefresh/dind-volume-utils:1.29.0
+{{- .Values.dockerRegistry }}/codefresh/dind-volume-utils:1.29.2
+{{- else }}codefresh/dind-volume-utils:1.29.2
 {{- end}}
 {{- end }}
 

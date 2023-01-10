@@ -35,7 +35,7 @@ CRDs are not uninstalled.
 See [Customizing the Chart Before Installing](https://helm.sh/docs/intro/using_helm/#customizing-the-chart-before-installing). To see all configurable options with detailed comments:
 
 ```console
-helm show values intel/device-plugin-operator
+helm show values intel/intel-device-plugins-operator
 ```
 
 You may also run `helm show values` on this chart's dependencies for additional options.

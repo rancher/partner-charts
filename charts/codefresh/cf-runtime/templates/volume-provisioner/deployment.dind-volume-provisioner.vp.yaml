@@ -12,6 +12,10 @@ spec:
   template:
     metadata:
       labels: {{- include "cf-vp.provisionerLabels" . | nindent 9 }}
+      annotations:
+        {{- range $key, $value := .Values.volumeProvisioner.annotations }}
+        {{ $key }}: {{ $value }}
+        {{- end}}
     spec:
       serviceAccountName: {{ include "cf-vp.fullname" . }}
       {{- if .Values.volumeProvisioner.nodeSelector }}
@@ -21,7 +25,13 @@ spec:
       tolerations:
       {{- if .Values.volumeProvisioner.tolerations }}
 {{ toYaml .Values.volumeProvisioner.tolerations | indent 8 }}
-      {{- end }}      
+      {{- end }}
+      {{- if .Values.volumeProvisioner.securityContext.enabled }}
+      securityContext:
+        runAsUser: 3000
+        runAsGroup: 3000
+        fsGroup: 3000
+      {{- end }}
       containers:
         - name: dind-volume-provisioner
           {{- if .Values.volumeProvisioner.resources }}

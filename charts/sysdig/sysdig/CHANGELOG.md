@@ -1,8 +1,53 @@
 # Chart: Sysdig
 
-## Change Log
+All notable changes to this chart will be documented in this file.
 
-This file documents all notable changes to Sysdig Helm Chart. The release numbering uses [semantic versioning](http://semver.org).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Please note that it's automatically updated vía github actions.
+Manual edits are supported only below '## Change Log' and should be used
+exclusively to fix incorrect entries and not to add new ones.
+
+## Change Log
+# v1.15.69
+### Documentation
+* **agent,node-analyzer,sysdig,sysdig-stackdriver-bridge** [da18fe5](https://github.com/sysdiglabs/charts/commit/da18fe5e7225be9bbfc484d6dcb22987d7d08066): remove references of the deprecated --purge option for 'helm delete' ([#864](https://github.com/sysdiglabs/charts/issues/864))
+# v1.15.68
+### Documentation
+* **agent,node-analyzer,sysdig** [bd37186](https://github.com/sysdiglabs/charts/commit/bd371864313e64d7a7ac07f79fe30f296b46d540): Remove references to Get Started in the READMEs ([#819](https://github.com/sysdiglabs/charts/issues/819))
+# v1.15.67
+### Chores
+* **sysdig** [577e003](https://github.com/sysdiglabs/charts/commit/577e003eddd43e6e9a71bb89e4265a3a2d131262): bump agent version to 12.10.1 ([#849](https://github.com/sysdiglabs/charts/issues/849))
+# v1.15.66
+### New Features
+* **sysdig** [be92144](https://github.com/sysdiglabs/charts/commit/be92144be843bc46377c949c7f8c88a4b5df5fc4): Update legacy engine NIA/HostAnalyzer components with security updates ([#843](https://github.com/sysdiglabs/charts/issues/843))
+
+    * Security updates (December 2022) for NodeImageAnalyzer and HostAnalyzer components
+# v1.15.65
+### New Features
+* **sysdig** [3fa1178](https://github.com/sysdiglabs/charts/commit/3fa1178e722f921f595d056c0d91991a9ad85690): runtimescanner bump to 1.4.1 ([#838](https://github.com/sysdiglabs/charts/issues/838))
+
+    * RuntimeScanner: bump to version 1.4.1. Fixed 1 CVE:
+    * CVE-2022-41717
+# v1.15.64
+### Bug Fixes
+* **sysdig,agent** [096d6e4](https://github.com/sysdiglabs/charts/commit/096d6e4d0326f36357fec6ac61342c17e73b33ab): add extra secrets and tests ([#821](https://github.com/sysdiglabs/charts/issues/821))
+# v1.15.63
+### New Features
+* **sysdig** [ef5afd9](https://github.com/sysdiglabs/charts/commit/ef5afd9ed9a041a6af0464f55467f82e034fe05c): add extra secrets ([#820](https://github.com/sysdiglabs/charts/issues/820))
+# v1.15.62
+### Chores
+* **sysdig** [0e014c2](https://github.com/sysdiglabs/charts/commit/0e014c2a2ebd285edd0e9c45422df6d98827cfc4): bump agent version to 12.10.0 ([#814](https://github.com/sysdiglabs/charts/issues/814))
+# v1.15.61
+### New Features
+* [f4cb189](https://github.com/sysdiglabs/charts/commit/f4cb189afba6833fd458f99dcfcc0121f9d9dfa2)]: unify changelog headers ([#787](https://github.com/sysdiglabs/charts/issues/787))
+
+## v1.15.60
+### Minor changes:
+* BenchmarkRunner
+    * bump to runner version 1.1.0.5
+
 ## v1.15.59
 ### Minor changes:
 * BenchmarkRunner

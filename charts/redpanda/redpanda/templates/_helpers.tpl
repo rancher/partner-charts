@@ -379,9 +379,10 @@ IP is required for the advertised address.
   {{- end -}}
   {{- $sasl := list -}}
   {{- if (include "sasl-enabled" . | fromJson).bool -}}
+    {{- $root := . | toJson | fromJson -}}
     {{- $sasl = concat $sasl (list
-      "--user" (first .Values.auth.sasl.users).name
-      "--password" (first .Values.auth.sasl.users).password
+      "--user" (dig "auth" "username" (first .Values.auth.sasl.users).name $root)
+      "--password" (dig "auth" "password" (first .Values.auth.sasl.users).password $root)
       "--sasl-mechanism " (include "sasl-mechanism" .)
     )
     -}}
@@ -428,4 +429,16 @@ IP is required for the advertised address.
 
 {{- define "redpanda-atleast-22-3-0" -}}
 {{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.3.0"))) -}}
+{{- end -}}
+
+# manage backward compatibility with renaming podSecurityContext to securityContext
+{{- define "pod-security-context" -}}
+fsGroup: {{ dig "podSecurityContext" "fsGroup" .Values.statefulset.securityContext.fsGroup .Values.statefulset }}
+{{- end -}}
+
+# for backward compatibility, force a default on releases that didn't
+# set the podSecurityContext.runAsUser before
+{{- define "container-security-context" -}}
+runAsUser: {{ dig "podSecurityContext" "runAsUser" .Values.statefulset.securityContext.runAsUser .Values.statefulset }}
+runAsGroup: {{ dig "podSecurityContext" "fsGroup" .Values.statefulset.securityContext.fsGroup .Values.statefulset }}
 {{- end -}}

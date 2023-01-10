@@ -3,9 +3,12 @@
 ## This will override any available parameters in this chart
 ## as well as dependent charts
 ##
-## Current available global parameters: storageClass
+## Current available global parameters: storageClass, secureCookie
+##
 global:
   storageClass: ""
+  # set to true if oauth is configured on Asserts and exclusively using https
+  secureCookie: false
 
 nameOverride: ""
 fullnameOverride: ""
@@ -15,7 +18,7 @@ rbac:
   ## Namespaced role and rolebinding
   ## to allow for get/list/watch of
   ## pod, endpoints, and services in the
-  ## installed {{ .Release.Namespace }}
+  ## installed {{.Release.Namespace}}
   create: true
   annotations: {}
   extraLabels: {}
@@ -34,15 +37,16 @@ serviceAccount:
   annotations: {}
   extraLabels: {}
 
-## If Prometheus-Operator is used (detected by checking "monitoring.coreos.com/v1" api existence)
-## Then they will be created, else the Asserts Tsdb will scrape the services
+## ServiceMonitor configuration
+##
+## If Asserts is being installed in the same cluster you are running Prometheus-Operator
+## set this to true and .Values.selfScrape: false
 ##
 serviceMonitor:
-  enabled: true
+  enabled: false
   # endpoints and appropriate relabelings
-  # relabelings used to avoid duplicates
-  # this allows us to avoid errors and keep everything in one
-  # ServiceMonitor
+  # used to avoid duplicates this allows us to
+  # avoid errors and keep everything in one ServiceMonitor
   endpoints:
     - port: http
       path: /api-server/actuator/prometheus
@@ -51,10 +55,19 @@ serviceMonitor:
           regex: "{{.Release.Name}}-server"
           action: keep
     - port: http
+      path: /authorization/actuator/prometheus
+      relabelings:
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-authorization"
+          action: keep
+    - port: http
       path: /metrics
       relabelings:
         - sourceLabels: [job]
           regex: "{{.Release.Name}}-server"
+          action: drop
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-authorization"
           action: drop
         - sourceLabels: [job]
           regex: "{{.Release.Name}}-ui"
@@ -68,18 +81,12 @@ serviceMonitor:
   # your prometheus-operator serviceMonitorSelector (e.g. release: kube-prometheus-stack)
   extraLabels: {}
 
-## Asserts cluster env and site
+## Asserts self scrape
 ##
-## IGNORE IF RUNNING Promtheus-Operator!!!
+## When this is set to true, the Asserts Tsdb will scrape
+## all of the Asserts Services independent of your Prometheus.
 ##
-## This is required in order for Asserts to scrape a
-## and monitor itself. This should be set to the env and site
-## of the cluster asserts is being installed in.
-## This means that the env and site of the datasource
-## for this cluster (set in the Asserts UI), should
-## match these values.
-assertsClusterEnv: ""
-assertsClusterSite: ""
+selfScrape: true
 
 ## Asserts Url
 ##
@@ -91,11 +98,13 @@ assertsClusterSite: ""
 ##
 ## If unset, leave the url like this as opposed to empty
 ## as it will work when using port-forwarding.
+##
 assertsUrl: http://localhost:8080
 
 ## Receiver configuration
 ## the notification receiver (e.g. slack, pagerduty, etc..)
 ## wait times/intervals
+##
 receiver:
   group_wait: 1m
   group_interval: 15m
@@ -120,17 +129,20 @@ pagerduty:
   # routing_key: <your-events-api-v2-integration-key>
   # url: https://events.pagerduty.com/v2/enqueue
 
+
 ## Asserts server configuration
 ##
 server:
   nameOverride: ""
   fullnameOverride: ""
 
+  replicaCount: 1
+
   image:
     repository: asserts/asserts-server
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.2.415
+    tag: v0.2.458
 
   initContainers:
     - name: wait-for-postgres
@@ -138,6 +150,20 @@ server:
       imagePullPolicy: IfNotPresent
       args:
         - "{{.Values.postgres.fullnameOverride}}.{{.Release.Namespace}}.{{.Values.clusterDomain}}:5432"
+        - "-t"
+        - "420"
+    - name: wait-for-redisgraph
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{include \"asserts.redisgraphServiceEndpoint\" .}}"
+        - "-t"
+        - "420"
+    - name: wait-for-redisearch
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{include \"asserts.redisearchServiceEndpoint\" .}}"
         - "-t"
         - "420"
 
@@ -150,6 +176,10 @@ server:
   service:
     type: ClusterIP
     port: 8030
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{.Values.server.service.port}}"
+      prometheus.io/path: "/api-server/actuator/prometheus"
 
   resources: {}
 
@@ -205,6 +235,68 @@ server:
     ## When set, will use the existing PVC for persistence
     existingClaim: ""
 
+## Asserts authorization server configuration
+##
+authorization:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  replicaCount: 1
+
+  image:
+    repository: asserts/authorization
+    pullPolicy: IfNotPresent
+    ## Overrides the image tag whose default is the chart appVersion.
+    tag: v0.2.415
+
+  initContainers:
+    - name: wait-for-postgres
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Values.postgres.fullnameOverride}}.{{.Release.Namespace}}.{{.Values.clusterDomain}}:5432"
+        - "-t"
+        - "420"
+
+  imagePullSecrets: []
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {}
+
+  service:
+    type: ClusterIP
+    port: 8070
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{.Values.authorization.service.port}}"
+      prometheus.io/path: "/authorization/actuator/prometheus"
+
+  resources: {}
+
+  ## environment variables to add to the asserts-server pod
+  extraEnv: []
+
+  ## environment variables from secrets or configmaps to add to the asserts-server pod
+  extraEnvFrom: []
+
+  annotations: {}
+
+  extraLabels: {}
+
+  extraPodLabels: {}
+
+  extraPodAnnotations: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  extraVolumeMounts: []
+
+  extraVolumes: []
 
 ## Asserts ui configuration
 ##
@@ -212,11 +304,13 @@ ui:
   nameOverride: ""
   fullnameOverride: ""
 
+  replicaCount: 1
+
   image:
     repository: asserts/asserts-ui
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.1.1093
+    tag: v0.1.1119
 
   imagePullSecrets: []
 
@@ -304,7 +398,7 @@ grafana:
     repository: asserts/grafana
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v1.0.180
+    tag: v1.0.195
 
   imagePullSecrets: []
 
@@ -315,8 +409,10 @@ grafana:
   service:
     type: ClusterIP
     port: 3000
-    annotations: {}
     clusterIP: ""
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{.Values.grafana.service.port}}"
 
     ## List of IP addresses at which the Prometheus server service is available
     ## Ref: https://kubernetes.io/docs/user-guide/services/#external-ips
@@ -388,8 +484,8 @@ grafana:
     password: ""
     existingSecret: ""
 
-  # scrape interval for grafana datasource
-  # set in .Values.grafana.datasources[0].jsonData.timeInterval
+  # set to the scrapeInterval of your Prometheus
+  # but never smaller than 30s (default)
   scrapeInterval: 30s
 
   # ref: https://grafana.com/docs/grafana/latest/administration/provisioning/#example-data-source-config-file
@@ -441,7 +537,7 @@ grafana:
 knowledge-sensor:
   image:
     repository: asserts/knowledge-sensor
-    tag: v1.1.9
+    tag: v1.1.11
 
   serviceAccount:
     create: false
@@ -494,6 +590,11 @@ tsdb:
 
     nameOverride: "tsdb"
     fullNameOverride: "tsdb"
+
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8428"
 
     initContainers:
       ## wait for the knowledge-sensor to be ready to
@@ -613,7 +714,7 @@ redisgraph:
   ## ref: https://hub.docker.com/repository/docker/asserts/redismod
   image:
     repository: asserts/redismod
-    tag: 6.26
+    tag: 6.2.7-rg-v2.8.20-rs-v2.4.16
 
   nameOverride: asserts-redisgraph
   fullnameOverride: asserts-redisgraph
@@ -634,9 +735,6 @@ redisgraph:
   sentinel:
     enabled: false
 
-  ## TODO: since we are scraping from the tsdb, may want to disable
-  ##       the annotation -> prometheus.io/scrape: true
-  ##       so that there isn't a double scrape from another prom
   metrics:
     enabled: true
 
@@ -650,7 +748,7 @@ redisearch:
   ## ref: https://hub.docker.com/repository/docker/asserts/redismod
   image:
     repository: asserts/redismod
-    tag: 6.26
+    tag: 6.2.7-rg-v2.8.20-rs-v2.4.16
 
   nameOverride: asserts-redisearch
   fullnameOverride: asserts-redisearch
@@ -671,9 +769,6 @@ redisearch:
   sentinel:
     enabled: false
 
-  # TODO: since we are scraping from the tsdb, may want to disable
-  #       the annotation -> prometheus.io/scrape: true
-  #       so that there isn't a double scrape from another prom
   metrics:
     enabled: true
 
@@ -687,6 +782,11 @@ alertmanager:
   serviceAccount:
     create: false
     name: asserts
+
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9093"
 
   persistence:
     enabled: true
@@ -710,6 +810,11 @@ promxyruler:
   serviceAccount:
     create: false
     name: asserts
+
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8082"
 
   existingConfigMap: asserts-promxyruler
 
@@ -768,6 +873,11 @@ promxyuser:
   serviceAccount:
     create: false
     name: asserts
+
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8082"
 
   existingConfigMap: asserts-promxyuser
 
@@ -828,8 +938,3 @@ postgres:
 
   metrics:
     enabled: true
-    service:
-      annotations:
-        # set to false since this chart is handling scraping for this service
-        # the Asserts ServiceMonitor is used or the Asserts TSDB is already scraping this endpoint
-        prometheus.io/scrape: "false"
