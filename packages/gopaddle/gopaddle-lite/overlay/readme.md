@@ -85,16 +85,6 @@ Under Templates, the Marketplace Applications hosts a variety of pre-built Kuber
 
 <img width="1445" alt="gp-app-templates-1" src="https://user-images.githubusercontent.com/74309181/205758999-2a50eac6-d292-4280-85dd-3d617eda623a.png">
 
-
-## microk8s addon for gopaddle community (lite) edition
-
-The microk8s addon for gopaddle community (lite) edition uses this helm
-repository for helm-based installation of gopaddle-lite.
-
-For documentation specific to microk8s addon for gopaddle community (lite)
-edition, see:
-https://github.com/gopaddle-io/microk8s-community-addons-gplite/blob/main/README.md
-
 ## Help
 
 For help related to gopaddle community (lite) edition, visit the gopaddle Help Center at:  https://help.gopaddle.io
