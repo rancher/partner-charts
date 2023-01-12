@@ -34,12 +34,17 @@ Slack template
 {{- printf "\n        {{- if eq .Name \"daemonset\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"replicaset\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"job\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
+{{- printf "\n        {{- if eq .Name \"name\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"asserts_severity\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"asserts_request_type\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"asserts_error_type\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"asserts_request_context\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"instance\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- if eq .Name \"pod\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
+{{- printf "\n        {{- if eq .Name \"d_executed_version\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
+{{- printf "\n        {{- if eq .Name \"configmap\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
+{{- printf "\n        {{- if eq .Name \"config\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
+{{- printf "\n        {{- if eq .Name \"persistentvolumeclaim\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- end }}" -}}
 {{- printf "\n      {{- end }}" -}}
 {{- printf "\n      {{- end }}" -}}

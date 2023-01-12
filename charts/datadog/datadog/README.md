@@ -1,6 +1,6 @@
 # Datadog
 
-![Version: 3.6.8](https://img.shields.io/badge/Version-3.6.8-informational?style=flat-square) ![AppVersion: 7](https://img.shields.io/badge/AppVersion-7-informational?style=flat-square)
+![Version: 3.7.2](https://img.shields.io/badge/Version-3.7.2-informational?style=flat-square) ![AppVersion: 7](https://img.shields.io/badge/AppVersion-7-informational?style=flat-square)
 
 [Datadog](https://www.datadoghq.com/) is a hosted infrastructure monitoring platform. This chart adds the Datadog Agent to all nodes in your cluster via a DaemonSet. It also optionally depends on the [kube-state-metrics chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics). For more information about monitoring Kubernetes with Datadog, please refer to the [Datadog documentation website](https://docs.datadoghq.com/agent/basic_agent_usage/kubernetes/).
 
@@ -425,7 +425,7 @@ helm install <RELEASE_NAME> \
 | agents.containers.systemProbe.logLevel | string | `nil` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off. If not set, fall back to the value of datadog.logLevel. |
 | agents.containers.systemProbe.ports | list | `[]` | Allows to specify extra ports (hostPorts for instance) for this container |
 | agents.containers.systemProbe.resources | object | `{}` | Resource requests and limits for the system-probe container |
-| agents.containers.systemProbe.securityContext | object | `{"capabilities":{"add":["SYS_ADMIN","SYS_RESOURCE","SYS_PTRACE","NET_ADMIN","NET_BROADCAST","NET_RAW","IPC_LOCK","CHOWN"]},"privileged":false}` | Allows you to overwrite the default container SecurityContext for the system-probe container. |
+| agents.containers.systemProbe.securityContext | object | `{"capabilities":{"add":["SYS_ADMIN","SYS_RESOURCE","SYS_PTRACE","NET_ADMIN","NET_BROADCAST","NET_RAW","IPC_LOCK","CHOWN","DAC_READ_SEARCH"]},"privileged":false}` | Allows you to overwrite the default container SecurityContext for the system-probe container. |
 | agents.containers.traceAgent.env | string | `nil` | Additional environment variables for the trace-agent container |
 | agents.containers.traceAgent.envFrom | list | `[]` | Set environment variables specific to trace-agent from configMaps and/or secrets |
 | agents.containers.traceAgent.livenessProbe | object | Every 15s | Override default agent liveness probe settings |
@@ -586,6 +586,7 @@ helm install <RELEASE_NAME> \
 | datadog.clusterChecks.enabled | bool | `true` | Enable the Cluster Checks feature on both the cluster-agents and the daemonset |
 | datadog.clusterChecks.shareProcessNamespace | bool | `false` | Set the process namespace sharing on the cluster checks agent |
 | datadog.clusterName | string | `nil` | Set a unique cluster name to allow scoping hosts and Cluster Checks easily |
+| datadog.clusterTagger.collectKubernetesTags | bool | `false` | Enables Kubernetes resources tags collection. |
 | datadog.collectEvents | bool | `true` | Enables this to start event collection from the kubernetes API |
 | datadog.confd | object | `{}` | Provide additional check configurations (static and Autodiscovery) |
 | datadog.containerExclude | string | `nil` | Exclude containers from the Agent Autodiscovery, as a space-sepatered list |
@@ -632,6 +633,8 @@ helm install <RELEASE_NAME> \
 | datadog.kubelet.hostCAPath | string | None (no mount from host) | Path (on host) where the Kubelet CA certificate is stored |
 | datadog.kubelet.podLogsPath | string | /var/log/pods on Linux, C:\var\log\pods on Windows | Path (on host) where the PODs logs are located |
 | datadog.kubelet.tlsVerify | string | true | Toggle kubelet TLS verification |
+| datadog.kubernetesEvents.collectedEventTypes | list | `[{"kind":"Pod","reasons":["Failed","BackOff","Unhealthy","FailedScheduling","FailedMount","FailedAttachVolume"]},{"kind":"Node","reasons":["TerminatingEvictedPod","NodeNotReady","Rebooted","HostPortConflict"]},{"kind":"CronJob","reasons":["SawCompletedJob"]}]` | Collects Helm values from a release and uses them as tags (Requires Cluster Agent 7.42.0+). This requires datadog.kubernetesEvents.unbundleEvents to be set to true |
+| datadog.kubernetesEvents.unbundleEvents | bool | `false` | Allow unbundling kubernetes events, 1:1 mapping between Kubernetes and Datadog events. (Requires Cluster Agent 7.42.0+). |
 | datadog.leaderElection | bool | `true` | Enables leader election mechanism for event collection |
 | datadog.leaderLeaseDuration | string | `nil` | Set the lease time for leader election in second |
 | datadog.logLevel | string | `"INFO"` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, off |
