@@ -229,3 +229,64 @@ ChartMetadata:
   kubeVersion: '>=1.21-0'
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
+## Migrate existing chart to automated updates
+After chart is migrated, it should get updated from your helm/github repo automatically.
+
+#### 1. Fork partner-charts repository, clone your fork, checkout the main-source branch and pull the latest changes. Then create a new branch off of main-source
+
+#### 2. Create directory structure for your company and chart in `packages/<company>/<chart>`
+
+#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>`
+e.g.
+```yaml	
+	cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
+	HelmRepo: https://charts.kubewarden.io
+	HelmChart: kubewarden-controller
+	Vendor: SUSE
+	DisplayName: Kubewarden Controller
+	ChartMetadata:
+	  kubeVersion: '>=1.21-0'
+	  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
+	EOF  
+```
+* Note: If chart is using a high patch version like 5.5.100 due to old method of modifying version with the PackageVersion, add PackageVersion to the upstream.yaml (set it to 01 , 00 is not valid). Ideally,  when the the next minor version is released e.g. 5.6.X you can then remove PackageVersion from the upstream.yaml since 5.6.X > 5.5.XXX. 
+
+#### 4. If there is an overlay dir in `partner-charts/packages/<chart>/generated-changes/overlay` move it to `packages/<company>/<chart>/overlay` and ensure only necessary files are present in overlay dir.
+
+#### 5. Check the old `generated-changes/patch` directory for any requisite other changes. If there is an edit in `Chart.yaml.patch` that needs to be replicated, it can be handled in the upstream.yaml's `ChartMetadata` like shown above for `kubeVersion` and `icon`. 
+
+#### 6. Clean up old packages and charts directories:
+```bash
+git rm -r packages/<chart>
+git rm -r packages/charts/<chart> (if this exists)
+```
+* Note: If a chart is using a logo file in partner-charts repo, make sure the `icon:` variable is set correctly in the `upstream.yaml ChartMetadata`. 
+
+#### 7. Stage your changes (To make sure the config works, and to setup the new charts and assets directories)
+```bash
+export PACKAGE=<company>/<chart>
+bin/partner-charts-ci stage
+```
+#### 8. Move the old assets files to the new directory (Sometimes this is unchanged but most times it does change)
+```bash
+git mv assets/<chart>/* assets/<company>/
+```
+#### 9. Update the `index.yaml` to reflect the new assets path for existing entries
+```bash
+sed -i 's%assets/<chart>%assets/<company>%' index.yaml
+```
+After doing this,  run this loop to validate that every assets file referenced in the index actually exists, it makes sure your paths aren't edited incorrectly.
+```bash
+for charts in $(yq '.entries[][] | .urls[0]' index.yaml); do stat ${charts} > /dev/null; if [[ ! $? -eq 0 ]]; then echo ${charts}; fi; done
+```
+The command should return quickly with no output. If it outputs anything it means some referenced assets files don't exist which is a problem.
+#### 10. Add/Commit your changes
+```bash
+git add assets charts packages index.yaml
+git commit -m "Migrating <vendor> <chart> chart"
+```
+#### 11. Push your commit
+```bash
+git push origin <your branch>
+```
+#### 12. Open a pull request  to the `main-source` branch for review
