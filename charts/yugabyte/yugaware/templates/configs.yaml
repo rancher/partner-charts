@@ -180,7 +180,7 @@ data:
 {{- end }}
       proxy_http_version 1.1;
       proxy_set_header X-Real-IP  $remote_addr;
-      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header Host $host;
 
@@ -245,8 +245,6 @@ data:
       uwsgi_temp_path /tmp/uwsgi_temp;
       scgi_temp_path /tmp/scgi_temp;
 
-      proxy_read_timeout {{ .Values.nginx.proxyReadTimeoutSec }};
-
       include       /etc/nginx/mime.types;
       default_type  application/octet-stream;
 
@@ -265,6 +263,31 @@ data:
 
       include /etc/nginx/conf.d/*.conf;
     }
+{{- if .Values.prometheus.remoteWrite.tls.enabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-yugaware-prometheus-remote-write-tls
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+type: Opaque
+data:
+# For user-provided remote write ca cert, cert and key. Expect to be base-64 encoded.
+{{- if .Values.prometheus.remoteWrite.tls.caCert }}
+  ca.crt: {{ .Values.prometheus.remoteWrite.tls.caCert }}
+{{- end }}
+{{- if .Values.prometheus.remoteWrite.tls.clientCert }}
+  client.crt: {{ .Values.prometheus.remoteWrite.tls.clientCert }}
+{{- end }}
+{{- if .Values.prometheus.remoteWrite.tls.clientKey }}
+  client.key: {{ .Values.prometheus.remoteWrite.tls.clientKey }}
+{{- end }}
+{{- end}}
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -283,6 +306,10 @@ data:
     rule_files:
       - '/opt/yugabyte/prometheus/rules/yugaware.ad.*.yml'
       - '/opt/yugabyte/prometheus/rules/yugaware.recording-rules.yml'
+    {{- if .Values.prometheus.remoteWrite.config }}
+    remote_write:
+{{ toYaml .Values.prometheus.remoteWrite.config | indent 6}}
+    {{- end }}
     scrape_configs:
       {{- if .Values.ocpCompatibility.enabled }}
       - job_name: "ocp-prometheus-federated"
