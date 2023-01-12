@@ -239,15 +239,15 @@ After chart is migrated, it should get updated from your helm/github repo automa
 #### 3. Create an `upstream.yaml` in `packages/<company>/<chart>`
 e.g.
 ```yaml	
-	cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
-	HelmRepo: https://charts.kubewarden.io
-	HelmChart: kubewarden-controller
-	Vendor: SUSE
-	DisplayName: Kubewarden Controller
-	ChartMetadata:
-	  kubeVersion: '>=1.21-0'
-	  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
-	EOF  
+cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
+HelmRepo: https://charts.kubewarden.io
+HelmChart: kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
+EOF 
 ```
 * Note: If chart is using a high patch version like 5.5.100 due to old method of modifying version with the PackageVersion, add PackageVersion to the upstream.yaml (set it to 01 , 00 is not valid). Ideally,  when the the next minor version is released e.g. 5.6.X you can then remove PackageVersion from the upstream.yaml since 5.6.X > 5.5.XXX. 
 
