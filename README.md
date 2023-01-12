@@ -234,13 +234,11 @@ After chart is migrated, it should get updated from your helm/github repo automa
 
 #### 1. Fork partner-charts repository, clone your fork, checkout the main-source branch and pull the latest changes. Then create a new branch off of main-source
 
-#### 2. Create directory structure for your company and chart in `packages/<company>/<chart>`
-e.g.
+#### 2. Create directory structure for your company and chart in `packages/<company>/<chart>` e.g.
 ```bash
 mkdir -p partner-charts/packages/suse/kubewarden-controller
 ```
-#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>`
-e.g.
+#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>` e.g.
 ```yaml	
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
 HelmRepo: https://charts.kubewarden.io
@@ -254,8 +252,7 @@ EOF
 ```
 * Note: If chart is using a high patch version like 5.5.100 due to old method of modifying version with the PackageVersion, add PackageVersion to the upstream.yaml (set it to 01 , 00 is not valid). Ideally,  when the the next minor version is released e.g. 5.6.X you can then remove PackageVersion from the upstream.yaml since 5.6.X > 5.5.XXX. 
 
-#### 4. If there is an `overlay` dir in `partner-charts/packages/<chart>/generated-changes/` move it to `packages/<company>/<chart>/` and ensure only necessary files are present in overlay dir.
-e.g.
+#### 4. If there is an `overlay` dir in `partner-charts/packages/<chart>/generated-changes/` move it to `packages/<company>/<chart>/` and ensure only necessary files are present in overlay dir e.g.
 ```bash
 mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partner-charts/packages/suse/kubewarden-controller/
 ```
