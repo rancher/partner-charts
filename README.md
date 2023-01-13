@@ -35,7 +35,7 @@ files on top of it.
 
 ## Workflow
 
-#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
+#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. Then create a new branch off of main-source
 #### 2. Clone your fork and ensure the main-source branch is checked out
 ```bash
 git clone -b main-source git@github.com:<your_github>/partner-charts.git
@@ -71,12 +71,12 @@ git add packages/suse/kubewarden-controller
 git commit -m "Submitting suse/kubewarden-controller"
 ```
 #### 7. [Test your configuration](#testing-your-configuration)
-#### 8. Push your commit and open a pull request
+#### 8. Push your commit
 ```bash
-git push origin main-source
-
-# Open Your Pull Request
+git push origin <your_branch>
 ```
+#### 9. Open a pull request to **main-source** branch
+
 
 ## Testing your configuration
 If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-ci-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
