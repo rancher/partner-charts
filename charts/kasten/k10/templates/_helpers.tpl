@@ -250,10 +250,10 @@ install certified version of upstream
 images or not
 */}}
 {{- define "k10.dexImage" -}}
-{{- if not .Values.rhMarketPlace }}
+{{- if not .Values.global.rhMarketPlace }}
 {{- printf "%s:%s" ( include "k10.dexImageRepo" . ) (include "k10.dexTag" .) }}
 {{- else }}
-{{- printf "%s" (get .Values.images "dex") }}
+{{- printf "%s" (get .Values.global.images "dex") }}
 {{- end -}}
 {{- end -}}
 

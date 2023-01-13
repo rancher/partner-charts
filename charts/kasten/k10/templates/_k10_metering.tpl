@@ -80,8 +80,10 @@ data:
   prometheusTargets: |
 {{- range $service_list }}
 {{- if or (not (hasKey $optionalServices .)) (index $optionalServices .).enabled }}
+{{- if not (eq . "executor") }}
 {{ $tmpcontx := dict "main" $main "k10service" . -}}
 {{ include "k10.prometheusTargetConfig" $tmpcontx | trim | indent 4 -}}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- range include "k10.services" . | splitList " " }}
