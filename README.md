@@ -261,7 +261,7 @@ mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partn
 #### 6. Clean up old packages and charts directories:
 ```bash
 git rm -r packages/<chart>
-git rm -r packages/charts/<chart> (if this exists)
+git rm -r charts/<chart>
 ```
 * Note: If a chart is using a logo file in partner-charts repo, make sure the `icon:` variable is set correctly in the `upstream.yaml ChartMetadata`. 
 
