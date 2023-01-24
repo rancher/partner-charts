@@ -253,6 +253,7 @@ EOF
 ```bash
 mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partner-charts/packages/suse/kubewarden-controller/
 ```
+Check the old generated-changes/patch directory for any requisite other changes. If there is an edit in `Chart.yaml.patch` that needs to be replicated, it can be handled in the `upstream.yaml` `ChartMetadata` (see https://github.com/rancher/partner-charts#configuration-file).  If it is a change for any other file in the chart it can be done via an overlay file. See https://github.com/rancher/partner-charts#overlay  
 #### 5. Check the old `generated-changes/patch` directory for any requisite other changes. If there is an edit in `Chart.yaml.patch` that needs to be replicated, it can be handled in the upstream.yaml's `ChartMetadata` like shown above for `kubeVersion` and `icon`. 
 
 #### 6. Clean up old packages and charts directories:
