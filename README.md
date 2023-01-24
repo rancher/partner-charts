@@ -35,18 +35,15 @@ files on top of it.
 
 ## Workflow
 
-#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
-#### 2. Clone your fork and ensure the main-source branch is checked out
-```bash
-git clone -b main-source git@github.com:<your_github>/partner-charts.git
-```
-#### 3. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
+#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. Then create a new branch off of main-source
+
+#### 2. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
 ```bash
 cd partner-charts
 mkdir -p packages/suse/kubewarden-controller
 
 ```
-#### 4. Create your [upstream.yaml](#configuration-file)
+#### 3. Create your [upstream.yaml](#configuration-file)
 Some [examples](#examples) are provided below
 ```bash
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
@@ -59,24 +56,24 @@ ChartMetadata:
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF
 ```
-#### 5. [Create 'overlay' files](#overlay)
+#### 4. [Create 'overlay' files](#overlay)
 Create any add-on files such as an app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
 ```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
 ```
-#### 6. Commit your packages directory
+#### 5. Commit your packages directory
 ```bash
 git add packages/suse/kubewarden-controller
 git commit -m "Submitting suse/kubewarden-controller"
 ```
-#### 7. [Test your configuration](#testing-your-configuration)
-#### 8. Push your commit and open a pull request
+#### 6. [Test your configuration](#testing-your-configuration)
+#### 7. Push your commit
 ```bash
-git push origin main-source
-
-# Open Your Pull Request
+git push origin <your_branch>
 ```
+#### 8. Open a pull request to **main-source** branch
+
 
 ## Testing your configuration
 If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-ci-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.

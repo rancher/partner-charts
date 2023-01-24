@@ -1,5 +1,21 @@
 # Datadog changelog
 
+## 3.9.0
+
+* Set processDiscovery to be true by default
+
+## 3.8.1
+
+* Update docs for `datadog.otlp.receiver.protocols.grpc.endpoint`
+
+## 3.8.0
+
+* Add `providers.gke.cos` option to prevent `/usr/src` from being mounted on COS
+
+## 3.7.3
+
+* Add support for Secret Annotations using `datadog.SecretAnnotations` helm value
+
 ## 3.7.2
 
 * Rename dogstatsd port on the Agent Service to match the name of the dogstatsd port in the Agent pod (`dogstatsd -> dogstatsdport`).

@@ -2,9 +2,17 @@ agent:
   listen:
     address: ":{{ .Values.service.internalPort }}"
     websocket: true
+    {{- if $.Values.global.kas.tls.enabled }}
+    certificate_file: /etc/kas/tls.crt
+    key_file: /etc/kas/tls.key
+    {{- end }}
   kubernetes_api:
     listen:
       address: ":{{ .Values.service.kubernetesApiPort }}"
+      {{- if $.Values.global.kas.tls.enabled }}
+      certificate_file: /etc/kas/tls.crt
+      key_file: /etc/kas/tls.key
+      {{- end }}
     url_path_prefix: "{{ .Values.ingress.k8sApiPath }}"
 gitlab:
   address: "{{ template "gitlab.workhorse.url" . }}"
@@ -22,11 +30,15 @@ api:
   listen:
     address: ":{{ .Values.service.apiInternalPort }}"
     authentication_secret_file: "/etc/kas/.gitlab_kas_secret"
+    {{- if $.Values.global.kas.tls.enabled }}
+    certificate_file: /etc/kas/tls.crt
+    key_file: /etc/kas/tls.key
+    {{- end }}
 private_api:
   listen:
     address: ":{{ .Values.service.privateApiPort }}"
     authentication_secret_file: "/etc/kas/.gitlab_kas_private_api_secret"
-    {{- if .Values.privateApi.tls.enabled }}
+    {{- if or .Values.privateApi.tls.enabled $.Values.global.kas.tls.enabled }}
     certificate_file: "/etc/kas/tls.crt"
     key_file: "/etc/kas/tls.key"
     ca_certificate_file: "/etc/ssl/certs/ca-certificates.crt"
