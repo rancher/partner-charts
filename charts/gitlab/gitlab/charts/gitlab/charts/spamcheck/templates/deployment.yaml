@@ -1,6 +1,5 @@
 {{- if .Values.global.spamcheck.enabled -}}
 {{- $imageCfg := dict "global" $.Values.global.image "local" $.Values.image -}}
-{{- $initImageCfg := dict "global" $.Values.global.busybox.image "local" $.Values.init.image -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,7 +26,7 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
         cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
-        {{- range $key, $value := merge .Values.annotations .Values.metrics.annotations }}
+        {{- range $key, $value := .Values.annotations }}
         {{ $key }}: {{ $value | quote }}
       {{- end }}
     spec:
@@ -67,36 +66,15 @@ spec:
       initContainers:
         {{- include "gitlab.extraInitContainers" . | nindent 8 }}
         {{- include "gitlab.certificates.initContainer" $ | nindent 8 }}
-        - name: configure
-          command: ["sh"]
-          args: ["-c", "wget -P /var/lib/spamcheck $(STORAGE_URL)"]
-          image: {{ include "gitlab.busybox.image" (dict "local" .Values.init "global" $.Values.global) | quote }}
-          {{- include "gitlab.image.pullPolicy" $initImageCfg | indent 10 }}
-          env:
-            - name: STORAGE_URL
-              value: {{ .Values.storageUrl | quote }}
-            {{- include "gitlab.extraEnv" . | nindent 12 }}
-            {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" (dict)) | nindent 12 }}
-          volumeMounts:
-          {{- include "gitlab.extraVolumeMounts" $ | nindent 10 }}
-          - name: spamcheck-data-volume
-            mountPath: /var/lib/spamcheck
-            readOnly: false
-          resources:
-            {{- toYaml $.Values.init.resources | nindent 12 }}
       containers:
         {{- include "gitlab.extraContainers" . | nindent 8 }}
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ coalesce .Values.image.tag (include "gitlab.parseAppVersion" (dict "appVersion" .Chart.AppVersion "prepend" "true")) }}{{ include "gitlab.image.tagSuffix" . }}"
+          image: "{{ .Values.image.repository }}:{{ coalesce .Values.image.tag (include "gitlab.parseAppVersion" (dict "appVersion" .Chart.AppVersion "prepend" "false")) }}{{ include "gitlab.image.tagSuffix" . }}"
           {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
           ports:
             - name: grpc
               containerPort: {{ $.Values.service.internalPort }}
-            - name: monitor
-              containerPort: {{ $.Values.metrics.port }}
           env:
-            - name: STORAGE_URL
-              value: {{ .Values.storageUrl | quote }}
             {{- include "gitlab.extraEnv" . | nindent 12 }}
             {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" (dict)) | nindent 12 }}
           resources:
@@ -104,14 +82,11 @@ spec:
           volumeMounts:
             - name: spamcheck-config-volume
               mountPath: /app/config
-            - name: spamcheck-data-volume
-              mountPath: /var/lib/spamcheck
-              readOnly: false
             {{- include "gitlab.certificates.volumeMount" . | nindent 12 }}
             {{- include "gitlab.extraVolumeMounts" . | nindent 12 }}
           livenessProbe:
             exec:
-              command: ["grpcurl", "-plaintext", "-max-time=1", "localhost:{{ .Values.service.internalPort }}", "spamcheck.SpamcheckService/Healthz"]
+              command: ["health-check", "--liveness"]
             initialDelaySeconds: {{ .Values.deployment.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.deployment.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.deployment.livenessProbe.timeoutSeconds }}
@@ -119,7 +94,7 @@ spec:
             failureThreshold: {{ .Values.deployment.livenessProbe.failureThreshold }}
           readinessProbe:
             exec:
-              command: ["grpcurl", "-plaintext", "-max-time=1", "localhost:{{ .Values.service.internalPort }}", "spamcheck.SpamcheckService/Healthz"]
+              command: ["health-check", "--readiness"]
             initialDelaySeconds: {{ .Values.deployment.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.deployment.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.deployment.readinessProbe.timeoutSeconds }}

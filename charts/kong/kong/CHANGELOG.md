@@ -1,8 +1,36 @@
 # Changelog
 
-## Unreleased
+## 2.15.2
 
-Nothing yet.
+### Fixed
+
+* Do not attempt to mount DB-less config if none provided by chart.
+
+## 2.15.1
+
+### Fixed
+
+* Remove unnecessary failure condition from [#695](https://github.com/Kong/charts/pull/695).
+
+## 2.15.0
+
+### Improvements
+
+* Add the `dblessConfig.secret` key to the values file, allowing the user to
+  supply a Secret for their dbless config file.
+  [#695](https://github.com/Kong/charts/pull/695)
+* Add support for version `v1beta1` of the Gateway API when generating RBAC rules.
+* Add support for version `v1beta1` of the Gateway API when generating RBAC rules.
+  ([#706](https://github.com/Kong/charts/pull/706))
+* Prevent supplying duplicate plugin inclusion to `KONG_PLUGINS` env variable.
+  ([#711](https://github.com/Kong/charts/pull/711))
+
+### Fixed
+
+* Removed appProtocol to fix AKS load balancer
+  ([#705](https://github.com/Kong/charts/pull/705))
+* Fix lookup for CA certificate secret for admission webhook.
+  ([#704](https://github.com/Kong/charts/pull/704))
 
 ## 2.14.0
 

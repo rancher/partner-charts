@@ -95,6 +95,7 @@ Due to gotpl scoping, we can't make use of `range`, so we have to add action lin
 
 {{/* other checks */}}
 {{- $messages = append $messages (include "gitlab.checkConfig.multipleRedis" .) -}}
+{{- $messages = append $messages (include "gitlab.checkConfig.redisYmlOverride" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.hostWhenNoInstall" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.sentry" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.gitlab_docs" .) -}}
@@ -128,12 +129,23 @@ redis:
 {{/* END gitlab.checkConfig.multipleRedis */}}
 
 {{/*
+Ensure that `redis.install: false` if using redis.yml override
+*/}}
+{{- define "gitlab.checkConfig.redisYmlOverride" -}}
+{{- if and .Values.redis.install ( hasKey .Values.global.redis "redisYmlOverride" ) }}
+redis:
+  When you override redis.yml you can not use the in-chart Redis server. Please see https://docs.gitlab.com/charts/charts/globals#configure-redis-settings
+{{- end -}}
+{{- end -}}
+{{/* END gitlab.checkConfig.redisYmlOverride */}}
+
+{{/*
 Ensure that `global.redis.host: <hostname>` is present if `redis.install: false`
 */}}
 {{- define "gitlab.checkConfig.hostWhenNoInstall" -}}
-{{-   if and (not .Values.redis.install) (not .Values.global.redis.host) }}
+{{-   if and (not .Values.redis.install) (empty .Values.global.redis.host) (empty .Values.global.redis.redisYmlOverride) }}
 redis:
-  You've disabled the installation of Redis. When using an external Redis, you must populate `global.redis.host`. Please see https://docs.gitlab.com/charts/advanced/external-redis/
+  You've disabled the installation of Redis. When using an external Redis, you must populate `global.redis.host` or `gitlab.redis.redisYmlOverride`. Please see https://docs.gitlab.com/charts/advanced/external-redis/
 {{-   end -}}
 {{- end -}}
 {{/* END gitlab.checkConfig.hostWhenNoInstall */}}
