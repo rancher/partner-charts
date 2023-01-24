@@ -254,25 +254,24 @@ EOF
 mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partner-charts/packages/suse/kubewarden-controller/
 ```
 Check the old generated-changes/patch directory for any requisite other changes. If there is an edit in `Chart.yaml.patch` that needs to be replicated, it can be handled in the `upstream.yaml` `ChartMetadata` (see https://github.com/rancher/partner-charts#configuration-file).  If it is a change for any other file in the chart it can be done via an overlay file. See https://github.com/rancher/partner-charts#overlay  
-#### 5. Check the old `generated-changes/patch` directory for any requisite other changes. If there is an edit in `Chart.yaml.patch` that needs to be replicated, it can be handled in the upstream.yaml's `ChartMetadata` like shown above for `kubeVersion` and `icon`. 
 
-#### 6. Clean up old packages and charts directories:
+#### 5. Clean up old packages and charts directories:
 ```bash
 git rm -r packages/<chart>
 git rm -r charts/<chart>
 ```
 * Note: If a chart is using a logo file in partner-charts repo, make sure the `icon:` variable is set correctly in the `upstream.yaml ChartMetadata`. 
 
-#### 7. Stage your changes (To make sure the config works, and to setup the new charts and assets directories)
+#### 6. Stage your changes (To make sure the config works, and to setup the new charts and assets directories)
 ```bash
 export PACKAGE=<company>/<chart>
 bin/partner-charts-ci stage
 ```
-#### 8. Move the old assets files to the new directory (Sometimes this is unchanged but most times it does change)
+#### 7. Move the old assets files to the new directory (Sometimes this is unchanged but most times it does change)
 ```bash
 git mv assets/<chart>/* assets/<company>/
 ```
-#### 9. Update the `index.yaml` to reflect the new assets path for existing entries
+#### 8. Update the `index.yaml` to reflect the new assets path for existing entries
 ```bash
 sed -i 's%assets/<chart>%assets/<company>%' index.yaml
 ```
@@ -281,13 +280,13 @@ After doing this,  run this loop to validate that every assets file referenced i
 for charts in $(yq '.entries[][] | .urls[0]' index.yaml); do stat ${charts} > /dev/null; if [[ ! $? -eq 0 ]]; then echo ${charts}; fi; done
 ```
 The command should return quickly with no output. If it outputs anything it means some referenced assets files don't exist which is a problem.
-#### 10. Add/Commit your changes
+#### 9. Add/Commit your changes
 ```bash
 git add assets charts packages index.yaml
 git commit -m "Migrating <vendor> <chart> chart"
 ```
-#### 11. Push your commit
+#### 10. Push your commit
 ```bash
 git push origin <your branch>
 ```
-#### 12. Open a pull request  to the `main-source` branch for review
+#### 11. Open a pull request  to the `main-source` branch for review
