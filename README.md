@@ -227,7 +227,7 @@ ChartMetadata:
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 ## Migrate existing chart to automated updates
-After chart is migrated, it should get updated from your helm/github repo automatically.
+These steps are for charts still using `package.yaml` to track upstream chart.  These charts should be migrated to receive automatic updates via an `upstream.yaml` by following the steps below.  After chart is migrated, it should get updated from your helm/github repo automatically.
 
 #### 1. Fork partner-charts repository, clone your fork, checkout the main-source branch and pull the latest changes. Then create a new branch off of main-source
 
