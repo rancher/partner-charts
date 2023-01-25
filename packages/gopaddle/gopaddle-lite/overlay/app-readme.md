@@ -27,11 +27,11 @@ kubectl patch node $node -p '{"metadata": {"labels":{"topology.kubernetes.io/zon
 ```
 
 b) Create default storageClass.
-Create a storageClass named `standard` from the Rancher Dashboard https://<rancher-endpoint>/dashboard/c/local/explorer/storage.k8s.io.storageclass.
+Create a storageClass named `standard` from the Rancher Dashboard https://rancher-endpoint/dashboard/c/local/explorer/storage.k8s.io.storageclass.
 
 In case of AWS, create an Amazon EBS Disk.
 
-![AWS-EBS](https://user-images.githubusercontent.com/74309181/211659744-adde9594-5a33-4fea-8578-b9347142ba1c.png)
+<img src="https://user-images.githubusercontent.com/74309181/211659744-adde9594-5a33-4fea-8578-b9347142ba1c.png" width="50%">
 
 Patch the storageClass `standard` and add the `is-default-class` annotation to make it the default storageClass.
 
@@ -41,11 +41,11 @@ kubectl patch storageclass standard -p '{"metadata": {"annotations":{"storagecla
 
 c) Open INBOUND firewall ports 30003 and 30004. If RKE is installed on AWS, then open the ports 30003 and 30004 in the instance security group.
 
-Once the gopaddle chart is installed, the dashboard can be accessed at http://<nodeip>:30003
+Once the gopaddle chart is installed, the dashboard can be accessed at http://node_ip:30003
 
 ### Support URL
 
-[Slack](https://gopaddleio.slack.com/join/shared_invite/zt-1l73p8wfo-vYk1XcbLAZMo9wcV_AChvg#/shared-invite/email/expanded-email-form)
+[![Slack Channel](https://img.shields.io/badge/Slack-Join-purple)](https://gopaddleio.slack.com/join/shared_invite/zt-1l73p8wfo-vYk1XcbLAZMo9wcV_AChvg#/shared-invite/email/expanded-email-form)
 
 ### Documentation
 
