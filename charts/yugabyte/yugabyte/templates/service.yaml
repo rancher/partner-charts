@@ -46,27 +46,10 @@ data:
 {{- range $index := until ( int ( $replicas ) ) }}
 {{- $nodeOldStyle := printf "%s-%d.%s.%s.svc.%s" $service.label $index $service.name $root.Release.Namespace $root.Values.domainName }}
 {{- $nodeNewStyle := printf "%s-%s-%d.%s-%s.%s.svc.%s" (include "yugabyte.fullname" $root) $service.label $index (include "yugabyte.fullname" $root) $service.name $root.Release.Namespace $root.Values.domainName }}
-
-{{- if $root.Values.multicluster.createServiceExports -}}
-  {{- $nodeOldStyle = printf "%s-%d.%s.%s.%s.svc.clusterset.local" $service.label $index $root.Values.multicluster.kubernetesClusterId $service.name $root.Release.Namespace }}
-  {{- $nodeNewStyle = printf "%s-%s-%d.%s.%s-%s.%s.svc.clusterset.local" (include "yugabyte.fullname" $root) $service.label $index $root.Values.multicluster.kubernetesClusterId (include "yugabyte.fullname" $root) $service.name $root.Release.Namespace }}
-{{- end -}}
-
-{{- if (and $root.Values.istioCompatibility.enabled $root.Values.multicluster.createServicePerPod) -}}
-  {{- $nodeOldStyle = printf "%s-%d.%s.svc.%s" $service.label $index $root.Release.Namespace $root.Values.domainName }}
-  {{- $nodeNewStyle = printf "%s-%s-%d.%s.svc.%s" (include "yugabyte.fullname" $root) $service.label $index $root.Release.Namespace $root.Values.domainName }}
-{{- end -}}
-
 {{- $node := $root.Values.oldNamingStyle | ternary $nodeOldStyle $nodeNewStyle }}
 {{- if $root.Values.tls.rootCA.key }}
 {{- $dns1 := printf "*.*.%s" $root.Release.Namespace }}
 {{- $dns2 := printf "%s.svc.%s" $dns1 $root.Values.domainName }}
-{{- if $root.Values.multicluster.createServiceExports -}}
-  {{- $dns1 = printf "*.*.*.%s.svc.clusterset.local" $root.Release.Namespace }}
-{{- end -}}
-{{- if (and $root.Values.istioCompatibility.enabled $root.Values.multicluster.createServicePerPod) -}}
-  {{- $dns1 = printf "*.%s.svc.%s" $root.Release.Namespace $root.Values.domainName }}
-{{- end -}}
 {{- $rootCA := buildCustomCert $root.Values.tls.rootCA.cert $root.Values.tls.rootCA.key -}}
 {{- $server := genSignedCert $node ( default nil ) (list $dns1 $dns2 ) 3650 $rootCA }}
   node.{{$node}}.crt: {{ $server.Cert | b64enc }}
@@ -111,7 +94,6 @@ metadata:
   labels:
     {{- include "yugabyte.applabel" ($appLabelArgs) | indent 4 }}
     {{- include "yugabyte.labels" $root | indent 4 }}
-    service-type: "endpoint"
 spec:
   {{ if eq $root.Release.Service "Tiller" }}
   clusterIP:
@@ -215,9 +197,6 @@ spec:
       labels:
         {{- include "yugabyte.applabel" ($appLabelArgs) | indent 8 }}
         {{- include "yugabyte.labels" $root | indent 8 }}
-        {{- if $root.Values.istioCompatibility.enabled }}
-        sidecar.istio.io/inject: "true"
-        {{- end }}
         {{- if eq .name "yb-masters" }}
         {{- with $root.Values.master.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
         {{- else }}
@@ -235,6 +214,7 @@ spec:
       nodeSelector:
       {{ toYaml $root.Values.nodeSelector | indent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: 300
       {{- if eq .name "yb-masters" }} # yb-masters
       {{- if $root.Values.master.tolerations }}
       tolerations:
@@ -246,7 +226,6 @@ spec:
       {{- with $root.Values.tserver.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
       {{- end }}
       {{- end }}
-      terminationGracePeriodSeconds: 300
       affinity:
         # Set the anti-affinity selector scope to YB masters.
         {{ if $root.Values.AZ }}
@@ -379,13 +358,10 @@ spec:
           {{- $rpcPreflight := include "yugabyte.preflight_check" (set $serviceValues "Preflight" $rpcDict) -}}
           {{- if $rpcPreflight -}}{{ $rpcPreflight | nindent 12 }}{{ end -}}
           {{- $broadcastAddr := include "yugabyte.server_broadcast_address" $serviceValues -}}
-          {{/* skip bind check for Istio multi-cluster, we cannot/don't bind to service IP */}}
-          {{- if (not (and $root.Values.istioCompatibility.enabled $root.Values.multicluster.createServicePerPod)) }}
-            {{- $broadcastPort := index $service.ports "tcp-rpc-port" -}}
-            {{- $broadcastDict := dict "Addr" $broadcastAddr "Port" $broadcastPort -}}
-            {{- $broadcastPreflight := include "yugabyte.preflight_check" (set $serviceValues "Preflight" $broadcastDict) -}}
-            {{- if $broadcastPreflight -}}{{ $broadcastPreflight | nindent 12 }}{{ end -}}
-          {{- end }}
+          {{- $broadcastPort := index $service.ports "tcp-rpc-port" -}}
+          {{- $broadcastDict := dict "Addr" $broadcastAddr "Port" $broadcastPort -}}
+          {{- $broadcastPreflight := include "yugabyte.preflight_check" (set $serviceValues "Preflight" $broadcastDict) -}}
+          {{- if $broadcastPreflight -}}{{ $broadcastPreflight | nindent 12 }}{{ end -}}
           {{- $webserverAddr := include "yugabyte.webserver_interface" $serviceValues -}}
           {{- $webserverPort := index $service.ports "http-ui" -}}
           {{- $webserverDict := dict "Addr" $webserverAddr "Port" $webserverPort -}}
@@ -396,25 +372,6 @@ spec:
             else
               k8s_parent=""
             fi && \
-          {{- if and $root.Values.tls.enabled $root.Values.tls.certManager.enabled }}
-            echo "Creating ephemeral /opt/certs/yugabyte/ as symlink to persisted /mnt/disk0/certs/" && \
-            mkdir -p /mnt/disk0/certs  && \
-            mkdir -p /opt/certs  && \
-            ln -s /mnt/disk0/certs /opt/certs/yugabyte  && \
-            if [[ ! -f /opt/certs/yugabyte/ca.crt ]]; then
-              echo "Fresh install of /opt/certs/yugabyte/ca.crt"
-              cp /home/yugabyte/cert-manager/ca.crt /opt/certs/yugabyte/ca.crt;
-            fi && \
-            cmp -s /home/yugabyte/cert-manager/ca.crt /opt/certs/yugabyte/ca.crt;sameRootCA=$? && \
-            if [[ $sameRootCA -eq 0 ]]; then
-              echo "Refreshing tls certs at /opt/certs/yugabyte/";
-              cp /home/yugabyte/cert-manager/tls.crt /opt/certs/yugabyte/node.{{$rpcAddr}}.crt;
-              cp /home/yugabyte/cert-manager/tls.key /opt/certs/yugabyte/node.{{$rpcAddr}}.key;
-              chmod 600 /opt/certs/yugabyte/*
-            else
-              echo "WARNING: Not refreshing certificates as the root ca.crt has changed"
-            fi && \
-          {{- end }}
           {{- if eq .name "yb-masters" }}
             exec ${k8s_parent} /home/yugabyte/bin/yb-master \
             {{- if not $root.Values.storage.ephemeral }}
@@ -530,7 +487,7 @@ spec:
           {{- end }}
           {{- if $root.Values.tls.enabled }}
           - name: {{ $root.Values.oldNamingStyle | ternary (printf "%s-yugabyte-tls-cert" .label) (printf "%s-%s-tls-cert" (include "yugabyte.fullname" $root) .label) }}
-            mountPath: {{ $root.Values.tls.certManager.enabled | ternary "/home/yugabyte/cert-manager" "/opt/certs/yugabyte" }}
+            mountPath: /opt/certs/yugabyte
             readOnly: true
           - name: {{ $root.Values.oldNamingStyle | ternary "yugabyte-tls-client-cert" (printf "%s-client-tls" (include "yugabyte.fullname" $root)) }}
             mountPath: /root/.yugabytedb/
@@ -580,24 +537,25 @@ spec:
         {{- end }}
         {{- end }}
         {{- if $root.Values.tls.enabled }}
-        {{- if $root.Values.tls.certManager.enabled }}
-        {{- /* certManager enabled */}}
-        - name: {{ $root.Values.oldNamingStyle | ternary (printf "%s-yugabyte-tls-cert" .label) (printf "%s-%s-tls-cert" (include "yugabyte.fullname" $root) .label) }}
-          projected:
-            sources:
-            {{- if not $root.Values.tls.certManager.bootstrapSelfsigned }}
-            - secret:
-                name: {{ printf "%s-root-ca" (include "yugabyte.fullname" $root) }}
-            {{- end }}
-            - secret:
-                name: {{ $root.Values.oldNamingStyle | ternary (printf "%s-yugabyte-tls-cert" .label) (printf "%s-%s-tls-cert" (include "yugabyte.fullname" $root) .label) }}
-        {{- else }}
-        {{/* certManager disabled */}}
         - name: {{ $root.Values.oldNamingStyle | ternary (printf "%s-yugabyte-tls-cert" .label) (printf "%s-%s-tls-cert" (include "yugabyte.fullname" $root) .label) }}
           secret:
             secretName: {{ $root.Values.oldNamingStyle | ternary (printf "%s-yugabyte-tls-cert" .label) (printf "%s-%s-tls-cert" (include "yugabyte.fullname" $root) .label) }}
+            {{- if $root.Values.tls.certManager.enabled }}
+            items:
+              {{- $replicas := (eq .name "yb-masters") | ternary $root.Values.replicas.master $root.Values.replicas.tserver -}}
+              {{- range $index := until ( int ( $replicas ) ) }}
+              {{- $nodeOldStyle := printf "%s-%d.%s.%s.svc.%s" $service.label $index $service.name $root.Release.Namespace $root.Values.domainName }}
+              {{- $nodeNewStyle := printf "%s-%s-%d.%s-%s.%s.svc.%s" (include "yugabyte.fullname" $root) $service.label $index (include "yugabyte.fullname" $root) $service.name $root.Release.Namespace $root.Values.domainName }}
+              {{- $node := $root.Values.oldNamingStyle | ternary $nodeOldStyle $nodeNewStyle }}
+              - key: tls.crt
+                path: node.{{$node}}.crt
+              - key: tls.key
+                path: node.{{$node}}.key
+              {{- end }}
+              - key: ca.crt
+                path: ca.crt
+            {{- end }}
             defaultMode: 256
-        {{- end }}
         - name: {{ $root.Values.oldNamingStyle | ternary "yugabyte-tls-client-cert" (printf "%s-client-tls" (include "yugabyte.fullname" $root)) }}
           secret:
             secretName: {{ $root.Values.oldNamingStyle | ternary "yugabyte-tls-client-cert" (printf "%s-client-tls" (include "yugabyte.fullname" $root)) }}

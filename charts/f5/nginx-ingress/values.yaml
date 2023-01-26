@@ -6,6 +6,9 @@ controller:
   ## The kind of the Ingress Controller installation - deployment or daemonset.
   kind: deployment
 
+  ## Annotations for deployments and daemonsets
+  annotations: {}
+
   ## Deploys the Ingress Controller for NGINX Plus.
   nginxplus: false
 
@@ -19,11 +22,11 @@ controller:
     ## Sets log level for App Protect WAF. Allowed values: fatal, error, warn, info, debug, trace
     # logLevel: fatal
 
-  ## Support for App Protect Dos
+  ## Support for App Protect DoS
   appprotectdos:
-    ## Enable the App Protect Dos module in the Ingress Controller.
+    ## Enable the App Protect DoS module in the Ingress Controller.
     enable: false
-    ## Enable debugging for App Protect Dos.
+    ## Enable debugging for App Protect DoS.
     debug: false
     ## Max number of nginx processes to support.
     maxWorkers: 0
@@ -34,6 +37,9 @@ controller:
 
   ## Enables the Ingress Controller pods to use the host's network namespace.
   hostNetwork: false
+
+  ## DNS policy for the Ingress Controller pods
+  dnsPolicy: ClusterFirst
 
   ## Enables debugging for NGINX. Uses the nginx-debug binary. Requires error-log-level: debug in the ConfigMap via `controller.config.entries`.
   nginxDebug: false
@@ -49,7 +55,7 @@ controller:
     repository: nginx/nginx-ingress
 
     ## The tag of the Ingress Controller image.
-    tag: "2.4.2"
+    tag: "3.0.0"
 
     ## The digest of the Ingress Controller image.
     ## If digest is specified it has precedence over tag and will be used instead
@@ -90,7 +96,7 @@ controller:
     ## Used as an alternative to specifying a certificate and key using `controller.defaultTLS.cert` and `controller.defaultTLS.key` parameters.
     ## Note: Alternatively, omitting the default server secret completely will configure NGINX to reject TLS connections to the default server.
     ## Format: <namespace>/<secret_name>
-    secret:
+    secret: ""
 
   wildcardTLS:
     ## The base64-encoded TLS certificate for every Ingress/VirtualServer host that has TLS enabled but no secret specified.
@@ -105,13 +111,28 @@ controller:
     ## The value must follow the following format: `<namespace>/<name>`.
     ## Used as an alternative to specifying a certificate and key using `controller.wildcardTLS.cert` and `controller.wildcardTLS.key` parameters.
     ## Format: <namespace>/<secret_name>
-    secret:
+    secret: ""
 
   ## The node selector for pod assignment for the Ingress Controller pods.
-  nodeSelector: {}
+  # nodeSelector: {}
 
   ## The termination grace period of the Ingress Controller pod.
   terminationGracePeriodSeconds: 30
+
+  ## HorizontalPodAutoscaling (HPA)
+  autoscaling:
+    ## Enables HorizontalPodAutoscaling.
+    enabled: false
+    ## The annotations of the Ingress Controller HorizontalPodAutoscaler.
+    annotations: {}
+    ## Minimum number of replicas for the HPA.
+    minReplicas: 1
+    ## Maximum number of replicas for the HPA.
+    maxReplicas: 3
+    ## The target cpu utilization percentage.
+    targetCPUUtilizationPercentage: 50
+    ## The target memory utilization percentage.
+    targetMemoryUtilizationPercentage: 50
 
   ## The resources of the Ingress Controller pods.
   resources:
@@ -130,7 +151,7 @@ controller:
   affinity: {}
 
   ## The topology spread constraints of the Ingress controller pods.
-  topologySpreadConstraints: {}
+  # topologySpreadConstraints: {}
 
   ## The volumes of the Ingress Controller pods.
   volumes: []
@@ -177,8 +198,14 @@ controller:
   ## New Ingresses without an ingressClassName field specified will be assigned the class specified in `controller.ingressClass`.
   setAsDefaultIngress: false
 
-  ## Comma separated list of namespaces to watch for Ingress resources. By default the Ingress Controller watches all namespaces.
+  ## Comma separated list of namespaces to watch for Ingress resources. By default the Ingress Controller watches all namespaces. Mutually exclusive with "controller.watchNamespaceLabel".
   watchNamespace: ""
+
+  ## Configures the Ingress Controller to watch only those namespaces with label foo=bar. By default the Ingress Controller watches all namespaces. Mutually exclusive with "controller.watchNamespace".
+  watchNamespaceLabel: ""
+
+  ## Comma separated list of namespaces to watch for Secret resources. By default the Ingress Controller watches all namespaces.
+  watchSecretNamespace: ""
 
   ## Enable the custom resources.
   enableCustomResources: true
@@ -284,7 +311,7 @@ controller:
       port: 80
 
       ## The custom NodePort for the HTTP port. Requires controller.service.type set to NodePort.
-      nodePort: ""
+      # nodePort: 80
 
       ## The HTTP port on the POD where the Ingress Controller service is running.
       targetPort: 80
@@ -297,7 +324,7 @@ controller:
       port: 443
 
       ## The custom NodePort for the HTTPS port. Requires controller.service.type set to NodePort.
-      nodePort: ""
+      # nodePort: 443
 
       ## The HTTPS port on the POD where the Ingress Controller service is running.
       targetPort: 443
@@ -306,6 +333,9 @@ controller:
     customPorts: []
 
   serviceAccount:
+    ## The annotations of the service account of the Ingress Controller pods.
+    annotations: {}
+
     ## The name of the service account of the Ingress Controller pods. Used for RBAC.
     ## Autogenerated if not set or set to "".
     # name: nginx-ingress
@@ -330,7 +360,7 @@ controller:
     selectorMatchLabels: {}
 
     ## A list of endpoints allowed as part of this ServiceMonitor.
-    endpoints: {}
+    endpoints: []
 
   reportIngressStatus:
     ## Updates the address field in the status of Ingress resources with an external address of the Ingress Controller.
@@ -403,9 +433,21 @@ prometheus:
   ## Configures the HTTP scheme used.
   scheme: http
 
+serviceInsight:
+  ## Expose NGINX Plus Service Insight endpoint.
+  create: false
+
+  ## Configures the port to expose endpoint.
+  port: 9114
+
+  ## Specifies the namespace/name of a Kubernetes TLS Secret which will be used to protect the Service Insight endpoint.
+  secret: ""
+
+  ## Configures the HTTP scheme used.
+  scheme: http
+
 nginxServiceMesh:
   ## Enables integration with NGINX Service Mesh.
-  ## Requires controller.nginxplus
   enable: false
 
   ## Enables NGINX Service Mesh workload to route egress traffic through the Ingress Controller.

@@ -2,6 +2,42 @@
 documentation](doc/development/changelog.md) for instructions on adding your own
 entry.
 
+## 6.8.0 (2023-01-20)
+
+### Added (4 changes)
+
+- [Add redisYmlOverride config setting](gitlab-org/charts/gitlab@977f28ed2da9a30b329e0cef905394a27c7c47dc) ([merge request](gitlab-org/charts/gitlab!2907))
+- [Allow configuring repository cache redis instance](gitlab-org/charts/gitlab@c5f6385840180861b8be564d2a64a032cdf1bc4c) ([merge request](gitlab-org/charts/gitlab!2896))
+- [Improve KAS TLS UX](gitlab-org/charts/gitlab@8fcbe634eb7bf181eb2ddfbd30fd5fe4a3af2fec) ([merge request](gitlab-org/charts/gitlab!2888))
+- [mail_room: Allow configuration of delete_after_delivery parameter](gitlab-org/charts/gitlab@7091675c3a222f35302e1d1876e9b134e0f648ea) ([merge request](gitlab-org/charts/gitlab!2906))
+
+### Fixed (1 change)
+
+- [Fix indent for priorityClassName in Toolbox backup job](gitlab-org/charts/gitlab@e94049797f3788661c7d0967ead0b7581a1c4361) by @george.poputnikov ([merge request](gitlab-org/charts/gitlab!2898))
+
+### Changed (4 changes)
+
+- [Update gitlab-org/container-registry from 3.64.0-gitlab to 3.65.0-gitlab](gitlab-org/charts/gitlab@744f9ca839e3c322e1202ad700f79e61595c7a51) ([merge request](gitlab-org/charts/gitlab!2916))
+- [Update gitlab-org/charts/gitlab-runner from 0.48.0 to 0.48.1](gitlab-org/charts/gitlab@460c275eaca9b1e3bf063947ca49629edef57d80) ([merge request](gitlab-org/charts/gitlab!2915))
+- [Update gitlab-org/gitlab-exporter from 11.18.2 to 12.1.0](gitlab-org/charts/gitlab@428de3dd7c208a0469b18b927fece2bc54029b19) ([merge request](gitlab-org/charts/gitlab!2911))
+- [Update gitlab-org/container-registry from 3.63.0-gitlab to 3.64.0-gitlab](gitlab-org/charts/gitlab@a1edaea5f4d9d2a6d972b7412deafe6a2b50aedb) ([merge request](gitlab-org/charts/gitlab!2904))
+
+## 6.7.4 (2023-01-12)
+
+No changes.
+
+## 6.7.3 (2023-01-11)
+
+No changes.
+
+## 6.7.2 (2023-01-09)
+
+No changes.
+
+## 6.7.1 (2023-01-05)
+
+No changes.
+
 ## 6.7.0 (2022-12-21)
 
 ### Added (2 changes)
@@ -27,6 +63,18 @@ entry.
 ### Other (1 change)
 
 - [Use kubectl image with kubectl 1.24.7, yq 4.30.1](gitlab-org/charts/gitlab@e0c892e060ac405d8a2c90f7b4d632e1b3512728) ([merge request](gitlab-org/charts/gitlab!2871))
+
+## 6.6.5 (2023-01-12)
+
+No changes.
+
+## 6.6.4 (2023-01-09)
+
+No changes.
+
+## 6.6.3 (2022-12-21)
+
+No changes.
 
 ## 6.6.2 (2022-12-05)
 
@@ -68,6 +116,14 @@ No changes.
 ### Removed (1 change)
 
 - [Container Registry: remove testslowimport migration setting](gitlab-org/charts/gitlab@b433267a4a406dc7dbfd22c72de930cf62994eea) ([merge request](gitlab-org/charts/gitlab!2818))
+
+## 6.5.9 (2023-01-12)
+
+No changes.
+
+## 6.5.8 (2023-01-09)
+
+No changes.
 
 ## 6.5.7 (2022-12-07)
 

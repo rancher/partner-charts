@@ -153,6 +153,7 @@ integrations that you have configured.
 | ksm.config.selector | string | `"app.kubernetes.io/name=kube-state-metrics"` | Label selector that will be used to automatically discover an instance of kube-state-metrics running in the cluster. |
 | ksm.config.timeout | string | `"10s"` | Timeout for the ksm API contacted by the integration |
 | ksm.enabled | bool | `true` | Enable cluster state monitoring. Advanced users only. Setting this to `false` is not supported and will break the New Relic experience. |
+| ksm.hostNetwork | bool | Not set | Sets pod's hostNetwork. When set bypasses global/common variable  |
 | ksm.resources | object | 100m/150M -/850M | Resources for the KSM scraper pod. Keep in mind that sharding is not supported at the moment, so memory usage for this component ramps up quickly on large clusters. |
 | ksm.tolerations | list | Schedules in all tainted nodes | Tolerations for the KSM Deployment. |
 | kubelet | object | See `values.yaml` | Configuration for the DaemonSet that collects metrics from the Kubelet. |
@@ -164,6 +165,7 @@ integrations that you have configured.
 | kubelet.extraEnvFrom | list | `[]` | Add user environment from configMaps or secrets as variables to the agent |
 | kubelet.extraVolumeMounts | list | `[]` | Defines where to mount volumes specified with `extraVolumes` |
 | kubelet.extraVolumes | list | `[]` | Volumes to mount in the containers |
+| kubelet.hostNetwork | bool | Not set | Sets pod's hostNetwork. When set bypasses global/common variable  |
 | kubelet.tolerations | list | Schedules in all tainted nodes | Tolerations for the control plane DaemonSet. |
 | labels | object | `{}` | Additional labels for chart objects. Can be configured also with `global.labels` |
 | licenseKey | string | `""` | This set this license key to use. Can be configured also with `global.licenseKey` |
@@ -179,7 +181,7 @@ integrations that you have configured.
 | proxy | string | `""` | Configures the integration to send all HTTP/HTTPS request through the proxy in that URL. The URL should have a standard format like `https://user:password@hostname:port`. Can be configured also with `global.proxy` |
 | rbac.create | bool | `true` | Whether the chart should automatically create the RBAC objects required to run. |
 | rbac.pspEnabled | bool | `false` | Whether the chart should create Pod Security Policy objects. |
-| selfMonitoring.pixie.enabled | bool | `true` | Enables the Pixie Health Check nri-flex config. This Flex config performs periodic checks of the Pixie /healthz and /statusz endpoints exposed by the Pixie Cloud Connector. A status for each endpoint is sent to New Relic in a pixieHealthCheck event. |
+| selfMonitoring.pixie.enabled | bool | `false` | Enables the Pixie Health Check nri-flex config. This Flex config performs periodic checks of the Pixie /healthz and /statusz endpoints exposed by the Pixie Cloud Connector. A status for each endpoint is sent to New Relic in a pixieHealthCheck event. |
 | serviceAccount | object | See `values.yaml` | Settings controlling ServiceAccount creation. |
 | serviceAccount.create | bool | `true` | Whether the chart should automatically create the ServiceAccount objects required to run. |
 | strategy | object | `type: Recreate` | Update strategy for the deployed Deployments. |

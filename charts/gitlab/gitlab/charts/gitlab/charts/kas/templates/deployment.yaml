@@ -92,7 +92,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: OWN_PRIVATE_API_URL
-              value: "{{ ternary "grpcs" "grpc" .Values.privateApi.tls.enabled }}://$(POD_IP):{{ .Values.service.privateApiPort }}"
+              value: "{{ include "gitlab.kas.internal.scheme" . }}://$(POD_IP):{{ .Values.service.privateApiPort }}"
           ports:
             - containerPort: {{ .Values.service.internalPort }}
               name: {{ template "name" . }}
@@ -142,9 +142,9 @@ spec:
                 items:
                   - key: {{ template "gitlab.kas.privateApi.key" . }}
                     path: .gitlab_kas_private_api_secret
-            {{- if $.Values.privateApi.tls.enabled }}
+            {{- if or $.Values.privateApi.tls.enabled $.Values.global.kas.tls.enabled }}
             - secret:
-                name: {{ .Values.privateApi.tls.secretName }}
+                name: {{ default .Values.privateApi.tls.secretName .Values.global.kas.tls.secretName | quote }}
                 items:
                   - key: tls.crt
                     path: tls.crt
