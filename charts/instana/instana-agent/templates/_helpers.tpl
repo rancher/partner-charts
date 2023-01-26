@@ -321,3 +321,11 @@ failureThreshold: 3
   mountPath: /opt/instana/agent/etc/certs
   readOnly: true
 {{- end -}}
+
+
+{{- define "k8sensor.commonEnv" -}}
+{{- range $key, $value := .Values.agent.env }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end }}
+{{- end -}}
