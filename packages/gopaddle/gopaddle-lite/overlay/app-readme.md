@@ -31,7 +31,7 @@ Create a storageClass named `standard` from the Rancher Dashboard https://ranche
 
 In case of AWS, create an Amazon EBS Disk.
 
-<img src="https://user-images.githubusercontent.com/74309181/211659744-adde9594-5a33-4fea-8578-b9347142ba1c.png" width="50%">
+<img src="https://user-images.githubusercontent.com/74309181/211659744-adde9594-5a33-4fea-8578-b9347142ba1c.png" width="80%">
 
 Patch the storageClass `standard` and add the `is-default-class` annotation to make it the default storageClass.
 
