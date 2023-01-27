@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: marketplace
+    app-id: appsa666871dcdb46c48d7c939cc17107348e44b
+    family: servicegroup
+    name: marketplace
+    released-by: gopaddle
+    servicegroup: marketplace-q5j701mv
+    servicegroup-name: marketplace
+  name: marketplace
+  namespace: {{ .Release.Namespace }}
+spec:
+  minReadySeconds: 5
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: marketplace
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: marketplace
+        app-id: appsa666871dcdb46c48d7c939cc17107348e44b
+        family: servicegroup
+        name: marketplace
+        released-by: gopaddle
+        servicegroup: marketplace-q5j701mv
+        servicetype: gopaddle
+      name: marketplace
+    spec:
+      affinity: {}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+      containers:
+      - args:
+        - |-
+          #!/bin/bash
+
+          echo "----------- start conatainer ------------"
+          ./marketplace kube > /var/log/gopaddle/marketplace.log
+          tail -f /var/log/gopaddle/marketplace.log
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ quote .Values.marketplace.marketplace.envMap.NODE_NAME }}
+        - name: GP_RELEASE
+          value: gp-4.2
+        envFrom:
+        - secretRef:
+            name: marketplace-marketplace-envsecret-rmadj
+        image: {{ template "gopaddle.registryUrl" . }}/marketplace:{{ .Values.marketplace.marketplace.imageTag }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8023
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: marketplace
+        ports:
+        - containerPort: 8023
+          name: 8023-tcp
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8023
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100M
+          requests:
+            cpu: 10m
+            memory: 50M
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /app/config
+          name: marketplace-marketplace-cmnt-xeiho
+        - mountPath: /var/log/gopaddle/
+          name: log
+      imagePullSecrets:
+{{- if .Values.global.airgapped.enabled }}
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- else }}
+      - name: gcr-json-key
+{{- end }}
+      securityContext: {}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: marketplace-marketplace-configmap-7dszg
+        name: marketplace-marketplace-cmnt-xeiho
+      - emptyDir: {}
+        name: log
+status: {}

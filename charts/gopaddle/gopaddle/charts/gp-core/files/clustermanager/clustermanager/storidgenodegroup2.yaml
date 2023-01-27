@@ -1,0 +1,1111 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Amazon EKS - Node Group
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: EKS Cluster
+        Parameters:
+          - ClusterName
+          - ClusterControlPlaneSecurityGroup
+      - Label:
+          default: Worker Node Configuration
+        Parameters:
+          - NodeGroupName
+          - NodeAutoScalingGroupMinSize
+          - NodeAutoScalingGroupDesiredCapacity
+          - NodeAutoScalingGroupMaxSize
+          - NodeInstanceType
+          - NodeImageIdSSMParam
+          - NodeImageId
+          - NodeVolumeSize
+          - KeyName
+          - BootstrapArguments
+          - DisableIMDSv1
+      - Label:
+          default: Worker Network Configuration
+        Parameters:
+          - VpcId
+          - Subnets
+
+Parameters:
+  BootstrapArguments:
+    Type: String
+    Default: ""
+    Description: "Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami"
+
+  ClusterControlPlaneSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup::Id"
+    Default: CLUSTER_SG
+    Description: The security group of the cluster control plane.
+
+  ClusterName:
+    Type: String
+    Default: CLUSTER_NAME
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+
+  KeyName:
+    Type: "AWS::EC2::KeyPair::KeyName"
+    Default: KEY_NAME
+    Description: The EC2 Key Pair to allow SSH access to the instances
+
+  NodeAutoScalingGroupDesiredCapacity:
+    Type: Number
+    Default: ASG_DESIRED_CAPACITY
+    Description: Desired capacity of Node Group ASG.
+
+  NodeAutoScalingGroupMaxSize:
+    Type: Number
+    Default: ASG_MAXSIZE
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+
+  NodeAutoScalingGroupMinSize:
+    Type: Number
+    Default: ASG_MINSIZE
+    Description: Minimum size of Node Group ASG.
+
+  NodeGroupName:
+    Type: String
+    Default: NODEGROUP_NAME
+    Description: Unique identifier for the Node Group.
+
+  NodeInstanceRole:
+    Type: String
+    Default: NODE_INSTANCE_ROLE
+    Description: IAM role for Node group.
+
+  NodeImageId:
+    Type: String
+    Default: AMI_IMAGE_ID
+    Description: (Optional) Specify your own custom image ID. This value overrides any AWS Systems Manager Parameter Store value specified above.
+
+  NodeImageIdSSMParam:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: /aws/service/eks/optimized-ami/1.17/amazon-linux-2/recommended/image_id
+    Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances. Change this value to match the version of Kubernetes you are using.
+
+  DisableIMDSv1:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "false"
+      - "true"
+
+  NodeInstanceType:
+    Type: String
+    Default: NODEPOOL_INSTANCE_TYPE
+    AllowedValues:
+      - a1.medium
+      - a1.large
+      - a1.xlarge
+      - a1.2xlarge
+      - a1.4xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.12xlarge
+      - c5.18xlarge
+      - c5.24xlarge
+      - c5.metal
+      - c5d.large
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.9xlarge
+      - c5d.12xlarge
+      - c5d.18xlarge
+      - c5d.24xlarge
+      - c5d.metal
+      - c5n.large
+      - c5n.xlarge
+      - c5n.2xlarge
+      - c5n.4xlarge
+      - c5n.9xlarge
+      - c5n.18xlarge
+      - c6g.medium
+      - c6g.large
+      - c6g.xlarge
+      - c6g.2xlarge
+      - c6g.4xlarge
+      - c6g.8xlarge
+      - c6g.12xlarge
+      - c6g.16xlarge
+      - c6g.metal
+      - c6gd.medium
+      - c6gd.large
+      - c6gd.xlarge
+      - c6gd.2xlarge
+      - c6gd.4xlarge
+      - c6gd.8xlarge
+      - c6gd.12xlarge
+      - c6gd.16xlarge
+      - c6gd.metal
+      - cc2.8xlarge
+      - cr1.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - f1.2xlarge
+      - f1.4xlarge
+      - f1.16xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - g3s.xlarge
+      - g3.4xlarge
+      - g3.8xlarge
+      - g3.16xlarge
+      - h1.2xlarge
+      - h1.4xlarge
+      - h1.8xlarge
+      - h1.16xlarge
+      - hs1.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - i3.large
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - i3.16xlarge
+      - i3.metal
+      - i3en.large
+      - i3en.xlarge
+      - i3en.2xlarge
+      - i3en.3xlarge
+      - i3en.6xlarge
+      - i3en.12xlarge
+      - i3en.24xlarge
+      - inf1.xlarge
+      - inf1.2xlarge
+      - inf1.6xlarge
+      - inf1.24xlarge
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m4.16xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
+      - m5.12xlarge
+      - m5.16xlarge
+      - m5.24xlarge
+      - m5.metal
+      - m5a.large
+      - m5a.xlarge
+      - m5a.2xlarge
+      - m5a.4xlarge
+      - m5a.8xlarge
+      - m5a.12xlarge
+      - m5a.16xlarge
+      - m5a.24xlarge
+      - m5ad.large
+      - m5ad.xlarge
+      - m5ad.2xlarge
+      - m5ad.4xlarge
+      - m5ad.12xlarge
+      - m5ad.24xlarge
+      - m5d.large
+      - m5d.xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - m5d.8xlarge
+      - m5d.12xlarge
+      - m5d.16xlarge
+      - m5d.24xlarge
+      - m5d.metal
+      - m5dn.large
+      - m5dn.xlarge
+      - m5dn.2xlarge
+      - m5dn.4xlarge
+      - m5dn.8xlarge
+      - m5dn.12xlarge
+      - m5dn.16xlarge
+      - m5dn.24xlarge
+      - m5n.large
+      - m5n.xlarge
+      - m5n.2xlarge
+      - m5n.4xlarge
+      - m5n.8xlarge
+      - m5n.12xlarge
+      - m5n.16xlarge
+      - m5n.24xlarge
+      - m6g.medium
+      - m6g.large
+      - m6g.xlarge
+      - m6g.2xlarge
+      - m6g.4xlarge
+      - m6g.8xlarge
+      - m6g.12xlarge
+      - m6g.16xlarge
+      - m6g.metal
+      - m6gd.medium
+      - m6gd.large
+      - m6gd.xlarge
+      - m6gd.2xlarge
+      - m6gd.4xlarge
+      - m6gd.8xlarge
+      - m6gd.12xlarge
+      - m6gd.16xlarge
+      - m6gd.metal
+      - p2.xlarge
+      - p2.8xlarge
+      - p2.16xlarge
+      - p3.2xlarge
+      - p3.8xlarge
+      - p3.16xlarge
+      - p3dn.24xlarge
+      - g4dn.xlarge
+      - g4dn.2xlarge
+      - g4dn.4xlarge
+      - g4dn.8xlarge
+      - g4dn.12xlarge
+      - g4dn.16xlarge
+      - g4dn.metal
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.8xlarge
+      - r5.12xlarge
+      - r5.16xlarge
+      - r5.24xlarge
+      - r5.metal
+      - r5a.large
+      - r5a.xlarge
+      - r5a.2xlarge
+      - r5a.4xlarge
+      - r5a.8xlarge
+      - r5a.12xlarge
+      - r5a.16xlarge
+      - r5a.24xlarge
+      - r5ad.large
+      - r5ad.xlarge
+      - r5ad.2xlarge
+      - r5ad.4xlarge
+      - r5ad.12xlarge
+      - r5ad.24xlarge
+      - r5d.large
+      - r5d.xlarge
+      - r5d.2xlarge
+      - r5d.4xlarge
+      - r5d.8xlarge
+      - r5d.12xlarge
+      - r5d.16xlarge
+      - r5d.24xlarge
+      - r5d.metal
+      - r5dn.large
+      - r5dn.xlarge
+      - r5dn.2xlarge
+      - r5dn.4xlarge
+      - r5dn.8xlarge
+      - r5dn.12xlarge
+      - r5dn.16xlarge
+      - r5dn.24xlarge
+      - r5n.large
+      - r5n.xlarge
+      - r5n.2xlarge
+      - r5n.4xlarge
+      - r5n.8xlarge
+      - r5n.12xlarge
+      - r5n.16xlarge
+      - r5n.24xlarge
+      - r6g.medium
+      - r6g.large
+      - r6g.xlarge
+      - r6g.2xlarge
+      - r6g.4xlarge
+      - r6g.8xlarge
+      - r6g.12xlarge
+      - r6g.16xlarge
+      - r6g.metal
+      - r6gd.medium
+      - r6gd.large
+      - r6gd.xlarge
+      - r6gd.2xlarge
+      - r6gd.4xlarge
+      - r6gd.8xlarge
+      - r6gd.12xlarge
+      - r6gd.16xlarge
+      - r6gd.metal
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - t3a.nano
+      - t3a.micro
+      - t3a.small
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t3a.2xlarge
+      - u-6tb1.metal
+      - u-9tb1.metal
+      - u-12tb1.metal
+      - x1.16xlarge
+      - x1.32xlarge
+      - x1e.xlarge
+      - x1e.2xlarge
+      - x1e.4xlarge
+      - x1e.8xlarge
+      - x1e.16xlarge
+      - x1e.32xlarge
+      - z1d.large
+      - z1d.xlarge
+      - z1d.2xlarge
+      - z1d.3xlarge
+      - z1d.6xlarge
+      - z1d.12xlarge
+      - z1d.metal
+    ConstraintDescription: Must be a valid EC2 instance type
+    Description: EC2 instance type for the node instances
+
+  NodeVolumeSize:
+    Type: Number
+    Default: NODE_DISK_SIZE
+    Description: Node volume size
+
+  Subnets:
+    Type: "CommaDelimitedList"
+    Default: SUBNET01
+    Description: The subnets where workers can be created.
+
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    Default: VPCID
+    Description: The VPC of the worker instances
+
+Mappings:
+  PartitionMap:
+    aws:
+      EC2ServicePrincipal: "ec2.amazonaws.com"
+    aws-us-gov:
+      EC2ServicePrincipal: "ec2.amazonaws.com"
+    aws-cn:
+      EC2ServicePrincipal: "ec2.amazonaws.com.cn"
+    aws-iso:
+      EC2ServicePrincipal: "ec2.c2s.ic.gov"
+    aws-iso-b:
+      EC2ServicePrincipal: "ec2.sc2s.sgov.gov"
+
+Conditions:
+  HasNodeImageId: !Not
+    - "Fn::Equals":
+      - !Ref NodeImageId
+      - ""
+
+  IMDSv1Disabled:
+    "Fn::Equals":
+      - !Ref DisableIMDSv1
+      - "true"
+
+Resources:
+  NodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+        - !Ref NodeInstanceRole
+
+  NodeSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Security group for all nodes in the cluster
+      Tags:
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: owned
+      VpcId: !Ref VpcId
+
+  NodeSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      FromPort: 0
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      ToPort: 65535
+
+  ClusterControlPlaneSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      FromPort: 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      ToPort: 443
+
+  ControlPlaneEgressToNodeSecurityGroup:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      FromPort: 1025
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 65535
+
+  ControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      FromPort: 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+
+  NodeSecurityGroupFromControlPlaneIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      FromPort: 1025
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 65535
+
+  NodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      FromPort: 443
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 443
+
+  NodeLaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp2
+          - DeviceName: /dev/xvdf 
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp2 
+          - DeviceName: /dev/xvdg 
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp2 
+          - DeviceName: /dev/xvdh 
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp2          
+        IamInstanceProfile:
+          Arn: !GetAtt NodeInstanceProfile.Arn
+        ImageId: !If
+          - HasNodeImageId
+          - !Ref NodeImageId
+          - !Ref NodeImageIdSSMParam
+        InstanceType: !Ref NodeInstanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+        - !Ref NodeSecurityGroup
+        UserData: !Base64
+          "Fn::Sub": |
+            #!/bin/bash
+            set -o xtrace
+            sed -i '/allow-privileged\=true\ \\/d' /etc/eks/bootstrap.sh
+            /etc/eks/bootstrap.sh ${ClusterName} --kubelet-extra-args --node-labels=nodePoolType=storidgeNodePool
+            curl -fsSL ftp://download.storidge.com/pub/ce/cio-ce | sudo bash
+            /opt/aws/bin/cfn-signal --exit-code $? \
+                     --stack  ${AWS::StackName} \
+                     --resource NodeGroup  \
+                     --region ${AWS::Region}   
+                     
+            reboot
+        MetadataOptions:
+          HttpPutResponseHopLimit : 2
+          HttpEndpoint: enabled
+          HttpTokens: !If
+            - IMDSv1Disabled
+            - required
+            - optional
+
+  NodeGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      DesiredCapacity: !Ref NodeAutoScalingGroupDesiredCapacity
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NodeLaunchTemplate
+        Version: !GetAtt NodeLaunchTemplate.LatestVersionNumber
+      MaxSize: !Ref NodeAutoScalingGroupMaxSize
+      MinSize: !Ref NodeAutoScalingGroupMinSize
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub ${ClusterName}-${NodeGroupName}-Node
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          PropagateAtLaunch: true
+          Value: owned
+      VPCZoneIdentifier: !Ref Subnets
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref NodeAutoScalingGroupDesiredCapacity
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+        MinInstancesInService: !Ref NodeAutoScalingGroupDesiredCapacity
+        PauseTime: PT5M
+    
+  ASGLifecycleHookTerminate:
+    Type: AWS::AutoScaling::LifecycleHook
+    DependsOn: NodeGroup
+    Properties:
+      AutoScalingGroupName: !Ref NodeGroup
+      DefaultResult: "CONTINUE"
+      HeartbeatTimeout: 600
+      LifecycleHookName: "Storidge-Remove-Node"
+      LifecycleTransition: "autoscaling:EC2_INSTANCE_TERMINATING"
+    
+  ASGLifecycleHookLaunch:
+    Type: AWS::AutoScaling::LifecycleHook
+    DependsOn: NodeGroup
+    Properties:
+      AutoScalingGroupName: !Ref NodeGroup
+      HeartbeatTimeout: 1200
+      LifecycleHookName: "Storidge-Add-Node"
+      LifecycleTransition: "autoscaling:EC2_INSTANCE_LAUNCHING"
+
+  SSMdocument:
+    Type: 'AWS::SSM::Document'
+    DependsOn: NodeGroup
+    Properties:
+      DocumentType: Automation
+      Content:
+        schemaVersion: "0.3"
+        description: "Create Storidge cluster with SSM Automation"
+        # Role that is utilized to perform the steps within the Automation Document. In this case to be able to Signal CFN and Describe Instances. 
+        assumeRole: "{{AutomationAssumeRole}}"
+        # Gathering parameters needed to configure DCs in the Quick Start
+        parameters:
+          Region:
+            type: String
+            default: !Ref "AWS::Region"
+          AutomationAssumeRole:
+            type: String
+            # TODO
+            default: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${NodeInstanceRole}'         
+          ASGName:
+            type: String
+            default: !Ref NodeGroup
+        mainSteps:
+          - name: Get_Token_Name
+            action: 'aws:executeScript'
+            inputs:
+              Runtime: python3.6
+              Handler: script_handler
+              Script: |-
+                import time
+                import calendar        
+                def script_handler(events, context):
+                  print('Setting storidge token name')
+                  # print(events["parameter"])
+                  token=str(calendar.timegm(time.gmtime()))
+                  return {'token': token}
+            maxAttempts: 3
+            outputs:
+              - Selector: $.Payload.token
+                Type: String
+                Name: token
+          - name: Get_ASG_Instances
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: AutoScaling
+              Api: DescribeAutoScalingGroups
+              AutoScalingGroupNames:
+                - '{{ASGName}}'
+            maxAttempts: 3
+            outputs:
+              - Selector: '$.AutoScalingGroups[0].Instances..InstanceId'
+                Name: StorageNodes
+                Type: StringList
+              - Name: LeaderNode
+                Selector: '$.AutoScalingGroups[0].Instances[0].InstanceId'
+                Type: String
+          - name: Tag_StorageNodes
+            action: 'aws:createTags'
+            inputs:
+              ResourceType: EC2
+              ResourceIds:
+                - '{{Get_ASG_Instances.StorageNodes}}'
+              Tags:
+                - Key: storidge_role
+                  Value: 'Storage-{{Get_Token_Name.token}}'
+            maxAttempts: 3
+          - name: Tag_LeaderNode
+            action: 'aws:createTags'
+            inputs:
+              ResourceType: EC2
+              ResourceIds:
+                - '{{Get_ASG_Instances.LeaderNode}}'
+              Tags:
+                - Key: storidge_role
+                  Value: 'Leader-{{Get_Token_Name.token}}'
+            maxAttempts: 3
+          - name: VerifyTags
+            action: 'aws:executeAwsApi'
+            outputs:
+              - Selector: $.Reservations..Instances..InstanceId
+                Name: out1
+                Type: StringList
+            inputs:
+              Service: ec2
+              Api: DescribeInstances
+              Filters:
+                - Name: tag-value
+                  Values:
+                    - Leader-{{Get_Token_Name.token}}
+                    - Storage-{{Get_Token_Name.token}}
+          - name: Sleep
+            action: 'aws:sleep'
+            inputs:
+              Duration: PT5M
+          - name: Create_Token
+            action: 'aws:runCommand'
+            inputs:
+              DocumentName: AWS-RunShellScript
+              Targets:
+                - Key: 'tag:storidge_role'
+                  Values:
+                    - 'Leader-{{Get_Token_Name.token}}'
+              Parameters:
+                commands:
+                  - '#!/bin/bash'
+                  - set -o pipefail
+                  - set -xe
+                  - ip=$(ec2metadata --local-ipv4)
+                  - token=$(cioctl create --ip $ip | grep "cioctl join")
+                  - if [ -z "${token}" ]; then echo "ERROR:Token is not created"; exit; fi
+                  - /snap/bin/aws ssm put-parameter --region {{ Region }} --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" --type SecureString --overwrite --value "$token"
+            maxAttempts: 1
+          - name: Join_Nodes
+            action: 'aws:runCommand'
+            inputs:
+              DocumentName: AWS-RunShellScript
+              Targets:
+                - Key: 'tag:storidge_role'
+                  Values:
+                    - 'Storage-{{Get_Token_Name.token}}'
+              Parameters:
+                commands:
+                  - '#!/bin/bash'
+                  - set -o pipefail
+                  - set -xe
+                  - ip=$(ec2metadata --local-ipv4)
+                  - STORIDGE_TOKEN=$(/snap/bin/aws ssm get-parameter --region {{ Region }}  --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" --with-decryption --query "Parameter.Value" --output text)
+                  - echo $STORIDGE_TOKEN
+                  - eval "$STORIDGE_TOKEN --ip $ip"
+            maxAttempts: 1
+          - name: Initialize_Cluster
+            action: 'aws:runCommand'
+            inputs:
+              DocumentName: AWS-RunShellScript
+              Targets:
+                - Key: 'tag:storidge_role'
+                  Values:
+                    - 'Leader-{{Get_Token_Name.token}}'
+              Parameters:
+                commands:
+                  - '#!/bin/bash'
+                  - set -o pipefail
+                  - set -xe
+                  - STORIDGE_TOKEN=$(/snap/bin/aws ssm get-parameter --region {{ Region }} --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" --with-decryption --query ''Parameter.Value'' --output text)
+                  - echo $STORIDGE_TOKEN
+                  - cioctl init `echo $STORIDGE_TOKEN | cut -d'-' -f2`
+                  - cio node ls | grep -v "Error"
+                  - /snap/bin/aws ssm delete-parameter --region {{ Region }} --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" 
+            maxAttempts: 1
+          - name: Tag_Node
+            action: 'aws:createTags'
+            inputs:
+              ResourceType: EC2
+              ResourceIds:
+                - '{{Get_ASG_Instances.LeaderNode}}'
+                - '{{Get_ASG_Instances.StorageNodes}}'
+              Tags:
+                - Value: ready
+                  Key: node_status
+
+  SSMDocumentAddNode:
+    Type: 'AWS::SSM::Document'
+    DependsOn: NodeGroup
+    Properties:
+      DocumentType: Automation
+      Content:
+        description: Add a new node to Storidge cluster
+        schemaVersion: '0.3'
+        assumeRole: '{{AutomationAssumeRole}}'
+        parameters:
+          AutomationAssumeRole:
+            default: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${NodeInstanceRole}'
+            type: String
+          ASGName:
+            default: test22-vv1-NodeGroup-1TMPAZMFBWHSE
+            type: String
+          Region:
+            default: !Ref "AWS::Region"
+            type: String
+          InstanceId:
+            type: String
+          LCHName:
+            type: String
+          SSMDocumentName:
+            type: String
+        mainSteps:
+          - name: GetRunningAutomation
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: ssm
+              Api: describe_automation_executions
+              Filters:
+                - Key: DocumentNamePrefix
+                  Values:
+                    - '{{SSMDocumentName}}'
+                - Key: ExecutionStatus
+                  Values:
+                    - InProgress
+                    - Waiting
+                    - Pending
+            outputs:
+              - Name: ExecutionStatus
+                Selector: AutomationExecutionMetadataList..AutomationExecutionStatus
+                Type: StringList
+              - Name: ExecutionIds
+                Selector: AutomationExecutionMetadataList..AutomationExecutionId
+                Type: StringList   
+          - name: GetExecutionCount
+            action: 'aws:executeScript'
+            inputs:
+              Runtime: python3.6
+              Handler: script_handler
+              Script: |-
+                def script_handler(events, context):
+                  print(events["ExecutionIds"])
+                  events["ExecutionIds"].pop(0)
+                  if len(events["ExecutionIds"]) != 0:
+                    return {'ExecutionIds': events["ExecutionIds"], 'ExecutionLen': len(events["ExecutionIds"]) }
+                  return {'ExecutionLen': 0}
+              InputPayload:
+                ExecutionIds: '{{ GetRunningAutomation.ExecutionIds}}'
+            outputs:
+              - Name: ExecutionIds
+                Selector: $.Payload.ExecutionIds
+                Type: StringList
+              - Name: ExecutionLen
+                Selector: $.Payload.ExecutionLen
+                Type: Integer
+          - name: CheckExecutionLength
+            action: 'aws:branch'
+            inputs:
+              Choices:
+                - NextStep: WaitToCompleteRunningExecutions
+                  Variable: '{{GetExecutionCount.ExecutionLen}}'
+                  NumericGreater: 0
+              Default: Sleep
+          - name: WaitToCompleteRunningExecutions
+            action: 'aws:waitForAwsResourceProperty'
+            inputs:
+              Service: ssm
+              Api: describe_automation_executions
+              PropertySelector: AutomationExecutionMetadataList..AutomationExecutionStatus
+              DesiredValues:
+                - Success
+                - TimedOut
+                - Cancelling
+                - Cancelled
+                - Failed
+              Filters:
+                - Key: DocumentNamePrefix
+                  Values:
+                    - '{{SSMDocumentName}}'
+                - Key: ExecutionId
+                  Values:
+                    - '{{GetExecutionCount.ExecutionIds}}'
+            timeoutSeconds: 600   
+          - name: Sleep
+            action: 'aws:sleep'
+            inputs:
+              Duration: PT5M    
+          - outputs:
+              - Type: String
+                Selector: $.Payload.token
+                Name: token
+            inputs:
+              Script: |-
+                import time
+                import calendar                
+
+                def script_handler(events, context):
+                  print('Setting storidge token name')
+                  # print(events["parameter"])
+                  token=str(calendar.timegm(time.gmtime()))
+                  return {'token': token}
+              Runtime: python3.6
+              Handler: script_handler
+            name: Get_Token_Name
+            action: 'aws:executeScript'
+            maxAttempts: 2
+          - name: GetStoridgeNode
+            action: 'aws:executeAwsApi'
+            outputs:
+              - Selector: $.Reservations[0].Instances[0].InstanceId
+                Name: NodeId
+                Type: String
+            inputs:
+              Service: ec2
+              Api: DescribeInstances
+              Filters:
+                - Name: 'tag:aws:autoscaling:groupName'
+                  Values:
+                    - '{{ASGName}}'
+                - Name: 'tag:node_status'
+                  Values:
+                    - ready
+                - Name: instance-state-name
+                  Values:
+                    - running
+          - inputs:
+              Parameters:
+                commands:
+                  - '#!/bin/bash'
+                  - set -o pipefail
+                  - set -xe
+                  - ip=$(ec2metadata --local-ipv4)
+                  - token=$(sudo cioctl join-token)
+                  - if [ -z "${token}" ]; then echo "ERROR:Token is not created"; exit; fi
+                  - echo $token
+                  - '/snap/bin/aws ssm put-parameter --region {{ Region }} --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" --type SecureString --overwrite --value "$token"'
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - '{{GetStoridgeNode.NodeId}}'
+            name: Create_Token
+            action: 'aws:runCommand'
+            maxAttempts: 1
+          - inputs:
+              Parameters:
+                commands:
+                  - '#!/bin/bash'
+                  - set -o pipefail
+                  - set -xe
+                  - ip=$(ec2metadata --local-ipv4)
+                  - 'STORIDGE_TOKEN=$(/snap/bin/aws ssm get-parameter --region {{ Region }}  --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" --with-decryption --query "Parameter.Value" --output text)'
+                  - echo $STORIDGE_TOKEN
+                  - eval "$STORIDGE_TOKEN --ip $ip"
+                  - sleep 2m
+                  - cio node ls
+                  - /snap/bin/aws ssm delete-parameter --region {{ Region }} --name "STORIDGE_TOKEN_{{ Get_Token_Name.token }}" 
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - '{{InstanceId}}'
+            name: Add_Node
+            action: 'aws:runCommand'
+            maxAttempts: 1
+          - name: CompleteLifecycleAction_Launch
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              LifecycleActionResult: CONTINUE
+              LifecycleHookName: '{{ LCHName }}'
+              AutoScalingGroupName: '{{ ASGName }}'
+              InstanceId: '{{ InstanceId }}'
+            maxAttempts: 3
+          - name: Tag_Node
+            action: 'aws:createTags'
+            inputs:
+              ResourceType: EC2
+              ResourceIds:
+                - '{{ InstanceId }}'
+              Tags:
+                - Value: ready
+                  Key: node_status
+
+  SSMDocumentRemoveNode:
+    Type: 'AWS::SSM::Document'
+    DependsOn: NodeGroup
+    Properties:
+      DocumentType: Automation
+      Content:
+        description: Remove node from storidge cluster
+        schemaVersion: '0.3'
+        assumeRole: '{{AutomationAssumeRole}}'
+        parameters:
+          AutomationAssumeRole:
+            type: String
+          ASGName:
+            default: test22-vv1-NodeGroup-1TMPAZMFBWHSE
+            type: String
+          InstanceId:
+            type: String
+          LCHName:
+            type: String
+        mainSteps:
+          - name: Remove_Node
+            action: 'aws:runCommand'
+            inputs:
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - '{{InstanceId}}'
+              Parameters:
+                commands:
+                  - '#!/bin/bash'
+                  - set -o pipefail
+                  - set -xe
+                  - cio node ls
+                  - cioctl node remove
+            maxAttempts: 1
+          - name: CompleteLifecycleAction_Terminate
+            action: 'aws:executeAwsApi'
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              LifecycleActionResult: CONTINUE
+              LifecycleHookName: '{{ LCHName }}'
+              AutoScalingGroupName: '{{ ASGName }}'
+              InstanceId: '{{ InstanceId }}'
+            maxAttempts: 3      
+
+  CloudWatchEventRuleLaunchNode:
+    Type: AWS::Events::Rule
+    DependsOn: SSMDocumentAddNode
+    Properties:
+      Description: "Event rule to add a new node to storidge cluster"
+      EventPattern:
+        source:
+          - "aws.autoscaling"
+        detail-type:
+          - "EC2 Instance-launch Lifecycle Action"
+        detail:
+          AutoScalingGroupName:
+            - !Ref NodeGroup    
+      Name: !Join [ "", ["Launch_", !Ref NodeGroup ] ] 
+      State: "ENABLED"
+      Targets:
+        - 
+          Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SSMDocumentAddNode}:$DEFAULT'
+          Id: "CallSSMDocumentAddNode"
+          # TODO
+          RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${NodeInstanceRole}'
+          InputTransformer:
+            InputPathsMap:
+              asgname: "$.detail.AutoScalingGroupName"
+              instanceid: "$.detail.EC2InstanceId"
+              lchname: "$.detail.LifecycleHookName"
+           # TODO
+            InputTemplate: !Sub '{"InstanceId":[<instanceid>],"ASGName":[<asgname>],"LCHName":[<lchname>],"AutomationAssumeRole":["arn:aws:iam::${AWS::AccountId}:role/${NodeInstanceRole}"],"SSMDocumentName":["${SSMDocumentAddNode}"]}'
+
+  CloudWatchEventRuleTerminateNode:
+    Type: AWS::Events::Rule
+    DependsOn: SSMDocumentRemoveNode
+    Properties:
+      Description: "Event rule to remove node from storidge cluster"
+      EventPattern:
+        source:
+          - "aws.autoscaling"
+        detail-type:
+          - "EC2 Instance-terminate Lifecycle Action"
+        detail:
+          AutoScalingGroupName:
+            - !Ref NodeGroup    
+      Name: !Join [ "", ["Terminate_", !Ref NodeGroup ] ] 
+      State: "ENABLED"
+      Targets:
+        - 
+          Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SSMDocumentRemoveNode}:$DEFAULT'
+          Id: "CallSSMDocumentRemoveNode"
+          # TODO
+          RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${NodeInstanceRole}'
+          InputTransformer:
+            InputPathsMap:
+              asgname: "$.detail.AutoScalingGroupName"
+              instanceid: "$.detail.EC2InstanceId"
+              lchname: "$.detail.LifecycleHookName"
+              # TODO
+            InputTemplate: !Sub '{"InstanceId":[<instanceid>],"ASGName":[<asgname>],"LCHName":[<lchname>],"AutomationAssumeRole":["arn:aws:iam::${AWS::AccountId}:role/${NodeInstanceRole}"]}'
+
+Outputs:
+
+  NodeSecurityGroup:
+    Description: The security group for the node group
+    Value: !Ref NodeSecurityGroup
+
+  NodeAutoScalingGroup:
+    Description: The autoscaling group
+    Value: !Ref NodeGroup
+    
+  SSMDocument:
+    Description: SSM document name
+    Value: !Ref SSMdocument

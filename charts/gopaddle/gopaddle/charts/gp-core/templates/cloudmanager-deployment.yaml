@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: cloudmanager
+    app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+    family: servicegroup
+    name: cloudmanager
+    released-by: gopaddle
+    servicegroup: cloudmanager-7kd52da1
+    servicegroup-name: cloudmanager
+  name: cloudmanager
+  namespace: {{ .Release.Namespace }}
+spec:
+  minReadySeconds: 5
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: cloudmanager
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: cloudmanager
+        app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+        family: servicegroup
+        name: cloudmanager
+        released-by: gopaddle
+        servicegroup: cloudmanager-7kd52da1
+        servicetype: gopaddle
+      name: cloudmanager
+    spec:
+      affinity: {}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+      containers:
+      - args:
+        - |-
+          #!/bin/bash
+          ./cloudmanager kube > /var/log/gopaddle/cloudmanager.log
+          tail -f /var/log/gopaddle/cloudmanager.log
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ quote .Values.cloudmanager.cloudmanager.envMap.NODE_NAME }}
+        - name: GP_RELEASE
+          value: gp-4.2
+        envFrom:
+        - secretRef:
+            name: cloudmanager-cloudmanager-envsecret-onluv
+        image: {{ template "gopaddle.registryUrl" . }}/cloudmanager:{{ .Values.cloudmanager.cloudmanager.imageTag }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8018
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: cloudmanager
+        ports:
+        - containerPort: 8018
+          name: 8018-tcp
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8018
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100M
+          requests:
+            cpu: 10m
+            memory: 50M
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /app/config
+          name: cloudmanager-cloudmanager-cmnt-15hlp
+        - mountPath: /var/log/gopaddle/
+          name: log
+      imagePullSecrets:
+{{- if .Values.global.airgapped.enabled }}
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- else }}
+      - name: gcr-json-key
+{{- end }}
+      securityContext: {}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: cloudmanager-cloudmanager-configmap-o3c6s
+        name: cloudmanager-cloudmanager-cmnt-15hlp
+      - emptyDir: {}
+        name: log
+status: {}
