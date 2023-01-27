@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: domainmanager
+    app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+    family: servicegroup
+    name: domainmanager
+    released-by: gopaddle
+    servicegroup: domainmanager-51g7q5yh
+    servicegroup-name: domainmanager
+  name: domainmanager
+  namespace: {{ .Release.Namespace }}
+spec:
+  minReadySeconds: 5
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: domainmanager
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: domainmanager
+        app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+        family: servicegroup
+        name: domainmanager
+        released-by: gopaddle
+        servicegroup: domainmanager-51g7q5yh
+        servicetype: gopaddle
+      name: domainmanager
+    spec:
+      affinity: {}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+      containers:
+      - args:
+        - |-
+          #!/bin/bash
+          ./domainmanager kube > /var/log/gopaddle/domainmanager.log
+          tail -f /var/log/gopaddle/domainmanager.log
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ quote .Values.domainmanager.domainmanager.envMap.NODE_NAME }}
+        - name: GP_RELEASE
+          value: gp-4.2
+        envFrom:
+        - secretRef:
+            name: domainmanager-domainmanager-envsecret-bzb3z
+        image: {{ template "gopaddle.registryUrl" . }}/domainmanager:{{ .Values.domainmanager.domainmanager.imageTag }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8004
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: domainmanager
+        ports:
+        - containerPort: 8004
+          name: 8004-tcp
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8004
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100M
+          requests:
+            cpu: 10m
+            memory: 50M
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /app/config
+          name: domainmanager-domainmanager-cmnt-8stzt
+        - mountPath: /var/log/gopaddle/
+          name: log
+      imagePullSecrets:
+{{- if .Values.global.airgapped.enabled }}
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- else }}
+      - name: gcr-json-key
+{{- end }}
+      securityContext: {}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: domainmanager-domainmanager-configmap-ieq7l
+        name: domainmanager-domainmanager-cmnt-8stzt
+      - emptyDir: {}
+        name: log
+status: {}
