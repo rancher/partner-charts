@@ -97,6 +97,25 @@ bin/partner-charts-ci auto
 ```bash
 bin/partner-charts-ci validate
 ```
+#### Testing new chart on Rancher Apps UI
+1. If you haven't done so yet, pull down your new chart files into your local `partner-charts` repository:
+```bash
+a) Get scripts: scripts/pull-ci-scripts
+b) List and find your company name/chart: bin/partner-charts-ci list | grep <company>
+c) set PACKAGE variable to your company/chart: export PACKAGE=<company>/<chart-name> or export PACKAGE=<company>
+d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
+```
+2.  In your local `partner-charts` directory start a python3 http server:
+```bash
+#python3 -m http.server 8000
+```
+3. From a second terminal expose your local http server via ngrok ( https://ngrok.com/download )
+```bash
+#./ngrok http 8000
+```
+4. In Rancher UI create a test repository that points to your local `partner-charts` repo by selecting an appropriate cluster and going to Apps > Repositories and clicking "Create".  Enter a Name, copy ngrok forwarding url and paste it into Target http(s) "Index URL" and click "Create" again.
+
+5. Once the new repository is "Active" go to Apps > Charts , find your new chart, review Readme is correct, etc. and install it. It should be successfully deployed.
 
 ## Overlay
 
