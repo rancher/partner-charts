@@ -1,7 +1,6 @@
-
 apiVersion: v1
 kind: ConfigMap
-metadata: 
+metadata:
   name: {{ .Release.Name }}-config-cm
   namespace: {{ .Release.Namespace }}
   labels:
@@ -17,6 +16,8 @@ metadata:
 data:
   # Jetty header size in bytes in the auth server
   CN_JETTY_REQUEST_HEADER_SIZE: {{ .Values.configmap.cnJettyRequestHeaderSize | quote }}
+  # Port used by Prometheus JMX agent
+  CN_PROMETHEUS_PORT: {{ .Values.global.cnPrometheusPort | quote }}
   CN_DISTRIBUTION: {{ .Values.global.distribution | quote }}
   {{ if .Values.global.cnObExtSigningJwksUri }}
   CN_OB_EXT_SIGNING_JWKS_URI: {{ .Values.global.cnObExtSigningJwksUri | quote }}
@@ -45,6 +46,7 @@ data:
   CN_CONFIG_GOOGLE_SECRET_NAME_PREFIX: {{ .Values.configmap.cnConfigGoogleSecretNamePrefix | quote }}
   # [google_secret_manager_envs] END
   {{- end }}
+  CN_SQL_DB_SCHEMA: {{ .Values.configmap.cnSqlDbSchema | quote }}
   CN_SQL_DB_DIALECT: {{ .Values.configmap.cnSqlDbDialect }}
   CN_SQL_DB_HOST: {{ .Values.configmap.cnSqlDbHost }}
   CN_SQL_DB_PORT: {{ .Values.configmap.cnSqlDbPort | quote }}
@@ -79,18 +81,9 @@ data:
   | replace "scriptLogLevel" "script_log_level"
   | replace "auditStatsLogTarget" "audit_log_target"
   | replace "auditStatsLogLevel" "audit_log_level"
+  | replace "enableStdoutLogPrefix" "enable_stdout_log_prefix"
   | squote
   }}
-  {{- if index .Values "global" "client-api" "enabled" }}
-  CN_CLIENT_API_SERVER_URL: {{ cat ( index .Values "global" "client-api" "clientApiServerServiceName" ) ":8443" | quote | nospace }}
-  CN_CLIENT_API_BIND_IP_ADDRESSES: {{ .Values.configmap.cnClientApiBindIpAddresses | quote }}
-  CN_CLIENT_API_APP_LOGGERS: {{ index .Values "global" "client-api" "appLoggers"
-  | toJson
-  | replace "clientApiLogTarget" "client_api_log_target"
-  | replace "clientApiLogLevel" "client_api_log_level"
-  | squote
-  }}
-  {{- end }}
   {{- if index .Values "global" "config-api" "enabled" }}
   CN_CONFIG_API_APP_LOGGERS: {{ index .Values "global" "config-api" "appLoggers"
   | toJson
@@ -104,6 +97,7 @@ data:
   | replace "ldapStatsLogLevel" "ldap_stats_log_level"
   | replace "scriptLogTarget" "script_log_target"
   | replace "scriptLogLevel" "script_log_level"
+  | replace "enableStdoutLogPrefix" "enable_stdout_log_prefix"
   | squote
   }}
   {{- end }}
@@ -129,22 +123,23 @@ data:
   CN_KEY_ROTATION_FORCE: "false"
   CN_KEY_ROTATION_CHECK: "3600"
   CN_KEY_ROTATION_INTERVAL: "48"
+  {{- if .Values.global.isFqdnRegistered }}
+  CN_SSL_CERT_FROM_SECRETS: "false"
+  {{- else }}
   CN_SSL_CERT_FROM_SECRETS: "true"
+  {{- end }}
   CN_CONTAINER_MAIN_NAME: {{ .Release.Name }}-auth-server
   # options: default/user/site/cache/statistic used only if CN_PERSISTENCE_TYPE is hybrid or hybrid
   {{- if or (eq .Values.global.cnPersistenceType "hybrid") (eq .Values.global.cnPersistenceType "ldap") }}
    # must the same as the opendj service name
   CN_CERT_ALT_NAME: {{ .Values.global.opendj.ldapServiceName }} #{{ template "cn.fullname" . }}-service
-  CN_PERSISTENCE_LDAP_MAPPING: {{ .Values.configmap.cnPersistenceLdapMapping | quote }}
+  CN_HYBRID_MAPPING: {{ .Values.configmap.cnPersistenceHybridMapping | quote }}
   {{- end }}
   # Auto enable installation of some services
-  CN_CASA_ENABLED: {{ .Values.global.casa.enabled | quote }}
   CN_PASSPORT_ENABLED: {{ .Values.global.oxpassport.enabled | quote }}
   {{- if .Values.global.oxshibboleth.enabled }}
   CN_SAML_ENABLED: {{ .Values.global.oxshibboleth.enabled | quote }}
   {{- end }}
-  CN_CLIENT_API_APPLICATION_CERT_CN: {{ .Values.configmap.cnClientApiApplicationCertCn | quote }}
-  CN_CLIENT_API_ADMIN_CERT_CN: {{ .Values.configmap.cnClientApiAdminCertCn | quote }}
   {{ if eq .Values.configmap.cnCacheType "REDIS" }}
   CN_REDIS_URL: {{ .Values.configmap.cnRedisUrl | quote }}
   CN_REDIS_TYPE: {{ .Values.configmap.cnRedisType | quote }}
@@ -171,6 +166,7 @@ data:
   | replace "ldapStatsLogLevel" "ldap_stats_log_level"
   | replace "scriptLogTarget" "script_log_target"
   | replace "scriptLogLevel" "script_log_level"
+  | replace "enableStdoutLogPrefix" "enable_stdout_log_prefix"
   | squote
   }}
   {{- end }}
@@ -181,19 +177,33 @@ data:
   | replace "fido2LogLevel" "fido2_log_level"
   | replace "persistenceLogTarget" "persistence_log_target"
   | replace "persistenceLogLevel" "persistence_log_level"
+  | replace "enableStdoutLogPrefix" "enable_stdout_log_prefix"
   | squote
   }}
   {{- end }}
   {{- if index .Values "global" "admin-ui" "enabled" }}
   # ADMIN-UI
   ADMIN_UI_JWKS: {{ cat "http://" ( index .Values "global" "auth-server" "authServerServiceName" ) ":8080/jans-auth/restv1/jwks" | quote | nospace }}
-  CN_CONFIG_API_PLUGINS: "admin-ui,scim"
-  CN_ADMIN_UI_PLUGIN_LOGGERS: {{ index .Values "global" "config-api" "adminUiappLoggers"
+  CN_CONFIG_API_PLUGINS: "admin-ui,scim,fido2,user-mgt"
+  CN_ADMIN_UI_PLUGIN_LOGGERS: {{ index .Values "global" "config-api" "adminUiAppLoggers"
   | toJson
   | replace "adminUiLogTarget" "admin_ui_log_target"
   | replace "adminUiLogLevel" "admin_ui_log_level"
   | replace "adminUiAuditLogTarget" "admin_ui_audit_log_target"
   | replace "adminUiAuditLogLevel" "admin_ui_audit_log_level"
+  | replace "enableStdoutLogPrefix" "enable_stdout_log_prefix"
+  | squote
+  }}
+  {{- end }}
+  {{- if .Values.global.casa.enabled }}
+  # CASA
+  GLUU_CASA_APP_LOGGERS: {{ .Values.global.casa
+  | toJson
+  | replace "casaLogTarget" "casa_log_target"
+  | replace "casaLogLevel" "casa_log_level"
+  | replace "timerLogTarget" "timer_log_target"
+  | replace "timerLogLevel" "timer_log_level"
+  | replace "enableStdoutLogPrefix" "enable_stdout_log_prefix"
   | squote
   }}
   {{- end }}
