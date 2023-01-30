@@ -113,7 +113,7 @@ d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
 ```bash
 #./ngrok http 8000
 ```
-4. In Rancher UI create a test repository that points to your local `partner-charts` repo by selecting an appropriate cluster and going to Apps > Repositories and clicking "Create".  Enter a Name, copy ngrok forwarding url and paste it into Target http(s) "Index URL" and click 'Create' again.
+4. In Rancher UI create a test repository that points to your local `partner-charts` repo by selecting an appropriate cluster and going to Apps > Repositories and clicking "Create".  Enter a Name, copy ngrok forwarding url and paste it into Target http(s) "Index URL" and click "Create" again.
 
 5. Once the new repository is "Active" go to Apps > Charts , find your new chart, review Readme is correct, etc. and install it. It should be successfully deployed.
 
