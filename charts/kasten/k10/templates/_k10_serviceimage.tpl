@@ -7,20 +7,19 @@ Using substr to remove repo from ambassadorImage
 */}}
 {{- define "serviceImage" -}}
 {{/*
-we are maintaining the field .Values.images to override it when
+we are maintaining the field .Values.global.images to override it when
 we install the chart for red hat marketplace. If we dont
 have the value specified use earlier flow, if it is, use the
 value that is specified.
 */}}
+{{- include "image.values.check" . -}}
 {{- if not .main.Values.global.rhMarketPlace }}
 {{- $serviceImage := "" -}}
 {{- $tagFromDefs := "" -}}
 {{- if .main.Values.global.airgapped.repository }}
-{{- $serviceImage = default .main.Chart.AppVersion .main.Values.image.tag | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
-{{- else if contains .main.Values.image.registry .main.Values.image.repository }}
-{{- $serviceImage = default .main.Chart.AppVersion .main.Values.image.tag | print .main.Values.image.repository "/" .k10_service ":" }}
+{{- $serviceImage = default .main.Chart.AppVersion .main.Values.global.image.tag | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
 {{- else }}
-{{- $serviceImage = default .main.Chart.AppVersion .main.Values.image.tag | print .main.Values.image.registry "/" .main.Values.image.repository "/" .k10_service ":" }}
+{{- $serviceImage = default .main.Chart.AppVersion .main.Values.global.image.tag | print .main.Values.global.image.registry "/" .k10_service ":" }}
 {{- end }}{{/* if .main.Values.global.airgapped.repository */}}
 {{- $serviceImageKey := print (replace "-" "" .k10_service) "Image" }}
 {{- if eq $serviceImageKey "ambassadorImage" }}

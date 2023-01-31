@@ -267,7 +267,7 @@ required
 {{- if .Values.global.airgapped.repository }}
 {{- printf "%s/dex" .Values.global.airgapped.repository }}
 {{- else }}
-{{- printf "%s/%s/dex"  .Values.image.registry .Values.image.repository }}
+{{- printf "%s/dex" .Values.global.image.registry }}
 {{- end}}
 {{- else }}
 {{- if .Values.global.airgapped.repository }}
@@ -325,20 +325,16 @@ Get the emissary image.
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "k10.emissaryImageName" .) }}
   {{- else }}
-    {{- if hasPrefix .Values.image.registry .Values.image.repository }}
-      {{- printf "%s/%s" .Values.image.repository (include "k10.emissaryImageName" .) }}
-    {{- else }}
-      {{- printf "%s/%s/%s" .Values.image.registry .Values.image.repository (include "k10.emissaryImageName" .) }}
-    {{- end }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "k10.emissaryImageName" .) }}
   {{- end }}
 {{- end -}}
 
 {{- define "k10.emissaryImageName" -}}
-{{- printf "emissary" }}
+  {{- printf "emissary" }}
 {{- end -}}
 
 {{- define "k10.emissaryImageTag" -}}
-{{- default .Chart.AppVersion .Values.image.tag }}
+  {{- .Values.global.image.tag | default .Chart.AppVersion }}
 {{- end -}}
 
 {{/*
@@ -750,4 +746,57 @@ running in the same cluster.
 */}}
 {{- define "k10.ambassadorId" -}}
 "kasten.io/k10"
+{{- end -}}
+
+{{/*
+  Indicates the multi-cluster mode
+*/}}
+{{- define "k10.multicluster" -}}
+  {{ (default .Values.features dict).multicluster }}
+{{- end -}}
+
+{{/*
+  Indicates whether K10 is configured as a multi-cluster primary
+*/}}
+{{- define "k10.isMulticlusterPrimary" -}}
+  {{ if eq (include "k10.multicluster" .) "primary" }}true{{ end }}
+{{- end -}}
+
+{{/* Check that image.values are not set. */}}
+{{- define "image.values.check" -}}
+  {{- if not (empty .main.Values.image) }}
+
+    {{- $registry := .main.Values.image.registry }}
+    {{- $repository := .main.Values.image.repository }}
+    {{- if or $registry $repository }}
+      {{- $registry = coalesce $registry "gcr.io" }}
+      {{- $repository = coalesce $repository "kasten-images" }}
+
+      {{- $oldCombinedRegistry := "" }}
+      {{- if hasPrefix $registry $repository }}
+        {{- $oldCombinedRegistry = $repository }}
+      {{- else }}
+        {{- $oldCombinedRegistry = printf "%s/%s" $registry $repository }}
+      {{- end }}
+
+      {{- if ne $oldCombinedRegistry .main.Values.global.image.registry }}
+        {{- fail "Setting image.registry and image.repository is no longer supported use global.image.registry instead" }}
+      {{- end }}
+    {{- end }}
+
+    {{- $tag := .main.Values.image.tag }}
+    {{- if $tag }}
+      {{- if ne $tag .main.Values.global.image.tag }}
+        {{- fail "Setting image.tag is no longer supported use global.image.tag instead" }}
+      {{- end }}
+    {{- end }}
+
+    {{- $pullPolicy := .main.Values.image.pullPolicy }}
+    {{- if $pullPolicy }}
+      {{- if ne $pullPolicy .main.Values.global.image.pullPolicy }}
+        {{- fail "Setting image.pullPolicy is no longer supported use global.image.pullPolicy instead" }}
+      {{- end }}
+    {{- end }}
+
+  {{- end }}
 {{- end -}}

@@ -84,101 +84,59 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{/*
-Figure out the config based on
-the value of airgapped.repository
+  Get the ConfigMap Reload image
 */}}
 {{- define "get.cmreloadimage" }}
-{{- if not .Values.global.rhMarketPlace }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/configmap-reload:%s" .Values.global.airgapped.repository (include "get.cmReloadImageTag" .) }}
-{{- else }}
-{{- printf "%s:%s" (include "get.cmReloadImageRepo" .) (include "get.cmReloadImageTag" .) }}
-{{- end }}
-{{- else }}
-{{- printf "%s" (get .Values.global.images "configmap-reload") }}
-{{- end -}}
+  {{- (get .Values.global.images (include "prometheus.cmreloadImageName" .)) | default (include "prometheus.cmreloadImage" .)  }}
 {{- end }}
 
+{{- define "prometheus.cmreloadImage" }}
+  {{- printf "%s:%s" (include "prometheus.cmreloadImageRepo" .) (include "prometheus.cmreloadImageTag" .) }}
+{{- end -}}
+
+{{- define "prometheus.cmreloadImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "prometheus.cmreloadImageName" .) }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "prometheus.cmreloadImageName" .) }}
+  {{- end }}
+{{- end -}}
+
+{{- define "prometheus.cmreloadImageName" -}}
+  {{- printf "configmap-reload" }}
+{{- end -}}
+
+{{- define "prometheus.cmreloadImageTag" -}}
+  {{- .Values.global.image.tag | default .Chart.AppVersion }}
+{{- end -}}
+
 {{/*
-Figure out the config based on
-the value of airgapped.repository
+  Get the Prometheus image
 */}}
+
 {{- define "get.serverimage" }}
-{{- if not .Values.global.rhMarketPlace }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/prometheus:%s" .Values.global.airgapped.repository (include "get.promImageTag" .) }}
-{{- else }}
-{{- printf "%s:%s" (include "get.promImageRepo" .) (include "get.promImageTag" .) }}
-{{- end }}
-{{- else }}
-{{- printf "%s" (get .Values.global.images "prometheus") }}
+  {{- (get .Values.global.images (include "prometheus.prometheusImageName" .)) | default (include "prometheus.prometheusImage" .)  }}
 {{- end -}}
-{{- end }}
 
+{{- define "prometheus.prometheusImage" }}
+  {{- printf "%s:%s" (include "prometheus.prometheusImageRepo" .) (include "prometheus.prometheusImageTag" .) }}
+{{- end -}}
 
-{{/*
-Figure out the configmap-reload image tag
-based on the value of global.upstreamCertifiedImages
-*/}}
-{{- define "get.cmReloadImageTag"}}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "k10-%s-rh-ubi" (include "k10.prometheusConfigMapReloaderImageTag" .) }}
-{{- else }}
-{{- printf "%s-rh-ubi" (include "k10.prometheusConfigMapReloaderImageTag" .) }}
-{{- end }}
-{{- else }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "k10-%s" (include "k10.prometheusConfigMapReloaderImageTag" .) }}
-{{- else }}
-{{- printf "%s" (include "k10.prometheusConfigMapReloaderImageTag" .) }}
-{{- end }}
-{{- end }}
-{{- end }}
+{{- define "prometheus.prometheusImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "prometheus.prometheusImageName" .) }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "prometheus.prometheusImageName" .) }}
+  {{- end }}
+{{- end -}}
 
-{{/*
-Figure out the prometheus image tag
-based on the value of global.upstreamCertifiedImages
-*/}}
-{{- define "get.promImageTag"}}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "k10-%s-rh-ubi" (include "k10.prometheusImageTag" .) }}
-{{- else }}
-{{- printf "%s-rh-ubi" (include "k10.prometheusImageTag" .) }}
-{{- end }}
-{{- else }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "k10-%s" (include "k10.prometheusImageTag" .) }}
-{{- else }}
-{{- printf "%s" (include "k10.prometheusImageTag" .) }}
-{{- end }}
-{{- end }}
-{{- end }}
+{{- define "prometheus.prometheusImageName" -}}
+  {{- printf "prometheus" }}
+{{- end -}}
 
-{{/*
-Figure out the configmap-reload image repo
-based on the value of global.upstreamCertifiedImages
-*/}}
-{{- define "get.cmReloadImageRepo" }}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- printf "%s/%s/configmap-reload" .Values.k10image.registry .Values.k10image.repository }}
-{{- else }}
-{{- print .Values.configmapReload.prometheus.image.repository }}
-{{- end }}
-{{- end }}
-
-{{/*
-Figure out the prom image repo
-based on the value of global.upstreamCertifiedImages
-*/}}
-{{- define "get.promImageRepo" }}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- printf "%s/%s/prometheus" .Values.k10image.registry .Values.k10image.repository }}
-{{- else }}
-{{- print .Values.server.image.repository }}
-{{- end }}
-{{- end }}
+{{- define "prometheus.prometheusImageTag" -}}
+  {{- .Values.global.image.tag | default .Chart.AppVersion }}
+{{- end -}}
 
 {{/*
 Create a fully qualified alertmanager name.

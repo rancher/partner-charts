@@ -176,14 +176,39 @@ Parameter | Description | Default
 `injectKanisterSidecar.webhookServer.port` | Port number on which the mutating webhook server accepts request | `8080`
 `gateway.insecureDisableSSLVerify` | Specifies whether to disable SSL verification for gateway pods | `false`
 `gateway.exposeAdminPort` | Specifies whether to expose Admin port for gateway service | `true`
+`gateway.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for gateway pod | `{}`
 `genericVolumeSnapshot.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for Generic Volume Snapshot restore pods | `{}`
-`prometheus.server.enabled` | If false, K10's Prometheus server will not be created, reducing the dashboard's functionality. | `true`
-`prometheus.server.persistentVolume.enabled` | If true, K10 Prometheus server will create a Persistent Volume Claim | `true`
-`prometheus.server.persistentVolume.size` | K10 Prometheus server data Persistent Volume size | `30Gi`
-`prometheus.server.persistentVolume.storageClass` | StorageClassName used to create Prometheus PVC. Setting this option overwrites global StorageClass value | `""`
+`prometheus.k10image.registry` | (optional) Set Prometheus image registry. | `gcr.io`
+`prometheus.k10image.repository` | (optional) Set Prometheus image repository. | `kasten-images`
+`prometheus.initChownData.enabled` | (optional) Prometheus init container configuration. Enable `initChownData` init container | `false`
+`prometheus.rbac.create` | (optional) Whether to create Prometheus RBAC configuration. Warning - this action will allow prometheus to scrape pods in all k8s namespaces | `false`
+`prometheus.alertmanager.enabled` | (optional) Enable Prometheus `alertmanager` service | `false`
+`prometheus.kubeStateMetrics.enabled` | (optional) Enable Prometheus `kubeStateMetrics` service | `false`
+`prometheus.networkPolicy.enabled` | (optional) Enable Prometheus `networkPolicy` | `false`
+`prometheus.nodeExporter.enabled` | (optional) Enable Prometheus `nodeExporter` | `false`
+`prometheus.pushgateway.enabled` | (optional) Enable Prometheus `pushgateway` | `false`
+`prometheus.scrapeCAdvisor` | (optional) Enable Prometheus ScrapeCAdvisor | `false`
+`prometheus.server.enabled` | (optional) If false, K10's Prometheus server will not be created, reducing the dashboard's functionality. | `true`
+`prometheus.server.securityContext.runAsUser` | (optional) Set security context `runAsUser` ID for Prometheus server pod | `65534`
+`prometheus.server.securityContext.runAsNonRoot` | (optional) Enable security context `runAsNonRoot` for Prometheus server pod | `true`
+`prometheus.server.securityContext.runAsGroup` | (optional) Set security context `runAsGroup` ID for Prometheus server pod | `65534`
+`prometheus.server.securityContext.fsGroup` | (optional) Set security context `fsGroup` ID for Prometheus server pod | `65534`
 `prometheus.server.retention` | (optional) K10 Prometheus data retention | `"30d"`
+`prometheus.server.strategy.rollingUpdate.maxSurge` | (optional) The number of Prometheus server pods that can be created above the desired amount of pods during an update | `"100%"`
+`prometheus.server.strategy.rollingUpdate.maxUnavailable` | (optional) The number of Prometheus server pods that can be unavailable during the upgrade process | `"100%"`
+`prometheus.server.strategy.type` | (optional) Change default deployment strategy for Prometheus server | `"RollingUpdate"`
+`prometheus.server.persistentVolume.enabled` | (optional) If true, K10 Prometheus server will create a Persistent Volume Claim | `true`
+`prometheus.server.persistentVolume.size` | (optional) K10 Prometheus server data Persistent Volume size | `30Gi`
+`prometheus.server.persistentVolume.storageClass` | (optional) StorageClassName used to create Prometheus PVC. Setting this option overwrites global StorageClass value | `""`
+`prometheus.server.configMapOverrideName` | (optional) Prometheus configmap name to override default generated name| `k10-prometheus-config`
+`prometheus.server.fullnameOverride` | (optional) Prometheus deployment name to override default generated name| `prometheus-server`
 `prometheus.server.baseURL` | (optional) K10 Prometheus external url path at which the server can be accessed | `/k10/prometheus/`
 `prometheus.server.prefixURL` | (optional) K10 Prometheus prefix slug at which the server can be accessed | `/k10/prometheus/`
+`prometheus.server.serviceAccounts.alertmanager.create` | (optional) Set true to create ServiceAccount for Prometheus `Alertmanager` service | `false`
+`prometheus.server.serviceAccounts.kubeStateMetrics.create` | (optional) Set true to create ServiceAccount for Prometheus `kubeStateMetrics` service | `false`
+`prometheus.server.serviceAccounts.nodeExporter.create` | (optional) Set true to create ServiceAccount for Prometheus `nodeExporter` service | `false`
+`prometheus.server.serviceAccounts.pushgateway.create` | (optional) Set true to create ServiceAccount for Prometheus `pushgateway` service | `false`
+`prometheus.server.serviceAccounts.server.create` | (optional) Set true to create ServiceAccount for Prometheus server service | `true`
 `grafana.enabled` | (optional) If false Grafana will not be available | `true`
 `grafana.prometheusPrefixURL` | (optional) URL for Prometheus datasource in Grafana (must match `prometheus.server.prefixURL`) | `/k10/prometheus/`
 `resources.<podName>.<containerName>.[requests\|limits].[cpu\|memory]` | Overwrite default K10 [container resource requests and limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) | varies by container

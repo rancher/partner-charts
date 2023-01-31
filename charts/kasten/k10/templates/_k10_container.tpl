@@ -20,7 +20,7 @@
 {{- with .main }}
       - name: {{ $service }}-svc
         {{- dict "main" . "k10_service" $service | include "serviceImage" | indent 8 }}
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
 {{- if eq $service "aggregatedapis" }}
         args:
         - "--secure-port={{ .Values.service.aggregatedApiPort }}"
@@ -248,11 +248,9 @@ stating that types are not same for the equality check
 {{- if or (eq $service "kanister") (eq $service "executor")}}
           - name: DATA_MOVER_IMAGE
             {{- if .Values.global.airgapped.repository }}
-            value: {{ default .Chart.AppVersion .Values.image.tag | print .Values.global.airgapped.repository "/datamover:" }}
-            {{- else if contains .Values.image.registry .Values.image.repository }}
-            value: {{ default .Chart.AppVersion .Values.image.tag | print .Values.image.repository "/datamover:" }}
+            value: {{ default .Chart.AppVersion .Values.global.image.tag | print .Values.global.airgapped.repository "/datamover:" }}
             {{- else }}
-            value: {{ default .Chart.AppVersion .Values.image.tag | print .Values.image.registry "/" .Values.image.repository "/datamover:"  }}
+            value: {{ default .Chart.AppVersion .Values.global.image.tag | print .Values.global.image.registry "/datamover:" }}
             {{- end }}{{/* if .Values.global.airgapped.repository */}}
 
           - name: KANISTER_POD_READY_WAIT_TIMEOUT
@@ -427,11 +425,6 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterEFSPostRestoreTimeout
-          - name: K10_ROOTLESS_CONTAINERS
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: K10RootlessContainers
 {{- end }}
 {{- if and (eq $service "executor") (.Values.awsConfig.efsBackupVaultName) }}
           - name: EFS_BACKUP_VAULT_NAME
@@ -464,13 +457,6 @@ stating that types are not same for the equality check
               secretKeyRef:
                 name: k10-token-auth
                 key: auth
-{{- end }}
-{{- if eq $service "kanister" }}
-          - name: K10_ROOTLESS_CONTAINERS
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: K10RootlessContainers
 {{- end }}
 {{- if eq "true" (include "overwite.kanisterToolsImage" .) }}
           - name: KANISTER_TOOLS
@@ -711,19 +697,14 @@ stating that types are not same for the equality check
 {{- else if $serviceStateful }}
       - name: upgrade-init
         securityContext:
-        {{- if $main_context.Values.global.rootlessContainers }}
             capabilities:
                 add:
                 - FOWNER
                 - CHOWN
             runAsUser: 1000
             allowPrivilegeEscalation: false
-        {{- else }}
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-        {{- end }}
         {{- dict "main" $main_context "k10_service" "upgrade" | include "serviceImage" | indent 8 }}
-        imagePullPolicy: {{ $main_context.Values.image.pullPolicy }}
+        imagePullPolicy: {{ $main_context.Values.global.image.pullPolicy }}
         env:
           - name: MODEL_STORE_DIR
             valueFrom:
@@ -736,7 +717,7 @@ stating that types are not same for the equality check
 {{- if eq $service "catalog" }}
       - name: schema-upgrade-check
         {{- dict "main" $main_context "k10_service" $service | include "serviceImage" | indent 8 }}
-        imagePullPolicy: {{ $main_context.Values.image.pullPolicy }}
+        imagePullPolicy: {{ $main_context.Values.global.image.pullPolicy }}
         env:
 {{- if $main_context.Values.clusterName }}
           - name: CLUSTER_NAME

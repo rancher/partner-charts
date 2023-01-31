@@ -26,9 +26,9 @@ vbrintegrationapi:
   primary: dashboardbff
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}crypto:
+- garbagecollector
 - bloblifecyclemanager
 - events
-- garbagecollector
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -46,7 +46,6 @@ state:
 {{- define "k10.backupActionsDetails" -}}backupactions/details{{- end -}}
 {{- define "k10.reportActions" -}}reportactions{{- end -}}
 {{- define "k10.reportActionsDetails" -}}reportactions/details{{- end -}}
-{{- define "k10.restorePointRepositories" -}}restorepointrepositories{{- end -}}
 {{- define "k10.storageRepositories" -}}storagerepositories{{- end -}}
 {{- define "k10.restoreActions" -}}restoreactions{{- end -}}
 {{- define "k10.restoreActionsDetails" -}}restoreactions/details{{- end -}}
@@ -100,7 +99,6 @@ state:
 {{- define "k10.defaultKanisterCheckRepoTimeout" -}}20{{- end -}}
 {{- define "k10.defaultKanisterStatsTimeout" -}}20{{- end -}}
 {{- define "k10.defaultKanisterEFSPostRestoreTimeout" -}}45{{- end -}}
-{{- define "k10.defaultK10RootlessContainers" -}}false{{- end -}}
 {{- define "k10.cloudProviders" -}} aws google azure {{- end -}}
 {{- define "k10.serviceResources" -}}
 admin-svc:
@@ -203,5 +201,5 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.85.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.88.0{{- end -}}
 {{- define "k10.dexImageTag" -}}v2.35.3{{- end -}}
