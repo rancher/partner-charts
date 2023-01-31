@@ -97,3 +97,16 @@ Image Pull Secret
 {{- $au := (printf "%s:%s" $un $pw | b64enc) }}
 {{- printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" $rg $un $pw $em $au | b64enc}}
 {{- end }}
+
+
+{{/*
+Default Access Credentials
+*/}}
+{{- define "s3gw.defaultAccessKey" -}}
+{{- $key := default (randAlphaNum 32) .Values.accessKey }}
+{{- printf "%s" $key }}
+{{- end }}
+{{- define "s3gw.defaultSecretKey" -}}
+{{- $key := default (randAlphaNum 32) .Values.secretKey }}
+{{- printf "%s" $key }}
+{{- end }}
