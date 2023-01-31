@@ -1,0 +1,51 @@
+{{- if ne (.Values.global.routingType | toString) "NodePortWithOutIngress" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    k8s-app: default-http-backend
+    released-by: gopaddle
+  name: default-http-backend
+  # namespace: default
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: default-http-backend
+      released-by: gopaddle
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        k8s-app: default-http-backend
+        released-by: gopaddle
+    spec:
+      containers:
+      - image: {{ template "gopaddle.googleContainer.registryUrl" . }}/defaultbackend:1.4
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        name: default-http-backend
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+      terminationGracePeriodSeconds: 60
+{{- if .Values.global.airgapped.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- end }}
+status: {}
+{{- end }}

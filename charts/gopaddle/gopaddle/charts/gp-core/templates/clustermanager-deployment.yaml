@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: clustermanager
+    app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+    family: servicegroup
+    name: clustermanager
+    released-by: gopaddle
+    servicegroup: clustermanager-lee5js63
+    servicegroup-name: clustermanager
+  name: clustermanager
+  namespace: {{ .Release.Namespace }}
+spec:
+  minReadySeconds: 5
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: clustermanager
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: clustermanager
+        app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+        family: servicegroup
+        name: clustermanager
+        released-by: gopaddle
+        servicegroup: clustermanager-lee5js63
+        servicetype: gopaddle
+      name: clustermanager
+    spec:
+      affinity: {}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+      containers:
+      - {{ template "cluster.provider.clustermanager" . }}
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ quote .Values.clustermanager.clustermanager.envMap.NODE_NAME }}
+        - name: NODE_IP
+          value: {{ template "gopaddle.nodeIP" . }}
+        - name: GP_RELEASE
+          value: gp-4.2
+{{- if .Values.global.airgapped.enabled }}
+        - name: AIR_GAPPED
+          value: {{ quote .Values.global.airgapped.enabled }}
+        - name: IMAGE_REGISTRY
+          value: {{ quote .Values.global.airgapped.imageRegistryType }}
+        - name: DOCKER_REGISTRY_URL
+          value: {{ .Values.global.airgapped.imageRegistryInfo.registryUrl }}
+  {{- if eq ( .Values.global.airgapped.imageRegistryType | toString) "private" }}
+        - name: KUBE_STATE_METRICS_IMAGE
+          value: {{ template "gopaddle.clustermanger.kube-state-metrics" . }}
+        - name: NODE_EXPORTER_PROMETHEUS_IMAGE
+          value: {{ template "gopaddle.clustermanager.node-exporter" . }}
+        - name: BUSYBOX_IMAGE
+          value: {{ template "gopaddle.clustermanager.busybox" . }}
+        - name: PROMETHEUS_IMAGE  
+          value: {{ template "gopaddle.clustermanager.prometheus" . }}
+        - name: SERVER_DEPLOYMENT_IMAGE
+          value: {{ template "gopaddle.clustermanager.configmap-reload" . }}
+        - name: DEFAULT_BACKEND_IMAGE
+          value: {{ template "gopaddle.clustermanager.defaultbackend" . }}
+        - name: GRAFANA_IMAGE
+          value: {{ template "gopaddle.clustermanager.grafana" . }}
+        - name: EVENT_EXPORTER_IMAGE
+          value: {{ template "gopaddle.clustermanager.event-exporter" . }}
+        - name: CERTMANAGER_CAINJECTOR_DEPLOYMENT_IMAGE
+          value: {{ template "gopaddle.clustermanager.cert-manager-cainjector" . }}
+        - name: CERTMANAGER_DEPLOYMENT_IMAGE
+          value: {{ template "gopaddle.clustermanager.cert-manager-controller" . }}
+        - name: CERTMANAGER_WEBHOOK_DEPLOYMENT_IMAGE
+          value: {{ template "gopaddle.clustermanager.cert-manager-webhook" . }}
+        - name: AWS_ALB_INGRESS_CONTROLLER_IMAGE
+          value: {{ template "gopaddle.clustermanager.aws-alb-ingress-controller" . }}
+        - name: CONFIGURATOR_ADMISSIONWEBHOOK_IMAGE
+          value: {{ template "gopaddle.clustermanager.controllerwebhook" . }}
+        - name: CONFIGURATOR_CONTROLLER_IMAGE
+          value: {{ template "gopaddle.clustermanager.configurator-controller" . }}
+        - name: CONFIGURATOR_CONTROLLER_INIT_IMAGE
+          value: {{ template "gopaddle.clustermanager.controllerinit" . }}
+    {{- if eq (.Values.global.airgapped.imageRegistryInfo.authType | toString) "dockerconfig" }}
+        - name: DOCKER_CONFIG_JSON_B64
+          value: {{ .Values.global.airgapped.imageRegistryInfo.dockerConfig }}
+        - name: AUTHTYPE
+          value: {{ .Values.global.airgapped.imageRegistryInfo.authType }}
+    {{- else if eq (.Values.global.airgapped.imageRegistryInfo.authType | toString) "basic" }}
+        - name: DOCKER_REGISTRY_USERNAME
+          value: {{ .Values.global.airgapped.imageRegistryInfo.basicAuth.registryUserName }}
+        - name: DOCKER_REGISTRY_PASSWORD
+          value: {{ .Values.global.airgapped.imageRegistryInfo.basicAuth.registryPassword }}
+        - name: AUTHTYPE
+          value: {{ .Values.global.airgapped.imageRegistryInfo.authType }}
+    {{- end}}
+  {{- end }}
+{{- end }}
+        envFrom:
+        - secretRef:
+            name: clustermanager-clustermanager-envsecret-ipy9y
+        image: {{ template "gopaddle.registryUrl" . }}/clustermanager:{{ .Values.clustermanager.clustermanager.imageTag }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8013
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: clustermanager
+        ports:
+        - containerPort: 8013
+          name: 8013-tcp
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8013
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 200M
+          requests:
+            cpu: 50m
+            memory: 50M
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /app/config
+          name: clustermanager-clustermanager-cmnt-ef4ac
+        - mountPath: /var/log/gopaddle/
+          name: log
+      imagePullSecrets:
+{{- if .Values.global.airgapped.enabled }}
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- else }}
+      - name: gcr-json-key
+{{- end }}
+      securityContext: {}
+      volumes:
+      - configMap:
+          defaultMode: 272
+          name: clustermanager-clustermanager-configmap-vadks
+        name: clustermanager-clustermanager-cmnt-ef4ac
+      - emptyDir: {}
+        name: log
+status: {}

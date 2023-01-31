@@ -1,0 +1,72 @@
+{{- if ne (.Values.global.routingType | toString) "NodePortWithOutIngress" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+    cluster-id: ""
+    released-by: gopaddle
+  name: nginx-ingress-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: nginx-ingress-lb
+      released-by: gopaddle
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "10254"
+        prometheus.io/scheme: http
+        prometheus.io/scrape: gopaddle-ingress
+      creationTimestamp: null
+      labels:
+        app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+        cluster-id: ""
+        k8s-app: nginx-ingress-lb
+        released-by: gopaddle
+    spec:
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+      containers:
+      - args:
+        - /nginx-ingress-controller
+        - --default-backend-service={{ .Release.Namespace }}/default-http-backend
+        - --default-ssl-certificate=$(POD_NAMESPACE)/tls-certificate
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: {{ template "gopaddle.nginx.registryUrl" . }}/ingress-nginx/controller:v1.3.0
+        name: nginx-ingress-controller
+        resources:
+          limits:
+            cpu: 500m
+            memory: 500M
+          requests:
+            cpu: 50m
+            memory: 50M
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        resources: {}
+      serviceAccountName: nginx-ingress-serviceaccount
+{{- if .Values.global.airgapped.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- end }}
+status: {}
+{{- end }}

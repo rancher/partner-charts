@@ -1,0 +1,117 @@
+{{- if eq (.Values.global.installer.edition | toString) "Enterprise" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: paymentmanager
+    app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+    family: servicegroup
+    name: paymentmanager
+    released-by: gopaddle
+    servicegroup: paymentmanager-3yqw8yo3
+    servicegroup-name: paymentmanager
+  name: paymentmanager
+  namespace: {{ .Release.Namespace }}
+spec:
+  minReadySeconds: 5
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: paymentmanager
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: paymentmanager
+        app-id: appsab909ba8cbe61c46e1cb3f9c4dffd24b038a
+        family: servicegroup
+        name: paymentmanager
+        released-by: gopaddle
+        servicegroup: paymentmanager-3yqw8yo3
+        servicetype: gopaddle
+      name: paymentmanager
+    spec:
+      affinity: {}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+      containers:
+      - args:
+        - |-
+          #!/bin/bash
+          ./paymentmanager kube > /var/log/gopaddle/paymentmanager.log
+          tail -f /var/log/gopaddle/paymentmanager.log
+        command:
+        - /bin/sh
+        - -c
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ quote .Values.paymentmanager.paymentmanager.envMap.NODE_NAME }}
+        - name: GP_RELEASE
+          value: gp-4.2
+        envFrom:
+        - secretRef:
+            name: paymentmanager-paymentmanager-envsecret-cgatk
+        image: {{ template "gopaddle.registryUrl" . }}/paymentmanager:{{ .Values.paymentmanager.paymentmanager.imageTag }}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8021
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: paymentmanager
+        ports:
+        - containerPort: 8021
+          name: 8021-tcp
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/status
+            port: 8021
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100M
+          requests:
+            cpu: 10m
+            memory: 50M
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /app/config
+          name: paymentmanager-paymentmanager-cmnt-sm2bk
+        - mountPath: /var/log/gopaddle/
+          name: log
+      imagePullSecrets:
+{{- if .Values.global.airgapped.enabled }}
+      - name: {{ .Values.global.airgapped.imageRegistryInfo.imageSecret }}
+{{- else }}
+      - name: gcr-json-key
+{{- end }}
+      securityContext: {}
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: paymentmanager-paymentmanager-configmap-f3pct
+        name: paymentmanager-paymentmanager-cmnt-sm2bk
+      - emptyDir: {}
+        name: log
+status: {}
+{{- end }}

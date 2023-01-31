@@ -35,18 +35,15 @@ files on top of it.
 
 ## Workflow
 
-#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
-#### 2. Clone your fork and ensure the main-source branch is checked out
-```bash
-git clone -b main-source git@github.com:<your_github>/partner-charts.git
-```
-#### 3. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
+#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. Then create a new branch off of main-source
+
+#### 2. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
 ```bash
 cd partner-charts
 mkdir -p packages/suse/kubewarden-controller
 
 ```
-#### 4. Create your [upstream.yaml](#configuration-file)
+#### 3. Create your [upstream.yaml](#configuration-file)
 Some [examples](#examples) are provided below
 ```bash
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
@@ -59,24 +56,24 @@ ChartMetadata:
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF
 ```
-#### 5. [Create 'overlay' files](#overlay)
+#### 4. [Create 'overlay' files](#overlay)
 Create any add-on files such as an app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
 ```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
 ```
-#### 6. Commit your packages directory
+#### 5. Commit your packages directory
 ```bash
 git add packages/suse/kubewarden-controller
 git commit -m "Submitting suse/kubewarden-controller"
 ```
-#### 7. [Test your configuration](#testing-your-configuration)
-#### 8. Push your commit and open a pull request
+#### 6. [Test your configuration](#testing-your-configuration)
+#### 7. Push your commit
 ```bash
-git push origin main-source
-
-# Open Your Pull Request
+git push origin <your_branch>
 ```
+#### 8. Open a pull request to **main-source** branch
+
 
 ## Testing your configuration
 If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-ci-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
@@ -100,6 +97,25 @@ bin/partner-charts-ci auto
 ```bash
 bin/partner-charts-ci validate
 ```
+#### Testing new chart on Rancher Apps UI
+1. If you haven't done so yet, pull down your new chart files into your local `partner-charts` repository:
+```bash
+a) Get scripts: scripts/pull-ci-scripts
+b) List and find your company name/chart: bin/partner-charts-ci list | grep <company>
+c) set PACKAGE variable to your company/chart: export PACKAGE=<company>/<chart-name> or export PACKAGE=<company>
+d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
+```
+2.  In your local `partner-charts` directory start a python3 http server:
+```bash
+#python3 -m http.server 8000
+```
+3. From a second terminal expose your local http server via ngrok ( https://ngrok.com/download )
+```bash
+#./ngrok http 8000
+```
+4. In Rancher UI create a test repository that points to your local `partner-charts` repo by selecting an appropriate cluster and going to Apps > Repositories and clicking "Create".  Enter a Name, copy ngrok forwarding url and paste it into Target http(s) "Index URL" and click "Create" again.
+
+5. Once the new repository is "Active" go to Apps > Charts , find your new chart, review Readme is correct, etc. and install it. It should be successfully deployed.
 
 ## Overlay
 
@@ -229,3 +245,67 @@ ChartMetadata:
   kubeVersion: '>=1.21-0'
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
+## Migrate existing chart to automated updates
+These steps are for charts still using `package.yaml` to track upstream chart.  These charts should be migrated to receive automatic updates via an `upstream.yaml` by following the steps below.  After chart is migrated, it should get updated from your helm/github repo automatically.
+
+#### 1. Fork partner-charts repository, clone your fork, checkout the main-source branch and pull the latest changes. Then create a new branch off of main-source
+
+#### 2. Create directory structure for your company and chart in `packages/<company>/<chart>` e.g.
+```bash
+mkdir -p partner-charts/packages/suse/kubewarden-controller
+```
+#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>` e.g.
+```yaml	
+cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
+HelmRepo: https://charts.kubewarden.io
+HelmChart: kubewarden-controller
+Vendor: SUSE
+DisplayName: Kubewarden Controller
+ChartMetadata:
+  kubeVersion: '>=1.21-0'
+  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
+EOF 
+```
+* Note: If chart is using a high patch version like 5.5.100 due to old method of modifying version with the PackageVersion, add PackageVersion to the upstream.yaml (set it to 01 , 00 is not valid). Ideally,  when the the next minor version is released e.g. 5.6.X you can then remove PackageVersion from the upstream.yaml since 5.6.X > 5.5.XXX. 
+
+#### 4. If there is an `overlay` dir in `partner-charts/packages/<chart>/generated-changes/` move it to `packages/<company>/<chart>/` and ensure only necessary files are present in overlay dir e.g.
+```bash
+mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partner-charts/packages/suse/kubewarden-controller/
+```
+Check the old generated-changes/patch directory for any requisite other changes. If there is an edit in `Chart.yaml.patch` that needs to be replicated, it can be handled in the `upstream.yaml` `ChartMetadata` (see https://github.com/rancher/partner-charts#configuration-file).  If it is a change for any other file in the chart it can be done via an overlay file. See https://github.com/rancher/partner-charts#overlay  
+
+#### 5. Clean up old packages and charts directories:
+```bash
+git rm -r packages/<chart>
+git rm -r charts/<chart>
+```
+* Note: If a chart is using a logo file in partner-charts repo, make sure the `icon:` variable is set correctly in the `upstream.yaml ChartMetadata`. 
+
+#### 6. Stage your changes (To make sure the config works, and to setup the new charts and assets directories)
+```bash
+export PACKAGE=<company>/<chart>
+bin/partner-charts-ci stage
+```
+#### 7. Move the old assets files to the new directory (Sometimes this is unchanged but most times it does change)
+```bash
+git mv assets/<chart>/* assets/<company>/
+```
+#### 8. Update the `index.yaml` to reflect the new assets path for existing entries
+```bash
+sed -i 's%assets/<chart>%assets/<company>%' index.yaml
+```
+After doing this,  run this loop to validate that every assets file referenced in the index actually exists, it makes sure your paths aren't edited incorrectly.
+```bash
+for charts in $(yq '.entries[][] | .urls[0]' index.yaml); do stat ${charts} > /dev/null; if [[ ! $? -eq 0 ]]; then echo ${charts}; fi; done
+```
+The command should return quickly with no output. If it outputs anything it means some referenced assets files don't exist which is a problem.
+#### 9. Add/Commit your changes
+```bash
+git add assets charts packages index.yaml
+git commit -m "Migrating <vendor> <chart> chart"
+```
+#### 10. Push your commit
+```bash
+git push origin <your branch>
+```
+#### 11. Open a pull request  to the `main-source` branch for review

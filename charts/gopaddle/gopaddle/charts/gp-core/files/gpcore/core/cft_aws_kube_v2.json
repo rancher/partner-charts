@@ -1,0 +1,1753 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Parameters": {
+		"KubernetesMasterName": {
+			"Default": "KUBEMASTER_NAME",
+			"Description": "Enter the name for Kubernetes Master",
+			"Type": "String",
+			"MinLength": "1",
+			"MaxLength": "64",
+			"AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+			"ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+		},
+		"KubernetesMinionsName": {
+			"Default": "KubeMinion",
+			"Description": "Enter the name for Kubernetes Minion",
+			"Type": "String",
+			"MinLength": "1",
+			"MaxLength": "64",
+			"AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+			"ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+		},
+		"MinionsCount": {
+			"Default": "MINIONS_COUNT",
+			"Type": "Number",
+			"MinValue": "1",
+			"Description": "Enter the number of Minions you want to create(Default Maximum scaling size is 10):"
+		},
+		"MasterInstanceType": {
+			"Description": "Enter the instance size for Kubernetes Master",
+			"Type": "String",
+			"Default": "MASTER_INSTANCE_TYPE",
+			"AllowedValues": [
+				"t2.nano",
+				"t2.micro",
+				"t2.small",
+				"t2.large",
+				"t2.medium",
+				"t2.large",
+				"m4.large",
+				"m4.xlarge",
+				"m3.medium",
+				"m3.large",
+				"m3.xlarge"
+			],
+			"ConstraintDescription": "Select EC2 Instance Type from list."
+		},
+		"MinionsInstanceType": {
+			"Description": "Enter the instance size for Kubernetes Minions",
+			"Type": "String",
+			"Default": "MINION_INSTANCE_TYPE",
+			"AllowedValues": [
+				"t2.nano",
+				"t2.micro",
+				"t2.small",
+				"t2.large",
+				"t2.medium",
+				"t2.large",
+				"m4.large",
+				"m4.xlarge",
+				"m3.medium",
+				"m3.large",
+				"m3.xlarge"
+			],
+			"ConstraintDescription": "Select EC2 Instance Type from list."
+		},
+		"KeyPair": {
+			"Default": "PUBLIC_KEY",
+			"Description": "Select the KeyPair(For both Master and Minions)",
+			"Type": "AWS::EC2::KeyPair::KeyName",
+			"ConstraintDescription": "Can contain only ASCII characters."
+		}
+	},
+	"Mappings": {
+		"RegionMap": {
+			"us-east-1": {
+				"masterImage": "ami-d14cefc7",
+				"nodeImage": "ami-3825852e"
+			},
+			"us-east-2": {
+				"masterImage": "ami-44725621",
+				"nodeImage": "ami-07775362"
+			},
+			"us-west-1": {
+				"masterImage": "ami-feb6ef9e",
+				"nodeImage": "ami-ce81d8ae"
+			},
+			"us-west-2": {
+				"masterImage": "ami-9c6de2fc",
+				"nodeImage": "ami-44ad2224"
+			},
+			"ca-central-1": {
+				"masterImage": "ami-4557ea21",
+				"nodeImage": "ami-c35ae7a7"
+			},
+			"eu-west-1": {
+				"masterImage": "ami-a0281dc6",
+				"nodeImage": "ami-359db753"
+			},
+			"eu-central-1": {
+				"masterImage": "ami-1e9c4b71",
+				"nodeImage": "ami-f877a397"
+			},
+			"eu-west-2": {
+				"masterImage": "ami-d09287b4",
+				"nodeImage": "ami-e7918483"
+			},
+			"ap-southeast-1": {
+				"masterImage": "ami-08233021b7701c399",
+				"nodeImage": "ami-0e4ef4cb6b69cbb19"
+			},
+			"ap-southeast-2": {
+				"masterImage": "ami-0f49491506e8848c1",
+				"nodeImage": "ami-01ae776fb5018f463"
+			},
+			"ap-northeast-2": {
+				"masterImage": "ami-c8895aa6",
+				"nodeImage": "ami-2f825141"
+			},
+			"ap-northeast-1": {
+				"masterImage": "ami-95cb9bf2",
+				"nodeImage": "ami-db7121bc"
+			},
+			"ap-south-1": {
+				"masterImage": "ami-6ba3d304",
+				"nodeImage": "ami-a8bfcfc7"
+			},
+			"sa-east-1": {
+				"masterImage": "ami-de5d3cb2",
+				"nodeImage": "ami-7048291c"
+			}
+		}
+	},
+	"Conditions": {
+		"RegionIsUsEast1": {
+			"Fn::Equals": [
+				{
+					"Ref": "AWS::Region"
+				},
+				"us-east-1"
+			]
+		},
+		"RegionIsUsGovWest1": {
+			"Fn::Equals": [
+				{
+					"Ref": "AWS::Region"
+				},
+				"us-gov-west-1"
+			]
+		}
+	},
+	"Resources": {
+		"MasterRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": [
+									"ec2.amazonaws.com"
+								]
+							},
+							"Action": [
+								"sts:AssumeRole"
+							]
+						}
+					]
+				},
+				"Path": "/"
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "062b2a90-29bd-4e7f-8512-2b9d87cd50ac"
+				}
+			}
+		},
+		"MasterRolePolicies": {
+			"Type": "AWS::IAM::Policy",
+			"Properties": {
+				"PolicyName": "kubernetes-master",
+				"PolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Action": [
+								"ec2:*"
+							],
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"elasticloadbalancing:*"
+							],
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": "s3:*",
+							"Resource": [
+								"arn:aws:s3:::kubernetes-*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:Describe*",
+								"cloudwatch:*",
+								"logs:*",
+								"sns:*"
+							],
+							"Resource": "*"
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:*"
+							],
+							"Resource": [
+								"*"
+							]
+						}
+					]
+				},
+				"Roles": [
+					{
+						"Ref": "MasterRole"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "1660e688-e775-4dcd-809f-ce55b2d8b03d"
+				}
+			}
+		},
+		"MasterInstanceProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Path": "/",
+				"Roles": [
+					{
+						"Ref": "MasterRole"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "d9051f55-2638-4223-a528-f6bd637d69ce"
+				}
+			}
+		},
+		"MinionsRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": [
+									"ec2.amazonaws.com"
+								]
+							},
+							"Action": [
+								"sts:AssumeRole"
+							]
+						}
+					]
+				},
+				"Path": "/"
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "34cc30af-a656-4bdf-985e-1cce4c861d0a"
+				}
+			}
+		},
+		"MinionsRolePolicies": {
+			"Type": "AWS::IAM::Policy",
+			"Properties": {
+				"PolicyName": "kubernetes-minion",
+				"PolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Action": "s3:*",
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": "ec2:Describe*",
+							"Resource": "*"
+						},
+						{
+							"Effect": "Allow",
+							"Action": "ec2:AttachVolume",
+							"Resource": "*"
+						},
+						{
+							"Effect": "Allow",
+							"Action": "ec2:DetachVolume",
+							"Resource": "*"
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:TerminateInstanceInAutoScalingGroup"
+							],
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:DescribeAutoScalingGroups"
+							],
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:DescribeAutoScalingInstances"
+							],
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:SetDesiredCapacity"
+							],
+							"Resource": [
+								"*"
+							]
+						},
+						{
+							"Effect": "Allow",
+							"Action": [
+								"autoscaling:Describe*",
+								"cloudwatch:*",
+								"logs:*",
+								"sns:*"
+							],
+							"Resource": "*"
+						}
+					]
+				},
+				"Roles": [
+					{
+						"Ref": "MinionsRole"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "f8ac3cb8-a0c7-4c09-aa17-7cbc5b714b14"
+				}
+			}
+		},
+		"MinionsInstanceProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Path": "/",
+				"Roles": [
+					{
+						"Ref": "MinionsRole"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "34090e53-04bc-4369-b851-83b599731685"
+				}
+			}
+		},
+		"vpcc54420a1": {
+			"Type": "AWS::EC2::VPC",
+			"DeletionPolicy": "Delete",
+			"Properties": {
+				"CidrBlock": "172.20.0.0/16",
+				"InstanceTenancy": "default",
+				"EnableDnsSupport": "true",
+				"EnableDnsHostnames": "true",
+				"Tags": [
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					},
+					{
+						"Key": "Name",
+						"Value": "kubernetes-vpc"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "8dba90ed-bf34-433f-a7d9-ab8517543adb"
+				}
+			}
+		},
+		"subnet1c9c0378": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"CidrBlock": "172.20.0.0/24",
+				"AvailabilityZone": {
+					"Fn::Select": [
+						"0",
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				},
+				"Tags": [
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "b6097bd5-5202-44b7-bff0-21e6c17648f8"
+				}
+			}
+		},
+		"igw20b4ac45": {
+			"Type": "AWS::EC2::InternetGateway",
+			"Properties": {},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "f713e70c-1a4d-4680-b4a2-f7b85e7458cc"
+				}
+			}
+		},
+		"doptbe33a7db": {
+			"Type": "AWS::EC2::DHCPOptions",
+			"Properties": {
+				"DomainName": {
+					"Fn::If": [
+						"RegionIsUsEast1",
+						"ec2.internal",
+						{
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::Region"
+									},
+									".compute.internal"
+								]
+							]
+						}
+					]
+				},
+				"DomainNameServers": [
+					"AmazonProvidedDNS"
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "acf8dcff-cfab-4941-a7de-9b8e445ae526"
+				}
+			}
+		},
+		"aclc90371ad": {
+			"Type": "AWS::EC2::NetworkAcl",
+			"Properties": {
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "6959c47d-40ad-410b-941f-8b5a5ef18e28"
+				}
+			}
+		},
+		"rtb349ed450": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				},
+				"Tags": [
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "9e8c941e-b4aa-4474-b2a4-7951635e0175"
+				}
+			}
+		},
+		"asgkubernetesminiongroup": {
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+			"Properties": {
+				"Cooldown": "600",
+				"DesiredCapacity": {
+					"Ref": "MinionsCount"
+				},
+				"HealthCheckGracePeriod": "0",
+				"HealthCheckType": "EC2",
+				"MaxSize": "5",
+				"MinSize": {
+					"Ref": "MinionsCount"
+				},
+				"VPCZoneIdentifier": [
+					{
+						"Ref": "subnet1c9c0378"
+					}
+				],
+				"LaunchConfigurationName": {
+					"Ref": "lckubernetesminiongroup"
+				},
+				"Tags": [
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes",
+						"PropagateAtLaunch": true
+					},
+					{
+						"Key": "Name",
+						"Value": {
+							"Ref": "KubernetesMinionsName"
+						},
+						"PropagateAtLaunch": true
+					},
+					{
+						"Key": "Role",
+						"Value": "kubernetes-minion",
+						"PropagateAtLaunch": true
+					}
+				],
+				"TerminationPolicies": [
+					"NewestInstance"
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "5df835e4-67ed-4967-8841-67a5de2b9cf4"
+				}
+			}
+		},
+		"scaleUpMemUtili": {
+			"Type": "AWS::AutoScaling::ScalingPolicy",
+			"Properties": {
+				"AdjustmentType": "ChangeInCapacity",
+				"AutoScalingGroupName": {
+					"Ref": "asgkubernetesminiongroup"
+				},
+				"ScalingAdjustment": "1"
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "44a31cce-3c69-4cb3-bac2-2bf8fbf0604b"
+				}
+			}
+		},
+		"lckubernetesminiongroup": {
+			"Type": "AWS::AutoScaling::LaunchConfiguration",
+			"Properties": {
+				"IamInstanceProfile": {
+					"Ref": "MinionsInstanceProfile"
+				},
+				"AssociatePublicIpAddress": true,
+				"ImageId": {
+					"Fn::FindInMap": [
+						"RegionMap",
+						{
+							"Ref": "AWS::Region"
+						},
+						"nodeImage"
+					]
+				},
+				"InstanceType": {
+					"Ref": "MinionsInstanceType"
+				},
+				"KeyName": {
+					"Ref": "KeyPair"
+				},
+				"InstanceMonitoring": "true",
+				"SecurityGroups": [
+					{
+						"Ref": "sgkubernetesminionkubernetes"
+					}
+				],
+				"BlockDeviceMappings": [
+					{
+						"DeviceName": "/dev/sda1",
+						"Ebs": {
+							"VolumeSize": 50
+						}
+					},
+					{
+						"VirtualName": "ephemeral3",
+						"DeviceName": "/dev/sdf"
+					},
+					{
+						"VirtualName": "ephemeral2",
+						"DeviceName": "/dev/sde"
+					},
+					{
+						"VirtualName": "ephemeral0",
+						"DeviceName": "/dev/sdc"
+					},
+					{
+						"VirtualName": "ephemeral1",
+						"DeviceName": "/dev/sdd"
+					}
+				],
+				"UserData": {
+					"Fn::Base64": {
+						"Fn::Join": [
+							"",
+							[
+								"#!/bin/bash -x \n",
+								"apt-get update\n",
+								"# Kubeadm - Joining your nodes with master \n",
+								"kubeadm join --token=REPLACE_TOKEN --node-name=$(hostname -f) 172.20.0.9:6443 \n",
+								"bash -x /opt/gp/setPassword.sh \n",
+								"sed -i 's/MASTER_PASSWORD/REPLACE_MASTER_PASSWORD/g' /opt/gp/scaleDown.sh"								
+							]
+						]
+					}
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "01c4d03f-bbaf-4d9f-81c2-9cbe45c12a77"
+				}
+			}
+		},
+		"instancei5efd3af1": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"IamInstanceProfile": {
+					"Ref": "MasterInstanceProfile"
+				},
+				"DisableApiTermination": "true",
+				"InstanceInitiatedShutdownBehavior": "stop",
+				"ImageId": {
+					"Fn::FindInMap": [
+						"RegionMap",
+						{
+							"Ref": "AWS::Region"
+						},
+						"masterImage"
+					]
+				},
+				"InstanceType": {
+					"Ref": "MasterInstanceType"
+				},
+				"KeyName": {
+					"Ref": "KeyPair"
+				},
+				"Monitoring": "false",
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Ref": "KubernetesMasterName"
+						}
+					},
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					},
+					{
+						"Key": "Role",
+						"Value": "kubernetes-master"
+					}
+				],
+				"Volumes": [
+					{
+						"Device": "/dev/xvdb",
+						"VolumeId": {
+							"Ref": "volumevol05ecfdb3"
+						}
+					}
+				],
+				"NetworkInterfaces": [
+					{
+						"DeleteOnTermination": "true",
+						"DeviceIndex": 0,
+						"SubnetId": {
+							"Ref": "subnet1c9c0378"
+						},
+						"PrivateIpAddresses": [
+							{
+								"PrivateIpAddress": "172.20.0.9",
+								"Primary": "true"
+							}
+						],
+						"GroupSet": [
+							{
+								"Ref": "sgkubernetesmasterkubernetes"
+							}
+						],
+						"AssociatePublicIpAddress": "true"
+					}
+				],
+				"UserData": {
+					"Fn::Base64": {
+						"Fn::Join": [
+							"",
+							[
+								"#!/bin/bash -x \n",
+								"apt-get update\n",
+								"apt-get install awscli -y\n",
+								"#Initializing your master \n",
+								"touch /etc/kubernetes/pki/pass.csv \n",
+								"chmod 600 /etc/kubernetes/pki/pass.csv \n",
+								"sed -i 's/TOKEN/REPLACE_TOKEN/g' /opt/gp/masterConfiguration.sh \n",
+								"sed -i 's/pass/pki\\/pass/g' /opt/gp/masterConfiguration.sh \n",
+								"bash /opt/gp/masterConfiguration.sh \n",
+								"echo \"REPLACE_MASTER_PASSWORD,gopaddle-monitor,gopaddle-monitor\" >> /etc/kubernetes/pki/pass.csv \n",
+								"kubeadm init  --config=/opt/gp/kubeadm.yml \n",
+								"#Creating kube dir and copying config file \n",
+								"cp -i /etc/kubernetes/admin.conf /root/.kube/config \n",
+								"chown $(id -u):$(id -g) /root/.kube/config \n",
+								"aws s3 mb s3://kubernetes-ORGID-ACCID-KUBENAME --region=BUCKETREG \n",
+								"aws s3 cp /etc/kubernetes/admin.conf s3://kubernetes-ORGID-ACCID-KUBENAME --region=BUCKETREG \n",
+								"autoScalingGroupName=",
+								{
+									"Ref": "asgkubernetesminiongroup"
+								},
+								"\n",
+								"autoScalingPolicyName=",
+								{
+									"Ref": "scaleUpMemUtili"
+								},
+								"\n",
+								"regionName=",
+								{
+									"Ref": "AWS::Region"
+								},
+								"\n",
+								"echo autoScalingGroupName: $autoScalingGroupName \n",
+								"#asg_policy=(${autoScalingPolicyName//policyName\\// })\n",
+								"#echo asg_policy: $asg_policy \n",
+								"sed -i \"s/AUTOSCALING-GROUP-NAME/$autoScalingGroupName/g\" /opt/gp/autoscaler.yml\n",
+								"#sed -i \"s/AUTOSCALING_GROUP/$autoScalingGroupName/g\" /opt/gp/nodeDelete.sh\n",
+								"#sed -i \"s|POLICY_NAME|${asg_policy[1]}|g\" /opt/gp/scaleUp.sh\n",
+								"#sed -i \"s/REGION_ID/$regionName/g\" /opt/gp/scaleUp.sh\n",
+								"sed -i \"s/AWS-REGION/$regionName/g\" /opt/gp/autoscaler.yml\n",
+								"#Creating Read only Role for gopaddle-monitor\n",
+								"bash /opt/gp/gopaddleAddons.sh \n"
+							]
+						]
+					}
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "e3ec9de7-4bb2-452d-a623-a6c94e9414ba"
+				}
+			}
+		},
+		"volumevol05ecfdb3": {
+			"Type": "AWS::EC2::Volume",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						"0",
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"Size": "20",
+				"VolumeType": "gp2",
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "kubernetes-master-pd"
+					},
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "d75a7952-3adb-42bc-9364-b41cbd62f694"
+				}
+			}
+		},
+		"sgkubernetesmasterkubernetes": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Kubernetes security group applied to master nodes",
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				},
+				"Tags": [
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "fed17564-3011-40cc-9f3d-81672947e416"
+				}
+			}
+		},
+		"sgkubernetesminionkubernetes": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Kubernetes security group applied to minion nodes",
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				},
+				"Tags": [
+					{
+						"Key": "KubernetesCluster",
+						"Value": "kubernetes"
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "f4e18814-35bc-494a-91e6-fafb0ec705ff"
+				}
+			}
+		},
+		"memoryScaleUp90": {
+			"Type": "AWS::CloudWatch::Alarm",
+			"Properties": {
+				"ActionsEnabled": "true",
+				"ComparisonOperator": "GreaterThanOrEqualToThreshold",
+				"EvaluationPeriods": "1",
+				"MetricName": "MemoryUtilization",
+				"Namespace": "System/Linux",
+				"Period": "300",
+				"Statistic": "Average",
+				"Threshold": "90.0",
+				"AlarmActions": [
+					{
+						"Ref": "scaleUpMemUtili"
+					}
+				],
+				"Dimensions": [
+					{
+						"Name": "AutoScalingGroupName",
+						"Value": {
+							"Ref": "asgkubernetesminiongroup"
+						}
+					}
+				]
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "5e4d5136-5e00-43f2-88ca-21e30deece4e"
+				}
+			}
+		},
+		"acl1": {
+			"Type": "AWS::EC2::NetworkAclEntry",
+			"Properties": {
+				"CidrBlock": "0.0.0.0/0",
+				"Egress": "true",
+				"Protocol": "-1",
+				"RuleAction": "allow",
+				"RuleNumber": "100",
+				"NetworkAclId": {
+					"Ref": "aclc90371ad"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "706f95a5-fb5e-428c-aa73-f9d3c56d4e50"
+				}
+			}
+		},
+		"acl2": {
+			"Type": "AWS::EC2::NetworkAclEntry",
+			"Properties": {
+				"CidrBlock": "0.0.0.0/0",
+				"Protocol": "-1",
+				"RuleAction": "allow",
+				"RuleNumber": "100",
+				"NetworkAclId": {
+					"Ref": "aclc90371ad"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "a78ed404-1093-4861-b6f4-69aa2239c66e"
+				}
+			}
+		},
+		"subnetacl1": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"NetworkAclId": {
+					"Ref": "aclc90371ad"
+				},
+				"SubnetId": {
+					"Ref": "subnet1c9c0378"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "4f4dff08-c6e1-4a40-a9b6-9f4cc01aeb1e"
+				}
+			}
+		},
+		"gw1": {
+			"Type": "AWS::EC2::VPCGatewayAttachment",
+			"DeletionPolicy": "Delete",
+			"Properties": {
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				},
+				"InternetGatewayId": {
+					"Ref": "igw20b4ac45"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "ca7bd359-c1e1-4bb5-9072-72863dda115f"
+				}
+			}
+		},
+		"subnetroute2": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"RouteTableId": {
+					"Ref": "rtb349ed450"
+				},
+				"SubnetId": {
+					"Ref": "subnet1c9c0378"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "21432f55-5655-4510-9808-5f41c2038c45"
+				}
+			}
+		},
+		"route2": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "10.246.0.0/24",
+				"RouteTableId": {
+					"Ref": "rtb349ed450"
+				},
+				"InstanceId": {
+					"Ref": "instancei5efd3af1"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "8116d1ab-9a68-4e1b-9285-760066ae1093"
+				}
+			}
+		},
+		"route4": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {
+					"Ref": "rtb349ed450"
+				},
+				"GatewayId": {
+					"Ref": "igw20b4ac45"
+				}
+			},
+			"DependsOn": "gw1",
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "8da01726-6a8e-4e82-a06b-70625b5c229f"
+				}
+			}
+		},
+		"dchpassoc1": {
+			"Type": "AWS::EC2::VPCDHCPOptionsAssociation",
+			"Properties": {
+				"VpcId": {
+					"Ref": "vpcc54420a1"
+				},
+				"DhcpOptionsId": {
+					"Ref": "doptbe33a7db"
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "498bfac2-d655-40b5-a7b5-0aa042a544ce"
+				}
+			}
+		},
+		"ingress1": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "-1",
+				"SourceSecurityGroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"SourceSecurityGroupOwnerId": "473641303166"
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "7daf34f8-5dbd-4881-b65a-dfc596013f26"
+				}
+			}
+		},
+		"ingress2": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "-1",
+				"SourceSecurityGroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"SourceSecurityGroupOwnerId": "473641303166"
+			}
+		},
+		"ingress3": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "tcp",
+				"FromPort": "22",
+				"ToPort": "22",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"ingress4": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "tcp",
+				"FromPort": "443",
+				"ToPort": "443",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"ingress5": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"IpProtocol": "-1",
+				"SourceSecurityGroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"SourceSecurityGroupOwnerId": "473641303166"
+			}
+		},
+		"ingress6": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"IpProtocol": "-1",
+				"SourceSecurityGroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"SourceSecurityGroupOwnerId": "473641303166"
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Designer": {
+					"id": "ba908a72-6c66-47f3-8cf0-f545febc44be"
+				}
+			}
+		},
+		"ingress7": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"IpProtocol": "tcp",
+				"FromPort": "22",
+				"ToPort": "22",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"ingress8": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "tcp",
+				"FromPort": "8080",
+				"ToPort": "8080",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"ingress9": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "tcp",
+				"FromPort": "6443",
+				"ToPort": "6443",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"ingress10": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"IpProtocol": "tcp",
+				"FromPort": "4200",
+				"ToPort": "4200",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"egress1": {
+			"Type": "AWS::EC2::SecurityGroupEgress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesmasterkubernetes"
+				},
+				"IpProtocol": "-1",
+				"CidrIp": "0.0.0.0/0"
+			}
+		},
+		"egress2": {
+			"Type": "AWS::EC2::SecurityGroupEgress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "sgkubernetesminionkubernetes"
+				},
+				"IpProtocol": "-1",
+				"CidrIp": "0.0.0.0/0"
+			}
+		}
+	},
+	"Description": "Kubernetes Cluster Creation Template using AWS CloudFormation",
+	"Outputs": {
+		"K8sURL": {
+			"Value": {
+				"Fn::Join": [
+					"",
+					[
+						"https://",
+						{
+							"Fn::GetAtt": [
+								"instancei5efd3af1",
+								"PublicIp"
+							]
+						},
+						":6443/ui"
+					]
+				]
+			},
+			"Description": "Kubernetes Cluster Master IP Address"
+		},
+		"MasterIP": {
+			"Description": "Master IP Address",
+			"Value": {
+				"Fn::Join": [
+					"",
+					[
+						"",
+						{
+							"Fn::GetAtt": [
+								"instancei5efd3af1",
+								"PublicIp"
+							]
+						}
+					]
+				]
+			}
+		},
+		"MinionsRoleName": {
+			"Description": "Name of MinionsRole",
+			"Value": {
+				"Fn::Join": [
+					"",
+					[
+						"",
+						{
+							"Fn::GetAtt": [
+								"MinionsRole",
+								"Arn"
+							]
+						}
+					]
+				]
+			}
+		},
+		"VpcID": {
+			"Description": "ID of VPC",
+			"Value": {
+				"Fn::Join": [
+					"",
+					[
+						"",
+						{
+							"Ref": "vpcc54420a1"
+						}
+					]
+				]
+			}
+		}
+	},
+	"Metadata": {
+		"AWS::CloudFormation::Designer": {
+			"5e4d5136-5e00-43f2-88ca-21e30deece4e": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [],
+				"isrelatedto": [
+					"44a31cce-3c69-4cb3-bac2-2bf8fbf0604b",
+					"5df835e4-67ed-4967-8841-67a5de2b9cf4"
+				]
+			},
+			"9306acfd-ce94-4e5b-9a0b-abdf6978be27": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 210
+				},
+				"z": 1,
+				"embeds": [],
+				"isrelatedto": [
+					"a190ec41-22f1-4585-bf34-2b1fe903485f",
+					"5df835e4-67ed-4967-8841-67a5de2b9cf4"
+				]
+			},
+			"d75a7952-3adb-42bc-9364-b41cbd62f694": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 330
+				},
+				"z": 1,
+				"embeds": []
+			},
+			"acf8dcff-cfab-4941-a7de-9b8e445ae526": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 450
+				},
+				"z": 1,
+				"embeds": []
+			},
+			"f713e70c-1a4d-4680-b4a2-f7b85e7458cc": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 570
+				},
+				"z": 1,
+				"embeds": []
+			},
+			"8dba90ed-bf34-433f-a7d9-ab8517543adb": {
+				"size": {
+					"width": 780,
+					"height": 780
+				},
+				"position": {
+					"x": 60,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [
+					"f4e18814-35bc-494a-91e6-fafb0ec705ff",
+					"fed17564-3011-40cc-9f3d-81672947e416",
+					"9e8c941e-b4aa-4474-b2a4-7951635e0175",
+					"6959c47d-40ad-410b-941f-8b5a5ef18e28",
+					"b6097bd5-5202-44b7-bff0-21e6c17648f8"
+				]
+			},
+			"498bfac2-d655-40b5-a7b5-0aa042a544ce": {
+				"source": {
+					"id": "acf8dcff-cfab-4941-a7de-9b8e445ae526"
+				},
+				"target": {
+					"id": "8dba90ed-bf34-433f-a7d9-ab8517543adb"
+				},
+				"z": 1
+			},
+			"ca7bd359-c1e1-4bb5-9072-72863dda115f": {
+				"source": {
+					"id": "f713e70c-1a4d-4680-b4a2-f7b85e7458cc"
+				},
+				"target": {
+					"id": "8dba90ed-bf34-433f-a7d9-ab8517543adb"
+				},
+				"z": 1
+			},
+			"f4e18814-35bc-494a-91e6-fafb0ec705ff": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 690,
+					"y": 450
+				},
+				"z": 2,
+				"parent": "8dba90ed-bf34-433f-a7d9-ab8517543adb",
+				"embeds": []
+			},
+			"01c4d03f-bbaf-4d9f-81c2-9cbe45c12a77": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 690
+				},
+				"z": 1,
+				"embeds": [],
+				"ismemberof": [
+					"f4e18814-35bc-494a-91e6-fafb0ec705ff"
+				],
+				"isrelatedto": [
+					"34090e53-04bc-4369-b851-83b599731685"
+				]
+			},
+			"fed17564-3011-40cc-9f3d-81672947e416": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 690,
+					"y": 570
+				},
+				"z": 2,
+				"parent": "8dba90ed-bf34-433f-a7d9-ab8517543adb",
+				"embeds": []
+			},
+			"ba908a72-6c66-47f3-8cf0-f545febc44be": {
+				"source": {
+					"id": "f4e18814-35bc-494a-91e6-fafb0ec705ff"
+				},
+				"target": {
+					"id": "fed17564-3011-40cc-9f3d-81672947e416"
+				},
+				"z": 2
+			},
+			"7daf34f8-5dbd-4881-b65a-dfc596013f26": {
+				"source": {
+					"id": "fed17564-3011-40cc-9f3d-81672947e416"
+				},
+				"target": {
+					"id": "f4e18814-35bc-494a-91e6-fafb0ec705ff"
+				},
+				"z": 2
+			},
+			"9e8c941e-b4aa-4474-b2a4-7951635e0175": {
+				"size": {
+					"width": 330,
+					"height": 330
+				},
+				"position": {
+					"x": 90,
+					"y": 150
+				},
+				"z": 2,
+				"parent": "8dba90ed-bf34-433f-a7d9-ab8517543adb",
+				"embeds": [
+					"8da01726-6a8e-4e82-a06b-70625b5c229f",
+					"8116d1ab-9a68-4e1b-9285-760066ae1093"
+				]
+			},
+			"8da01726-6a8e-4e82-a06b-70625b5c229f": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 120,
+					"y": 210
+				},
+				"z": 3,
+				"parent": "9e8c941e-b4aa-4474-b2a4-7951635e0175",
+				"embeds": [],
+				"references": [
+					"f713e70c-1a4d-4680-b4a2-f7b85e7458cc"
+				],
+				"dependson": [
+					"ca7bd359-c1e1-4bb5-9072-72863dda115f"
+				]
+			},
+			"6778df45-dbc1-460f-afef-073126f855c3": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 240,
+					"y": 210
+				},
+				"z": 3,
+				"parent": "9e8c941e-b4aa-4474-b2a4-7951635e0175",
+				"embeds": [],
+				"references": [
+					"f713e70c-1a4d-4680-b4a2-f7b85e7458cc"
+				]
+			},
+			"e91552bd-fc54-4bf7-b77a-70ba6e0a4ad1": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 120,
+					"y": 150
+				},
+				"z": 3,
+				"parent": "9e8c941e-b4aa-4474-b2a4-7951635e0175",
+				"embeds": [],
+				"references": [
+					"f713e70c-1a4d-4680-b4a2-f7b85e7458cc"
+				]
+			},
+			"6959c47d-40ad-410b-941f-8b5a5ef18e28": {
+				"size": {
+					"width": 330,
+					"height": 180
+				},
+				"position": {
+					"x": 90,
+					"y": 540
+				},
+				"z": 2,
+				"parent": "8dba90ed-bf34-433f-a7d9-ab8517543adb",
+				"embeds": [
+					"a78ed404-1093-4861-b6f4-69aa2239c66e",
+					"706f95a5-fb5e-428c-aa73-f9d3c56d4e50"
+				]
+			},
+			"a78ed404-1093-4861-b6f4-69aa2239c66e": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 120,
+					"y": 600
+				},
+				"z": 3,
+				"parent": "6959c47d-40ad-410b-941f-8b5a5ef18e28",
+				"embeds": []
+			},
+			"706f95a5-fb5e-428c-aa73-f9d3c56d4e50": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 120,
+					"y": 600
+				},
+				"z": 3,
+				"parent": "6959c47d-40ad-410b-941f-8b5a5ef18e28",
+				"embeds": []
+			},
+			"b6097bd5-5202-44b7-bff0-21e6c17648f8": {
+				"size": {
+					"width": 240,
+					"height": 240
+				},
+				"position": {
+					"x": 480,
+					"y": 150
+				},
+				"z": 2,
+				"parent": "8dba90ed-bf34-433f-a7d9-ab8517543adb",
+				"embeds": [
+					"e3ec9de7-4bb2-452d-a623-a6c94e9414ba"
+				]
+			},
+			"21432f55-5655-4510-9808-5f41c2038c45": {
+				"source": {
+					"id": "9e8c941e-b4aa-4474-b2a4-7951635e0175"
+				},
+				"target": {
+					"id": "b6097bd5-5202-44b7-bff0-21e6c17648f8"
+				},
+				"z": 2
+			},
+			"4f4dff08-c6e1-4a40-a9b6-9f4cc01aeb1e": {
+				"source": {
+					"id": "6959c47d-40ad-410b-941f-8b5a5ef18e28"
+				},
+				"target": {
+					"id": "b6097bd5-5202-44b7-bff0-21e6c17648f8"
+				},
+				"z": 2
+			},
+			"e3ec9de7-4bb2-452d-a623-a6c94e9414ba": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 510,
+					"y": 210
+				},
+				"z": 3,
+				"parent": "b6097bd5-5202-44b7-bff0-21e6c17648f8",
+				"embeds": [],
+				"isconnectedto": [
+					"d75a7952-3adb-42bc-9364-b41cbd62f694"
+				],
+				"isrelatedto": [
+					"fed17564-3011-40cc-9f3d-81672947e416",
+					"d9051f55-2638-4223-a528-f6bd637d69ce",
+					"5df835e4-67ed-4967-8841-67a5de2b9cf4",
+					"44a31cce-3c69-4cb3-bac2-2bf8fbf0604b"
+				]
+			},
+			"8116d1ab-9a68-4e1b-9285-760066ae1093": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 120,
+					"y": 150
+				},
+				"z": 3,
+				"parent": "9e8c941e-b4aa-4474-b2a4-7951635e0175",
+				"embeds": [],
+				"references": [
+					"e3ec9de7-4bb2-452d-a623-a6c94e9414ba"
+				]
+			},
+			"5df835e4-67ed-4967-8841-67a5de2b9cf4": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 900,
+					"y": 810
+				},
+				"z": 1,
+				"embeds": [],
+				"isconnectedto": [
+					"b6097bd5-5202-44b7-bff0-21e6c17648f8"
+				],
+				"isassociatedwith": [
+					"01c4d03f-bbaf-4d9f-81c2-9cbe45c12a77"
+				]
+			},
+			"0295532e-d02f-457a-b66f-bf885a676894": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 990,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [],
+				"references": [
+					"a7b57808-5d45-43b0-bf47-aad86ca4c28e"
+				],
+				"dependson": [
+					"e3ec9de7-4bb2-452d-a623-a6c94e9414ba"
+				]
+			},
+			"a7b57808-5d45-43b0-bf47-aad86ca4c28e": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 1080,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": []
+			},
+			"a190ec41-22f1-4585-bf34-2b1fe903485f": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 990,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [],
+				"isassociatedwith": [
+					"5df835e4-67ed-4967-8841-67a5de2b9cf4"
+				]
+			},
+			"44a31cce-3c69-4cb3-bac2-2bf8fbf0604b": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 1110,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [],
+				"isassociatedwith": [
+					"5df835e4-67ed-4967-8841-67a5de2b9cf4"
+				]
+			},
+			"34cc30af-a656-4bdf-985e-1cce4c861d0a": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 1200,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": []
+			},
+			"34090e53-04bc-4369-b851-83b599731685": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 1320,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [],
+				"isassociatedwith": [
+					"34cc30af-a656-4bdf-985e-1cce4c861d0a"
+				]
+			},
+			"f8ac3cb8-a0c7-4c09-aa17-7cbc5b714b14": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 1440,
+					"y": 90
+				},
+				"z": 1,
+				"embeds": [],
+				"isassociatedwith": [
+					"34cc30af-a656-4bdf-985e-1cce4c861d0a"
+				]
+			},
+			"062b2a90-29bd-4e7f-8512-2b9d87cd50ac": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 640,
+					"y": -10
+				},
+				"z": 1,
+				"embeds": []
+			},
+			"d9051f55-2638-4223-a528-f6bd637d69ce": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 510,
+					"y": -10
+				},
+				"z": 1,
+				"embeds": [],
+				"isassociatedwith": [
+					"062b2a90-29bd-4e7f-8512-2b9d87cd50ac"
+				]
+			},
+			"1660e688-e775-4dcd-809f-ce55b2d8b03d": {
+				"size": {
+					"width": 60,
+					"height": 60
+				},
+				"position": {
+					"x": 750,
+					"y": -10
+				},
+				"z": 1,
+				"embeds": [],
+				"isassociatedwith": [
+					"062b2a90-29bd-4e7f-8512-2b9d87cd50ac"
+				]
+			}
+		}
+	}
+}
