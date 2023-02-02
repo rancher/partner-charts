@@ -22,20 +22,10 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
     controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
   name: clusters.controller.kubeslice.io
 spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          name: kubeslice-controller-webhook-service
-          namespace: kubeslice-controller
-          path: /convert
-      conversionReviewVersions:
-      - v1
   group: controller.kubeslice.io
   names:
     kind: Cluster
@@ -158,20 +148,10 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
     controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
   name: projects.controller.kubeslice.io
 spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          name: kubeslice-controller-webhook-service
-          namespace: kubeslice-controller
-          path: /convert
-      conversionReviewVersions:
-      - v1
   group: controller.kubeslice.io
   names:
     kind: Project
@@ -328,20 +308,10 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
     controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
   name: sliceconfigs.controller.kubeslice.io
 spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          name: kubeslice-controller-webhook-service
-          namespace: kubeslice-controller
-          path: /convert
-      conversionReviewVersions:
-      - v1
   group: controller.kubeslice.io
   names:
     kind: SliceConfig
@@ -400,6 +370,11 @@ spec:
                       type: object
                   type: object
                 type: array
+              maxClusters:
+                default: 16
+                maximum: 32
+                minimum: 2
+                type: integer
               namespaceIsolationProfile:
                 properties:
                   allowedNamespaces:
@@ -513,6 +488,103 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: slicenodeaffinities.controller.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: controller.kubeslice.io
+  names:
+    kind: SliceNodeAffinity
+    listKind: SliceNodeAffinityList
+    plural: slicenodeaffinities
+    singular: slicenodeaffinity
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SliceNodeAffinity is the Schema for the slicenodeaffinities API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SliceNodeAffinitySpec defines the desired state of SliceNodeAffinity
+            properties:
+              nodeAffinityProfiles:
+                description: NodeAffinityProfiles defines the node affinity profile for the slice
+                items:
+                  properties:
+                    cluster:
+                      description: Cluster is the cluster in the slice this rule applies to
+                      type: string
+                    nodeAffinityRules:
+                      description: NodeAffinityRules defines the node affinity profile for the slice
+                      items:
+                        properties:
+                          namespace:
+                            description: Namespace is the namespace in the slice this rule applies to
+                            type: string
+                          nodeSelectorLabels:
+                            description: NodeSelectorLabels defines the label selectors to select nodes for assigning to pods
+                            items:
+                              description: A node selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                              properties:
+                                key:
+                                  description: The label key that the selector applies to.
+                                  type: string
+                                operator:
+                                  description: Represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+                                  type: string
+                                values:
+                                  description: An array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. If the operator is Gt or Lt, the values array must have a single element, which will be interpreted as an integer. This array is replaced during a strategic merge patch.
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                        type: object
+                      type: array
+                  type: object
+                type: array
+            type: object
+          status:
+            description: SliceNodeAffinityStatus defines the observed state of SliceNodeAffinity
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
   name: sliceqosconfigs.controller.kubeslice.io
@@ -583,6 +655,583 @@ spec:
           status:
             description: SliceQoSConfigStatus defines the observed state of SliceQoSConfig
             type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: sliceresourcequotaconfigs.controller.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: controller.kubeslice.io
+  names:
+    kind: SliceResourceQuotaConfig
+    listKind: SliceResourceQuotaConfigList
+    plural: sliceresourcequotaconfigs
+    singular: sliceresourcequotaconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SliceResourceQuotaConfig is the Schema for the sliceresourcequotaconfigs API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SliceResourceQuotaConfigSpec defines the desired state of SliceResourceQuotaConfig
+            properties:
+              clusterQuota:
+                description: ClusterQuota defines the configuration for cluster quota of a resource quota
+                items:
+                  description: ClusterQuota defines the configuration for cluster quota of a resource quota
+                  properties:
+                    clusterName:
+                      description: ClusterName defines the name of the cluster in ClusterQuota
+                      type: string
+                    namespaceQuota:
+                      description: NamespaceQuota defines the configuration for namespace quota of a ClusterQuota
+                      items:
+                        description: NamespaceQuota defines the configuration for namespace quota of a NamespaceQuota
+                        properties:
+                          enforceQuota:
+                            default: false
+                            description: EnforceQuota defines the enforceQuota status flag for NamespaceQuota
+                            type: boolean
+                          namespace:
+                            description: Namespace defines the namespace of the NamespaceQuota
+                            type: string
+                          resources:
+                            description: Resources defines the configuration for resources for NamespaceQuota
+                            properties:
+                              defaultLimitPerContainer:
+                                properties:
+                                  cpu:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: CPU in cores. (500m = .5 cores)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  ephemeralStorage:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  memory:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                type: object
+                              defaultRequestPerContainer:
+                                properties:
+                                  cpu:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: CPU in cores. (500m = .5 cores)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  ephemeralStorage:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  memory:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                type: object
+                              limit:
+                                description: LimitResourceList is a set of (resource name, quantity) pairs.
+                                properties:
+                                  cpu:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: CPU in cores. (500m = .5 cores)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  ephemeralStorage:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  memory:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  podCount:
+                                    description: PodCount in number.
+                                    format: int64
+                                    type: integer
+                                type: object
+                              request:
+                                description: RequestResourceList is a set of (resource name, quantity) pairs.
+                                properties:
+                                  cpu:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: CPU in cores. (500m = .5 cores)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  ephemeralStorage:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  memory:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                type: object
+                            type: object
+                        type: object
+                      type: array
+                    resources:
+                      description: Resources defines the configuration for resources for ClusterQuota
+                      properties:
+                        limit:
+                          description: LimitResourceList is a set of (resource name, quantity) pairs.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: CPU in cores. (500m = .5 cores)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            ephemeralStorage:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            podCount:
+                              description: PodCount in number.
+                              format: int64
+                              type: integer
+                          type: object
+                        request:
+                          description: RequestResourceList is a set of (resource name, quantity) pairs.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: CPU in cores. (500m = .5 cores)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            ephemeralStorage:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                      type: object
+                  type: object
+                type: array
+              sliceQuota:
+                description: SliceQuota defines the configuration for slice quota of a resource quota
+                properties:
+                  resources:
+                    description: Resources defines the configuration for resources for SliceQuota
+                    properties:
+                      defaultRequestPerContainer:
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: CPU in cores. (500m = .5 cores)
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          ephemeralStorage:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        type: object
+                      limit:
+                        description: LimitResourceList is a set of (resource name, quantity) pairs.
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: CPU in cores. (500m = .5 cores)
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          ephemeralStorage:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          podCount:
+                            description: PodCount in number.
+                            format: int64
+                            type: integer
+                        type: object
+                      request:
+                        description: RequestResourceList is a set of (resource name, quantity) pairs.
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: CPU in cores. (500m = .5 cores)
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          ephemeralStorage:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                type: object
+            type: object
+          status:
+            description: SliceResourceQuotaConfigStatus defines the observed state of SliceResourceQuotaConfig
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: slicerolebindings.controller.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: controller.kubeslice.io
+  names:
+    kind: SliceRoleBinding
+    listKind: SliceRoleBindingList
+    plural: slicerolebindings
+    singular: slicerolebinding
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SliceRoleBinding is the Schema for the slicerolebindings API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          bindings:
+            items:
+              description: RoleBinding references a role, but does not contain it.
+              properties:
+                applyTo:
+                  description: ApplyTo contains information about the namespace and the Subjects.
+                  items:
+                    description: ApplyTo contains information about the namespace and the Subjects. It adds who information via Subjects and namespace information by which namespace it exists in.
+                    properties:
+                      namespace:
+                        description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error. '*' Represents all namespaces
+                        type: string
+                      subjects:
+                        description: Subjects holds references to the objects the role applies to.
+                        items:
+                          description: Subject contains a reference to the object or user identities a role binding applies to.  This can either hold a direct API object reference, or a value for non-objects such as user and group names.
+                          properties:
+                            apiGroup:
+                              description: APIGroup holds the API group of the referenced subject. Defaults to "" for ServiceAccount subjects. Defaults to "rbac.authorization.k8s.io" for User and Group subjects.
+                              type: string
+                            kind:
+                              description: Kind of object being referenced. Values defined by this API group are "User", "Group", and "ServiceAccount". If the Authorizer does not recognized the kind value, the Authorizer should report an error.
+                              type: string
+                            name:
+                              description: Name of the object being referenced.
+                              type: string
+                            namespace:
+                              description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error.
+                              type: string
+                          required:
+                          - kind
+                          - name
+                          type: object
+                        type: array
+                    type: object
+                  type: array
+                roleRef:
+                  description: RoleRef can reference a Role in the current namespace or a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error.
+                  properties:
+                    apiVersion:
+                      description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                      type: string
+                    kind:
+                      description: Kind is the type of resource being referenced
+                      type: string
+                    name:
+                      description: Name is the name of resource being referenced
+                      type: string
+                  required:
+                  - apiVersion
+                  - kind
+                  - name
+                  type: object
+              type: object
+            type: array
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          status:
+            properties:
+              roleRefConditions:
+                items:
+                  properties:
+                    condition:
+                      description: Condition defines conditions of a RoleRef, one of INVALID_NS, NOT_ACCESSIBLE, INVALID_RULE, INVALID_ROLE_BINDING.
+                      type: string
+                    lastUpdateTime:
+                      description: The last time this condition was updated.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human-readable message indicating details about the transition.
+                      type: string
+                    namespace:
+                      description: Name of the Namespace in case of INVALID_NS condition.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    roleRef:
+                      description: Name, APIVersion and Kind of the RoleRef
+                      properties:
+                        apiVersion:
+                          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                          type: string
+                        kind:
+                          description: Kind is the type of resource being referenced
+                          type: string
+                        name:
+                          description: Name is the name of resource being referenced
+                          type: string
+                      required:
+                      - apiVersion
+                      - kind
+                      - name
+                      type: object
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                  required:
+                  - condition
+                  - lastUpdateTime
+                  - reason
+                  - roleRef
+                  - status
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: sliceroletemplates.controller.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: controller.kubeslice.io
+  names:
+    kind: SliceRoleTemplate
+    listKind: SliceRoleTemplateList
+    plural: sliceroletemplates
+    singular: sliceroletemplate
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SliceRoleTemplate is the Schema for the sliceroletemplates API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          rules:
+            items:
+              description: PolicyRule holds information that describes a policy rule, but does not contain information about who the rule applies to or which namespace the rule applies to.
+              properties:
+                apiGroups:
+                  description: APIGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed.
+                  items:
+                    type: string
+                  type: array
+                nonResourceURLs:
+                  description: NonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding. Rules can either apply to API resources (such as "pods" or "secrets") or non-resource URL paths (such as "/api"),  but not both.
+                  items:
+                    type: string
+                  type: array
+                resourceNames:
+                  description: ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
+                  items:
+                    type: string
+                  type: array
+                resources:
+                  description: Resources is a list of resources this rule applies to. '*' represents all resources.
+                  items:
+                    type: string
+                  type: array
+                verbs:
+                  description: Verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs.
+                  items:
+                    type: string
+                  type: array
+              required:
+              - verbs
+              type: object
+            type: array
+          status:
+            description: SliceRoleTemplateStatus defines the observed state of SliceResourceQuotaConfig
+            type: object
+        required:
+        - rules
         type: object
     served: true
     storage: true
@@ -727,6 +1376,8 @@ spec:
           spec:
             description: WorkerSliceConfigSpec defines the desired state of Slice
             properties:
+              clusterSubnetCIDR:
+                type: string
               externalGatewayConfig:
                 properties:
                   egress:
@@ -766,6 +1417,8 @@ spec:
                     default: false
                     type: boolean
                 type: object
+              octet:
+                type: integer
               qosProfileDetails:
                 description: QOSProfile is the QOS Profile configuration from backend
                 properties:
@@ -818,6 +1471,8 @@ spec:
               sliceType:
                 default: Application
                 type: string
+            required:
+            - octet
             type: object
           status:
             description: WorkerSliceConfigStatus defines the observed state of Slice
@@ -966,6 +1621,757 @@ status:
   conditions: []
   storedVersions: []
 ---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: workerslicenodeaffinities.worker.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: worker.kubeslice.io
+  names:
+    kind: WorkerSliceNodeAffinity
+    listKind: WorkerSliceNodeAffinityList
+    plural: workerslicenodeaffinities
+    singular: workerslicenodeaffinity
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: WorkerSliceNodeAffinity is the Schema for the workerslicenodeaffinities API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WorkerSliceNodeAffinitySpec defines the desired state of WorkerSliceNodeAffinity
+            properties:
+              clusterName:
+                description: ClusterName defines the name of the cluster for the WorkerSliceNodeAffinity
+                type: string
+              nodeAffinityRules:
+                description: NodeAffinityRules defines the node affinity profile for the slice
+                items:
+                  properties:
+                    namespace:
+                      description: Namespace is the namespace in the slice this rule applies to
+                      type: string
+                    nodeSelectorLabels:
+                      description: NodeSelectorLabels defines the label selectors to select nodes for assigning to pods
+                      items:
+                        description: A node selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                        properties:
+                          key:
+                            description: The label key that the selector applies to.
+                            type: string
+                          operator:
+                            description: Represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+                            type: string
+                          values:
+                            description: An array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. If the operator is Gt or Lt, the values array must have a single element, which will be interpreted as an integer. This array is replaced during a strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                  type: object
+                type: array
+              sliceName:
+                description: SliceName defines the name of the slice for the WorkerSliceNodeAffinity
+                type: string
+            type: object
+          status:
+            description: WorkerSliceNodeAffinityStatus defines the observed state of WorkerSliceNodeAffinity
+            properties:
+              nodeAffinityRules:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run "make" to regenerate code after modifying this file'
+                items:
+                  properties:
+                    namespace:
+                      description: Namespace is the namespace in the slice this rule applies to
+                      type: string
+                    nodeSelectorLabels:
+                      description: NodeSelectorLabels defines the label selectors to select nodes for assigning to pods
+                      items:
+                        description: A node selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                        properties:
+                          key:
+                            description: The label key that the selector applies to.
+                            type: string
+                          operator:
+                            description: Represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+                            type: string
+                          values:
+                            description: An array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. If the operator is Gt or Lt, the values array must have a single element, which will be interpreted as an integer. This array is replaced during a strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: workersliceresourcequotas.worker.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: worker.kubeslice.io
+  names:
+    kind: WorkerSliceResourceQuota
+    listKind: WorkerSliceResourceQuotaList
+    plural: workersliceresourcequotas
+    singular: workersliceresourcequota
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: WorkerSliceResourceQuota is the Schema for the workersliceresourcequota API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WorkerSliceResourceQuotaSpec defines the desired state of WorkerSliceResourceQuota
+            properties:
+              clusterName:
+                description: ClusterName defines the name of the cluster for the WorkerResourceQuota
+                type: string
+              resourceQuotaProfile:
+                description: ResourceQuotaProfile defines the resource quota profile for the slice
+                properties:
+                  clusterQuota:
+                    description: ClusterQuota defines the configuration for cluster quota of a resource quota
+                    properties:
+                      namespaceQuota:
+                        description: NamespaceQuota defines the configuration for namespace quota of a ClusterQuota
+                        items:
+                          description: NamespaceQuota defines the configuration for namespace quota of a namespaceQuota
+                          properties:
+                            enforceQuota:
+                              default: false
+                              description: EnforceQuota defines the enforceQuota status flag for NamespaceQuota
+                              type: boolean
+                            namespace:
+                              description: Namespace defines the namespace of the NamespaceQuota
+                              type: string
+                            resources:
+                              description: Resources defines the configuration for resources for NamespaceQuota
+                              properties:
+                                defaultLimitPerContainer:
+                                  description: DefaultResourcePerContainer is a set of (resource name, quantity) pairs.
+                                  properties:
+                                    cpu:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: CPU in cores. (500m = .5 cores)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    ephemeralStorage:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    memory:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  type: object
+                                defaultRequestPerContainer:
+                                  description: DefaultResourcePerContainer is a set of (resource name, quantity) pairs.
+                                  properties:
+                                    cpu:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: CPU in cores. (500m = .5 cores)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    ephemeralStorage:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    memory:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  type: object
+                                limit:
+                                  description: LimitResourceList is a set of (resource name, quantity) pairs.
+                                  properties:
+                                    cpu:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: CPU in cores. (500m = .5 cores)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    ephemeralStorage:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    memory:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    podCount:
+                                      description: PodCount in number.
+                                      format: int64
+                                      type: integer
+                                  type: object
+                                request:
+                                  description: RequestResourceList is a set of (resource name, quantity) pairs.
+                                  properties:
+                                    cpu:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: CPU in cores. (500m = .5 cores)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    ephemeralStorage:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    memory:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  type: object
+                              type: object
+                          type: object
+                        type: array
+                      resources:
+                        description: Resources defines the configuration for resources for ClusterQuota
+                        properties:
+                          limit:
+                            description: LimitResourceList is a set of (resource name, quantity) pairs.
+                            properties:
+                              cpu:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPU in cores. (500m = .5 cores)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              ephemeralStorage:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memory:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              podCount:
+                                description: PodCount in number.
+                                format: int64
+                                type: integer
+                            type: object
+                          request:
+                            description: RequestResourceList is a set of (resource name, quantity) pairs.
+                            properties:
+                              cpu:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPU in cores. (500m = .5 cores)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              ephemeralStorage:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memory:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                            type: object
+                        type: object
+                    type: object
+                  sliceQuota:
+                    description: SliceQuota defines the configuration for slice quota of a resource quota
+                    properties:
+                      resources:
+                        description: Resources defines the configuration for resources for SliceQuota
+                        properties:
+                          defaultRequestPerContainer:
+                            description: DefaultResourcePerContainer is a set of (resource name, quantity) pairs.
+                            properties:
+                              cpu:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPU in cores. (500m = .5 cores)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              ephemeralStorage:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memory:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                            type: object
+                          limit:
+                            description: LimitResourceList is a set of (resource name, quantity) pairs.
+                            properties:
+                              cpu:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPU in cores. (500m = .5 cores)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              ephemeralStorage:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memory:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              podCount:
+                                description: PodCount in number.
+                                format: int64
+                                type: integer
+                            type: object
+                          request:
+                            description: RequestResourceList is a set of (resource name, quantity) pairs.
+                            properties:
+                              cpu:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPU in cores. (500m = .5 cores)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              ephemeralStorage:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memory:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                            type: object
+                        type: object
+                    type: object
+                type: object
+              sliceName:
+                description: SliceName defines the name of the slice for the WorkerResourceQuota
+                type: string
+            type: object
+          status:
+            description: WorkerSliceResourceQuotaStatus defines the observed state of WorkerSliceResourceQuota
+            properties:
+              clusterResourceQuotaStatus:
+                properties:
+                  namespaceResourceQuotaStatus:
+                    items:
+                      properties:
+                        namespace:
+                          type: string
+                        requestResourceUsage:
+                          description: RequestResourceList is a set of (resource name, quantity) pairs.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: CPU in cores. (500m = .5 cores)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            ephemeralStorage:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                        resourceUsage:
+                          description: LimitResourceList is a set of (resource name, quantity) pairs.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: CPU in cores. (500m = .5 cores)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            ephemeralStorage:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            podCount:
+                              description: PodCount in number.
+                              format: int64
+                              type: integer
+                          type: object
+                      type: object
+                    type: array
+                  requestResourceUsage:
+                    description: RequestResourceList is a set of (resource name, quantity) pairs.
+                    properties:
+                      cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: CPU in cores. (500m = .5 cores)
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      memory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    type: object
+                  resourceUsage:
+                    description: LimitResourceList is a set of (resource name, quantity) pairs.
+                    properties:
+                      cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: CPU in cores. (500m = .5 cores)
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      ephemeralStorage:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: EphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024) The resource name for EphemeralStorage is alpha, and it can change across releases.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      memory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Memory in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      podCount:
+                        description: PodCount in number.
+                        format: int64
+                        type: integer
+                    type: object
+                type: object
+              onboardedNamespace:
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
+    controller-gen.kubebuilder.io/version: v0.7.0
+  name: workerslicerolebindings.worker.kubeslice.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: kubeslice-controller-webhook-service
+          namespace: kubeslice-controller
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: worker.kubeslice.io
+  names:
+    kind: WorkerSliceRoleBinding
+    listKind: WorkerSliceRoleBindingList
+    plural: workerslicerolebindings
+    singular: workerslicerolebinding
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: WorkerSliceRoleBinding is the Schema for the workerslicerolebindings API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          bindings:
+            properties:
+              applyTo:
+                description: ApplyTo contains information about the namespace and the Subjects.
+                items:
+                  description: ApplyTo contains information about the namespace and the Subjects. It adds who information via Subjects and namespace information by which namespace it exists in.
+                  properties:
+                    namespace:
+                      description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error. '*' Represents all namespaces
+                      type: string
+                    subjects:
+                      description: Subjects holds references to the objects the role applies to.
+                      items:
+                        description: Subject contains a reference to the object or user identities a role binding applies to.  This can either hold a direct API object reference, or a value for non-objects such as user and group names.
+                        properties:
+                          apiGroup:
+                            description: APIGroup holds the API group of the referenced subject. Defaults to "" for ServiceAccount subjects. Defaults to "rbac.authorization.k8s.io" for User and Group subjects.
+                            type: string
+                          kind:
+                            description: Kind of object being referenced. Values defined by this API group are "User", "Group", and "ServiceAccount". If the Authorizer does not recognized the kind value, the Authorizer should report an error.
+                            type: string
+                          name:
+                            description: Name of the object being referenced.
+                            type: string
+                          namespace:
+                            description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        type: object
+                      type: array
+                  type: object
+                type: array
+              rules:
+                items:
+                  description: PolicyRule holds information that describes a policy rule, but does not contain information about who the rule applies to or which namespace the rule applies to.
+                  properties:
+                    apiGroups:
+                      description: APIGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed.
+                      items:
+                        type: string
+                      type: array
+                    nonResourceURLs:
+                      description: NonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding. Rules can either apply to API resources (such as "pods" or "secrets") or non-resource URL paths (such as "/api"),  but not both.
+                      items:
+                        type: string
+                      type: array
+                    resourceNames:
+                      description: ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
+                      items:
+                        type: string
+                      type: array
+                    resources:
+                      description: Resources is a list of resources this rule applies to. '*' represents all resources.
+                      items:
+                        type: string
+                      type: array
+                    verbs:
+                      description: Verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - verbs
+                  type: object
+                type: array
+            type: object
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          status:
+            properties:
+              roleRefCondition:
+                properties:
+                  condition:
+                    description: Condition defines conditions of the RoleRef, one of INVALID_RULE, INVALID_ROLE_BINDING.
+                    type: string
+                  lastUpdateTime:
+                    description: The last time this condition was updated.
+                    format: date-time
+                    type: string
+                  message:
+                    description: A human-readable message indicating details about the transition.
+                    type: string
+                  reason:
+                    description: The reason for the condition's last transition.
+                    type: string
+                  roleRef:
+                    description: Name, APIGroup and Kind of the RoleRef
+                    properties:
+                      apiVersion:
+                        description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                        type: string
+                      kind:
+                        description: Kind is the type of resource being referenced
+                        type: string
+                      name:
+                        description: Name is the name of resource being referenced
+                        type: string
+                    required:
+                    - apiVersion
+                    - kind
+                    - name
+                    type: object
+                  status:
+                    description: Status of the condition, one of True, False, Unknown.
+                    type: string
+                required:
+                - condition
+                - lastUpdateTime
+                - reason
+                - roleRef
+                - status
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1091,7 +2497,11 @@ rules:
   - projects
   - serviceexportconfigs
   - sliceconfigs
+  - slicenodeaffinities
   - sliceqosconfigs
+  - sliceresourcequotaconfigs
+  - slicerolebindings
+  - sliceroletemplates
   verbs:
   - create
   - delete
@@ -1107,7 +2517,11 @@ rules:
   - projects/finalizers
   - serviceexportconfigs/finalizers
   - sliceconfigs/finalizers
+  - slicenodeaffinities/finalizers
   - sliceqosconfigs/finalizers
+  - sliceresourcequotaconfigs/finalizers
+  - slicerolebindings/finalizers
+  - sliceroletemplates/finalizers
   verbs:
   - update
 - apiGroups:
@@ -1117,11 +2531,17 @@ rules:
   - projects/status
   - serviceexportconfigs/status
   - sliceconfigs/status
+  - slicenodeaffinities/status
   - sliceqosconfigs/status
+  - sliceresourcequotaconfigs/status
+  - slicerolebindings/status
+  - sliceroletemplates/status
   verbs:
   - get
+  - list
   - patch
   - update
+  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -1142,6 +2562,9 @@ rules:
   - workerserviceimports
   - workersliceconfigs
   - workerslicegateways
+  - workerslicenodeaffinities
+  - workersliceresourcequotas
+  - workerslicerolebindings
   verbs:
   - create
   - delete
@@ -1155,7 +2578,10 @@ rules:
   resources:
   - workerserviceimports/finalizers
   - workersliceconfigs/finalizers
-  - workerslicegateways/
+  - workerslicegateways/finalizers
+  - workerslicenodeaffinities/finalizers
+  - workersliceresourcequotas/finalizers
+  - workerslicerolebindings/finalizers
   verbs:
   - update
 - apiGroups:
@@ -1164,10 +2590,126 @@ rules:
   - workerserviceimports/status
   - workersliceconfigs/status
   - workerslicegateways/status
+  - workerslicenodeaffinities/status
+  - workersliceresourcequotas/status
+  - workerslicerolebindings/status
   verbs:
   - get
+  - list
   - patch
   - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kubeslice-controller-kube-state-metrics
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - nodes
+  - pods
+  - services
+  - resourcequotas
+  - replicationcontrollers
+  - limitranges
+  - persistentvolumeclaims
+  - persistentvolumes
+  - namespaces
+  - endpoints
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - daemonsets
+  - deployments
+  - replicasets
+  - ingresses
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  - daemonsets
+  - deployments
+  - replicasets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  - volumeattachments
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - list
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -1228,6 +2770,38 @@ rules:
   - patch
   - update
 ---
+  {{ if .Values.kubeslice.prometheus.enabled}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeslice-controller-prometheus
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+  {{ end }}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -1260,10 +2834,28 @@ subjects:
   name: kubeslice-controller-controller-manager
   namespace: kubeslice-controller
 ---
+  {{ if .Values.kubeslice.prometheus.enabled}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kubeslice-controller-controller-rolebinding
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kubeslice-controller-kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeslice-controller-kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: kube-state-metrics
+  namespace: kube-system
+  {{ end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeslice-controller-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -1285,6 +2877,21 @@ subjects:
 - kind: ServiceAccount
   name: kubeslice-controller-ovpn-manager
   namespace: kubeslice-controller
+---
+  {{ if .Values.kubeslice.prometheus.enabled}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeslice-controller-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeslice-controller-prometheus
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: kubeslice-controller
+  {{ end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -1312,11 +2919,82 @@ data:
       port: 9443
     leaderElection:
       leaderElect: true
-      resourceName: d7f43c17.kubeslice.io
+      resourceName: 35a65c38.kubeslice.io
 kind: ConfigMap
 metadata:
   name: kubeslice-controller-manager-config
   namespace: kubeslice-controller
+---
+  {{ if .Values.kubeslice.prometheus.enabled}}
+apiVersion: v1
+data:
+  prometheus.rules: |-
+    groups:
+    - name: Resource Quota violation alerts
+      rules:
+      - alert: Slice Resource Quota Violation
+        expr: kubeslice_controller_slice_quota_violation > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Slice Resource Usage Exceeded Quota"
+          description: "The slice {{ "{{" }} $labels.slice_name}} has CPU usage {{ "{{" }} $labels.cpu}} and memory usage {{ "{{" }} $labels.memory}}: violated by {{ "{{" }} $labels.violated_resource_type}}"
+      - alert: Cluster Resource Quota Violation
+        expr: kubeslice_controller_cluster_quota_violation > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cluster Resource Usage Exceeded Quota"
+          description: "The cluster {{ "{{" }} $labels.cluster_name}} has CPU usage {{ "{{" }} $labels.cpu}} and memory usage {{ "{{" }} $labels.memory}}: violated by {{ "{{" }} $labels.violated_resource_type}}"
+      - alert: Namespace Resource Quota Violation
+        expr: kubeslice_controller_namespace_quota_violation > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Namespace Resource Usage Exceeded Quota"
+          description: "The namespace {{ "{{" }}$labels.namespace}} has CPU usage {{ "{{" }}$labels.cpu}} and memory usage {{ "{{" }}$labels.memory}}: violated by {{ "{{" }}$labels.violated_resource_type}}"
+  prometheus.yml: |-
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    rule_files:
+      - /etc/prometheus/prometheus.rules
+    scrape_configs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+kind: ConfigMap
+metadata:
+  labels:
+    name: prometheus-server-conf
+  name: kubeslice-controller-prometheus-server-conf
+  namespace: kubeslice-controller
+  {{ end }}
+---
 ---
 apiVersion: v1
 kind: Service
@@ -1334,6 +3012,21 @@ spec:
   selector:
     control-plane: controller-manager
 ---
+  {{ if .Values.kubeslice.prometheus.enabled}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeslice-controller-prometheus-service
+  namespace: kubeslice-controller
+spec:
+  ports:
+  - port: 9090
+    targetPort: 9090
+  selector:
+    app: prometheus-server
+  type: ClusterIP
+  {{ end }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -1346,6 +3039,35 @@ spec:
     targetPort: 9443
   selector:
     control-plane: controller-manager
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kubeslice-controller-cleanup
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+spec:
+  template:
+    spec:
+      serviceAccountName: kubeslice-controller-controller-manager
+      containers:
+        - name: cleanup
+          image: '{{ .Values.kubeslice.controller.image }}:{{ .Values.kubeslice.controller.tag }}'
+          imagePullPolicy: '{{ .Values.kubeslice.controller.pullPolicy }}'
+          command:
+            - /cleanup
+          env:
+            - name: KUBESLICE_CONTROLLER_MANAGER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      imagePullSecrets:
+        - name: kubeslice-image-pull-secret
+      restartPolicy: Never
+  backoffLimit: 1
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1363,6 +3085,8 @@ spec:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
+        prometheus.io/port: "18080"
+        prometheus.io/scrape: "true"
       labels:
         control-plane: controller-manager
     spec:
@@ -1371,7 +3095,7 @@ spec:
         - --secure-listen-address=0.0.0.0:8443
         - --upstream=http://127.0.0.1:8080/
         - --logtostderr=true
-        - --v=10
+        - --v=0
         image: '{{ .Values.kubeslice.rbacproxy.image }}:{{ .Values.kubeslice.rbacproxy.tag }}'
         name: kube-rbac-proxy
         ports:
@@ -1386,6 +3110,7 @@ spec:
         - --rbac-resource-prefix={{ required "A valid value is required!" .Values.kubeslice.controller.rbacResourcePrefix }}
         - --project-namespace-prefix={{ required "A valid value is required!" .Values.kubeslice.controller.projectnsPrefix }}
         - --controller-end-point={{ required "A valid value is required!" .Values.kubeslice.controller.endpoint }}
+        - --prometheus-service-endpoint={{ required "A valid value is required!" .Values.kubeslice.prometheus.url}}
         - --ovpn-job-image={{ .Values.kubeslice.ovpnJob.image }}:{{ .Values.kubeslice.ovpnJob.tag }}
         command:
         - /manager
@@ -1440,6 +3165,51 @@ spec:
       - name: kubeslice-image-pull-secret
         {{- end }}
 ---
+  {{ if .Values.kubeslice.prometheus.enabled}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: prometheus-server
+  name: kubeslice-controller-prometheus
+  namespace: kubeslice-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+    spec:
+      containers:
+      - args:
+        - --config.file=/etc/prometheus/prometheus.yml
+        - --storage.tsdb.path=/prometheus/
+        image: prom/prometheus
+        name: prometheus
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - mountPath: /etc/prometheus/
+          name: prometheus-config-volume
+        - mountPath: /prometheus/
+          name: prometheus-storage-volume
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: kubeslice-controller-prometheus-server-conf
+        name: prometheus-config-volume
+      - emptyDir: {}
+        name: prometheus-storage-volume
+  {{ end }}
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -1469,6 +3239,46 @@ metadata:
     cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
   name: kubeslice-controller-mutating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kubeslice-controller-webhook-service
+      namespace: kubeslice-controller
+      path: /mutate-controller-kubeslice-io-v1alpha1-sliceresourcequotaconfig
+  failurePolicy: Fail
+  name: msliceresourcequotaconfig.kb.io
+  rules:
+  - apiGroups:
+    - controller.kubeslice.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - sliceresourcequotaconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kubeslice-controller-webhook-service
+      namespace: kubeslice-controller
+      path: /mutate-controller-kubeslice-io-v1alpha1-slicerolebinding
+  failurePolicy: Fail
+  name: mslicerolebinding.kb.io
+  rules:
+  - apiGroups:
+    - controller.kubeslice.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - slicerolebindings
+  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -1617,6 +3427,69 @@ metadata:
     cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
   name: kubeslice-controller-validating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kubeslice-controller-webhook-service
+      namespace: kubeslice-controller
+      path: /validate-controller-kubeslice-io-v1alpha1-sliceresourcequotaconfig
+  failurePolicy: Fail
+  name: vsliceresourcequotaconfig.kb.io
+  rules:
+  - apiGroups:
+    - controller.kubeslice.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - sliceresourcequotaconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kubeslice-controller-webhook-service
+      namespace: kubeslice-controller
+      path: /validate-controller-kubeslice-io-v1alpha1-slicerolebinding
+  failurePolicy: Fail
+  name: vslicerolebinding.kb.io
+  rules:
+  - apiGroups:
+    - controller.kubeslice.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - slicerolebindings
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kubeslice-controller-webhook-service
+      namespace: kubeslice-controller
+      path: /validate-controller-kubeslice-io-v1alpha1-sliceroletemplate
+  failurePolicy: Fail
+  name: vsliceroletemplate.kb.io
+  rules:
+  - apiGroups:
+    - controller.kubeslice.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - sliceroletemplates
+  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:

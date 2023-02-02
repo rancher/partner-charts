@@ -1,23 +1,4 @@
 ---
-  {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
-apiVersion: v1
-data:
-  .dockerconfigjson: {{
-                        printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}"
-                        .Values.imagePullSecrets.repository
-                        .Values.imagePullSecrets.username
-                        .Values.imagePullSecrets.password
-                        .Values.imagePullSecrets.email
-                        (printf "%s:%s" .Values.imagePullSecrets.username .Values.imagePullSecrets.password | b64enc)
-                         | b64enc
-                     }}
-kind: Secret
-metadata:
-  name: kubeslice-ui-image-pull-secret
-  namespace: kubeslice-controller
-type: kubernetes.io/dockerconfigjson
-  {{- end }}
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -30,7 +11,7 @@ spec:
   - name: http
     port: 80
     protocol: TCP
-    targetPort: 3000
+    targetPort: 80
   selector:
     app: kubeslice-ui
   type: ClusterIP
@@ -54,11 +35,16 @@ spec:
       - image: '{{ .Values.kubeslice.ui.image }}:{{ .Values.kubeslice.ui.tag }}'
         imagePullPolicy: '{{ .Values.kubeslice.ui.pullPolicy }}'
         name: kubeslice-ui
+        env:
+        - name: KUBESLICE_CONTROLLER_PROMETHEUS
+          value: {{ .Values.kubeslice.prometheus.url }}
+        - name: REACT_APP_SOCKET_URL
+          value: 'ws://kubeslice-api-gw.kubeslice-controller.svc.cluster.local:3000'
         ports:
         - containerPort: 3000
         {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
       imagePullSecrets:
       - name: kubeslice-ui-image-pull-secret
         {{- end }}
-      serviceAccountName: kubeslice-ui
-      serviceAccount: kubeslice-ui
+      serviceAccountName: kubeslice-api-gw
+      serviceAccount: kubeslice-api-gw

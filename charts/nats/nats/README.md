@@ -73,6 +73,15 @@ nats:
   terminationGracePeriodSeconds: 60
 ```
 
+#### Setting Go Memory Limit (Recommended)
+
+Since NATS Server v2.9 release, it is possible to use the `GOMEMLIMIT` environment variable to signal memory limits to the Go runtime (which is by default unaware of cgroups memory limits).  You should set this to about 90% of the intended available memory resources for the NATS Server container. 
+
+```yaml
+nats:
+  gomemlimit: "4GiB"
+```
+
 ### Logging
 
 *Note*: It is not recommended to enable trace or debug in production since enabling it will significantly degrade performance.
@@ -697,6 +706,48 @@ natsbox:
   #   secret:
   #     name: nats-sys-creds
   #     key: sys.creds
+```
+
+You can also add volumes to nats-box, for example given a PVC like:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nsc-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+You can give state to nats-box by using the `extraVolumes` and `extraVolumeMounts` options:
+
+```yaml
+natsbox:
+  enabled: true
+  extraVolumes:
+    - name: nsc
+      persistentVolumeClaim:
+        claimName: nsc-pvc
+  extraVolumeMounts:
+    - mountPath: /nsc
+      name: nsc
+```
+
+example:
+
+```sh
+$ helm install nats-nsc nats/nats -f examples/nats-box-persistent.yaml 
+$ kubectl exec -it deployment/nats-nsc-box -- /bin/sh
+
+# cd /nsc
+/nsc #  curl -fSl https://nats-io.github.io/k8s/setup/nsc-setup.sh | sh
+/nsc #  source .nsc.env 
+/nsc #  nsc list accounts
 ```
 
 ### Configuration Checksum

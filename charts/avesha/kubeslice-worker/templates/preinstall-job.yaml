@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-preinstall-job"
+  namespace: kubeslice-system
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-6"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: kubeslice-preinstall
+      containers:
+        - name: pre-install-job
+          image: "alpine/k8s:1.22.9"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash","/opt/scripts/pre-install.sh"]
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/scripts
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-preinstall-configmap
+            defaultMode: 0777
