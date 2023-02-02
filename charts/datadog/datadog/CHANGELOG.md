@@ -1,5 +1,14 @@
 # Datadog changelog
 
+## 3.10.4
+
+* Fix documentation for `agents.containers.traceAgent.env` and `agents.containers.securityAgent.env`
+
+## 3.10.3
+
+* Fix default `hostPid` value set to true on Windows.
+* Fix auth token path value on Windows.
+
 ## 3.10.1
 
 * Fix: add missing `DAC_READ_SEARCH` capability in agent PSP and SCC (openshift)
