@@ -238,3 +238,56 @@ subjects:
   name: {{ . }}
 {{- end }}
 {{- end }}
+{{- if and .Values.rbac.create (not .Values.prometheus.rbac.create) }}
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+{{ include "k10.defaultRBACLabels" . | indent 4 }}
+  name: {{ .Release.Name }}-prometheus-server
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - nodes/proxy
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  - ingresses
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: {{ .Release.Namespace }}-{{ template "serviceAccountName" . }}-prometheus-server
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name:  {{ .Release.Name }}-prometheus-server
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-server
+    namespace: {{ .Release.Namespace }}
+{{- end }}

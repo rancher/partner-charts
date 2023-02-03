@@ -427,6 +427,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterEFSPostRestoreTimeout
+          - name: K10_ROOTLESS_CONTAINERS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10RootlessContainers
 {{- end }}
 {{- if and (eq $service "executor") (.Values.awsConfig.efsBackupVaultName) }}
           - name: EFS_BACKUP_VAULT_NAME
@@ -460,6 +465,13 @@ stating that types are not same for the equality check
                 name: k10-token-auth
                 key: auth
 {{- end }}
+{{- if eq $service "kanister" }}
+          - name: K10_ROOTLESS_CONTAINERS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10RootlessContainers
+{{- end }}
 {{- if eq "true" (include "overwite.kanisterToolsImage" .) }}
           - name: KANISTER_TOOLS
             valueFrom:
@@ -489,7 +501,7 @@ stating that types are not same for the equality check
           - name: K10_MUTATING_WEBHOOK_PORT
             value: {{ .Values.injectKanisterSidecar.webhookServer.port | quote }}
 {{- end }}
-{{- if or (eq $service "controllermanager") (eq $service "kanister") }}
+{{- if (list "controllermanager" "kanister" "executor" "dashboardbff"  | has $service) }}
 {{- if .Values.genericVolumeSnapshot.resources.requests.memory }}
           - name: KANISTER_TOOLS_MEMORY_REQUESTS
             valueFrom:

@@ -218,6 +218,7 @@ Parameter | Description | Default
 `garbagecollector.importRunActions.enabled` | Enables ``importRunActions`` collector | `false`
 `garbagecollector.retireActions.enabled` | Enables ``retireActions`` collector | `false`
 `kubeVirtVMs.snapshot.unfreezeTimeout` | Defines the time duration within which the the VMs must be unfrozen while backing them up. To know more about format [go doc](https://pkg.go.dev/time#ParseDuration) can be followed | `5m`
+`excludedApps` | Specifies a list of applications to be excluded from the dashboard & compliance considerations. Format should be a :ref:`YAML array<k10_compliance>` | `None`
 
 ## Helm tips and tricks
 
