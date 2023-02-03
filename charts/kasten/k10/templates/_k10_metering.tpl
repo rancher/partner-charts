@@ -34,7 +34,7 @@ spec:
 ---
 {{- end }}{{/* if $.stateful */}}
 {{ $service_list := include "k10.restServices" . | splitList " " }}
-{{- if not (default .Values.features dict).multicluster -}}
+{{- if not (include "k10.isMulticlusterPrimary" .) -}}
   {{- $service_list = without $service_list "mccontrollermanager" -}}
 {{- end -}}
 kind: ConfigMap
@@ -135,19 +135,14 @@ spec:
       initContainers:
       - name: upgrade-init
         securityContext:
-         {{- if .Values.global.rootlessContainers }}
             capabilities:
                 add:
                 - FOWNER
                 - CHOWN
             runAsUser: 1000
             allowPrivilegeEscalation: false
-        {{- else }}
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-        {{- end }}
         {{- dict "main" . "k10_service" "upgrade" | include "serviceImage" | indent 8 }}
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
         env:
           - name: MODEL_STORE_DIR
             value: /var/reports/
@@ -158,7 +153,7 @@ spec:
       containers:
       - name: {{ $service }}-svc
         {{- dict "main" . "k10_service" $service | include "serviceImage" | indent 8 }}
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
 {{- if eq .Release.Namespace "default" }}
 {{- $podName := (printf "%s-svc" $service) }}
 {{- $containerName := (printf "%s-svc" $service) }}

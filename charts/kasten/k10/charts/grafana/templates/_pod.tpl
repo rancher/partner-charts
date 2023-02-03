@@ -21,8 +21,8 @@ initContainers:
 {{- end }}
 {{- if ( and .Values.global.persistence.enabled .Values.initChownData.enabled ) }}
   - name: init-chown-data
-    image: "{{ include "get.grafanaInitContainerImage" . }}"
-    imagePullPolicy: {{ .Values.ubi.image.pullPolicy }}
+    image: "{{ include "get.grafanaInitImage" . }}"
+    imagePullPolicy: {{ .Values.initChownData.image.pullPolicy }}
     securityContext:
       runAsNonRoot: false
       runAsUser: 0
@@ -41,7 +41,7 @@ initContainers:
     {{- if .Values.downloadDashboardsImage.sha }}
     image: "{{ .Values.downloadDashboardsImage.repository }}:{{ .Values.downloadDashboardsImage.tag }}@sha256:{{ .Values.downloadDashboardsImage.sha }}"
     {{- else }}
-    image: "{{ include "get.grafanaInitContainerImage" . }}"
+    image: "{{ include "get.grafanaInitImage" . }}"
     {{- end }}
     imagePullPolicy: {{ .Values.downloadDashboardsImage.pullPolicy }}
     command: ["/bin/sh"]

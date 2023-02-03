@@ -253,8 +253,15 @@ based on the value of global.airgapped.repository
 {{- if .Values.global.upstreamCertifiedImages }}
 {{- printf "%s/%s/ubi-minimal" .Values.k10image.registry .Values.k10image.repository }}
 {{- else }}
-{{- print .Values.ubi.image.repository }}
+{{- include "k10.grafanaInitContainerImageRepo" . }}
 {{- end }}
+{{- end }}
+
+{{/*
+Figure out the Grafana init image
+*/}}
+{{- define "get.grafanaInitImage" }}
+{{- .Values.global.images.init | default (include "get.grafanaInitContainerImage" .) }}
 {{- end }}
 
 {{/*
