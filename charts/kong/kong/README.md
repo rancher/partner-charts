@@ -565,7 +565,7 @@ namespaces. Limiting access requires several changes to configuration:
 - Set `ingressController.watchNamespaces` to a list of namespaces you want to
   watch. The chart will automatically generate roles for each namespace and
   assign them to the controller's service account.
-- Optionally set `ingressContrller.installCRDs=false` if your user role (the
+- Optionally set `ingressController.installCRDs=false` if your user role (the
   role you use when running `helm install`, not the controller service
   account's role) does not have access to get CRDs. By default, the chart
   attempts to look up the controller CRDs for [a legacy behavior
@@ -716,10 +716,10 @@ section of `values.yaml` file:
 | ingressClassAnnotations                 | The ingress-class value for controller                                                                                                                   | kong                               |
 | args                                    | List of ingress-controller cli arguments                                                                                                                 | []                                 |
 | watchNamespaces                         | List of namespaces to watch. Watches all namespaces if empty                                                                                             | []                                 |
-| admissionWebhook.enabled                | Whether to enable the validating admission webhook                                                                                                       | false                              |
-| admissionWebhook.failurePolicy          | How unrecognized errors from the admission endpoint are handled (Ignore or Fail)                                                                         | Fail                               |
+| admissionWebhook.enabled                | Whether to enable the validating admission webhook                                                                                                       | true                              |
+| admissionWebhook.failurePolicy          | How unrecognized errors from the admission endpoint are handled (Ignore or Fail)                                                                         | Ignore                               |
 | admissionWebhook.port                   | The port the ingress controller will listen on for admission webhooks                                                                                    | 8080                               |
-| admissionWebhook.certificate.provided   | Whether to generate the admission webhook certificate if not provided                                                                                    | false                              |
+| admissionWebhook.certificate.provided   | Use a provided certificate. When set to false, the chart will automatically generate a certificate.                                                      | false                              |
 | admissionWebhook.certificate.secretName | Name of the TLS secret for the provided webhook certificate                                                                                              |                                    |
 | admissionWebhook.certificate.caBundle   | PEM encoded CA bundle which will be used to validate the provided webhook certificate                                                                    |                                    |
 | deployment.userDefinedVolumes           | Create volumes. Please go to Kubernetes doc for the spec of the volumes                                                                                  |                                    |
@@ -788,6 +788,8 @@ kong:
 | podDisruptionBudget.maxUnavailable | Represents the minimum number of Pods that can be unavailable (integer or percentage) | `50%`               |
 | podDisruptionBudget.minAvailable   | Represents the number of Pods that must be available (integer or percentage)          |                     |
 | podSecurityPolicy.enabled          | Enable podSecurityPolicy for Kong                                                     | `false`             |
+| podSecurityPolicy.labels           | Labels to add to podSecurityPolicy for Kong                                           | `{}`             |
+| podSecurityPolicy.annotations      | Annotations to add to podSecurityPolicy for Kong                                      | `{}`             |
 | podSecurityPolicy.spec             | Collection of [PodSecurityPolicy settings](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#what-is-a-pod-security-policy) | |
 | priorityClassName                  | Set pod scheduling priority class for Kong pods                                       | `""`                |
 | secretVolumes                      | Mount given secrets as a volume in Kong container to override default certs and keys. | `[]`                |

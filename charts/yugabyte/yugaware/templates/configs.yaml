@@ -180,7 +180,7 @@ data:
 {{- end }}
       proxy_http_version 1.1;
       proxy_set_header X-Real-IP  $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header Host $host;
 
@@ -211,11 +211,18 @@ metadata:
 data:
   pg-upgrade-11-to-14.sh: |
     #!/bin/bash
+    set -x -o errexit
 
-    if [ ! "$(ls -A /var/lib/postgresql/14/data)" ] && [ "$(ls -A /var/lib/postgresql/11/data)" ];
+    cd /pg_upgrade_logs/
+    if [ ! "$(ls -A ${PGDATANEW})" ] && [ "$(ls -A ${PGDATAOLD})" ];
     then
-      docker-upgrade pg_upgrade >> /pg_upgrade_logs/pg_upgrade_11_to_14.log;
-      echo "host all all all scram-sha-256" >> /var/lib/postgresql/14/data/pg_hba.conf;
+      echo "Upgrading PG data from ${PGDATAOLD} to ${PGDATANEW}"
+      # if fsGroup is set, we need to remove the sticky bit, and group
+      # write permission from the directories
+      chmod -R g-w-s "${PGDATAOLD}"
+      chmod g-w-s "${PGDATAOLD}"
+      docker-upgrade pg_upgrade | tee -a /pg_upgrade_logs/pg_upgrade_11_to_14.log;
+      echo "host all all all scram-sha-256" >> "${PGDATANEW}/pg_hba.conf";
     fi
 ---
 apiVersion: v1
@@ -244,6 +251,8 @@ data:
       fastcgi_temp_path /tmp/fastcgi_temp;
       uwsgi_temp_path /tmp/uwsgi_temp;
       scgi_temp_path /tmp/scgi_temp;
+
+      proxy_read_timeout {{ .Values.nginx.proxyReadTimeoutSec }};
 
       include       /etc/nginx/mime.types;
       default_type  application/octet-stream;
