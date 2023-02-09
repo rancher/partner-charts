@@ -1,4 +1,3 @@
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -38,9 +37,16 @@ spec:
       dnsConfig:
 {{ toYaml . | indent 8 }}
     {{- end }}
+      {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "config-api.topology-spread-constraints" . | indent 8 }}
+      {{- end }}
       containers:
         - name: {{ include "config-api.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          env:
+            {{- include "config-api.usr-envs" . | indent 12 }}
+            {{- include "config-api.usr-secret-envs" . | indent 12 }}
           securityContext:
             runAsUser: 1000
             runAsNonRoot: true
@@ -56,6 +62,10 @@ spec:
           ports:
             - containerPort: 9444
             - containerPort: 8074
+            {{ if .Values.global.cnPrometheusPort }}
+            - name: prometheus-port
+              containerPort: {{ .Values.global.cnPrometheusPort }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-config-cm
@@ -67,19 +77,16 @@ spec:
           {{- with .Values.volumeMounts }}
 {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if index .Values "global" "admin-ui" "enabled" }}
-            - mountPath: {{ index .Values "global" "admin-ui" "adminUiApiKeyFile" }}
-              name: admin-ui-license-api-key
-              subPath: admin_ui_api_key
-            - mountPath: {{ index .Values "global" "admin-ui" "adminUiProductCodeFile" }}
-              name: admin-ui-license-product-code
-              subPath: admin_ui_product_code
-            - mountPath: {{ index .Values "global" "admin-ui" "adminUiSharedKeyFile" }}
-              name: admin-ui-license-shared-key
-              subPath: admin_ui_shared_key
-            - mountPath: {{ index .Values "global" "admin-ui" "adminUiManagementKeyFile" }}
-              name: admin-ui-license-management-key
-              subPath: admin_ui_management_key
+          {{ if or (eq .Values.global.configSecretAdapter "aws") (eq .Values.global.configAdapterName "aws") }}
+            - mountPath: {{ .Values.global.cnAwsSharedCredentialsFile }}
+              name: aws-shared-credential-file
+              subPath: aws_shared_credential_file
+            - mountPath: {{ .Values.global.cnAwsConfigFile }}
+              name: aws-config-file
+              subPath: aws_config_file
+            - mountPath: {{ .Values.global.cnAwsSecretsReplicaRegionsFile }}
+              name: aws-secrets-replica-regions
+              subPath: aws_secrets_replica_regions
           {{- end }}
           {{ if or (eq .Values.global.configSecretAdapter "google") (eq .Values.global.cnPersistenceType "spanner") }}
             - mountPath: {{ .Values.global.cnGoogleApplicationCredentials }}
@@ -98,7 +105,7 @@ spec:
             - name: {{ include "config-api.name" . }}-updatelbip
               mountPath: /scripts
             {{- end }}
-          {{- if or (eq .Values.global.storageClass.provisioner "microk8s.io/hostpath" ) (eq .Values.global.storageClass.provisioner "k8s.io/minikube-hostpath") }}
+          {{- if and ( .Values.global.opendj.enabled ) (or (eq .Values.global.storageClass.provisioner "microk8s.io/hostpath" ) (eq .Values.global.storageClass.provisioner "k8s.io/minikube-hostpath")) }}
           resources: {}
           {{- else if .Values.global.cloud.testEnviroment }}
           resources: {}
@@ -110,31 +117,25 @@ spec:
       {{- with .Values.volumes }}
 {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if index .Values "global" "admin-ui" "enabled" }}
-        - name: admin-ui-license-api-key
+      {{ if or (eq .Values.global.configSecretAdapter "aws") (eq .Values.global.configAdapterName "aws") }}
+        - name: aws-shared-credential-file
           secret:
-            secretName: {{ .Release.Name }}-admin-ui-license
+            secretName: {{ .Release.Name }}-aws-config-creds
             items:
-              - key: admin_ui_api_key
-                path: admin_ui_api_key
-        - name: admin-ui-license-product-code
+              - key: aws_shared_credential_file
+                path: aws_shared_credential_file
+        - name: aws-config-file
           secret:
-            secretName: {{ .Release.Name }}-admin-ui-license
+            secretName: {{ .Release.Name }}-aws-config-creds
             items:
-              - key: admin_ui_product_code
-                path: admin_ui_product_code
-        - name: admin-ui-license-shared-key
+              - key: aws_config_file
+                path: aws_config_file
+        - name: aws-secrets-replica-regions
           secret:
-            secretName: {{ .Release.Name }}-admin-ui-license
+            secretName: {{ .Release.Name }}-aws-config-creds
             items:
-              - key: admin_ui_shared_key
-                path: admin_ui_shared_key
-        - name: admin-ui-license-management-key
-          secret:
-            secretName: {{ .Release.Name }}-admin-ui-license
-            items:
-              - key: admin_ui_management_key
-                path: admin_ui_management_key
+              - key: aws_secrets_replica_regions
+                path: aws_secrets_replica_regions
       {{- end }}
       {{ if or (eq .Values.global.configSecretAdapter "google") (eq .Values.global.cnPersistenceType "spanner") }}
         - name: google-sa
