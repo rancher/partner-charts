@@ -53,6 +53,9 @@ spec:
               mountPath: {{ .Values.grafana.dataPath }}
       {{- end }}
       containers:
+        {{- with .Values.grafana.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         - name: grafana
           image:  "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.grafana.image.pullPolicy | quote }}
@@ -81,6 +84,11 @@ spec:
             - name: datasource
               mountPath: /etc/grafana/provisioning/datasources/datasource.yml
               subPath: datasource.yml
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards/dashboard.yml
+              subPath: dashboard.yml
+            - name: custom-dashboards
+              mountPath: /var/lib/grafana/dashboards/custom
             - name: data
               mountPath: {{ .Values.grafana.dataPath }}
           {{- with .Values.grafana.extraVolumeMounts }}
@@ -108,6 +116,14 @@ spec:
             items:
               - key: datasource.yml
                 path: datasource.yml
+        - name: dashboard-provider
+          configMap:
+            name: {{ include "asserts.grafanaFullname" . }}
+            items:
+              - key: dashboard.yml
+                path: dashboard.yml
+        - name: custom-dashboards
+          emptyDir: {}
         {{- with .Values.grafana.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

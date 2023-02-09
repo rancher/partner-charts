@@ -101,10 +101,10 @@ _See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documen
 A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an
 incompatible breaking change needing manual actions.
 
-### Upgrade to 1.2.20
+### Upgrade to 1.2.21
 
 ```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.2.20/templates/crds/trafficreplays.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.2.21/templates/crds/trafficreplays.yaml
 ```
 
 ### Upgrade to 1.1.0
