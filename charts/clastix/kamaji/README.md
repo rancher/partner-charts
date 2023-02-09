@@ -1,6 +1,6 @@
 # kamaji
 
-![Version: 0.10.2](https://img.shields.io/badge/Version-0.10.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.1.1](https://img.shields.io/badge/AppVersion-v0.1.1-informational?style=flat-square)
+![Version: 0.11.0](https://img.shields.io/badge/Version-0.11.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 Kamaji is a tool aimed to build and operate a Managed Kubernetes Service with a fraction of the operational burden. With Kamaji, you can deploy and operate hundreds of Kubernetes clusters as a hyper-scaler.
 
@@ -67,7 +67,6 @@ Here the values you can override:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Kubernetes affinity rules to apply to Kamaji controller pods |
-| configPath | string | `"./kamaji.yaml"` | Configuration file path alternative. (default "./kamaji.yaml") |
 | datastore.basicAuth.passwordSecret.keyPath | string | `nil` | The Secret key where the data is stored. |
 | datastore.basicAuth.passwordSecret.name | string | `nil` | The name of the Secret containing the password used to connect to the relational database. |
 | datastore.basicAuth.passwordSecret.namespace | string | `nil` | The namespace of the Secret containing the password used to connect to the relational database. |
@@ -91,7 +90,7 @@ Here the values you can override:
 | datastore.tlsConfig.clientCertificate.privateKey.namespace | string | `nil` | Namespace of the Secret containing the client certificate private key required to establish the mandatory SSL/TLS connection to the datastore. |
 | etcd.compactionInterval | int | `0` | ETCD Compaction interval (e.g. "5m0s"). (default: "0" (disabled)) |
 | etcd.deploy | bool | `true` | Install an etcd with enabled multi-tenancy along with Kamaji |
-| etcd.image | object | `{"pullPolicy":"IfNotPresent","repository":"quay.io/coreos/etcd","tag":"v3.5.4"}` | Install specific etcd image |
+| etcd.image | object | `{"pullPolicy":"IfNotPresent","repository":"quay.io/coreos/etcd","tag":"v3.5.6"}` | Install specific etcd image |
 | etcd.livenessProbe | object | `{"failureThreshold":8,"httpGet":{"path":"/health?serializable=true","port":2381,"scheme":"HTTP"},"initialDelaySeconds":10,"periodSeconds":10,"timeoutSeconds":15}` | The livenessProbe for the etcd container |
 | etcd.overrides.caSecret.name | string | `"etcd-certs"` | Name of the secret which contains CA's certificate and private key. (default: "etcd-certs") |
 | etcd.overrides.caSecret.namespace | string | `"kamaji-system"` | Namespace of the secret which contains CA's certificate and private key. (default: "kamaji-system") |
@@ -126,11 +125,10 @@ Here the values you can override:
 | resources.requests.cpu | string | `"100m"` |  |
 | resources.requests.memory | string | `"20Mi"` |  |
 | securityContext | object | `{"allowPrivilegeEscalation":false}` | The securityContext to apply to the Kamaji controller container only. It does not apply to the Kamaji RBAC proxy container. |
-| service.port | int | `8443` |  |
-| service.type | string | `"ClusterIP"` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `"kamaji-controller-manager"` |  |
+| serviceMonitor.enabled | bool | `false` | Toggle the ServiceMonitor true if you have Prometheus Operator installed and configured |
 | temporaryDirectoryPath | string | `"/tmp/kamaji"` | Directory which will be used to work with temporary files. (default "/tmp/kamaji") |
 | tolerations | list | `[]` | Kubernetes node taints that the Kamaji controller pods would tolerate |
 

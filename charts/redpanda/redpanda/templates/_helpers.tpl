@@ -19,19 +19,19 @@ Expand the name of the chart.
 */}}
 {{- define "redpanda.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
-{{- end }}
+{{- end -}}
 
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 */}}
 {{- define "redpanda.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s" .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
 
 {{/*
 Create chart name and version as used by the chart label.
@@ -283,8 +283,8 @@ Generate configuration needed for rpk
   {{- if eq $result 0 -}}
     {{- "unable to get memory value" | fail -}}
   {{- end -}}
-  {{- if lt $result 2000 -}}
-    {{- printf "\n%d is below the minimum recommended value for Redpanda" $result | fail -}}
+  {{- if lt $result 256 -}}
+    {{- printf "\n%d is below the minimum value for Redpanda" $result | fail -}}
   {{- end -}}
   {{- if gt (add $result (include "redpanda-reserve-memory" .)) (include "container-memory" . | int64) -}}
     {{- printf "\nNot enough container memory for Redpanda memory values\nredpanda: %d, reserve: %d, container: %d" $result (include "redpanda-reserve-memory" . | int64) (include "container-memory" . | int64) | fail -}}
@@ -298,10 +298,6 @@ Generate configuration needed for rpk
 
 {{- define "sasl-mechanism" -}}
 {{- dig "sasl" "mechanism" "SCRAM-SHA-512" .Values.auth -}}
-{{- end -}}
-
-{{- define "sasl-user-mechanism" -}}
-{{- dig "mechanism" (include "sasl-mechanism" $) $.user -}}
 {{- end -}}
 
 {{- define "rpk-flags" -}}
@@ -325,11 +321,10 @@ Generate configuration needed for rpk
   {{- end -}}
   {{- $sasl := list -}}
   {{- if (include "sasl-enabled" . | fromJson).bool -}}
-    {{- $root := . | toJson | fromJson -}}
     {{- $sasl = concat $sasl (list
-      "--user" (dig "auth" "username" (first .Values.auth.sasl.users).name $root)
-      "--password" (dig "auth" "password" (first .Values.auth.sasl.users).password $root)
-      "--sasl-mechanism " (include "sasl-mechanism" .)
+      "--user" ( print "$(find /etc/secrets/users/* -print | sed -n 1p | xargs cat | sed -n 1p | tr ':' '\n' | sed -n 1p )" | quote )
+      "--password" ( print "$(find /etc/secrets/users/* -print | sed -n 1p | xargs cat | sed -n 1p | tr ':' '\n' | sed -n 2p )" | quote )
+      "--sasl-mechanism" ( printf "$(find /etc/secrets/users/* -print | sed -n 1p | xargs cat | sed -n 1p | tr ':' '\n' | sed -n 3p | grep . || echo %s )" (include "sasl-mechanism" .) | quote )
     )
     -}}
   {{- end -}}
@@ -351,9 +346,36 @@ Generate configuration needed for rpk
 {{ join " " (list $flags.brokers $flags.admin $flags.sasl $flags.kafka)}}
 {{- end -}}
 
+{{- define "rpk-flags-no-admin" -}}
+{{- $flags := fromJson (include "rpk-flags" .) -}}
+{{ join " " (list $flags.brokers $flags.kafka $flags.sasl)}}
+{{- end -}}
+
+{{- define "rpk-flags-no-sasl" -}}
+{{- $flags := fromJson (include "rpk-flags" .) -}}
+{{ join " " (list $flags.brokers $flags.admin $flags.kafka)}}
+{{- end -}}
+
+{{- define "rpk-flags-no-admin-no-sasl" -}}
+{{- $flags := fromJson (include "rpk-flags" .) -}}
+{{ join " " (list $flags.brokers $flags.kafka)}}
+{{- end -}}
+
+{{- define "rpk-dummy-sasl" -}}
+{{- if (include "sasl-enabled" . | fromJson).bool -}}
+{{ "--user <admin-user-in-secret> --password <admin-password-in-secret> --sasl-mechanism <mechanism-in-secret>" -}}
+{{- else -}}
+{{ "" }}
+{{- end -}}
+{{- end -}}
+
 {{- define "rpk-topic-flags" -}}
 {{- $flags := fromJson (include "rpk-flags" .) -}}
-{{ join " " (list $flags.brokers $flags.sasl $flags.kafka)}}
+    {{- if (include "sasl-enabled" . | fromJson).bool -}}
+        {{- join " " (list $flags.brokers $flags.kafka $flags.sasl) -}}
+    {{- else -}}
+        {{- join " " (list $flags.brokers $flags.kafka) -}}
+    {{- end -}}
 {{- end -}}
 
 {{- define "storage-min-free-bytes" -}}
@@ -366,22 +388,22 @@ Generate configuration needed for rpk
 {{- end -}}
 
 {{- define "tunable" -}}
-{{- $tunable := dig "tunable" dict .Values.config }}
-{{- if (include "redpanda-atleast-22-3-0" . | fromJson).bool }}
-{{- toYaml $tunable | nindent 4 }}
-{{- else if (include "redpanda-atleast-22-2-0" . | fromJson).bool }}
-{{- $tunable = unset $tunable "log_segment_size_min" }}
-{{- $tunable = unset $tunable "log_segment_size_max" }}
-{{- $tunable = unset $tunable "kafka_batch_max_bytes" }}
-{{- toYaml $tunable | nindent 4 }}
-{{- else if (include "redpanda-atleast-22-1-1" . | fromJson).bool }}
-{{- $tunable = unset $tunable "log_segment_size_min" }}
-{{- $tunable = unset $tunable "log_segment_size_max" }}
-{{- $tunable = unset $tunable "kafka_batch_max_bytes" }}
-{{- $tunable = unset $tunable "topic_partitions_per_shard" }}
-{{- toYaml $tunable | nindent 4 }}
-{{- end }}
-{{- end }}
+{{- $tunable := dig "tunable" dict .Values.config -}}
+{{- if (include "redpanda-atleast-22-3-0" . | fromJson).bool -}}
+{{- toYaml $tunable | nindent 4 -}}
+{{- else if (include "redpanda-atleast-22-2-0" . | fromJson).bool -}}
+{{- $tunable = unset $tunable "log_segment_size_min" -}}
+{{- $tunable = unset $tunable "log_segment_size_max" -}}
+{{- $tunable = unset $tunable "kafka_batch_max_bytes" -}}
+{{- toYaml $tunable | nindent 4 -}}
+{{- else if (include "redpanda-atleast-22-1-1" . | fromJson).bool -}}
+{{- $tunable = unset $tunable "log_segment_size_min" -}}
+{{- $tunable = unset $tunable "log_segment_size_max" -}}
+{{- $tunable = unset $tunable "kafka_batch_max_bytes" -}}
+{{- $tunable = unset $tunable "topic_partitions_per_shard" -}}
+{{- toYaml $tunable | nindent 4 -}}
+{{- end -}}
+{{- end -}}
 
 {{- define "redpanda-atleast-22-1-1" -}}
 {{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.1.1"))) -}}
@@ -407,9 +429,9 @@ runAsUser: {{ dig "podSecurityContext" "runAsUser" .Values.statefulset.securityC
 runAsGroup: {{ dig "podSecurityContext" "fsGroup" .Values.statefulset.securityContext.fsGroup .Values.statefulset }}
 {{- end -}}
 
-{{- define "tls-curl-flags" -}}
+{{- define "admin-tls-curl-flags" -}}
   {{- $result := "" -}}
-  {{- if (include "tls-enabled" . | fromJson).bool -}}
+  {{- if (include "admin-internal-tls-enabled" . | fromJson).bool -}}
     {{- $path := (printf "/etc/tls/certs/%s" .Values.listeners.admin.tls.cert) -}}
     {{- $result = (printf "--cacert %s/tls.crt" $path) -}}
     {{- if .Values.listeners.admin.tls.requireClientAuth -}}
@@ -419,9 +441,9 @@ runAsGroup: {{ dig "podSecurityContext" "fsGroup" .Values.statefulset.securityCo
   {{- $result -}}
 {{- end -}}
 
-{{- define "http-protocol" -}}
+{{- define "admin-http-protocol" -}}
   {{- $result := "http" -}}
-  {{- if (include "tls-enabled" . | fromJson).bool -}}
+  {{- if (include "admin-internal-tls-enabled" . | fromJson).bool -}}
     {{- $result = "https" -}}
   {{- end -}}
   {{- $result -}}
@@ -466,12 +488,27 @@ advertised-host returns a json sring with the data neded for configuring the adv
 {{- end -}}
 
 {{/*
-Set default path for tiered storage cache or use one provided
+"warnings" is an aggregate that returns a list of warnings to be shown in NOTES.txt
 */}}
-{{- define "tieredStorage.cacheDirectory" -}}
-{{- if empty .Values.storage.tieredConfig.cloud_storage_cache_directory }}
-  {{- printf "/var/lib/redpanda/data/cloud_storage_cache" }}
-{{- else }}
-  {{- .Values.storage.tieredConfig.cloud_storage_cache_directory }}
-{{- end }}
-{{- end }}
+{{- define "warnings" -}}
+  {{- $result := list -}}
+  {{- $warnings := list "redpanda-memory-warning" -}}
+  {{- range $t := $warnings -}}
+    {{- $warning := include $t $ -}}
+      {{- if $warning -}}
+        {{- $result = append $result (printf "**Warning**: %s" $warning) -}}
+      {{- end -}}
+  {{- end -}}
+  {{/* fromJson cannot decode list */}}
+  {{- toJson (dict "result" $result) -}}
+{{- end -}}
+
+{{/*
+return a warning if the chart is configured with insufficient memory
+*/}}
+{{- define "redpanda-memory-warning" -}}
+  {{- $result := (include "redpanda-memory" .) | int -}}
+  {{- if lt $result 2000 -}}
+    {{- printf "%d is below the minimum recommended value for Redpanda" $result -}}
+  {{- end -}}
+{{- end -}}
