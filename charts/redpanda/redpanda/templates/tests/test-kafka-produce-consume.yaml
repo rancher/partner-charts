@@ -15,20 +15,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 {{- $sasl := .Values.auth.sasl }}
+{{- $useSaslSecret := and $sasl.enabled (not (empty $sasl.secretRef )) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ include "redpanda.fullname" . }}-test-kafka-produce-consume
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    helm.sh/chart: {{ template "redpanda.chart" . }}
-    app.kubernetes.io/name: {{ template "redpanda.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name | quote }}
-    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    app.kubernetes.io/component: {{ template "redpanda.name" . }}
-  {{- with .Values.commonLabels }}
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+{{- with include "full.labels" . }}
+  {{- . | nindent 4 }}
+{{- end }}
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
@@ -58,7 +54,7 @@ spec:
           - -c
           - |
             set -e
-          {{- if and (not $sasl.enabled) (and $sasl.enabled (not (empty $sasl.secretRef ))) }}
+          {{- if or (not $sasl.enabled) $useSaslSecret }}
             rpk topic create produce.consume.test.$POD_NAME {{ include "rpk-topic-flags" . }}
             echo "Pandas are awesome!" | rpk topic produce produce.consume.test.$POD_NAME {{ include "rpk-topic-flags" . }}
             rpk topic consume produce.consume.test.$POD_NAME -n 1 {{ include "rpk-topic-flags" . }} | grep "Pandas are awesome!"
@@ -72,7 +68,7 @@ spec:
               mountPath: {{ printf "/etc/tls/certs/%s" $name }}
   {{- end }}
 {{- end }}
-            {{- if and $sasl.enabled (not (empty $sasl.secretRef )) }}
+            {{- if $useSaslSecret }}
             - name: {{ $sasl.secretRef }}
               mountPath: "/etc/secrets/users"
               readOnly: true
@@ -84,7 +80,7 @@ spec:
             name: {{ template "redpanda.fullname" . }}
         - name: config
           emptyDir: {}
-        {{- if and $sasl.enabled  (not (empty $sasl.secretRef )) }}
+        {{- if $useSaslSecret }}
         - name: {{ $sasl.secretRef }}
           secret:
             secretName: {{ $sasl.secretRef }}
