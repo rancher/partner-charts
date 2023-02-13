@@ -254,20 +254,20 @@ These steps are for charts still using `package.yaml` to track upstream chart.  
 ```bash
 mkdir -p partner-charts/packages/suse/kubewarden-controller
 ```
-#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>` e.g.
+#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>` 
+If your existing chart is using a high patch version like 5.5.100 due to old method of taking version 5.5.1 and modifying it with the PackageVersion, add `PackageVersion` to the `upstream.yaml` (set it to 01 , 00 is not valid). Ideally, when the the next minor version is released e.g. 5.6.X you can then remove `PackageVersion` from the `upstream.yaml` since 5.6.X > 5.5.XXX.  E.g.
 ```yaml	
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
 HelmRepo: https://charts.kubewarden.io
 HelmChart: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
+PackageVersion: 01 # add if existing chart is using high patch version
 ChartMetadata:
   kubeVersion: '>=1.21-0'
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF 
 ```
-* Note: If chart is using a high patch version like 5.5.100 due to old method of modifying version with the PackageVersion, add PackageVersion to the upstream.yaml (set it to 01 , 00 is not valid). Ideally,  when the the next minor version is released e.g. 5.6.X you can then remove PackageVersion from the upstream.yaml since 5.6.X > 5.5.XXX. 
-
 #### 4. If there is an `overlay` dir in `partner-charts/packages/<chart>/generated-changes/` move it to `packages/<company>/<chart>/` and ensure only necessary files are present in overlay dir e.g.
 ```bash
 mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partner-charts/packages/suse/kubewarden-controller/
