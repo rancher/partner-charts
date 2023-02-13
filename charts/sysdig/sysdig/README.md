@@ -255,7 +255,7 @@ Node Image Analyzer parameters (deprecated by nodeAnalyzer)
 | `nodeImageAnalyzer.settings.httpsProxy`                    | Proxy configuration variables                                                            |                               |
 | `nodeImageAnalyzer.settings.noProxy`                       | Proxy configuration variables                                                            |                               |
 | `nodeImageAnalyzer.image.repository`                       | The image repository to pull the Node Image Analyzer from                                | `sysdig/node-image-analyzer`  |
-| `nodeImageAnalyzer.image.tag`                              | The image tag to pull the Node Image Analyzer                                            | `0.1.22`                      |
+| `nodeImageAnalyzer.image.tag`                              | The image tag to pull the Node Image Analyzer                                            | `0.1.23`                      |
 | `nodeImageAnalyzer.imagedigest`                            | The image digest to pull                                                                 | ` `                           |
 | `nodeImageAnalyzer.image.pullPolicy`                       | The Image pull policy for the Node Image Analyzer                                        | `IfNotPresent`                |
 | `nodeImageAnalyzer.image.pullSecrets`                      | Image pull secrets for the Node Image Analyzer                                           | `nil`                         |
