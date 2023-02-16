@@ -1,6 +1,23 @@
 # Changelog
 
+## 2.16.5
+
+* Fix autoscaling version detection.
+  [#744](https://github.com/Kong/charts/pull/744)
+* Don't include a clear-stale-pid initContainer when kong gateway is not
+  enabled in the deployment.
+  [#744](https://github.com/Kong/charts/pull/744)
+
+## 2.16.4
+
+### Fixed
+
+* HorizontalPodAutoscaler's API version is detected properly.
+  [#744](https://github.com/Kong/charts/pull/744)
+
 ## 2.16.3
+
+### Fixed
 
 * Fix template issue preventing custom dblessconfig volume from being mounted.
   [#741](https://github.com/Kong/charts/pull/741)

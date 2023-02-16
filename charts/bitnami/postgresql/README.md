@@ -7,12 +7,12 @@ PostgreSQL (Postgres) is an open source object-relational database known for rel
 [Overview of PostgreSQL](http://www.postgresql.org)
 
 Trademarks: This software listing is packaged by Bitnami. The respective trademarks mentioned in the offering are owned by the respective companies, and use of them does not imply any affiliation or endorsement.
-                           
+
 ## TL;DR
 
 ```console
-$ helm repo add my-repo https://charts.bitnami.com/bitnami
-$ helm install my-release my-repo/postgresql
+helm repo add my-repo https://charts.bitnami.com/bitnami
+helm install my-release my-repo/postgresql
 ```
 
 ## Introduction
@@ -34,8 +34,8 @@ Bitnami charts can be used with [Kubeapps](https://kubeapps.dev/) for deployment
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm repo add my-repo https://charts.bitnami.com/bitnami
-$ helm install my-release my-repo/postgresql
+helm repo add my-repo https://charts.bitnami.com/bitnami
+helm install my-release my-repo/postgresql
 ```
 
 The command deploys PostgreSQL on the Kubernetes cluster in the default configuration. The [Parameters](#parameters) section lists the parameters that can be configured during installation.
@@ -47,7 +47,7 @@ The command deploys PostgreSQL on the Kubernetes cluster in the default configur
 To uninstall/delete the `my-release` deployment:
 
 ```console
-$ helm delete my-release
+helm delete my-release
 ```
 
 The command removes all the Kubernetes components but PVC's associated with the chart and deletes the release.
@@ -55,7 +55,7 @@ The command removes all the Kubernetes components but PVC's associated with the 
 To delete the PVC's associated with `my-release`:
 
 ```console
-$ kubectl delete pvc -l release=my-release
+kubectl delete pvc -l release=my-release
 ```
 
 > **Note**: Deleting the PVC's will delete postgresql data as well. Please be cautious before doing it.
@@ -396,6 +396,7 @@ $ kubectl delete pvc -l release=my-release
 
 | Name                                          | Description                                                                                                                                 | Value   |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `serviceBindings.enabled`                     | Create secret for service binding (Experimental)                                                                                            | `false` |
 | `serviceAccount.create`                       | Enable creation of ServiceAccount for PostgreSQL pod                                                                                        | `false` |
 | `serviceAccount.name`                         | The name of the ServiceAccount to use.                                                                                                      | `""`    |
 | `serviceAccount.automountServiceAccountToken` | Allows auto mount of ServiceAccountToken on the serviceAccount created                                                                      | `true`  |
@@ -465,7 +466,6 @@ $ kubectl delete pvc -l release=my-release
 | `metrics.prometheusRule.rules`                  | PrometheusRule definitions                                                                                 | `[]`                        |
 
 
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
 ```console
 $ helm install my-release \
@@ -476,13 +476,12 @@ $ helm install my-release \
 The above command sets the PostgreSQL `postgres` account password to `secretpassword`.
 
 > NOTE: Once this chart is deployed, it is not possible to change the application's access credentials, such as usernames or passwords, using Helm. To change these application credentials after deployment, delete any persistent volumes (PVs) used by the chart and re-deploy it, or use the application's built-in administrative tools if available.
-
 > **Warning** Setting a password will be ignored on new installation in case when previous Posgresql release was deleted through the helm command. In that case, old PVC will have an old password, and setting it through helm won't take effect. Deleting persistent volumes (PVs) will solve the issue. Refer to [issue 2061](https://github.com/bitnami/charts/issues/2061) for more details
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```console
-$ helm install my-release -f values.yaml my-repo/postgresql
+helm install my-release -f values.yaml my-repo/postgresql
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -583,7 +582,7 @@ The exporter allows to create custom metrics from additional SQL queries. See th
 
 In more complex scenarios, we may have the following tree of dependencies
 
-```
+```text
                      +--------------+
                      |              |
         +------------+   Chart 1    +-----------+
@@ -603,7 +602,7 @@ In more complex scenarios, we may have the following tree of dependencies
 
 The three charts below depend on the parent chart Chart 1. However, subcharts 1 and 2 may need to connect to PostgreSQL as well. In order to do so, subcharts 1 and 2 need to know the PostgreSQL credentials, so one option for deploying could be deploy Chart 1 with the following parameters:
 
-```
+```text
 postgresql.auth.username=testuser
 subchart1.postgresql.auth.username=testuser
 subchart2.postgresql.auth.username=testuser
@@ -617,7 +616,7 @@ subchart2.postgresql.auth.database=testdb
 
 If the number of dependent sub-charts increases, installing the chart with parameters can become increasingly difficult. An alternative would be to set the credentials using global variables as follows:
 
-```
+```text
 global.postgresql.auth.username=testuser
 global.postgresql.auth.password=testpass
 global.postgresql.auth.database=testdb
@@ -641,7 +640,7 @@ To enable network policy for PostgreSQL, install [a networking plugin that imple
 For Kubernetes v1.5 & v1.6, you must also turn on NetworkPolicy by setting the DefaultDeny namespace annotation. Note: this will enforce policy for _all_ pods in the namespace:
 
 ```console
-$ kubectl annotate namespace default "net.beta.kubernetes.io/network-policy={\"ingress\":{\"isolation\":\"DefaultDeny\"}}"
+kubectl annotate namespace default "net.beta.kubernetes.io/network-policy={\"ingress\":{\"isolation\":\"DefaultDeny\"}}"
 ```
 
 With NetworkPolicy enabled, traffic will be limited to just port 5432.
@@ -685,7 +684,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+<http://www.apache.org/licenses/LICENSE-2.0>
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,

@@ -26,9 +26,9 @@ vbrintegrationapi:
   primary: dashboardbff
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}crypto:
-- garbagecollector
 - bloblifecyclemanager
 - events
+- garbagecollector
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -38,6 +38,7 @@ state:
 {{- define "k10.configAPIs" -}}config{{- end -}}
 {{- define "k10.profiles" -}}profiles{{- end -}}
 {{- define "k10.policypresets" -}}policypresets{{- end -}}
+{{- define "k10.transformsets" -}}transformsets{{- end -}}
 {{- define "k10.policies" -}}policies{{- end -}}
 {{- define "k10.reportingAPIs" -}}reporting{{- end -}}
 {{- define "k10.distAPIs" -}}dist{{- end -}}
@@ -201,5 +202,4 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.88.0{{- end -}}
-{{- define "k10.dexImageTag" -}}v2.35.3{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.89.0{{- end -}}

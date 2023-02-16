@@ -249,57 +249,29 @@ Get dex image, if user wants to
 install certified version of upstream
 images or not
 */}}
-{{- define "k10.dexImage" -}}
-{{- if not .Values.global.rhMarketPlace }}
-{{- printf "%s:%s" ( include "k10.dexImageRepo" . ) (include "k10.dexTag" .) }}
-{{- else }}
-{{- printf "%s" (get .Values.global.images "dex") }}
-{{- end -}}
-{{- end -}}
 
-{{/*
-Get dex image repo based on conditions
-if its airgapped and red hat images are
-required
-*/}}
-{{- define "k10.dexImageRepo" -}}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/dex" .Values.global.airgapped.repository }}
-{{- else }}
-{{- printf "%s/dex" .Values.global.image.registry }}
-{{- end}}
-{{- else }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/dex" .Values.global.airgapped.repository }}
-{{- else }}
-{{- printf "%s/%s/%s" .Values.dexImage.registry .Values.dexImage.repository .Values.dexImage.image }}
+{{- define "get.dexImage" }}
+  {{- (get .Values.global.images (include "dex.dexImageName" .)) | default (include "dex.dexImage" .)  }}
 {{- end }}
-{{- end }}
+
+{{- define "dex.dexImage" -}}
+  {{- printf "%s:%s" (include "dex.dexImageRepo" .) (include "dex.dexImageTag" .) }}
 {{- end -}}
 
-{{/*
-Get dex image tag based on conditions
-if its airgapped and red hat images are
-required
-*/}}
-{{- define "k10.dexTag" -}}
-  {{- $dexImageDict := default $.Values.dexImage dict }}
-  {{- $dexTag := index $dexImageDict "tag" | default (include "k10.dexImageTag" $) }}
-
-  {{- if .Values.global.upstreamCertifiedImages }}
-    {{- if .Values.global.airgapped.repository }}
-      {{- printf "k10-%s-rh-ubi" $dexTag }}
-    {{- else }}
-      {{- printf "%s-rh-ubi" $dexTag }}
-    {{- end }}
+{{- define "dex.dexImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "dex.dexImageName" .) }}
   {{- else }}
-    {{- if .Values.global.airgapped.repository }}
-      {{- printf "k10-%s" $dexTag }}
-    {{- else }}
-      {{- printf "%s" $dexTag }}
-    {{- end }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "dex.dexImageName" .) }}
   {{- end }}
+{{- end -}}
+
+{{- define "dex.dexImageName" -}}
+  {{- printf "dex" }}
+{{- end -}}
+
+{{- define "dex.dexImageTag" -}}
+  {{- .Values.global.image.tag | default .Chart.AppVersion }}
 {{- end -}}
 
 {{/*
@@ -313,12 +285,12 @@ required
 {{/*
 Get the emissary image.
 */}}
+{{- define "get.emissaryImage" }}
+  {{- (get .Values.global.images (include "k10.emissaryImageName" .)) | default (include "k10.emissaryImage" .)  }}
+{{- end }}
+
 {{- define "k10.emissaryImage" -}}
-{{- if not .Values.global.rhMarketPlace }}
-{{- printf "%s:%s" (include "k10.emissaryImageRepo" .) (include "k10.emissaryImageTag" .) }}
-{{- else }}
-{{- printf "%s" (get .Values.global.images (include "k10.emissaryImageName" .)) }}
-{{- end -}}
+  {{- printf "%s:%s" (include "k10.emissaryImageRepo" .) (include "k10.emissaryImageTag" .) }}
 {{- end -}}
 
 {{- define "k10.emissaryImageRepo" -}}
@@ -334,7 +306,7 @@ Get the emissary image.
 {{- end -}}
 
 {{- define "k10.emissaryImageTag" -}}
-  {{- .Values.global.image.tag | default .Chart.AppVersion }}
+  {{- include "get.k10ImageTag" . }}
 {{- end -}}
 
 {{/*
@@ -798,5 +770,15 @@ running in the same cluster.
       {{- end }}
     {{- end }}
 
+  {{- end }}
+{{- end -}}
+
+{{/* Get the K10 image tag. Fails if not set correctly */}}
+{{- define "get.k10ImageTag" -}}
+  {{- $imageTag := coalesce .Values.global.image.tag (include "k10.imageTag" .) }}
+  {{- if not $imageTag }}
+      {{- fail "global.image.tag must be set because helm chart does not include a default tag." }}
+  {{- else }}
+      {{- $imageTag }}
   {{- end }}
 {{- end -}}

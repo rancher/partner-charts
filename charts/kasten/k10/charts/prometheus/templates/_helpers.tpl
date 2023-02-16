@@ -107,7 +107,7 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "prometheus.cmreloadImageTag" -}}
-  {{- .Values.global.image.tag | default .Chart.AppVersion }}
+  {{- include "get.k10ImageTag" . }}
 {{- end -}}
 
 {{/*
@@ -135,7 +135,7 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "prometheus.prometheusImageTag" -}}
-  {{- .Values.global.image.tag | default .Chart.AppVersion }}
+  {{- include "get.k10ImageTag" . }}
 {{- end -}}
 
 {{/*

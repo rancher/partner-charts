@@ -17,15 +17,15 @@ value that is specified.
 {{- $serviceImage := "" -}}
 {{- $tagFromDefs := "" -}}
 {{- if .main.Values.global.airgapped.repository }}
-{{- $serviceImage = default .main.Chart.AppVersion .main.Values.global.image.tag | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
+{{- $serviceImage = (include "get.k10ImageTag" .main) | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
 {{- else }}
-{{- $serviceImage = default .main.Chart.AppVersion .main.Values.global.image.tag | print .main.Values.global.image.registry "/" .k10_service ":" }}
+{{- $serviceImage = (include "get.k10ImageTag" .main)  | print .main.Values.global.image.registry "/" .k10_service ":" }}
 {{- end }}{{/* if .main.Values.global.airgapped.repository */}}
 {{- $serviceImageKey := print (replace "-" "" .k10_service) "Image" }}
 {{- if eq $serviceImageKey "ambassadorImage" }}
 {{- $tagFromDefs = (include "k10.ambassadorImageTag" .) }}
 {{- else if eq $serviceImageKey "dexImage" }}
-{{- $tagFromDefs = (include "k10.dexImageTag" .) }}
+{{- $tagFromDefs = (include "dex.dexImageTag" .) }}
 {{- end }}{{/* if eq $serviceImageKey "ambassadorImage" */}}
 {{- if index .main.Values $serviceImageKey }}
 {{- $service_values := index .main.Values $serviceImageKey }}

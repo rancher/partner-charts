@@ -248,9 +248,9 @@ stating that types are not same for the equality check
 {{- if or (eq $service "kanister") (eq $service "executor")}}
           - name: DATA_MOVER_IMAGE
             {{- if .Values.global.airgapped.repository }}
-            value: {{ default .Chart.AppVersion .Values.global.image.tag | print .Values.global.airgapped.repository "/datamover:" }}
+            value: {{ (include "get.k10ImageTag" .)  | print .Values.global.airgapped.repository "/datamover:" }}
             {{- else }}
-            value: {{ default .Chart.AppVersion .Values.global.image.tag | print .Values.global.image.registry "/datamover:" }}
+            value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/datamover:" }}
             {{- end }}{{/* if .Values.global.airgapped.repository */}}
 
           - name: KANISTER_POD_READY_WAIT_TIMEOUT
@@ -621,7 +621,7 @@ stating that types are not same for the equality check
 {{- end }} {{/* and (eq $service "catalog") $.stateful */}}
 {{- if and ( eq $service "auth" ) ( or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true")) }}
       - name: dex
-        image: {{ include "k10.dexImage" . }}
+        image: {{ include "get.dexImage" . }}
 {{- if .Values.auth.ldap.enabled }}
         command: ["/usr/local/bin/dex", "serve", "/dex-config/config.yaml"]
 {{- else }}
