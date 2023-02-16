@@ -23,7 +23,7 @@ This step is required if you're installing the chart using its sources. Addition
 
 1. Clone the Ingress Controller repo:
     ```console
-    $ git clone https://github.com/nginxinc/kubernetes-ingress --branch v3.0.1
+    $ git clone https://github.com/nginxinc/kubernetes-ingress --branch v3.0.2
     ```
     **Note**: If you want to use the experimental repository (`edge`), remove the `--branch` flag and value.
 
@@ -159,7 +159,7 @@ Parameter | Description | Default
 `controller.logLevel` | The log level of the Ingress Controller. | 1
 `controller.image.digest ` | The image digest of the Ingress Controller. | None
 `controller.image.repository` | The image repository of the Ingress Controller. | nginx/nginx-ingress
-`controller.image.tag` | The tag of the Ingress Controller image. | 3.0.1
+`controller.image.tag` | The tag of the Ingress Controller image. | 3.0.2
 `controller.image.pullPolicy` | The pull policy for the Ingress Controller image. | IfNotPresent
 `controller.lifecycle` | The lifecycle of the Ingress Controller pods. | {}
 `controller.customConfigMap` | The name of the custom ConfigMap used by the Ingress Controller. If set, then the default config is ignored. | ""
@@ -255,7 +255,7 @@ Parameter | Description | Default
 `controller.autoscaling.maxReplicas` | Maximum number of replicas for the HPA. | 3
 `controller.autoscaling.targetCPUUtilizationPercentage` | The target CPU utilization percentage. | 50
 `controller.autoscaling.targetMemoryUtilizationPercentage` | The target memory utilization percentage. | 50
-`controller.strategy` | Specifies the strategy used to replace old Pods by new ones. [docs](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy) | {}
+`controller.strategy` | Specifies the strategy used to replace old Pods with new ones. Docs for [Deployment update strategy](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy) and [Daemonset update strategy](https://kubernetes.io/docs/tasks/manage-daemon/update-daemon-set/#daemonset-update-strategy) | {}
 `controller.disableIPV6` | Disable IPV6 listeners explicitly for nodes that do not support the IPV6 stack. | false
 `rbac.create` | Configures RBAC. | true
 `prometheus.create` | Expose NGINX or NGINX Plus metrics in the Prometheus format. | false

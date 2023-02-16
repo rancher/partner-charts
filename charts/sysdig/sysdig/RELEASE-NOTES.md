@@ -1,6 +1,6 @@
 # What's Changed
 
-### New Features
-- **sysdig,node-analyzer** [61deccc](https://github.com/sysdiglabs/charts/commit/61decccbf840632176424593b3959c7b8499c4a6): bump legacy NodeImageAnalyzer to v0.1.23 ([#924](https://github.com/sysdiglabs/charts/issues/924))
+### Chores
+- **sysdig** [38ce49c](https://github.com/sysdiglabs/charts/commit/38ce49c5e323b4703fa3cbe9e2a20c469fd784f0): bump agent version to 12.11.0 ([#926](https://github.com/sysdiglabs/charts/issues/926))
 
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.5.62...sysdig-1.15.71
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.5.63...sysdig-1.15.72

@@ -10,6 +10,9 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.15.72
+### Chores
+* **sysdig** [38ce49c](https://github.com/sysdiglabs/charts/commit/38ce49c5e323b4703fa3cbe9e2a20c469fd784f0): bump agent version to 12.11.0 ([#926](https://github.com/sysdiglabs/charts/issues/926))
 # v1.15.71
 ### New Features
 * **sysdig,node-analyzer** [61deccc](https://github.com/sysdiglabs/charts/commit/61decccbf840632176424593b3959c7b8499c4a6): bump legacy NodeImageAnalyzer to v0.1.23 ([#924](https://github.com/sysdiglabs/charts/issues/924))
