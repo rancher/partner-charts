@@ -1,6 +1,6 @@
 # kamaji
 
-![Version: 0.11.0](https://img.shields.io/badge/Version-0.11.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
+![Version: 0.11.2](https://img.shields.io/badge/Version-0.11.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.2.0](https://img.shields.io/badge/AppVersion-v0.2.0-informational?style=flat-square)
 
 Kamaji is a tool aimed to build and operate a Managed Kubernetes Service with a fraction of the operational burden. With Kamaji, you can deploy and operate hundreds of Kubernetes clusters as a hyper-scaler.
 
@@ -11,7 +11,6 @@ Kamaji is a tool aimed to build and operate a Managed Kubernetes Service with a 
 | Dario Tranchitella | <dario@tranchitella.eu> |  |
 | Massimiliano Giovagnoli | <me@maxgio.it> |  |
 | Adriano Pezzuto | <me@bsctl.io> |  |
-| Gonzalo Gabriel Jiménez Fuentes | <iam@mendrugory.com> |  |
 
 ## Source Code
 
@@ -99,6 +98,7 @@ Here the values you can override:
 | etcd.overrides.endpoints | object | `{"etcd-0":"etcd-0.etcd.kamaji-system.svc.cluster.local","etcd-1":"etcd-1.etcd.kamaji-system.svc.cluster.local","etcd-2":"etcd-2.etcd.kamaji-system.svc.cluster.local"}` | (map) Dictionary of the endpoints for the etcd cluster's members, key is the name of the etcd server. Don't define the protocol (TLS is automatically inflected), or any port, inflected from .etcd.peerApiPort value. |
 | etcd.peerApiPort | int | `2380` | The peer API port which servers are listening to. |
 | etcd.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| etcd.persistence.customAnnotations | object | `{}` | The custom annotations to add to the PVC |
 | etcd.persistence.size | string | `"10Gi"` |  |
 | etcd.persistence.storageClass | string | `""` |  |
 | etcd.port | int | `2379` | The client request port. |
