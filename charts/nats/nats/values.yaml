@@ -158,6 +158,9 @@ nats:
     port: 4222
     portName: "client"
 
+  # extraEnv is the list of environment variables to add to the nats-server container
+  extraEnv: []
+
   # Server settings.
   limits:
     maxConnections:
@@ -219,6 +222,20 @@ nats:
   #      configMap:
   #        name: log-config
 
+  # mappings is used to configure subject mapping
+  # https://docs.nats.io/running-a-nats-service/configuration/configuring_subject_mapping
+  # e.g:
+  # mappings:
+  #   foo: bar
+  #   foo.cluster.scoped:
+  #     - destination: bar.cluster.scoped
+  #       weight: 70%
+  #       cluster: us-west-1
+  #     - destination: foobar.cluster.scoped
+  #       weight: 30%
+  #       cluster: us-east-1
+  mappings: {}
+
   jetstream:
     enabled: false
 
@@ -277,6 +294,12 @@ nats:
         - ReadWriteOnce
       annotations:
       # key: "value"
+
+    # Use below if fileStorage is not enabled but you are persisting
+    # data using an alternative to PVC (e.g. hostPath)
+    # These set the corresponding jetstream configuration in nats.conf.
+    # store_dir: "/data"
+    # max_file: "10Gi"
 
   #######################
   #                     #
@@ -492,7 +515,7 @@ gateway:
 bootconfig:
   image:
     repository: natsio/nats-boot-config
-    tag: 0.9.2
+    tag: 0.9.3
     pullPolicy: IfNotPresent
     # registry: docker.io
 
@@ -568,7 +591,7 @@ reloader:
   enabled: true
   image:
     repository: natsio/nats-server-config-reloader
-    tag: 0.9.2
+    tag: 0.9.3
     pullPolicy: IfNotPresent
     # registry: docker.io
 
@@ -587,6 +610,10 @@ exporter:
   portName: metrics
   securityContext: {}
   resources: {}
+  # override the default args passed to the exporter
+  # see https://github.com/nats-io/prometheus-nats-exporter#usage
+  # make sure to pass HTTP monitoring port URL as last arg, e.g ["-connz", "http://localhost:8222/"]
+  args: []
   # Prometheus operator ServiceMonitor support. Exporter has to be enabled
   serviceMonitor:
     enabled: false
@@ -766,3 +793,11 @@ commonLabels: {}
 # podManagementPolicy controls how pods are created during initial scale up,
 # when replacing pods on nodes, or when scaling down.
 podManagementPolicy: Parallel
+
+# Shared volume to be mounted in pods for pid
+pidVolume:
+  emptyDir: {}
+
+# Shared volume to be mounted in pods for advertiseconfig
+advertiseconfigVolume:
+  emptyDir: {}
