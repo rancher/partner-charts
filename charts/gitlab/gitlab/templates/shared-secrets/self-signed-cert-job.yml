@@ -1,10 +1,11 @@
 {{- $sharedSecretValues := index .Values "shared-secrets" -}}
 {{- if $sharedSecretValues.enabled }}
-{{-   if not (or .Values.global.ingress.configureCertmanager .Values.global.ingress.tls) -}}
-{{-     $imageCfgSelfsign := dict "global" .Values.global.image "local" $sharedSecretValues.selfsign.image -}}
-{{-     $imageCfgKubectl := dict "global" .Values.global.image "local" .Values.global.kubectl.image -}}
-{{-     $jointPullSecrets := concat (default (list) $sharedSecretValues.selfsign.image.pullSecrets) (default (list) .Values.global.kubectl.image.pullSecrets) -}}
-{{-     $imageCfg := dict "global" .Values.global.image "local" (dict "pullSecrets" $jointPullSecrets) -}}
+{{-   if not .Values.global.ingress.configureCertmanager -}}
+{{-     if not (include "gitlab.ingress.tls.configured" .) }}
+{{-       $imageCfgSelfsign := dict "global" .Values.global.image "local" $sharedSecretValues.selfsign.image -}}
+{{-       $imageCfgKubectl := dict "global" .Values.global.image "local" .Values.global.kubectl.image -}}
+{{-       $jointPullSecrets := concat (default (list) $sharedSecretValues.selfsign.image.pullSecrets) (default (list) .Values.global.kubectl.image.pullSecrets) -}}
+{{-       $imageCfg := dict "global" .Values.global.image "local" (dict "pullSecrets" $jointPullSecrets) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -42,7 +43,7 @@ spec:
       {{- include "gitlab.image.pullSecrets" $imageCfg | nindent 6 }}
       initContainers:
       - name: cfssl-self-sign
-        image: "{{ $sharedSecretValues.selfsign.image.repository }}:{{ $sharedSecretValues.selfsign.image.tag }}"
+        image: {{ include "gitlab.selfsign.image" . }}
         {{- include "gitlab.image.pullPolicy" $imageCfgSelfsign | indent 8 }}
         env:
         - name: CA_SUBJECT
@@ -68,7 +69,7 @@ spec:
           {{- toYaml $sharedSecretValues.resources | nindent 10 }}
       containers:
       - name: kubectl
-        image: {{ include "gitlab.kubectl.image" . | quote }}
+        image: {{ include "gitlab.kubectl.image" . }}
         {{- include "gitlab.image.pullPolicy" $imageCfgKubectl | indent 8 }}
         command:
         - /bin/bash
@@ -111,5 +112,6 @@ spec:
       volumes:
       - name: certs-path
         emptyDir: {}
+{{-     end -}}
 {{-   end -}}
 {{- end }}

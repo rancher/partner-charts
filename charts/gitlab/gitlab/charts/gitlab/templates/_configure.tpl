@@ -23,7 +23,7 @@ secret_dir="/init-secrets"
 # required
 for secret in {{ without $required "none" | join " " }} ; do
   mkdir -p "${secret_dir}/${secret}"
-  cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+  cp -f -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
 done
 {{- end }}
 {{- if len (without $optional "none") }}
@@ -31,7 +31,7 @@ done
 for secret in {{ without $optional "none" | join " " }} ; do
   if [ -e "${config_dir}/${secret}" ]; then
     mkdir -p "${secret_dir}/${secret}"
-    cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+    cp -f -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
   fi
 done
 {{- end }}
