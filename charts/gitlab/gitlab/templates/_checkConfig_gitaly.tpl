@@ -49,6 +49,25 @@ praefect:
 {{/* END gitlab.checkConfig.praefect.storageNames" -}}
 
 {{/*
+Ensure that defaultReplicationFactor is greater then 0, and less than gitalyReplicas's number
+*/}}
+{{- define "gitlab.checkConfig.praefect.defaultReplicationFactor" -}}
+{{- if and $.Values.global.gitaly.enabled $.Values.global.praefect.enabled -}}
+{{-   range $i, $vs := $.Values.global.praefect.virtualStorages -}}
+{{-     $gitalyReplicas := int (default 1 $vs.gitalyReplicas) -}}
+{{-     $defaultReplicationFactor := int (default 1 $vs.defaultReplicationFactor) -}}
+{{-     if or ( gt $defaultReplicationFactor $gitalyReplicas ) ( lt $defaultReplicationFactor 1 ) -}}
+praefect:
+    Praefect is enabled but 'defaultReplicationFactor' is not correct.
+    'defaultReplicationFactor' is greater than 1, less than 'gitalyReplicas'.
+    Please modify `global.praefect.virtualStorages[{{ $i }}].defaultReplicationFactor`.
+{{-     end }}
+{{-   end }}
+{{- end }}
+{{- end }}
+{{/* END gitlab.checkConfig.praefect.defaultReplicationFactor */}}
+
+{{/*
 Ensure a certificate is provided when Gitaly is enabled and is instructed to
 listen over TLS */}}
 {{- define "gitlab.checkConfig.gitaly.tls" -}}

@@ -439,17 +439,19 @@ Handles merging a set of labels for services
 
 {{/*
 Detect if `x.ingress.tls.secretName` are set
-Return value if either `global.ingress.tls.secretName` or all three `x.ingress.tls.secretName` are set.
-Return empty if not
+Return value if either `global.ingress.tls.secretName` or all components have `x.ingress.tls.secretName` set.
+Return empty if not.
 
-We're explicitly checking for an actual value being present, not the existance of map.
+We're explicitly checking for an actual value being present, not the existence of map.
 */}}
 {{- define "gitlab.ingress.tls.configured" -}}
 {{/* Pull the value, if it exists */}}
-{{- $global      := pluck "secretName" (default (dict)  $.Values.global.ingress.tls) | first -}}
+{{- $global      := pluck "secretName" (default (dict) $.Values.global.ingress.tls) | first -}}
 {{- $webservice  := pluck "secretName" $.Values.gitlab.webservice.ingress.tls | first -}}
 {{- $registry    := pluck "secretName" $.Values.registry.ingress.tls | first -}}
 {{- $minio       := pluck "secretName" $.Values.minio.ingress.tls | first -}}
+{{- $pages       := pluck "secretName" ((index $.Values.gitlab "gitlab-pages").ingress).tls | first -}}
+{{- $kas         := pluck "secretName" $.Values.gitlab.kas.ingress.tls | first -}}
 {{- $smartcard   := pluck "smartcardSecretName" $.Values.gitlab.webservice.ingress.tls | first -}}
 {{/* Set each item to configured value, or !enabled
      This works because `false` is the same as empty, so we'll use the value when `enabled: true`
@@ -462,9 +464,11 @@ We're explicitly checking for an actual value being present, not the existance o
 {{- $webservice  :=  default $webservice (not $.Values.gitlab.webservice.enabled) -}}
 {{- $registry    :=  default $registry (not $.Values.registry.enabled) -}}
 {{- $minio       :=  default $minio (not $.Values.global.minio.enabled) -}}
+{{- $pages       :=  default $pages (not $.Values.global.pages.enabled) -}}
+{{- $kas         :=  default $kas (not $.Values.global.kas.enabled) -}}
 {{- $smartcard   :=  default $smartcard (not $.Values.global.appConfig.smartcard.enabled) -}}
 {{/* Check that all enabled items have been configured */}}
-{{- if or $global (and $webservice $registry $minio $smartcard) -}}
+{{- if or $global (and $webservice $registry $minio $pages $kas $smartcard) -}}
 true
 {{- end -}}
 {{- end -}}
@@ -506,10 +510,40 @@ Return true in any other case.
 {{- end -}}
 
 {{/*
-Constructs kubectl image name.
+Constructs helper image value.
+Format:
+  {{ include "gitlab.helper.image" (dict "context" . "image" "<image context>") }}
+*/}}
+{{- define "gitlab.helper.image" -}}
+{{- $gitlabVersion := "" -}}
+{{- if .context.Values.global.gitlabVersion -}}
+{{-   $gitlabVersion = include "gitlab.parseAppVersion" (dict "appVersion" .context.Values.global.gitlabVersion "prepend" "true") -}}
+{{- end -}}
+{{- $tag := coalesce .image.tag $gitlabVersion "master" -}}
+{{- $tagSuffix := include "gitlab.image.tagSuffix" .context -}}
+{{- printf "%s:%s%s" .image.repository $tag $tagSuffix -}}
+{{- end -}}
+
+{{/*
+Constructs kubectl image value.
 */}}
 {{- define "gitlab.kubectl.image" -}}
-{{- printf "%s:%s" .Values.global.kubectl.image.repository .Values.global.kubectl.image.tag -}}
+{{- include "gitlab.helper.image" (dict "context" . "image" .Values.global.kubectl.image) -}}
+{{- end -}}
+
+{{/*
+Constructs certificates image value.
+*/}}
+{{- define "gitlab.certificates.image" -}}
+{{- include "gitlab.helper.image" (dict "context" . "image" .Values.global.certificates.image) -}}
+{{- end -}}
+
+{{/*
+Constructs selfsign image value.
+*/}}
+{{- define "gitlab.selfsign.image" -}}
+{{- $image := index .Values "shared-secrets" "selfsign" "image" -}}
+{{- include "gitlab.helper.image" (dict "context" . "image" $image) -}}
 {{- end -}}
 
 {{/*
@@ -525,10 +559,11 @@ Constructs busybox image name.
     # doesn't matter what we print there because once rendering is done
     # deprecation check will kick-in and abort the process. That value will not
     # be used.
+    # TODO: consider tagSuffix here, since we took it out of example
 */}}
 {{- if kindIs "map" .local.image }}
 {{- $image := default .global.busybox.image.repository .local.image.repository }}
-{{- $tag := default .global.busybox.image.tag .local.image.tag }}
+{{- $tag := coalesce .local.image.tag .global.busybox.image.tag "latest" }}
 {{- printf "%s:%s" $image $tag -}}
 {{- else }}
 {{- printf "DEPRECATED:DEPRECATED" -}}

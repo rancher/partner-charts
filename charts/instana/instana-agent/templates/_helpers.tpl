@@ -337,3 +337,11 @@ failureThreshold: 3
 {{- define  "instana-agent.opentelemetry.grpc.isEnabled" -}}{{ if hasKey .Values "opentelemetry" }}{{ if hasKey .Values.opentelemetry "grpc" }}{{ if hasKey .Values.opentelemetry.grpc "enabled" }}{{ .Values.opentelemetry.grpc.enabled }}{{ else }}{{ true }}{{ end }}{{ else }}{{ if hasKey .Values.opentelemetry "enabled" }}{{ .Values.opentelemetry.enabled }}{{ else }}{{ false }}{{ end }}{{ end }}{{ else }}{{ false }}{{ end }}{{- end -}}
 
 {{- define  "instana-agent.opentelemetry.http.isEnabled" -}}{{ if hasKey .Values "opentelemetry" }}{{ if hasKey .Values.opentelemetry "http" }}{{ if hasKey .Values.opentelemetry.http "enabled" }}{{ .Values.opentelemetry.http.enabled }}{{ else }}{{ true }}{{ end }}{{ else }}{{ false }}{{ end }}{{ else }}{{ false }}{{ end }}{{- end -}}
+
+{{- define "kubeVersion" -}}
+{{- if (regexMatch "\\d+\\.\\d+\\.\\d+-(?:eks|gke).+" .Capabilities.KubeVersion.Version) -}}
+  {{- regexFind "\\d+\\.\\d+\\.\\d+" .Capabilities.KubeVersion.Version -}}
+{{- else -}}
+  {{- printf .Capabilities.KubeVersion.Version }}
+{{- end -}}
+{{- end -}}
