@@ -26,3 +26,15 @@ reduce collision
 {{- $name := printf "%s-issuer" .Release.Name | trunc 55 | trimSuffix "-" -}}
 {{- printf "%s-%d" $name .Release.Revision | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+Returns the http01 solver's ingress class field. Takes the IngressClass as paramter.
+If the IngressClass is "none", the field is not set.
+  See: https://cert-manager.io/docs/configuration/acme/http01/#class
+*/}}
+{{- define "certmanager-issuer.http01.ingress.class.field" -}}
+{{- $ingressClass := . | default "" -}}
+{{- if ne "none" $ingressClass -}}
+class: {{ $ingressClass }}
+{{- end -}}
+{{- end -}}

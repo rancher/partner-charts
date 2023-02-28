@@ -49,7 +49,15 @@ Return the redis scheme, or redis. Allowing people to use rediss clusters
 Return the redis url.
 */}}
 {{- define "gitlab.redis.url" -}}
-{{ template "gitlab.redis.scheme" . }}://{{ template "gitlab.redis.url.password" . }}{{ template "gitlab.redis.host" . }}:{{ template "gitlab.redis.port" . }}
+{{ template "gitlab.redis.scheme" . }}://{{ template "gitlab.redis.url.user" . }}{{ template "gitlab.redis.url.password" . }}{{ template "gitlab.redis.host" . }}:{{ template "gitlab.redis.port" . }}
+{{- end -}}
+
+{{/*
+Return the user section of the Redis URI, if needed.
+*/}}
+{{- define "gitlab.redis.url.user" -}}
+{{- include "gitlab.redis.configMerge" . -}}
+{{ .redisMergedConfig.user }}
 {{- end -}}
 
 {{/*
@@ -96,7 +104,7 @@ Note: Workhorse only uses the primary Redis (global.redis)
 {{- end -}}
 
 {{- define "gitlab.redis.secrets" -}}
-{{- range $redis := list "cache" "sharedState" "queues" "actioncable" "traceChunks" "rateLimiting" "sessions" "repositoryCache" -}}
+{{- range $redis := list "cache" "clusterCache" "sharedState" "queues" "actioncable" "traceChunks" "rateLimiting" "clusterRateLimiting" "sessions" "repositoryCache" -}}
 {{-   if index $.Values.global.redis $redis -}}
 {{-     $_ := set $ "redisConfigName" $redis }}
 {{      include "gitlab.redis.secret" $ }}

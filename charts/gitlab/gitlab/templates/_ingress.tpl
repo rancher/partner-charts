@@ -10,7 +10,7 @@ It expects a dictionary with two entries:
 {{-     $apiVersion := include "gitlab.ingress.apiVersion" . -}}
 {{-     $className := include "ingress.class.name" . -}}
 {{-       if not (eq $apiVersion "networking.k8s.io/v1") -}}
-kubernetes.io/ingress.class: {{ $className }}
+kubernetes.io/ingress.class: {{ $className | quote }}
 {{-       end -}}
 {{-   end -}}
 {{- end -}}
@@ -38,7 +38,7 @@ Otherwise, it will use the given value (even an empty string "").
 {{-   if kindIs "invalid" $here.global.class -}}
 {{-     printf "%s-nginx" $here.context.Release.Name -}}
 {{-   else -}}
-{{-     $here.global.class | quote -}}
+{{-     $here.global.class -}}
 {{-   end -}}
 {{- end -}}
 
@@ -53,7 +53,7 @@ It expects a dictionary with two entries:
 {{-   if not (eq (default "" .global.class) "none" ) -}}
 {{-     $apiVersion := include "gitlab.ingress.apiVersion" . -}}
 {{-     if eq $apiVersion "networking.k8s.io/v1" -}}
-ingressClassName: {{ include "ingress.class.name" . }}
+ingressClassName: {{ include "ingress.class.name" . | quote }}
 {{-     end -}}
 {{-   end -}}
 {{- end -}}

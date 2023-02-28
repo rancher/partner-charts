@@ -3,14 +3,14 @@
 {{/*
 Build a dict of redis configuration
 
-- inherit from global.redis, all but sentinels
+- inherit from global.redis, all but sentinels and cluster
 - use values within children, if they exist, even if "empty"
 */}}
 {{- define "gitlab.redis.configMerge" -}}
 {{- $_ := set $ "redisConfigName" (default "" $.redisConfigName) -}}
 {{-     $_ := unset $ "redisMergedConfig" -}}
 {{-     $_ := set $ "redisMergedConfig" (dict "redisConfigName" $.redisConfigName) -}}
-{{-     range $want := list "host" "port" "password" "scheme" -}}
+{{-     range $want := list "host" "port" "password" "scheme" "user" -}}
 {{-       $_ := set $.redisMergedConfig $want (pluck $want (index $.Values.global.redis $.redisConfigName) $.Values.global.redis | first) -}}
 {{-     end -}}
 {{-     range $key := keys $.Values.global.redis.password -}}

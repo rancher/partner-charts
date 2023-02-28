@@ -46,7 +46,9 @@ The user should ensure all necessary secrets are created according to documentat
 {{- if or .Values.gitlab.webservice.enabled .Values.registry.enabled .Values.global.minio.enabled }}
 {{-   if not (or .Values.global.ingress.configureCertmanager (include "gitlab.ingress.tls.configured" .)) }}
 {{ $WARNING }}
-Automatic TLS certificate generation with cert-manager is disabled and no TLS certificates were provided. Self-signed certificates were generated.
+Automatic TLS certificate generation with cert-manager is disabled.
+One or more of the components does not have a TLS certificate Secret configured.
+As a result, Self-signed certificates were generated for these components.
 
 You may retrieve the CA root for these certificates from the `{{ template "gitlab.wildcard-self-signed-cert-name" $ }}-ca` secret, via the following command. It can then be imported to a web browser or system store.
 
@@ -54,7 +56,7 @@ You may retrieve the CA root for these certificates from the `{{ template "gitla
 
 If you do not wish to use self-signed certificates, please set the following properties:
 - global.ingress.tls.secretName
-OR
+OR all of:
 - global.ingress.tls.enabled (set to `true`)
 {{- if $.Values.gitlab.webservice.enabled }}
 - gitlab.webservice.ingress.tls.secretName
@@ -67,6 +69,12 @@ OR
 {{- end }}
 {{- if $.Values.global.minio.enabled }}
 - minio.ingress.tls.secretName
+{{- end }}
+{{- if $.Values.global.pages.enabled }}
+- gitlab.gitlab-pages.ingress.tls.secretName
+{{- end }}
+{{- if $.Values.global.kas.enabled }}
+- gitlab.kas.ingress.tls.secretName
 {{- end }}
 
 {{- if (index .Values "gitlab-runner").install }}
@@ -163,6 +171,38 @@ kas:
     Other components of the GitLab chart other than KAS also need to be configured to talk to KAS via TLS.
     With a global value the chart can take care of these configurations without the need for other specific values.
 {{- end }}
+
+{{- /* Deprecation notice for `gitlab.deprecate.sidekiq.queueSelector` setting */}}
+{{- if and (hasKey .Values.gitlab.sidekiq "queueSelector") (eq true .Values.gitlab.sidekiq.queueSelector) -}}
+{{ $NOTICE }}
+sidekiq:
+    The configuration of 'gitlab.sidekiq.queueSelector' should be removed. Please follow the steps at https://docs.gitlab.com/ee/administration/sidekiq/extra_sidekiq_processes.html#start-multiple-processes, to run Sidekiq with multiple processes while listening to all queues.
+{{- end }}
+
+{{- /* Deprecation notice for `gitlab.deprecate.sidekiq.pods.queueSelector` setting */}}
+{{- range $index, $pod := .Values.gitlab.sidekiq.pods -}}
+{{-   if and (hasKey $pod "queueSelector") -}}
+{{ $NOTICE }}
+sidekiq.pods[{{ $index }}] ({{ $pod.name }}):
+    The configuration of 'gitlab.sidekiq.pods[{{ $index }}].queueSelector' should be removed. Please follow the steps at https://docs.gitlab.com/ee/administration/sidekiq/extra_sidekiq_processes.html#start-multiple-processes, to run Sidekiq with multiple processes while listening to all queues.
+{{-   end -}}
+{{- end -}}
+
+{{- /* Deprecation notice for `gitlab.deprecate.sidekiq.negateQueues` setting */}}
+{{- if hasKey .Values.gitlab.sidekiq "negateQueues" -}}
+{{ $NOTICE }}
+sidekiq:
+    The configuration of 'gitlab.sidekiq.negateQueues' should be removed. Please follow the steps at https://docs.gitlab.com/ee/administration/sidekiq/extra_sidekiq_processes.html#start-multiple-processes, to run Sidekiq with multiple processes while listening to all queues.
+{{- end }}
+
+{{- /* Deprecation notice for `gitlab.deprecate.sidekiq.pods.negateQueues` setting */}}
+{{- range $index, $pod := .Values.gitlab.sidekiq.pods -}}
+{{-   if hasKey $pod "negateQueues" -}}
+{{ $NOTICE }}
+sidekiq.pods[{{ $index }}] ({{ $pod.name }}):
+    The configuration of 'gitlab.sidekiq.pods[{{ $index }}].negateQueues' should be removed. Please follow the steps at https://docs.gitlab.com/ee/administration/sidekiq/extra_sidekiq_processes.html#start-multiple-processes, to run Sidekiq with multiple processes while listening to all queues.
+{{-   end -}}
+{{- end -}}
 
 {{- /* run deprecations */}}
 {{ include "gitlab.deprecations" . }}
