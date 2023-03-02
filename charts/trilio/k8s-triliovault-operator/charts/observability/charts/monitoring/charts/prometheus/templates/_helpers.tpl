@@ -19,13 +19,13 @@ Create unified labels for prometheus components
 {{- define "prometheus.common.matchLabels" -}}
 app: {{ template "prometheus.name" . }}
 release: {{ .Release.Name }}
-{{ include "k8s-triliovault-operator.labels" . }}
+{{ include "k8s-triliovault-operator.observability" . }}
 {{- end -}}
 
 {{- define "prometheus.common.metaLabels" -}}
 chart: {{ template "prometheus.chart" . }}
 heritage: {{ .Release.Service }}
-{{ include "k8s-triliovault-operator.labels" . }}
+{{ include "k8s-triliovault-operator.observability" . }}
 {{- end -}}
 
 {{- define "prometheus.alertmanager.labels" -}}

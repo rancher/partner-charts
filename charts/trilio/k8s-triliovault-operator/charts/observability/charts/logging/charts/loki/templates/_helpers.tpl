@@ -96,3 +96,4 @@ chart: {{ template "loki.chart" . }}
 release: {{ .Release.Name }}
 heritage: {{ .Release.Service }}
 {{- end }}
+

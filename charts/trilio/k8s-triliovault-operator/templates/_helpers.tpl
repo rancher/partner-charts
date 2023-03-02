@@ -79,9 +79,9 @@ Validation for the ingress tlsSecret, should exists if provided
 Create unified labels for k8s-triliovault-operator components
 */}}
 {{- define "k8s-triliovault-operator.labels" -}}
-app.kubernetes.io/part-of: k8s-triliovault-operator
-app.kubernetes.io/managed-by: k8s-triliovault-operator
-app.kubernetes.io/name: k8s-triliovault-operator
+app.kubernetes.io/part-of: {{ template "k8s-triliovault-operator.appName" . }}
+app.kubernetes.io/name: {{ template "k8s-triliovault-operator.appName" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{- define "k8s-triliovault-operator.serviceAccountName" -}}
@@ -125,4 +125,10 @@ Return the imagePullSecret name in below priority order
     {{- else -}}
         {{- printf "%s" .Values.imagePullSecret -}}
     {{- end -}}
+{{- end -}}
+
+{{- define "k8s-triliovault-operator.observability" -}}
+app.kubernetes.io/part-of: k8s-triliovault-operator
+app.kubernetes.io/managed-by: k8s-triliovault-operator
+app.kubernetes.io/name: k8s-triliovault-operator
 {{- end -}}

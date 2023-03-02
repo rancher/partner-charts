@@ -42,4 +42,3 @@ using the Helm chart:
 ```bash
 helm install sysdig-agent -f aws-marketplace-values.yaml stable/sysdig
 ```
-
