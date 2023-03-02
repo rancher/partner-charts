@@ -18,8 +18,14 @@ Slack template
 {{- printf "\n    " -}}
 {{- printf "\n    {{ define \"slack.notification.text\" -}}" -}}
 {{- printf "\n      {{- if eq .Status \"firing\" }}" -}}
-{{- printf "\n      :warning: *<%s/incidents?start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_notification_rule_name }}|View Impact>*" $assertsUrl $plus30min -}}
-{{- printf "\n     :fire: *<%s/insights/top?start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- if .CommonLabels.asserts_site }}" -}}
+{{- printf "\n      :warning: *<%s/incidents?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_notification_rule_name }}|View Impact>*" $assertsUrl $plus30min -}}
+{{- printf "\n     :fire: *<%s/insights/top?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- else }}" -}}
+{{- printf "\n      :warning: *<%s/incidents?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_notification_rule_name }}|View Impact>*" $assertsUrl $plus30min -}}
+{{- printf "\n     :fire: *<%s/insights/top?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- end }}" -}}
+{{- printf "\n      {{- end }}" -}}
 {{- printf "\n      *Alert details*:" -}}
 {{- printf "\n    " -}}
 {{- printf "\n      {{ range .Alerts -}}" -}}
@@ -47,7 +53,6 @@ Slack template
 {{- printf "\n        {{- if eq .Name \"persistentvolumeclaim\" }} • *{{ .Name }}:* `{{ .Value }}`{{ end }}" -}}
 {{- printf "\n        {{- end }}" -}}
 {{- printf "\n      {{- end }}" -}}
-{{- printf "\n      {{- end }}" -}}
 {{- printf "\n    {{- end }}" -}}
 {{- printf "\n    " -}}
 {{- printf "\n    {{/* Slack Slo */}}" -}}
@@ -57,8 +62,13 @@ Slack template
 {{- printf "\n    " -}}
 {{- printf "\n    {{ define \"slack.slo.text\" -}}" -}}
 {{- printf "\n      {{- if eq .Status \"firing\" }}" -}}
-{{- printf "\n      :warning: *<%s/incidents?start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}|View Impact>*" $assertsUrl $plus30min -}}
-{{- printf "\n      :fire: *<%s/assertions?slo_name={{.CommonLabels.asserts_slo_name}}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- if .CommonLabels.asserts_site }}" -}}
+{{- printf "\n      :warning: *<%s/incidents?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}|View Impact>*" $assertsUrl $plus30min -}}
+{{- printf "\n     :fire: *<%s/assertions?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&slo_name={{.CommonLabels.asserts_slo_name}}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- else }}" -}}
+{{- printf "\n      :warning: *<%s/incidents?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}|View Impact>*" $assertsUrl $plus30min -}}
+{{- printf "\n     :fire: *<%s/assertions?env[0]={{ .CommonLabels.asserts_env }}&slo_name={{.CommonLabels.asserts_slo_name}}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- end }}" -}}
 {{- printf "\n    " -}}
 {{- printf "\n      Asserts has detected an elevated burn rate on the \"{{ .GroupLabels.asserts_slo_name }}\" service level objective. These compliance windows are off track:" -}}
 {{- printf "\n      {{ range .Alerts }} {{ if .Annotations.description }}*Description:* {{ printf \"%s%s\" .Annotations.description }}{{ end }}{{ end }}" "%s" "\\n" -}}

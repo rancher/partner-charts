@@ -28,10 +28,18 @@ PagerDuty template
 {{- printf "\n    {{- end }}" -}}
 {{- printf "\n    " -}}
 {{- printf "\n    {{ define \"pagerduty.slo.link.incidents\" -}}" -}}
-{{- printf "\n      %s/incidents?start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- if .CommonLabels.asserts_site }}" -}}
+{{- printf "\n      %s/incidents?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- else }}" -}}
+{{- printf "\n      %s/incidents?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- end }}" -}}
 {{- printf "\n    {{- end }}" -}}
 {{- printf "\n    " -}}
 {{- printf "\n    {{ define \"pagerduty.slo.link.assertions\" -}}" -}}
-{{- printf "\n      %s/assertions?slo_name={{.CommonLabels.asserts_slo_name}}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- if .CommonLabels.asserts_site }}" -}}
+{{- printf "\n      %s/assertions?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&slo_name={{.CommonLabels.asserts_slo_name}}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- else }}" -}}
+{{- printf "\n      %s/incidents?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .GroupLabels.asserts_slo_name }}" $assertsUrl $plus30min -}}
+{{- printf "\n      {{- end }}" -}}
 {{- printf "\n    {{- end }}" -}}
 {{- end }}

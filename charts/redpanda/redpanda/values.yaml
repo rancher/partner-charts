@@ -128,9 +128,12 @@ external:
   # Default external access value for each service
   # Services can toggle external access per listener (ie. `listeners.<service name>.external.<listener name>.enabled`)
   enabled: true
-  # External access type. `NodePort` is the only acceptable value if defined.
+  # External access type. Only `NodePort` and `LoadBalancer` are supported
   # If undefined, then advertised listeners will be configured in Redpanda, but the helm chart will not create a Service. You must create a Service manually.
+  # Warning: If LoadBalancer is selected, you will likely experience higher latency and increased packet loss. NodePort is recommended in cases where latency is a priority.
   type: NodePort
+  # Optional source range for external access. Only applicable when external.type is LoadBalancer
+  # sourceRanges: []
   # Optional domain advertised to external clients
   # If specified, then it will be appended to the `external.addresses` values as each broker's advertised address
   # domain: local
@@ -502,11 +505,16 @@ statefulset:
     # The topologyKey to be used.
     # Can be used to spread across different nodes, AZs, regions etc.
     topologyKey: kubernetes.io/hostname
-    # Type of anti-affinity rules: either `soft` or `hard`.
+    # The two type of anti-affinity rules are either `soft` or `hard`
+    # Here we define default values for either case. However, you can select
+    # `custom` if you wish to supply your own rules
+    # If you do not wish to use either of these configurations and sup
     type: hard
     # Weight for `soft` anti-affinity rules.
     # Does not apply for other anti-affinity types.
     weight: 100
+    # change type to custom and supply here to supply your own podAntiAffinity rules
+    custom: {}
   # Node selection constraints for scheduling Pods of this StatefulSet.
   # these override the global nodeSelector value
   # https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
@@ -625,7 +633,7 @@ listeners:
       requireClientAuth: false
   # Kafka API listeners
   kafka:
-    # The port for internal client connections (10092 is default to avoid conflicts with the external default port 9092)
+    # The port for internal client connections
     port: 9093
     tls:
       # enabled: true
@@ -636,7 +644,7 @@ listeners:
         # enabled: true
         # The port used for external client connections
         port: 9094
-        # If undefined, `listeners.kafka.external.port` is used
+        # If undefined, `listeners.kafka.external.default.port` is used
         advertisedPorts:
         - 31092
   # HTTP API listeners (aka PandaProxy)

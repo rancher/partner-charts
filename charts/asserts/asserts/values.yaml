@@ -142,7 +142,12 @@ server:
     repository: asserts/asserts-server
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.2.504
+    tag: v0.2.528
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 768Mi
 
   initContainers:
     - name: wait-for-postgres
@@ -180,8 +185,6 @@ server:
       prometheus.io/scrape: "true"
       prometheus.io/port: "{{.Values.server.service.port}}"
       prometheus.io/path: "/api-server/actuator/prometheus"
-
-  resources: {}
 
   ## wait 30 seconds before pod termination
   ## to allow application shut down
@@ -250,6 +253,11 @@ authorization:
     ## Overrides the image tag whose default is the chart appVersion.
     tag: v0.2.504
 
+  resources:
+    requests:
+      cpu: 50m
+      memory: 512Mi
+
   initContainers:
     - name: wait-for-postgres
       image: asserts/wait-for:v2.2.3
@@ -272,8 +280,6 @@ authorization:
       prometheus.io/scrape: "true"
       prometheus.io/port: "{{.Values.authorization.service.port}}"
       prometheus.io/path: "/authorization/actuator/prometheus"
-
-  resources: {}
 
   ## environment variables to add to the asserts-server pod
   extraEnv: []
@@ -311,7 +317,7 @@ ui:
     repository: asserts/asserts-ui
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.1.1149
+    tag: v0.1.1156
 
   imagePullSecrets: []
 
@@ -327,6 +333,11 @@ ui:
     externalIPs: []
     loadBalancerIP: ""
     loadBalancerSourceRanges: []
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 128Mi
 
   ingress:
     enabled: false
@@ -358,8 +369,6 @@ ui:
     #   - secretName: asserts-ui-tls
     #     hosts:
     #       - asserts-ui.domain.com
-
-  resources: {}
 
   annotations: {}
 
@@ -399,7 +408,12 @@ grafana:
     repository: asserts/grafana
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v1.0.196
+    tag: v1.0.205
+
+  resources:
+    requests:
+      cpu: 30m
+      memory: 128Mi
 
   imagePullSecrets: []
 
@@ -471,8 +485,6 @@ grafana:
     runAsGroup: 1001
     fsGroup: 1001
 
-  resources: {}
-
   nodeSelector: {}
 
   tolerations: []
@@ -508,6 +520,22 @@ grafana:
       - name: Prometheus
         url: http://{{.Release.Name}}-promxyuser.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8082
         isDefault: true
+        orgId: 1
+        access: proxy
+        type: prometheus
+        jsonData:
+          timeInterval: "{{.Values.grafana.scrapeInterval}}"
+      - name: Alertmanager
+        url: http://{{.Release.Name}}-alertmanager.{{.Release.Namespace}}.{{.Values.clusterDomain}}:9093
+        isDefault: false
+        orgId: 1
+        access: proxy
+        type: alertmanager
+        jsonData:
+          implementation: prometheus
+      - name: Prometheus-Rules
+        url: http://{{.Release.Name}}-promxyruler.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8082
+        isDefault: false
         orgId: 1
         access: proxy
         type: prometheus
@@ -581,6 +609,11 @@ knowledge-sensor:
     create: false
     name: asserts
 
+  resources:
+    requests:
+      cpu: 10m
+      memory: 128Mi
+
   initContainers:
     - name: wait-for-asserts-server
       image: asserts/wait-for:v2.2.3
@@ -620,6 +653,11 @@ tsdb:
   serviceAccount:
     create: false
     name: asserts
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
 
   configMap: asserts-tsdb-scrapeconfig
   server:
@@ -770,6 +808,10 @@ redisgraph:
   master:
     configuration: |
       loadmodule /opt/bitnami/redis/modules/redisgraph.so
+    resources:
+      requests:
+        cpu: 20m
+        memory: 128Mi
 
   sentinel:
     enabled: false
@@ -804,6 +846,10 @@ redisearch:
   master:
     configuration: |
       loadmodule /opt/bitnami/redis/modules/redisearch.so
+    resources:
+      requests:
+        cpu: 10m
+        memory: 50Mi
 
   sentinel:
     enabled: false
@@ -821,6 +867,11 @@ alertmanager:
   serviceAccount:
     create: false
     name: asserts
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 50Mi
 
   service:
     annotations:
@@ -849,6 +900,11 @@ promxyruler:
   serviceAccount:
     create: false
     name: asserts
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
 
   service:
     annotations:
@@ -913,6 +969,11 @@ promxyuser:
     create: false
     name: asserts
 
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
   service:
     annotations:
       prometheus.io/scrape: "true"
@@ -964,6 +1025,11 @@ postgres:
     create: false
     name: asserts
 
+  resources:
+    requests:
+      cpu: 20m
+      memory: 128Mi
+
   primary:
     initdb:
       scripts:
@@ -977,3 +1043,34 @@ postgres:
 
   metrics:
     enabled: true
+
+## eBPF probe configuration
+## ref: https://github.com/asserts/helm-charts/blob/master/charts/ebpf-probe/values.yaml
+ebpf-probe:
+  enabled: false
+
+  fullnameOverride: asserts-ebpf-probe
+  nameOverride: asserts-ebpf-probe
+
+  image:
+    repository: asserts/ebpf-probe
+    pullPolicy: IfNotPresent
+    tag: 0.3.0
+
+  podMonitor:
+    enabled: true
+    # Use if you need to add a label that matches
+    # your prometheus-operator podMonitorSelector.
+    #
+    # Ex:
+    #
+    # running:
+    # kubectl get prometheus -A -ojsonpath='{.items[].spec.podMonitorSelector}'
+    #
+    # returns:
+    # {"matchLabels":{"release":"kube-prometheus-stack"}}
+    #
+    # set:
+    # extraLabels:
+    #   release: kube-prometheus-stack
+    extraLabels: {}
