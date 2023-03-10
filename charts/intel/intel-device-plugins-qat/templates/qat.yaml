@@ -1,0 +1,42 @@
+{{- /*
+based on
+deployments/operator/samples/deviceplugin_v1_qatdeviceplugin.yaml
+*/}}
+
+apiVersion: deviceplugin.intel.com/v1
+kind: QatDevicePlugin
+metadata:
+  name: {{ .Values.name }}
+  annotations: {{ toYaml .Values.annotations | nindent 4 }}
+spec:
+  image: "{{ .Values.image.hub }}/intel-qat-plugin:{{ .Values.image.tag | default .Chart.AppVersion }}"
+  initImage: "{{ .Values.initImage.hub }}/intel-qat-initcontainer:{{ .Values.initImage.tag | default .Chart.AppVersion }}"
+  dpdkDriver: {{ .Values.dpdkDriver }}
+  kernelVfDrivers:
+    {{- range .Values.kernelVfDrivers }}
+    - {{ . }}
+    {{- end  }}
+  maxNumDevices: {{ .Values.maxNumDevices }}
+  logLevel:  {{ .Values.logLevel }}
+  nodeSelector: {{ .Values.nodeSelector | toYaml | nindent 4 }}
+---
+{{ if eq .Values.nodeFeatureRule true }}
+apiVersion: nfd.k8s-sigs.io/v1alpha1
+kind: NodeFeatureRule
+metadata:
+  name: intel-dp-qat-device
+spec:
+  rules:
+    - name: "intel.qat"
+      labels:
+        "intel.feature.node.kubernetes.io/qat": "true"
+      matchFeatures:
+        - feature: pci.device
+          matchExpressions:
+            vendor: {op: In, value: ["8086"]}
+            device: {op: In, value: ["37c8", "4940"]}
+            class: {op: In, value: ["0b40"]}
+        - feature: kernel.loadedmodule
+          matchExpressions:
+            intel_qat: {op: Exists}
+{{ end }}

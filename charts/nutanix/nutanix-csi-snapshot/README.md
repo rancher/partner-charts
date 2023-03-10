@@ -69,6 +69,14 @@ helm upgrade nutanix-csi-snapshot nutanix/nutanix-csi-snapshot
 
 You can renew webhook certificate during an upgrade by specifiying `--set "tls.renew=true"`.
 
+## Uninstalling the Chart
+
+To uninstall/delete the `nutanix-csi-snapshot` deployment:
+
+```console
+helm delete nutanix-csi-snapshot -n <namespace of your choice>
+```
+
 ## Configuration
 
 Kubernetes Webhooks need to run on HTTPS and for this they need a certificate. This charts offers several options:
@@ -103,6 +111,8 @@ The following table lists the configurable parameters of the Nutanix-CSI chart a
 | `controller.tolerations`           | Add tolerations to controller pod                                                 | `[]`                                 |
 | `validationWebHook.nodeSelector`   | Add nodeSelector to validationWebHook pods                                        | `{}`                                 |
 | `validationWebHook.tolerations`    | Add tolerations to validationWebHook pods                                         | `[]`                                 |
+
+Specify each parameter using the `--set key=value[,key=value]` argument to `helm install` or provide a a file whit `-f value.yaml`.
 
 [`kubernetes.io/tls`]: https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets
 

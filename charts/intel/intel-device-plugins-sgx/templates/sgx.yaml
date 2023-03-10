@@ -1,0 +1,40 @@
+{{- /*
+based on
+deployments/operator/samples/deviceplugin_v1_sgxdeviceplugin.yaml
+*/}}
+
+apiVersion: deviceplugin.intel.com/v1
+kind: SgxDevicePlugin
+metadata:
+  name: {{ .Values.name }}
+  annotations: {{ toYaml .Values.annotations | nindent 4 }}
+spec:
+  image: "{{ .Values.image.hub }}/intel-sgx-plugin:{{ .Values.image.tag | default .Chart.AppVersion }}"
+  initImage: "{{ .Values.initImage.hub }}/intel-sgx-initcontainer:{{ .Values.initImage.tag | default .Chart.AppVersion }}"
+  enclaveLimit: {{ .Values.enclaveLimit }}
+  provisionLimit: {{ .Values.provisionLimit }}
+  logLevel:  {{ .Values.logLevel }}
+  nodeSelector: {{- .Values.nodeSelector | toYaml | nindent 4 }}
+---
+{{ if eq .Values.nodeFeatureRule true }}
+apiVersion: nfd.k8s-sigs.io/v1alpha1
+kind: NodeFeatureRule
+metadata:
+  name: intel-dp-sgx-device
+spec:
+  rules:
+    - name: "intel.sgx"
+      labels:
+        "intel.feature.node.kubernetes.io/sgx": "true"
+      matchFeatures:
+        - feature: cpu.cpuid
+          matchExpressions:
+            SGX: {op: Exists}
+            SGXLC: {op: Exists}
+        - feature: cpu.sgx
+          matchExpressions:
+            enabled: {op: IsTrue}
+        - feature: kernel.config
+          matchExpressions:
+            X86_SGX: {op: Exists}
+{{ end }}
