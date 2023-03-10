@@ -54,6 +54,9 @@ spec:
       {{- else }}
       serviceAccountName: {{ if .Values.clusterChecksRunner.rbac.create }}{{ template "datadog.fullname" . }}{{ else }}"{{ .Values.clusterChecksRunner.rbac.serviceAccountName }}"{{ end }}
       {{- end }}
+      {{- if .Values.clusterChecksRunner.rbac.create  }}
+      automountServiceAccountToken: {{ .Values.clusterChecksRunner.rbac.automountServiceAccountToken }}
+      {{- end }}
       imagePullSecrets:
 {{ toYaml .Values.clusterChecksRunner.image.pullSecrets | indent 8 }}
       {{- if .Values.clusterChecksRunner.priorityClassName }}
@@ -77,6 +80,7 @@ spec:
         volumeMounts:
           - name: config
             mountPath: /opt/datadog-agent
+            readOnly: false # Need RW for writing agent config files
         resources:
 {{ toYaml .Values.agents.containers.initContainers.resources | indent 10 }}
       - name: init-config
@@ -88,6 +92,7 @@ spec:
         volumeMounts:
           - name: config
             mountPath: /etc/datadog-agent
+            readOnly: false # Need RW for writing datadog.yaml config file
           {{- if .Values.datadog.checksd }}
           - name: checksd
             mountPath: /checks.d
@@ -187,6 +192,7 @@ spec:
             value: {{ .Values.datadog.clusterName | quote }}
           {{- end }}
           {{- include "additional-env-entries" .Values.clusterChecksRunner.env | indent 10 }}
+          {{- include "additional-env-dict-entries" .Values.clusterChecksRunner.envDict | indent 10 }}
         resources:
 {{ toYaml .Values.clusterChecksRunner.resources | indent 10 }}
         volumeMounts:
@@ -200,6 +206,7 @@ spec:
             readOnly: true
           - name: config
             mountPath: {{ template "datadog.confPath" . }}
+            readOnly: false # Need RW for config path
 {{- if .Values.clusterChecksRunner.volumeMounts }}
 {{ toYaml .Values.clusterChecksRunner.volumeMounts | indent 10 }}
 {{- end }}

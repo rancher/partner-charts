@@ -11,7 +11,7 @@ The [HPE CSI Driver for Kubernetes](https://scod.hpedev.io/csi_driver/index.html
 
 Depending on which [Container Storage Provider](https://scod.hpedev.io/container_storage_provider/index.html) (CSP) is being used, other prerequisites and requirements may apply, such as storage platform OS and features.
 
-- [HPE Alletra 6000 and Nimble Storage](https://scod.hpedev.io/container_storage_provider/hpe_nimble_storage/index.html)
+- [HPE Alletra 5000/6000 and Nimble Storage](https://scod.hpedev.io/container_storage_provider/hpe_nimble_storage/index.html)
 - [HPE Alletra 9000, Primera and 3PAR](https://scod.hpedev.io/container_storage_provider/hpe_3par_primera/index.html)
 
 ## Configuration and installation
@@ -22,7 +22,7 @@ The following table lists the configurable parameters of the chart and their def
 |---------------------------|------------------------------------------------------------------------|------------------|
 | disable.nimble            | Disable HPE Nimble Storage CSP `Service`.                              | false            |
 | disable.primera           | Disable HPE Primera (and 3PAR) CSP `Service`.                          | false            |
-| disable.alletra6000       | Disable HPE Alletra 6000 CSP `Service`.                                | false            |
+| disable.alletra6000       | Disable HPE Alletra 5000/6000 CSP `Service`.                           | false            |
 | disable.alletra9000       | Disable HPE Alletra 9000 CSP `Service`.                                | false            |
 | disableNodeConformance    | Disable automatic installation of iSCSI/Multipath Packages.            | false            |
 | disableNodeGetVolumeStats | Disable NodeGetVolumeStats call to CSI driver.                         | false            |

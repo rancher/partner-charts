@@ -189,6 +189,14 @@ Composes a container image from a dict containing a "name" field (required), "ta
 - name: INSTANA_MVN_REPOSITORY_URL
   value: {{ .Values.agent.instanaMvnRepoUrl | quote }}
 {{- end }}
+{{- if .Values.agent.instanaMvnRepoFeaturesPath }}
+- name: INSTANA_MVN_REPOSITORY_FEATURES_PATH
+  value: {{ .Values.agent.instanaMvnRepoFeaturesPath | quote }}
+{{- end }}
+{{- if .Values.agent.instanaMvnRepoSharedPath }}
+- name: INSTANA_MVN_REPOSITORY_SHARED_PATH
+  value: {{ .Values.agent.instanaMvnRepoSharedPath | quote }}
+{{- end }}
 {{- if .Values.agent.proxyHost }}
 - name: INSTANA_AGENT_PROXY_HOST
   value: {{ .Values.agent.proxyHost | quote }}
