@@ -18,7 +18,20 @@ This chart bootstraps an [Asserts](https://www.asserts.ai) deployment on a [Kube
 ```bash
 helm repo add asserts https://asserts.github.io/helm-charts
 helm repo update
-helm upgrade --install asserts asserts/asserts -n asserts --create-namespace
+helm upgrade asserts asserts/asserts \
+    --install \
+    --namespace asserts \
+    --create-namespace
+```
+
+Asserts uses metric label informaton to build the Entity Graph, it will use labels from service meshes (Istio, Linkerd) or from the Asserts eBPF Probe. By default the probe is not enabled, it can be enabled via a values file or from the Helm command line.
+
+```bash
+helm upgrade asserts asserts/asserts \
+    --upgrade \
+    --namespace asserts \
+    --create-namespace \
+    --set ebpfProbe.enabled=true
 ```
 
 There any many configuration options such as PagerDuty and Slack integrations. These can be configured with a values file.

@@ -52,9 +52,11 @@
     - name: DD_ORCHESTRATOR_EXPLORER_ENABLED
       value: {{ (include "should-enable-k8s-resource-monitoring" .) | quote }}
     {{- include "additional-env-entries" .Values.agents.containers.processAgent.env | indent 4 }}
+    {{- include "additional-env-dict-entries" .Values.agents.containers.processAgent.envDict | indent 4 }}
   volumeMounts:
     - name: config
       mountPath: {{ template "datadog.confPath" . }}
+      readOnly: true
     {{- if eq .Values.targetSystem "linux" }}
     {{- if (not .Values.providers.gke.autopilot) }}
     - name: auth-token
@@ -63,9 +65,10 @@
     {{- end }}
     - name: logdatadog
       mountPath: /var/log/datadog
+      readOnly: false # Need RW to write logs
     - name: tmpdir
       mountPath: /tmp
-      readOnly: false
+      readOnly: false # Need RW to write to tmp directory
     {{- include "linux-container-host-release-volumemounts" . | nindent 4 }}
     {{- end }}
     {{- include "container-crisocket-volumemounts" . | nindent 4 }}
@@ -74,6 +77,7 @@
     - name: datadog-yaml
       mountPath: {{ template "datadog.confPath" . }}/datadog.yaml
       subPath: datadog.yaml
+      readOnly: true
     {{- end }}
     {{- if eq .Values.targetSystem "linux" }}
     - name: cgroups
@@ -89,7 +93,7 @@
       readOnly: true
     - name: dsdsocket
       mountPath: {{ (dir .Values.datadog.dogstatsd.socketPath) }}
-      readOnly: true
+      readOnly: false # Need RW for UDS DSD socket
     {{- if eq (include "should-enable-system-probe" .) "true" }}
     - name: sysprobe-socket-dir
       mountPath: /var/run/sysprobe
@@ -97,6 +101,7 @@
     - name: sysprobe-config
       mountPath: /etc/datadog-agent/system-probe.yaml
       subPath: system-probe.yaml
+      readOnly: true
     {{- end }}
     {{- end }}
     {{- if .Values.datadog.kubelet.hostCAPath }}

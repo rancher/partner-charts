@@ -146,10 +146,17 @@ Generate server broadcast address.
 
 {{/*
 Generate server RPC bind address.
+
+In case of multi-cluster services (MCS), we set it to $(POD_IP) to
+ensure YCQL uses a resolvable address.
+See https://github.com/yugabyte/yugabyte-db/issues/16155
 */}}
 {{- define "yugabyte.rpc_bind_address" -}}
-  {{- if or .Values.istioCompatibility.enabled .Values.multicluster.createServiceExports -}}
-    0.0.0.0:{{ index .Service.ports "tcp-rpc-port" -}}
+  {{- $port := index .Service.ports "tcp-rpc-port" -}}
+  {{- if .Values.istioCompatibility.enabled -}}
+    0.0.0.0:{{ $port }}
+  {{- else if .Values.multicluster.createServiceExports -}}
+    $(POD_IP):{{ $port }}
   {{- else -}}
     {{- include "yugabyte.server_fqdn" . -}}
   {{- end -}}

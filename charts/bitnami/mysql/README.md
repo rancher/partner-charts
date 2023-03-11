@@ -83,7 +83,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | `image.registry`           | MySQL image registry                                                                                                                                                                | `docker.io`            |
 | `image.repository`         | MySQL image repository                                                                                                                                                              | `bitnami/mysql`        |
-| `image.tag`                | MySQL image tag (immutable tags are recommended)                                                                                                                                    | `8.0.32-debian-11-r11` |
+| `image.tag`                | MySQL image tag (immutable tags are recommended)                                                                                                                                    | `8.0.32-debian-11-r14` |
 | `image.digest`             | MySQL image digest in the way sha256:aa.... Please note this parameter, if set, will override the tag                                                                               | `""`                   |
 | `image.pullPolicy`         | MySQL image pull policy                                                                                                                                                             | `IfNotPresent`         |
 | `image.pullSecrets`        | Specify docker-registry secret names as an array                                                                                                                                    | `[]`                   |
@@ -161,6 +161,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | `primary.extraEnvVars`                          | Extra environment variables to be set on MySQL primary containers                                               | `[]`                |
 | `primary.extraEnvVarsCM`                        | Name of existing ConfigMap containing extra env vars for MySQL primary containers                               | `""`                |
 | `primary.extraEnvVarsSecret`                    | Name of existing Secret containing extra env vars for MySQL primary containers                                  | `""`                |
+| `primary.extraPorts`                            | Extra ports to expose                                                                                           | `[]`                |
 | `primary.persistence.enabled`                   | Enable persistence on MySQL primary replicas using a `PersistentVolumeClaim`. If false, use emptyDir            | `true`              |
 | `primary.persistence.existingClaim`             | Name of an existing `PersistentVolumeClaim` for MySQL primary replicas                                          | `""`                |
 | `primary.persistence.subPath`                   | The name of a volume's sub path to mount for persistence                                                        | `""`                |
@@ -250,6 +251,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | `secondary.extraEnvVars`                          | An array to add extra environment variables on MySQL secondary containers                                           | `[]`                |
 | `secondary.extraEnvVarsCM`                        | Name of existing ConfigMap containing extra env vars for MySQL secondary containers                                 | `""`                |
 | `secondary.extraEnvVarsSecret`                    | Name of existing Secret containing extra env vars for MySQL secondary containers                                    | `""`                |
+| `secondary.extraPorts`                            | Extra ports to expose                                                                                               | `[]`                |
 | `secondary.persistence.enabled`                   | Enable persistence on MySQL secondary replicas using a `PersistentVolumeClaim`                                      | `true`              |
 | `secondary.persistence.existingClaim`             | Name of an existing `PersistentVolumeClaim` for MySQL secondary replicas                                            | `""`                |
 | `secondary.persistence.subPath`                   | The name of a volume's sub path to mount for persistence                                                            | `""`                |
@@ -305,7 +307,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | `volumePermissions.enabled`           | Enable init container that changes the owner and group of the persistent volume(s) mountpoint to `runAsUser:fsGroup`              | `false`                 |
 | `volumePermissions.image.registry`    | Init container volume-permissions image registry                                                                                  | `docker.io`             |
 | `volumePermissions.image.repository`  | Init container volume-permissions image repository                                                                                | `bitnami/bitnami-shell` |
-| `volumePermissions.image.tag`         | Init container volume-permissions image tag (immutable tags are recommended)                                                      | `11-debian-11-r90`      |
+| `volumePermissions.image.tag`         | Init container volume-permissions image tag (immutable tags are recommended)                                                      | `11-debian-11-r94`      |
 | `volumePermissions.image.digest`      | Init container volume-permissions image digest in the way sha256:aa.... Please note this parameter, if set, will override the tag | `""`                    |
 | `volumePermissions.image.pullPolicy`  | Init container volume-permissions image pull policy                                                                               | `IfNotPresent`          |
 | `volumePermissions.image.pullSecrets` | Specify docker-registry secret names as an array                                                                                  | `[]`                    |
@@ -318,7 +320,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | `metrics.enabled`                            | Start a side-car prometheus exporter                                                                                           | `false`                   |
 | `metrics.image.registry`                     | Exporter image registry                                                                                                        | `docker.io`               |
 | `metrics.image.repository`                   | Exporter image repository                                                                                                      | `bitnami/mysqld-exporter` |
-| `metrics.image.tag`                          | Exporter image tag (immutable tags are recommended)                                                                            | `0.14.0-debian-11-r93`    |
+| `metrics.image.tag`                          | Exporter image tag (immutable tags are recommended)                                                                            | `0.14.0-debian-11-r96`    |
 | `metrics.image.digest`                       | Exporter image digest in the way sha256:aa.... Please note this parameter, if set, will override the tag                       | `""`                      |
 | `metrics.image.pullPolicy`                   | Exporter image pull policy                                                                                                     | `IfNotPresent`            |
 | `metrics.image.pullSecrets`                  | Specify docker-registry secret names as an array                                                                               | `[]`                      |
@@ -356,7 +358,6 @@ The command removes all the Kubernetes components associated with the chart and 
 | `metrics.prometheusRule.namespace`           | Namespace for the prometheusRule Resource (defaults to the Release Namespace)                                                  | `""`                      |
 | `metrics.prometheusRule.additionalLabels`    | Additional labels that can be used so prometheusRule will be discovered by Prometheus                                          | `{}`                      |
 | `metrics.prometheusRule.rules`               | Prometheus Rule definitions                                                                                                    | `[]`                      |
-
 
 The above parameters map to the env variables defined in [bitnami/mysql](https://github.com/bitnami/containers/tree/main/bitnami/mysql). For more information please refer to the [bitnami/mysql](https://github.com/bitnami/containers/tree/main/bitnami/mysql) image documentation.
 

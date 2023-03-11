@@ -2,25 +2,36 @@
 - name: init-volume
   image: "{{ include "image-path" (dict "root" .Values "image" .Values.agents.image) }}"
   imagePullPolicy: {{ .Values.agents.image.pullPolicy }}
-  command: ["bash", "-c"]
+  command:
+    - cp
   args:
-    - cp -r /etc/datadog-agent /opt
+    - -r
+    - /etc/datadog-agent
+    - /opt
   volumeMounts:
     - name: config
       mountPath: /opt/datadog-agent
+      readOnly: false # Need RW for config path
   resources:
 {{ toYaml .Values.agents.containers.initContainers.resources | indent 4 }}
 - name: init-config
   image: "{{ include "image-path" (dict "root" .Values "image" .Values.agents.image) }}"
   imagePullPolicy: {{ .Values.agents.image.pullPolicy }}
-  command: ["bash", "-c"]
+  command:
+    - bash
+    - -c
   args:
-    - for script in $(find /etc/cont-init.d/ -type f -name '*.sh' | sort) ; do bash $script ; done
+    - |
+      for script in $(find /etc/cont-init.d/ -type f -name '*.sh' | sort); do
+        bash $script
+      done
   volumeMounts:
     - name: logdatadog
       mountPath: /var/log/datadog
+      readOnly: false # Need RW to write logs
     - name: config
       mountPath: /etc/datadog-agent
+      readOnly: false # Need RW for config path
     {{- if (or (.Values.datadog.confd) (.Values.datadog.autoconf)) }}
     - name: confd
       mountPath: /conf.d
@@ -40,6 +51,7 @@
     - name: sysprobe-config
       mountPath: /etc/datadog-agent/system-probe.yaml
       subPath: system-probe.yaml
+      readOnly: true
     {{- end }}
   env:
     {{- include "containers-common-env" . | nindent 4 }}
