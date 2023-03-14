@@ -177,6 +177,15 @@ BASE_SERVER for gopaddle ui
 {{- end -}}
 
 {{/*
+NODE_IP_ENDPOINT for gopaddle GPCTL
+*/}}
+{{- define "gopaddle.clusterNodeIP" -}}
+{{- if eq (.Values.global.cluster.type | toString) "docker" -}}
+    {{- printf "http://%s:30004" .Values.global.cluster.nodeIP -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
     cluster provider handdle appworker
 */}}
 {{- define "cluster.provider.appworker" -}}
@@ -750,5 +759,71 @@ routingType for gopaddle
       {{- $registryUrl := .Values.global.airgapped.imageRegistryInfo.registryUrl | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/"  -}}
       {{- $repoPath := .Values.global.airgapped.imageRegistryInfo.repoPath | trimPrefix "/" | trimSuffix "/"  -}}
       {{- printf "%s/%s/controller:v1.3.0" $registryUrl $repoPath -}}
+{{- end -}}
+{{- end -}}
+
+{{/* mongo */}}
+{{- define "gopaddle.mongo" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "mongo" -}}
+{{- else -}}
+     {{- printf "arm64v8/mongo" -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/* influxdb */}}
+{{- define "gopaddle.influxdb" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "influxdb" -}}
+{{- else -}}
+    {{- printf "arm64v8/influxdb" -}}
+{{- end -}}
+{{- end -}}
+
+{{/* esearch */}}
+{{- define "gopaddle.esearch" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "elasticsearch" -}}
+{{- else -}}
+    {{- printf "arm64v8/elasticsearch" -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/* redis */}}
+{{- define "gopaddle.redis" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "redis" -}}
+{{- else -}}
+    {{- printf "arm64v8/redis" -}}
+{{- end -}}
+{{- end -}}
+
+{{/* rabbitmq */}}
+{{- define "gopaddle.rabbitmq" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "rabbitmq" -}}
+{{- else -}}
+    {{- printf "arm64v8/rabbitmq" -}}
+{{- end -}}
+{{- end -}}
+
+{{/* defaultbackend */}}
+{{- define "gopaddle.defaultbackend" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "defaultbackend" -}}
+{{- else -}}
+    {{- printf "defaultbackend-arm64" -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/* nginx */}}
+{{- define "gopaddle.esearch.imageTag" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- .Values.esearch.esearch.imageTag -}}
+{{- else -}}
+    {{- printf "7.8.0" -}} 
 {{- end -}}
 {{- end -}}

@@ -41,3 +41,12 @@ routingType for rabbitmq
   {{- "NodePort" -}}
 {{- end -}}
 {{- end -}}
+
+{{/* rabbitmq */}}
+{{- define "gopaddle.rabbitmq" -}}
+{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
+    {{- printf "rabbitmq" -}}
+{{- else -}}
+    {{- printf "arm64v8/rabbitmq" -}}
+{{- end -}}
+{{- end -}}

@@ -107,7 +107,9 @@ spec:
           sed -i 's,<\/head>,<script>window.VUE_APP_SERVER="'$BASE_SERVER'"<\/script><\/head>,g' index.html
           sed -i 's/<\/head>/<script>window.VUE_APP_GP_RELEASE="'$GP_RELEASE'"<\/script><\/head>/g' index.html
           sed -i 's/<\/head>/<script>window.VUE_APP_INSTALL_SOURCE="'$INSTALL_SOURCE'"<\/script><\/head>/g' index.html
-          serve -s -l tcp://0.0.0.0:8080 > current_ui.log
+          sed -i 's/<\/head>/<script>window.VUE_APP_GP_CLUSTER_TYPE="'$CLUSTER_TYPE'"<\/script><\/head>/g' index.html
+          sed -i 's,<\/head>,<script>window.VUE_APP_GP_NODE_IP="'$NODE_IP'"<\/script><\/head>,g' index.html
+          /node_modules/.bin/serve -s -l tcp://0.0.0.0:8080 > current_ui.log
           tail -f current_ui.log
         command:
         - /bin/sh
@@ -120,7 +122,19 @@ spec:
         - name: BASE_SERVER
           value: {{ template "gopaddle.baseServer" . }}
         - name: INSTALL_SOURCE
-          value: {{quote .Values.global.installer.edition }}
+          value: {{quote (lower .Values.global.installer.edition) }}
+        - name: NODE_IP
+{{- if eq (.Values.global.cluster.type | toString) "docker" }}
+          value: {{ template "gopaddle.clusterNodeIP" . }}
+{{- else }}
+          value: {{ template "gopaddle.baseServer" . }}
+{{- end }}
+        - name: CLUSTER_TYPE
+{{- if eq (.Values.global.cluster.type | toString) "docker" }}
+          value: docker
+{{- else }}
+          value: standard
+{{- end }}
         envFrom:
         - secretRef:
             name: gateway-gpkubeux-envsecret-ai5wl
