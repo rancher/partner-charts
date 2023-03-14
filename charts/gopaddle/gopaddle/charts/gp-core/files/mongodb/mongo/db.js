@@ -113,6 +113,7 @@ configmanager_db.allocationPolicy.insert({
    "updatedTime":  new Date(),
    "defaultPolicy":true,
    "name":"default",
+   "displayName":"default",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IGFsbG9jYXRpb25Qb2xpY3k=",
    "resources":{
       "limits":{
@@ -144,6 +145,7 @@ configmanager_db.deploymentPolicy.insert({
    "createdTime":  new Date(),
    "updatedTime":  new Date(),
    "name":"default-stateless",
+   "displayName":"default-stateless",
    "type":"deployment",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IHN0YXRlbGVzcyBkZXBsb3ltZW50UG9saWN5",
    "property":{
@@ -180,12 +182,13 @@ configmanager_db.deploymentPolicy.insert({
    "updatedTime":  new Date(),
    "defaultPolicy":true,
    "name":"default-stateful",
+   "displayName":"default-stateful",
    "type":"stateful-set",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IHN0YXRlZnVsIGRlcGxveW1lbnRQb2xpY3k=",
    "property":{
       "revisionHistory":2,
       "statefulset":{
-         "replicas":5,
+         "replicas":1,
          "updateMethod":"rollingUpdate",
          "rollingUpdate":{
             "partition":0
@@ -206,7 +209,7 @@ configmanager_db.deploymentPolicy.insert({
 configmanager_db.createCollection("nwpolicy")
 configmanager_db.nwpolicy.createIndex( {"id":1}, { unique: true } )
 configmanager_db.nwpolicy.insert({
-   "accountid":"1",
+   "accountID":"1",
    "project" : [
 		"prj9e510b72e6738e4635e8541e2681143a5de1"
 	],
@@ -215,6 +218,7 @@ configmanager_db.nwpolicy.insert({
    "updatedtime":  new Date(),
    "defaultPolicy":true,
    "name":"default",
+   "displayName":"default",
    "ingress":[
       {
          "ports":[
@@ -264,6 +268,7 @@ configmanager_db.scalingPolicy.insert({
    "updatedTime":  new Date(),
    "defaultPolicy":true,
    "name":"default",
+   "displayName":"default",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IHNjYWxpbmdQb2xpY3k=",
    "minReplicas":2,
    "maxReplicas":4,
@@ -299,6 +304,7 @@ configmanager_db.storageClass.insert({
    "updatedTime":  new Date(),
    "defaultPolicy":true,
    "name":"default-aws",
+   "displayName":"default-aws",
    "type":"aws",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IGF3cyBwcm92aXNpb25Qb2xpY3k=",
    "parameter":{
@@ -328,6 +334,7 @@ configmanager_db.storageClass.insert({
    "updatedTime":  new Date(),
    "defaultPolicy":true,
    "name":"default-gce",
+   "displayName":"default-gce",
    "type":"gce",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IGdjZSBwcm92aXNpb25Qb2xpY3k=",
    "parameter":{
@@ -359,6 +366,7 @@ configmanager_db.storageClass.insert({
    "internalTrigger":true,
    "type":"azure",
    "name":"default-azure",
+   "displayName":"default-azure",
    "description":"Z29wYWRkbGUncyBkZWZhdWx0IGF6dXJlIHByb3Zpc2lvblBvbGljeQ==",
    "parameter":{
       "azureDISK":{
@@ -389,6 +397,7 @@ configmanager_db.volumeClaimPolicy.insert({
    "updatedtime":  new Date(),
    "defaultPolicy":true,
    "name":"default",
+   "displayName":"default",
    "accessMode":"ReadWriteOnce",
    "volumeMode":"Filesystem",
    "resources":{
