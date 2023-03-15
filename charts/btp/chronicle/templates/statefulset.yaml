@@ -1,0 +1,121 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "common.names.fullname" . }}-chronicle
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: chronicle
+spec:
+  replicas: {{ include "chronicle.replicas" . }}
+  selector:
+    matchLabels: {{ include "chronicle.labels.matchLabels" . | nindent 6 }}
+      component: chronicle
+  serviceName: {{ include "common.names.fullname" . }}
+  template:
+    metadata:
+      labels: {{ include "chronicle.labels" . | nindent 8 }}
+        component: chronicle
+    spec:
+      serviceAccountName: {{ include "lib.serviceAccountName" . }}
+      affinity: {{ include "lib.safeToYaml" .Values.affinity | nindent 8 }}
+      initContainers:
+        - name: chronicle-keystore
+          {{- include "lib.image" (dict "imageRoot" .Values.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-c"]
+          args:
+            - |
+              /usr/local/bin/chronicle \
+              -c /etc/chronicle/config/config.toml \
+              verify-keystore
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+          volumeMounts:
+            - name: chronicle-config
+              mountPath: /etc/chronicle/config/
+            - name: chronicle-secrets
+              mountPath: /var/lib/chronicle/secrets/
+              readOnly: false
+      containers:
+        {{- if .Values.postgres.enabled }}
+        - name: postgres
+          {{- include "lib.image" (dict "imageRoot" .Values.postgres.image "global" .Values.global ) | nindent 10 }}
+          ports:
+            - containerPort: {{.Values.postgres.port }}
+          resources: {{- include "lib.safeToYaml" .Values.postgres.resources | nindent 12 }}
+          env:
+            - name: PGDATA
+              value: /data/chronicle
+            - name: POSTGRES_PASSWORD
+              {{- if .Values.postgres.existingPasswordSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingPasswordSecret }}
+                  key: password
+              {{- else }}
+              value: {{ .Values.postgres.password }}
+              {{- end }}
+              {{- include "lib.safeToYaml" .Values.postgres.env | nindent 12 }}
+          volumeMounts:
+            - mountPath: /data
+              name: "pgdata"
+            {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+        {{- end }}
+        - name: chronicle
+          {{- include "lib.image" (dict "imageRoot" .Values.image "global" .Values.global ) | nindent 10 }}
+          ports:
+          - containerPort: {{ .Values.port }}
+          command: [ "bash", "-c"]
+          args:
+            - |
+              /usr/local/bin/chronicle \
+              -c /etc/chronicle/config/config.toml \
+              --console-logging json \
+              --sawtooth tcp://{{ include "chronicle.sawtooth.service" . }}:{{ include "chronicle.sawtooth.sawcomp" . }} \
+              serve-graphql --interface 0.0.0.0:{{ .Values.port}} {{ if .Values.webUi }} --open {{ end }}
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+          volumeMounts:
+            - name: chronicle-config
+              mountPath: /etc/chronicle/config/
+            - name: chronicle-secrets
+              mountPath: /var/lib/chronicle/secrets/
+              readOnly: true
+            - name: chronicle-data
+              mountPath: /var/lib/chronicle/store/
+            {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+      volumes:
+        - name: chronicle-secrets
+          persistentVolumeClaim:
+            claimName: chronicle-secrets
+        - name: chronicle-data
+          persistentVolumeClaim:
+            claimName: chronicle-data
+        - name: chronicle-config
+          configMap:
+            name: {{ .Release.Name }}-chronicle-config
+{{- if not .Values.postgres.persistence.enabled }}
+        - name: "pgdata"
+          emptyDir: {}
+{{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: chronicle-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 6Gi
+{{- if .Values.postgres.persistence.enabled }}
+    - metadata:
+        name: "pgdata"
+        annotations: {{- include "lib.safeToYaml" .Values.postgres.persistence.annotations | nindent 10 }}
+      spec:
+        accessModes: {{- include "lib.safeToYaml" .Values.postgres.persistence.accessModes | nindent 10 }}
+        storageClassName: {{ .Values.postgres.persistence.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.persistence.size | quote }}
+{{- end }}

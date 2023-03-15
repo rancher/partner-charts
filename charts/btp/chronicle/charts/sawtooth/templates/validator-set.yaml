@@ -1,0 +1,67 @@
+{{ $consensus := .Values.sawtooth.consensus | int }}
+---
+apiVersion: apps/v1
+kind: {{ include "sawtooth.kind" . }}
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{ include "sawtooth.labels" . | nindent 4}}
+spec:
+  {{ if or .Values.sawtooth.statefulset.enabled (eq $consensus 100) -}}
+  replicas: {{ include "sawtooth.replicas" . | int }}
+  serviceName: {{ include "common.names.fullname" . | quote }}
+  podManagementPolicy: Parallel
+  {{- end }}
+  updateStrategy:
+    type: RollingUpdate
+  {{ if not (or .Values.sawtooth.statefulset.enabled (eq $consensus 100)) }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.sawtooth.maxUnavailable | int }}
+  {{- end }}
+  {{ if (semverCompare "^1.22" .Capabilities.KubeVersion.Version) -}}
+  minReadySeconds: {{ .Values.sawtooth.minReadySeconds | int }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "sawtooth.labels.matchLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "sawtooth.labels.matchLabels" . | nindent 8 }}
+      annotations: {{- toYaml .Values.sawtooth.statefulset.podAnnotations | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "lib.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      affinity: {{- include "sawtooth.affinity" . | nindent 8 }}
+      hostAliases: {{- include "sawtooth.hostaliases" . | nindent 8 }}
+      containers: {{- include "sawtooth.containers" . | nindent 8 }}
+      initContainers:
+        - name: setup
+          {{- include "lib.image" (dict "imageRoot" .Values.sawtooth.containers.validator.image "global" .Values.global ) |nindent 10 }}
+          volumeMounts:
+            {{- include "sawtooth.etc.mount" . | nindent 12 }}
+            {{- include "sawtooth.data.mount" . | nindent 12 }}
+            {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+          {{- include "sawtooth.container.command" . | nindent 10 }}
+          {{- include "sawtooth.container.env" (dict "container" .Values.sawtooth.containers.validator "values" .Values "global" .Values.global) | nindent 10 }}
+          args:
+            - |
+              {{- include "sawtooth.genesis.reset" . | nindent 14 }}
+              mkdir -p /etc/sawtooth/genesis
+              mkdir -p /etc/sawtooth/keys
+              if [ ! -r /etc/sawtooth/keys/validator.priv ]; then
+                sawadm keygen --force
+              fi
+        {{ if .Values.sawtooth.genesis.enabled }}
+        {{- include "sawtooth.container.poet-registration" . | nindent 8 }}
+        {{ end }}
+      volumes:
+        {{- include "sawtooth.signals.volume" . | nindent 8 }}
+        {{- include "sawtooth.scripts.volume" . | nindent 8 }}
+        {{- include "lib.volumes" .Values.extraVolumes | nindent 8 }}
+{{ if or .Values.sawtooth.statefulset.enabled (eq $consensus 100) }}
+  volumeClaimTemplates:
+    {{- include "sawtooth.data.volume.vct" . | nindent 4 }}
+    {{- include "sawtooth.etc.volume.vct" . | nindent 4 }}
+{{ else }}
+        {{- include "sawtooth.etc.volume" . | nindent 8 }}
+        {{- include "sawtooth.data.volume" . | nindent 8 }}
+{{ end }}

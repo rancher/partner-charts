@@ -1,0 +1,97 @@
+{{- $consensus := .Values.sawtooth.consensus | int -}}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}-scripts
+  namespace: {{ .Release.Namespace }}
+  labels: {{ include "sawtooth.labels" . | nindent 4}}
+data:
+  validator-env: |-
+    #!/bin/bash
+
+    BIN_DIR=/usr/local/bin
+
+    function get_local_pods() {
+      kubectl get pod -l "app={{ include "common.names.fullname" . }}" \
+        --no-headers=true -o name | sed -e 's/pod\///g'
+    }
+
+    function get_all_nodes() {
+      for pod in $(get_local_pods); do
+        get_node_for_pod $pod
+      done | sort
+    }
+
+    function get_genesis_node() {
+      kubectl get configmap {{ include "common.names.fullname" . }}-genesis -o jsonpath='{.data.node}'
+    }
+
+    function get_node_for_pod() {
+      local pod=${1:?}
+      {{ if or .Values.sawtooth.statefulset.enabled (eq $consensus 100) -}}
+      echo "$pod"
+      {{- else -}}
+      kubectl get pod "$pod" -o jsonpath='{ $.spec.nodeName }'
+      {{- end }}
+    }
+
+    declare -a host_list
+    for node in $(get_all_nodes); do
+      host_list+=("$node")
+    done
+
+    export SEEDS=
+    export PEERS=
+    MY_NODE_NAME=$(get_node_for_pod $POD_NAME)
+    MY_PEERS=()
+    export DELAY=0
+
+    echo "Local Hosts Visible ${host_list[@]}"
+    this_list=("${host_list[@]}")
+    for host in "${host_list[@]}"; do
+      this_list=("${this_list[@]:1}")
+      if [ "$host" == "$MY_NODE_NAME" ]; then
+        while [ -n "${this_list[0]}" ]; do
+          MY_PEERS+=("${this_list[0]}")
+          this_list=("${this_list[@]:1}")
+        done
+      else
+        ((DELAY += 1))
+      fi
+    done
+
+    for peer in "${MY_PEERS[@]}"; do
+      export SEEDS="--seeds tcp://$peer:{{ include "sawtooth.ports.sawnet" . }} $SEEDS"
+      export PEERS="--peers tcp://$peer:{{ include "sawtooth.ports.sawnet" . }} $PEERS"
+    done
+
+    SET_GENESIS_NODE=${host_list[0]}
+
+    GENESIS_NODE=$(get_genesis_node)
+    while [ -z "$GENESIS_NODE" ]; do
+      sleep "$(echo $RANDOM | cut -c1-2)"
+      GENESIS_NODE=$(get_genesis_node)
+      if [ -z "$GENESIS_NODE" ]; then
+        "${BIN_DIR}/upsert_cm.sh" {{ include "common.names.fullname" . }}-genesis node "$SET_GENESIS_NODE"
+      fi
+    done
+    GENESIS_NODE=$(get_genesis_node)
+
+    "${BIN_DIR}/upsert_cm.sh" validator-public "$NODE_NAME" "$(cat /etc/sawtooth/keys/validator.pub)"
+
+    if [ "$GENESIS_NODE" = "$NODE_NAME" ]; then
+      export RUN_GENESIS=1
+      if [ ! -r /etc/sawtooth/initialized ]; then
+        PODCOUNT=$(get_local_pods | wc -l)
+        KEYCOUNT=$("${BIN_DIR}/get_local_public_keys.sh" "{{ .Release.Namespace }}" | wc -l)
+        while [ "$PODCOUNT" != "$KEYCOUNT" ]; do
+          sleep "$DELAY"
+          PODCOUNT=$(get_local_pods | wc -l)
+          KEYCOUNT=$("${BIN_DIR}/get_local_public_keys.sh" "{{ .Release.Namespace }}" | wc -l)
+        done
+      fi
+    else
+      export RUN_GENESIS=0
+    fi
