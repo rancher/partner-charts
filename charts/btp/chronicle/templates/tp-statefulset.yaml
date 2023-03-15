@@ -1,0 +1,51 @@
+---
+{{$stlServiceName := include "lib.call-nested" (list . "sawtooth" "common.names.fullname")}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "common.names.fullname" . }}-tp
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: tp
+spec:
+  replicas: {{ include "tp.replicas" . }}
+  serviceName: {{ include "common.names.fullname" . }}-tp
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  {{ if (semverCompare "^1.22" .Capabilities.KubeVersion.Version) -}}
+  minReadySeconds: {{ .Values.tp.minReadySeconds | int }}
+  {{- end }}
+  selector:
+    matchLabels: {{ include "chronicle.labels.matchLabels" . | nindent 6 }}
+      component: chronicle-tp
+  template:
+    metadata:
+      labels: {{- include "chronicle.labels" . | nindent 8 }}
+        component: chronicle-tp
+      annotations: {{- include "lib.safeToYaml" .Values.podAnnotations | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "lib.serviceAccountName" . }}
+      affinity: {{ include "lib.safeToYaml" .Values.affinity | nindent 8 }}
+      hostAliases:
+      containers:
+        - name: chronicle-tp
+          {{- include "lib.image" (dict "imageRoot" .Values.tp.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-c"]
+          args:
+            - |
+              HOST={{ $stlServiceName }}-${HOST##*-}.{{ .Release.Namespace }}.svc.cluster.local
+              echo tcp://$HOST:{{ include "chronicle.sawtooth.sawcomp" . }} &&
+              /usr/local/bin/chronicle_sawtooth_tp \
+              --console-logging json \
+              --connect tcp://$HOST:{{ include "chronicle.sawtooth.sawcomp" . }}
+          resources: {{- include "lib.safeToYaml" .Values.tp.resources | nindent 12 }}
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.tp.logLevel }}
+            - name: HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- include "lib.safeToYaml" .Values.tp.env | nindent 12 }}
+          volumeMounts: {{- include "lib.volumeMounts" .Values.tp.extraVolumeMounts | nindent 12 }}
+      volumes: {{- include "lib.volumes" .Values.tp.extraVolumes | nindent 8 }}
