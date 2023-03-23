@@ -47,6 +47,10 @@ spec:
         - name: {{ template "prometheus.name" . }}-{{ .Values.alertmanager.name }}
           image: "{{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}"
           imagePullPolicy: "{{ .Values.alertmanager.image.pullPolicy }}"
+          {{- with .Values.alertmanager.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             {{- range $key, $value := .Values.alertmanager.extraEnv }}
             - name: {{ $key }}
@@ -82,6 +86,10 @@ spec:
             httpGet:
               path: {{ .Values.alertmanager.prefixURL }}/-/ready
               port: 9093
+              {{- with .Values.alertmanager.probeHeaders }}
+              httpHeaders:
+{{- toYaml . | nindent 14 }}
+              {{- end }}
             initialDelaySeconds: 30
             timeoutSeconds: 30
           resources:
@@ -98,16 +106,33 @@ spec:
               subPath: {{ .subPath }}
               readOnly: {{ .readOnly }}
           {{- end }}
+          {{- range .Values.alertmanager.extraConfigmapMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              subPath: {{ .subPath }}
+              readOnly: {{ .readOnly }}
+          {{- end }}
 
         {{- if .Values.configmapReload.alertmanager.enabled }}
         - name: {{ template "prometheus.name" . }}-{{ .Values.alertmanager.name }}-{{ .Values.configmapReload.alertmanager.name }}
           image: "{{ .Values.configmapReload.alertmanager.image.repository }}:{{ .Values.configmapReload.alertmanager.image.tag }}"
           imagePullPolicy: "{{ .Values.configmapReload.alertmanager.image.pullPolicy }}"
+          {{- with .Values.configmapReload.alertmanager.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           args:
             - --volume-dir=/etc/config
             - --webhook-url=http://127.0.0.1:9093{{ .Values.alertmanager.prefixURL }}/-/reload
           {{- range $key, $value := .Values.configmapReload.alertmanager.extraArgs }}
             - --{{ $key }}={{ $value }}
+          {{- end }}
+          {{- range .Values.configmapReload.alertmanager.extraVolumeDirs }}
+            - --volume-dir={{ . }}
+          {{- end }}
+          {{- if .Values.configmapReload.alertmanager.containerPort }}
+          ports:
+            - containerPort: {{ .Values.configmapReload.alertmanager.containerPort }}
           {{- end }}
           resources:
 {{ toYaml .Values.configmapReload.alertmanager.resources | indent 12 }}
@@ -115,6 +140,12 @@ spec:
             - name: config-volume
               mountPath: /etc/config
               readOnly: true
+            {{- range .Values.configmapReload.alertmanager.extraConfigmapMounts }}
+            - name: {{ $.Values.configmapReload.alertmanager.name }}-{{ .name }}
+              mountPath: {{ .mountPath }}
+              subPath: {{ .subPath }}
+              readOnly: {{ .readOnly }}
+            {{- end }}
         {{- end }}
     {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -128,9 +159,9 @@ spec:
       dnsConfig:
 {{ toYaml . | indent 8 }}
     {{- end }}
-    {{- if .Values.alertmanager.securityContext }}
+    {{- with .Values.alertmanager.securityContext }}
       securityContext:
-{{ toYaml .Values.alertmanager.securityContext | indent 8 }}
+        {{- toYaml . | nindent 8 }}
     {{- end }}
     {{- if .Values.alertmanager.tolerations }}
       tolerations:
@@ -156,6 +187,16 @@ spec:
             {{- with .optional }}
             optional: {{ . }}
             {{- end }}
+      {{- end }}
+      {{- range .Values.alertmanager.extraConfigmapMounts }}
+        - name: {{ .name }}
+          configMap:
+            name: {{ .configMap }}
+      {{- end }}
+      {{- range .Values.configmapReload.alertmanager.extraConfigmapMounts }}
+        - name: {{ $.Values.configmapReload.alertmanager.name }}-{{ .name }}
+          configMap:
+            name: {{ .configMap }}
       {{- end }}
         - name: storage-volume
         {{- if .Values.alertmanager.persistentVolume.enabled }}

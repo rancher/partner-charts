@@ -1,21 +1,14 @@
-## v0.50.1 (2023-02-21)
+## v0.51.0 (2023-03-20)
 
 ### New features
 
-- Update GitLab Runner version to v15.9.1
-
-## v0.50.0 (2023-02-21)
-
-### New features
-
-- Update GitLab Runner version to v15.9.0
-- Add namespace to service account manifest !375 (Daniel Schömer @quatauta)
+- Update GitLab Runner version to v15.10.0
+- Removing replicaCount from deployment when HPA is configured !368 (Gustavo Oliveira @gustoliv)
 
 ### Maintenance
 
-- Add Chart repository as source !379 (Geoffrey McQuat @gmcquat)
-- Fix grammatical error in instructional comment !376 (Shafiullah Khan @gitshafi)
-- Add reference to actual documentation method of obtaining runnerRegistrationToken !361 (SveLem @SveLem)
+- Fix integration test scripting !383
+- Update the example reference to the helper image !382
 
 ## v0.48.0 (2022-12-17)
 

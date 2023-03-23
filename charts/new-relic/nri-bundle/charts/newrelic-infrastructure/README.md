@@ -153,19 +153,20 @@ integrations that you have configured.
 | ksm.config.selector | string | `"app.kubernetes.io/name=kube-state-metrics"` | Label selector that will be used to automatically discover an instance of kube-state-metrics running in the cluster. |
 | ksm.config.timeout | string | `"10s"` | Timeout for the ksm API contacted by the integration |
 | ksm.enabled | bool | `true` | Enable cluster state monitoring. Advanced users only. Setting this to `false` is not supported and will break the New Relic experience. |
-| ksm.hostNetwork | bool | Not set | Sets pod's hostNetwork. When set bypasses global/common variable  |
+| ksm.hostNetwork | bool | Not set | Sets pod's hostNetwork. When set bypasses global/common variable |
 | ksm.resources | object | 100m/150M -/850M | Resources for the KSM scraper pod. Keep in mind that sharding is not supported at the moment, so memory usage for this component ramps up quickly on large clusters. |
 | ksm.tolerations | list | Schedules in all tainted nodes | Tolerations for the KSM Deployment. |
 | kubelet | object | See `values.yaml` | Configuration for the DaemonSet that collects metrics from the Kubelet. |
 | kubelet.agentConfig | object | `{}` | Config for the Infrastructure agent that will forward the metrics to the backend and will run the integrations in this cluster. It will be merged with the configuration in `.common.agentConfig`. You can see all the agent configurations in [New Relic docs](https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/infrastructure-agent-configuration-settings/) e.g. you can set `passthrough_environment` int the [config file](https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/configure-infrastructure-agent/#config-file) so the agent let use that environment variables to the integrations. |
 | kubelet.config.retries | int | `3` | Number of retries after timeout expired |
+| kubelet.config.scraperMaxReruns | int | `4` | Max number of scraper rerun when scraper runtime error happens |
 | kubelet.config.timeout | string | `"10s"` | Timeout for the kubelet APIs contacted by the integration |
 | kubelet.enabled | bool | `true` | Enable kubelet monitoring. Advanced users only. Setting this to `false` is not supported and will break the New Relic experience. |
 | kubelet.extraEnv | list | `[]` | Add user environment variables to the agent |
 | kubelet.extraEnvFrom | list | `[]` | Add user environment from configMaps or secrets as variables to the agent |
 | kubelet.extraVolumeMounts | list | `[]` | Defines where to mount volumes specified with `extraVolumes` |
 | kubelet.extraVolumes | list | `[]` | Volumes to mount in the containers |
-| kubelet.hostNetwork | bool | Not set | Sets pod's hostNetwork. When set bypasses global/common variable  |
+| kubelet.hostNetwork | bool | Not set | Sets pod's hostNetwork. When set bypasses global/common variable |
 | kubelet.tolerations | list | Schedules in all tainted nodes | Tolerations for the control plane DaemonSet. |
 | labels | object | `{}` | Additional labels for chart objects. Can be configured also with `global.labels` |
 | licenseKey | string | `""` | This set this license key to use. Can be configured also with `global.licenseKey` |
@@ -191,14 +192,15 @@ integrations that you have configured.
 
 ## Maintainers
 
-* [alvarocabanas](https://github.com/alvarocabanas)
-* [carlossscastro](https://github.com/carlossscastro)
-* [sigilioso](https://github.com/sigilioso)
-* [gsanchezgavier](https://github.com/gsanchezgavier)
-* [kang-makes](https://github.com/kang-makes)
-* [marcsanmi](https://github.com/marcsanmi)
-* [paologallinaharbur](https://github.com/paologallinaharbur)
-* [roobre](https://github.com/roobre)
+* [nserrino](https://github.com/nserrino)
+* [philkuz](https://github.com/philkuz)
+* [htroisi](https://github.com/htroisi)
+* [juanjjaramillo](https://github.com/juanjjaramillo)
+* [svetlanabrennan](https://github.com/svetlanabrennan)
+* [nrepai](https://github.com/nrepai)
+* [csongnr](https://github.com/csongnr)
+* [vuqtran88](https://github.com/vuqtran88)
+* [xqi-nr](https://github.com/xqi-nr)
 
 ## Past Contributors
 

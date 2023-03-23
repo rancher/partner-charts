@@ -1,2 +1,2 @@
-### 🐞 Bug fixes
-- whenever `config.kubernetes.integrations_filter.enabled: false` we should pass the list of `labels` and `app_values` to the configurator config.
+### ⛓️ Dependencies
+- Updated common-library to v1.1.1 - [Changelog 🔗](https://github.com/newrelic/helm-charts/releases/tag/common-library-1.1.1)

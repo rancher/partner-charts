@@ -57,7 +57,7 @@ Create chart name and version as used by the chart label.
 Generate basic labels
 */}}
 {{- define "kube-state-metrics.labels" }}
-helm.sh/chart: {{ include "kube-state-metrics.chart" . }}
+helm.sh/chart: {{ template "kube-state-metrics.chart" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/component: metrics
 app.kubernetes.io/part-of: {{ template "kube-state-metrics.name" . }}
@@ -68,6 +68,9 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- if .Values.customLabels }}
 {{ toYaml .Values.customLabels }}
 {{- end }}
+{{- if .Values.releaseLabel }}
+release: {{ .Release.Name }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -77,3 +80,22 @@ Selector labels
 app.kubernetes.io/name: {{ include "kube-state-metrics.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/* Sets default scrape limits for servicemonitor */}}
+{{- define "servicemonitor.scrapeLimits" -}}
+{{- with .sampleLimit }}
+sampleLimit: {{ . }}
+{{- end }}
+{{- with .targetLimit }}
+targetLimit: {{ . }}
+{{- end }}
+{{- with .labelLimit }}
+labelLimit: {{ . }}
+{{- end }}
+{{- with .labelNameLengthLimit }}
+labelNameLengthLimit: {{ . }}
+{{- end }}
+{{- with .labelValueLengthLimit }}
+labelValueLengthLimit: {{ . }}
+{{- end }}
+{{- end -}}
