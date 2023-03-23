@@ -10,6 +10,9 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.15.80
+### New Features
+* **agent** [d48ef54](https://github.com/sysdiglabs/charts/commit/d48ef54afb4c79c72d8b51a77d8e101f9d25a4f4): Add poddisruptionbudget permissions to the Agent clusterrole ([#968](https://github.com/sysdiglabs/charts/issues/968))
 # v1.15.79
 ### New Features
 * **sysdig** [eb8d0bc](https://github.com/sysdiglabs/charts/commit/eb8d0bc4a990036aef0c298e6aaaef0dd6ff9f85): Update legacy engine NIA/HostAnalyzer components with security updates ([#987](https://github.com/sysdiglabs/charts/issues/987))

@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.1.1 - 2023-03-20
+
+### ⛓️ Dependencies
+- Updated common-library to v1.1.1 - [Changelog 🔗](https://github.com/newrelic/helm-charts/releases/tag/common-library-1.1.1)
+
+## v1.1.0 - 2023-01-30
+
+### 🚀 Enhancements
+- Set `NR_PROM_CHART_VERSION` env var in the configurator statefulset init container.
+
+### ⛓️ Dependencies
+- Upgraded github.com/prometheus/prometheus from 0.37.3 to 0.37.5 - [Changelog 🔗](https://github.com/prometheus/prometheus/releases/tag/0.37.5)
+
 ## v1.0.1 - 2022-11-30
 
 ### 🐞 Bug fixes

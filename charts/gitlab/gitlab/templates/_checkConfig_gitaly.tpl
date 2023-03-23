@@ -99,3 +99,14 @@ gitaly:
 {{-   end -}}
 {{- end -}}
 {{/* END gitlab.checkConfig.gitaly.extern.repos */}}
+
+{{/* Check that both GPG secret and key are set*/}}
+{{- define "gitlab.checkConfig.gitaly.gpgSigning" -}}
+{{-   if and $.Values.global.gitaly.enabled $.Values.gitlab.gitaly.gpgSigning.enabled -}}
+{{-     if not (and $.Values.gitlab.gitaly.gpgSigning.secret $.Values.gitlab.gitaly.gpgSigning.key) -}}
+gitaly:
+    secret and key must be set if gitlab.gitaly.gpgSigning.enabled is set
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{/* END gitlab.checkConfig.gitaly.gpgSigning */}}

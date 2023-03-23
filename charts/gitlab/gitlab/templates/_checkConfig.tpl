@@ -49,6 +49,7 @@ Due to gotpl scoping, we can't make use of `range`, so we have to add action lin
 {{- $messages = append $messages (include "gitlab.checkConfig.gitaly.storageNames" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.gitaly.tls" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.gitaly.extern.repos" .) -}}
+{{- $messages = append $messages (include "gitlab.checkConfig.gitaly.gpgSigning" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.praefect.storageNames" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.praefect.defaultReplicationFactor" .) -}}
 
@@ -93,6 +94,7 @@ Due to gotpl scoping, we can't make use of `range`, so we have to add action lin
 
 {{/* _checkConfig_gitlab_shell.tpl*/}}
 {{- $messages = append $messages (include "gitlab.checkConfig.gitlabShell.proxyPolicy" .) -}}
+{{- $messages = append $messages (include "gitlab.checkConfig.gitlabShell.metrics" .) -}}
 
 {{/* other checks */}}
 {{- $messages = append $messages (include "gitlab.checkConfig.multipleRedis" .) -}}

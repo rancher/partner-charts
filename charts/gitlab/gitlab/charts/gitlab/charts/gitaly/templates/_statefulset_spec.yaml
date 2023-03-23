@@ -61,6 +61,7 @@ spec:
           command: ['sh', '/config/configure']
           image: {{ include "gitlab.busybox.image" (dict "local" .Values.init "global" .Values.global) | quote }}
           {{- include "gitlab.image.pullPolicy" $initImageCfg | indent 10 }}
+          {{- include "gitlab.init.containerSecurityContext" . | indent 10 }}
           env:
           {{- include "gitlab.extraEnv" . | nindent 10 }}
           {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" (dict)) | nindent 10 }}
@@ -77,18 +78,7 @@ spec:
             readOnly: false
           resources:
             {{- toYaml .Values.init.resources | nindent 12 }}
-      {{- if .Values.securityContext }}
-      securityContext:
-        {{- if not (empty .Values.securityContext.runAsUser) }}
-        runAsUser: {{ .Values.securityContext.runAsUser }}
-        {{- end }}
-        {{- if not (empty .Values.securityContext.fsGroup) }}
-        fsGroup: {{ .Values.securityContext.fsGroup }}
-        {{- if not (empty .Values.securityContext.fsGroupChangePolicy) }}
-        fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
-        {{- end }}
-        {{- end }}
-      {{- end }}
+      {{- include "gitlab.podSecurityContext" .Values.securityContext | nindent 6 }}
       {{- include "gitlab.image.pullSecrets" $imageCfg | indent 6 }}
       {{- if eq (default .Values.global.antiAffinity .Values.antiAffinity) "hard" }}
       affinity:
@@ -124,6 +114,7 @@ spec:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ coalesce .Values.image.tag (include "gitlab.parseAppVersion" (dict "appVersion" .Chart.AppVersion "prepend" "true")) }}{{ include "gitlab.image.tagSuffix" . }}"
           {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
+          {{- include "gitlab.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: {{ coalesce .Values.service.internalPort .Values.global.gitaly.service.internalPort }}
               name: grpc-gitaly
@@ -220,6 +211,13 @@ spec:
               items:
                 - key: {{ template "gitlab.gitlab-shell.authToken.key" . }}
                   path: ".gitlab_shell_secret"
+          {{- if .Values.gpgSigning.enabled }}
+          - secret:
+              name: {{ .Values.gpgSigning.secret }}
+              items:
+                - key: {{ .Values.gpgSigning.key }}
+                  path: "signing_key.gpg"
+          {{- end }}
           {{- if .Values.global.gitaly.tls.enabled }}
           {{- $secretName := include "gitlab.gitaly.tls.secret" . -}}
           {{- if .storage }}

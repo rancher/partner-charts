@@ -1,6 +1,6 @@
 # nri-kube-events
 
-![Version: 2.2.6](https://img.shields.io/badge/Version-2.2.6-informational?style=flat-square) ![AppVersion: 1.8.0](https://img.shields.io/badge/AppVersion-1.8.0-informational?style=flat-square)
+![Version: 2.3.3](https://img.shields.io/badge/Version-2.3.3-informational?style=flat-square) ![AppVersion: 1.9.2](https://img.shields.io/badge/AppVersion-1.9.2-informational?style=flat-square)
 
 A Helm chart to deploy the New Relic Kube Events router
 
@@ -44,6 +44,7 @@ Options that can be defined globally include `affinity`, `nodeSelector`, `tolera
 | deployment.annotations | object | `{}` | Annotations to add to the Deployment. |
 | dnsConfig | object | `{}` | Sets pod's dnsConfig. Can be configured also with `global.dnsConfig` |
 | fedramp.enabled | bool | `false` | Enables FedRAMP. Can be configured also with `global.fedramp.enabled` |
+| forwarder | object | `{"resources":{}}` | Resources for the forwarder sidecar container |
 | fullnameOverride | string | `""` | Override the full name of the release |
 | hostNetwork | bool | `false` | Sets pod's hostNetwork. Can be configured also with `global.hostNetwork` |
 | images | object | See `values.yaml` | Images used by the chart for the integration and agents |
@@ -61,7 +62,7 @@ Options that can be defined globally include `affinity`, `nodeSelector`, `tolera
 | priorityClassName | string | `""` | Sets pod's priorityClassName. Can be configured also with `global.priorityClassName` |
 | proxy | string | `""` | Configures the integration to send all HTTP/HTTPS request through the proxy in that URL. The URL should have a standard format like `https://user:password@hostname:port`. Can be configured also with `global.proxy` |
 | rbac.create | bool | `true` | Specifies whether RBAC resources should be created |
-| resources | object | `{}` | Resources available for this pod |
+| resources | object | `{}` | Resources for the integration container |
 | serviceAccount | object | See `values.yaml` | Settings controlling ServiceAccount creation |
 | serviceAccount.create | bool | `true` | Specifies whether a ServiceAccount should be created |
 | sinks | object | See `values.yaml` | Configure where will the metrics be written. Mostly for debugging purposes. |
@@ -72,11 +73,12 @@ Options that can be defined globally include `affinity`, `nodeSelector`, `tolera
 
 ## Maintainers
 
-* [alvarocabanas](https://github.com/alvarocabanas)
-* [carlossscastro](https://github.com/carlossscastro)
-* [sigilioso](https://github.com/sigilioso)
-* [gsanchezgavier](https://github.com/gsanchezgavier)
-* [kang-makes](https://github.com/kang-makes)
-* [marcsanmi](https://github.com/marcsanmi)
-* [paologallinaharbur](https://github.com/paologallinaharbur)
-* [roobre](https://github.com/roobre)
+* [nserrino](https://github.com/nserrino)
+* [philkuz](https://github.com/philkuz)
+* [htroisi](https://github.com/htroisi)
+* [juanjjaramillo](https://github.com/juanjjaramillo)
+* [svetlanabrennan](https://github.com/svetlanabrennan)
+* [nrepai](https://github.com/nrepai)
+* [csongnr](https://github.com/csongnr)
+* [vuqtran88](https://github.com/vuqtran88)
+* [xqi-nr](https://github.com/xqi-nr)

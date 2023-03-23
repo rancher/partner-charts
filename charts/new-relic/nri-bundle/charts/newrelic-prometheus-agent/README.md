@@ -78,7 +78,7 @@ By default, some Kubernetes objects are discovered and scraped by Prometheus. Ta
     integrations_filter:
       enabled: true
       source_labels: ["app.kubernetes.io/name", "app.newrelic.io/name", "k8s-app"]
-      app_values: ["redis", "traefik", "calico", "nginx", "coredns", "etcd", "cockroachdb"]
+      app_values: ["redis", "traefik", "calico", "nginx", "coredns", "etcd", "cockroachdb", "velero", "harbor", "argocd"]
     jobs:
     - job_name_prefix: default
       target_discovery:
@@ -126,7 +126,7 @@ config:
       - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
         action: keep
         regex: default;kubernetes
-    
+
       scheme: https
       tls_config:
           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
@@ -201,7 +201,7 @@ The order to set the affinity is to set `affinity` field (at root level), if tha
 | config.extra_remote_write | object | `nil` | It includes additional remote-write configuration. Note this configuration is not parsed, so valid [prometheus remote_write configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write) should be provided. |
 | config.extra_scrape_configs | list | `[]` | It is possible to include extra scrape configuration in [prometheus format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config). Please note, it should be a valid Prometheus configuration which will not be parsed by the chart. WARNING extra_scrape_configs is a raw Prometheus config. Therefore, the metrics collected thanks to it will not have by default the metadata (pod_name, service_name, ...) added by the configurator for the static or kubernetes jobs. This configuration should be used as a workaround whenever kubernetes and static job do not cover a particular use-case. |
 | config.kubernetes | object | See `values.yaml` | It allows defining scrape jobs for Kubernetes in a simple way. |
-| config.kubernetes.integrations_filter.app_values | list | `["redis","traefik","calico","nginx","coredns","kube-dns","etcd","cockroachdb"]` | app_values used to create the regex used in the relabel config added by the integration filters configuration. Note that a single regex will be created from this list, example: '.*(?i)(app1|app2|app3).*' |
+| config.kubernetes.integrations_filter.app_values | list | `["redis","traefik","calico","nginx","coredns","kube-dns","etcd","cockroachdb","velero","harbor","argocd"]` | app_values used to create the regex used in the relabel config added by the integration filters configuration. Note that a single regex will be created from this list, example: '.*(?i)(app1|app2|app3).*' |
 | config.kubernetes.integrations_filter.enabled | bool | `true` | enabling the integration filters, merely the targets having one of the specified labels matching    one of the values of app_values are scraped. Each job configuration can override this default. |
 | config.kubernetes.integrations_filter.source_labels | list | `["app.kubernetes.io/name","app.newrelic.io/name","k8s-app"]` | source_labels used to fetch label values in the relabel config added by the integration filters configuration |
 | config.newrelic_remote_write | object | See `values.yaml` | Newrelic remote-write configuration settings. |
@@ -241,11 +241,12 @@ The order to set the affinity is to set `affinity` field (at root level), if tha
 
 ## Maintainers
 
-* [alvarocabanas](https://github.com/alvarocabanas)
-* [carlossscastro](https://github.com/carlossscastro)
-* [sigilioso](https://github.com/sigilioso)
-* [gsanchezgavier](https://github.com/gsanchezgavier)
-* [kang-makes](https://github.com/kang-makes)
-* [marcsanmi](https://github.com/marcsanmi)
-* [paologallinaharbur](https://github.com/paologallinaharbur)
-* [roobre](https://github.com/roobre)
+* [nserrino](https://github.com/nserrino)
+* [philkuz](https://github.com/philkuz)
+* [htroisi](https://github.com/htroisi)
+* [juanjjaramillo](https://github.com/juanjjaramillo)
+* [svetlanabrennan](https://github.com/svetlanabrennan)
+* [nrepai](https://github.com/nrepai)
+* [csongnr](https://github.com/csongnr)
+* [vuqtran88](https://github.com/vuqtran88)
+* [xqi-nr](https://github.com/xqi-nr)

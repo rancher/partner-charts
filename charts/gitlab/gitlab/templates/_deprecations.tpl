@@ -360,8 +360,8 @@ sidekiq:
 
 {{- define "gitlab.deprecate.sidekiq.pods.updateStrategy" -}}
 {{- range $index, $pod := .Values.gitlab.sidekiq.pods -}}
-{{-   if hasKey $pod "updateStrategy" -}}
-{{ $pod.name }}:
+{{-   if hasKey $pod "updateStrategy" }}
+sidekiq.pods[{{ $index }}] ({{ $pod.name }}):
     The configuration of 'gitlab.sidekiq.pods[{{ $index }}].updateStrategy' has moved. Please use 'gitlab.sidekiq.pods[{{ $index }}].deployment.strategy' instead.
 {{-   end -}}
 {{- end -}}
@@ -393,8 +393,8 @@ sidekiq:
 
 {{- define "gitlab.deprecate.sidekiq.pods.cluster" -}}
 {{- range $index, $pod := .Values.gitlab.sidekiq.pods -}}
-{{-   if hasKey $pod "cluster" -}}
-{{ $pod.name }}:
+{{-   if hasKey $pod "cluster" }}
+sidekiq.pods[{{ $index }}] ({{ $pod.name }}):
     The configuration of 'gitlab.sidekiq.pods[{{ $index }}].cluster' should be removed. Sidekiq is now always in cluster mode.
 {{-   end -}}
 {{- end -}}

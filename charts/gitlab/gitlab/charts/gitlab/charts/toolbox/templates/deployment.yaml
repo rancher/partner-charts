@@ -37,12 +37,7 @@ spec:
       tolerations:
         {{- toYaml .Values.tolerations | nindent 8 }}
       {{- end }}
-      securityContext:
-        runAsUser: {{ .Values.securityContext.runAsUser }}
-        fsGroup: {{ .Values.securityContext.fsGroup }}
-        {{- if not (empty .Values.securityContext.fsGroupChangePolicy) }}
-        fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
-        {{- end }}
+      {{- include "gitlab.podSecurityContext" .Values.securityContext | nindent 6 }}
       {{- if or .Values.serviceAccount.enabled .Values.global.serviceAccount.enabled }}
       serviceAccountName: {{ include "gitlab.serviceAccount.name" . }}
       {{- end }}
@@ -107,6 +102,8 @@ spec:
             - cp -v -r -L /etc/gitlab/.s3cfg $HOME/.s3cfg && while sleep 3600; do :; done # alpine sleep has no infinity
             {{- else if eq .Values.backups.objectStorage.backend "gcs" }}
             - sh /var/opt/gitlab/templates/configure-gsutil && while sleep 3600; do :; done
+            {{- else if eq .Values.backups.objectStorage.backend "azure" }}
+            - while sleep 3600; do :; done
             {{- end }}
           image: "{{ coalesce .Values.image.repository (include "image.repository" .) }}:{{ coalesce .Values.image.tag (include "gitlab.versionTag" . ) }}{{ include "gitlab.image.tagSuffix" . }}"
           {{- include "gitlab.image.pullPolicy" $imageCfg | indent 10 }}
@@ -148,6 +145,10 @@ spec:
             {{- if eq .Values.backups.objectStorage.backend "gcs" }}
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: '/etc/gitlab/objectstorage/{{ default "config" .Values.backups.objectStorage.config.key }}'
+            {{- end }}
+            {{- if eq .Values.backups.objectStorage.backend "azure" }}
+            - name: AZURE_CONFIG_FILE
+              value: '/etc/gitlab/objectstorage/azure_config'
             {{- end }}
             {{- include "gitlab.extraEnv" . | nindent 12 }}
             {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" (dict)) | nindent 12 }}
@@ -232,18 +233,7 @@ spec:
                   path: registry/gitlab-registry.key
           {{- include "gitlab.registry.notificationSecret.mount" $ | nindent 10 -}}
           {{- if or .Values.backups.objectStorage.config (not (or .Values.global.minio.enabled .Values.global.appConfig.object_store.enabled)) }}
-          - secret:
-              name: {{ .Values.backups.objectStorage.config.secret }}
-              items:
-                - key: {{ default "config" .Values.backups.objectStorage.config.key }}
-                  path: objectstorage/.s3cfg
-          {{- end }}
-          {{- if eq .Values.backups.objectStorage.backend "gcs" }}
-          - secret:
-              name: {{ .Values.backups.objectStorage.config.secret }}
-              items:
-                - key: {{ default "config" .Values.backups.objectStorage.config.key }}
-                  path: objectstorage/{{ default "config" .Values.backups.objectStorage.config.key }}
+          {{-   include "toolbox.backups.objectStorage.config.secret" .Values.backups.objectStorage | nindent 10 }}
           {{- end }}
           {{- include "gitlab.pages.mountSecrets" $ | nindent 10 }}
           {{- include "gitlab.kas.mountSecrets" $ | nindent 10 }}

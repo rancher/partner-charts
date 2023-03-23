@@ -69,10 +69,7 @@ spec:
                 matchLabels:
                   {{- include "gitlab.selectorLabels" . | nindent 18 }}
       {{- end }}
-      securityContext:
-        runAsUser: {{ .Values.securityContext.runAsUser }}
-        runAsGroup: {{ .Values.securityContext.runAsGroup }}
-        fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- include "gitlab.podSecurityContext" .Values.securityContext | nindent 6 }}
       {{- include "gitlab.image.pullSecrets" $imageCfg | indent 6 }}
       {{- include "gitlab.priorityClassName" . | nindent 6 }}
       initContainers:
@@ -93,6 +90,8 @@ spec:
                   fieldPath: status.podIP
             - name: OWN_PRIVATE_API_URL
               value: "{{ include "gitlab.kas.internal.scheme" . }}://$(POD_IP):{{ .Values.service.privateApiPort }}"
+            {{- include "gitlab.extraEnv" . | nindent 12 }}
+            {{- include "gitlab.extraEnvFrom" (dict "root" $ "local" (dict)) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.service.internalPort }}
               name: {{ template "name" . }}

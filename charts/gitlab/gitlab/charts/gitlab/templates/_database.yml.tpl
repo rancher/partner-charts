@@ -13,6 +13,7 @@ datamodel: {{ .Values.local | toYaml | nindent 4 }}
 production:
 {{- range $database := without (keys .Values.local.psql) "main" | concat (list "main") }}
 {{-   $context := get $.Values.local.psql $database }}
+{{-   if eq (include "gitlab.psql.database.enabled" $context) "true" }}
   {{ $database }}:
     adapter: postgresql
     encoding: unicode
@@ -32,10 +33,25 @@ production:
     database_tasks: {{ template "gitlab.psql.databaseTasks" $context }}
     {{- include "gitlab.database.loadBalancing" $context | nindent 4 }}
     {{- include "gitlab.psql.ssl.config" $context | nindent 4 }}
+{{-   end -}}
 {{- end }}
 {{- if include "gitlab.geo.secondary" . }}
 {{-   include "gitlab.geo.database.yml" . | nindent 2 }}
 {{- end }}
+{{- end -}}
+
+{{/*
+Return if the database is enabled
+Returns psql.enabled if it is a boolean,
+otherwise it will fallback to "true" default
+*/}}
+{{- define "gitlab.psql.database.enabled" -}}
+{{- $globalSet := and (hasKey .Values.global.psql "enabled") (kindIs "bool" .Values.global.psql.enabled) -}}
+{{- if $globalSet }}
+{{-   .Values.global.psql.enabled }}
+{{- else }}
+{{-   true }}
+{{- end -}}
 {{- end -}}
 
 {{/*
