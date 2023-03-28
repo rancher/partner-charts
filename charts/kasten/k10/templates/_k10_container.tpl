@@ -45,7 +45,7 @@ stating that types are not same for the equality check
         - containerPort: {{ .Values.service.aggregatedApiPort }}
 {{- else }}
         - containerPort: {{ $externalPort }}
-  {{- if eq $service "mccontrollermanager" }}
+  {{- if eq $service "controllermanager" }}
         - containerPort: {{ include "k10.mcExternalPort" nil }}
   {{- end }}
 {{- end }}
@@ -276,7 +276,7 @@ stating that types are not same for the equality check
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: kanisterPodCustomAnnotations
+                key: KanisterPodCustomAnnotations
 {{- end }}
           - name: POD_NAMESPACE
             valueFrom:

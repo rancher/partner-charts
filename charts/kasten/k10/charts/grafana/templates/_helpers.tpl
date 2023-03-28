@@ -201,81 +201,26 @@ Return if ingress supports pathType.
   {{- or (eq (include "grafana.ingress.isStable" .) "true") (and (eq (include "grafana.ingress.apiVersion" .) "networking.k8s.io/v1beta1") (semverCompare ">= 1.18-0" .Capabilities.KubeVersion.Version)) -}}
 {{- end -}}
 
-{{/*
-Figure out the grafana image tag
-based on the value of global.upstreamCertifiedImages
-*/}}
-{{- define "get.grafanaImageTag"}}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "k10-%s" (include "k10.grafanaImageTag" .) }}
-{{- else }}
-{{- printf "%s" (include "k10.grafanaImageTag" .) }}
-{{- end }}
+{{- define "get.grafanaImage" }}
+  {{- (get .Values.global.images (include "grafana.ImageName" .)) | default (include "grafana.Image" .)  }}
 {{- end }}
 
-{{- define "get.grafanaImageRepo" }}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- printf "%s/%s/grafana" .Values.k10image.registry .Values.k10image.repository }}
-{{- else }}
-{{- print .Values.image.repository }}
-{{- end }}
-{{- end }}
-
-{{/*
-Figure out the config based on
-the value of airgapped.repository
-*/}}
-{{- define "get.grafanaServerimage" }}
-{{- if not .Values.global.rhMarketPlace }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/grafana:%s" .Values.global.airgapped.repository (include "get.grafanaImageTag" .) }}
-{{- else }}
-{{- printf "%s:%s" (include "get.grafanaImageRepo" .) (include "get.grafanaImageTag" .) }}
-{{- end }}
-{{- else }}
-{{- printf "%s" .Values.global.images.grafana }}
+{{- define "grafana.Image" -}}
+  {{- printf "%s:%s" (include "grafana.ImageRepo" .) (include "grafana.ImageTag" .) }}
 {{- end -}}
-{{- end }}
 
-{{/*
-Figure out the grafana init container busy box image tag
-based on the value of global.airgapped.repository
-*/}}
-{{- define "get.grafanaInitContainerImageTag"}}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "k10-%s" (include "k10.grafanaInitContainerImageTag" .) }}
-{{- else }}
-{{- printf "%s" (include "k10.grafanaInitContainerImageTag" .) }}
-{{- end }}
-{{- end }}
+{{- define "grafana.ImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "grafana.ImageName" .) }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "grafana.ImageName" .) }}
+  {{- end }}
+{{- end -}}
 
-{{- define "get.grafanaInitContainerImageRepo" }}
-{{- if .Values.global.upstreamCertifiedImages }}
-{{- printf "%s/%s/ubi-minimal" .Values.k10image.registry .Values.k10image.repository }}
-{{- else }}
-{{- include "k10.grafanaInitContainerImageRepo" . }}
-{{- end }}
-{{- end }}
+{{- define "grafana.ImageName" -}}
+  {{- printf "grafana" }}
+{{- end -}}
 
-{{/*
-Figure out the Grafana init image
-*/}}
-{{- define "get.grafanaInitImage" }}
-{{- .Values.global.images.init | default (include "get.grafanaInitContainerImage" .) }}
-{{- end }}
-
-{{/*
-Figure out the config based on
-the value of airgapped.repository
-*/}}
-{{- define "get.grafanaInitContainerImage" }}
-{{- if not .Values.global.rhMarketPlace }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/ubi-minimal:%s" .Values.global.airgapped.repository (include "get.grafanaInitContainerImageTag" .) }}
-{{- else }}
-{{- printf "%s:%s" (include "get.grafanaInitContainerImageRepo" .) (include "get.grafanaInitContainerImageTag" .) }}
-{{- end }}
-{{- else }}
-{{- printf "%s:%s" (include "get.grafanaInitContainerImageRepo" .) (include "get.grafanaInitContainerImageTag" .) }}
-{{- end }}
-{{- end }}
+{{- define "grafana.ImageTag" -}}
+  {{- include "get.k10ImageTag" . }}
+{{- end -}}

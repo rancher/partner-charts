@@ -68,8 +68,9 @@ codefresh.io/application: pv-cleanup
 
 {{- define "cf-vp.docker-image-volume-utils" -}}
 {{- if ne .Values.dockerRegistry ""}}
-{{- .Values.dockerRegistry }}/codefresh/dind-volume-utils:1.29.2
-{{- else }}codefresh/dind-volume-utils:1.29.2
+{{- .Values.dockerRegistry }}/{{ .Values.storage.localVolumeMonitor.image }}
+{{- else }}
+{{- index .Values.storage.localVolumeMonitor.image }}
 {{- end}}
 {{- end }}
 
@@ -83,7 +84,8 @@ codefresh.io/application: pv-cleanup
 
 {{- define "cf-vp.docker-image-cleanup-cron" -}}
 {{- if ne .Values.dockerRegistry ""}}
-{{- .Values.dockerRegistry }}/codefresh/dind-volume-cleanup:1.2.0
-{{- else }}codefresh/dind-volume-cleanup:1.2.0
+{{- .Values.dockerRegistry }}/{{ index .Values "volumeProvisioner" "volume-cleanup" "image" }}
+{{- else }}
+{{- index .Values "volumeProvisioner" "volume-cleanup" "image" }}
 {{- end}}
 {{- end }}

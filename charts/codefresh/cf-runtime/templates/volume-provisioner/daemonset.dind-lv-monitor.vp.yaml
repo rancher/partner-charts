@@ -27,13 +27,28 @@ spec:
       {{- if .Values.storage.localVolumeMonitor.tolerations }}
 {{ toYaml .Values.storage.localVolumeMonitor.tolerations | indent 8 }}
       {{- end }}
+      initContainers:
+      - command:
+        - chown
+        - -R
+        - 1000:1000
+        - /var/lib/codefresh/dind-volumes
+        image: alpine
+        imagePullPolicy: Always
+        name: fs-change-owner
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/codefresh/dind-volumes
+          name: dind-volume-dir
       containers:
         - image: {{ include "cf-vp.docker-image-volume-utils" . }}
           name: lv-cleaner
           imagePullPolicy: Always
           resources: {{ toYaml .Values.storage.localVolumeMonitor.resources | nindent 12 }}
           command:
-            - /bin/local-volumes-agent
+            - /home/dind-volume-utils/bin/local-volumes-agent
           env:
             {{- if .Values.storage.localVolumeMonitor.env }}
             {{- range $key, $value := .Values.storage.localVolumeMonitor.env }}
@@ -51,6 +66,8 @@ spec:
             - mountPath: {{ $localVolumeParentDir }}
               readOnly: false
               name: dind-volume-dir
+      securityContext:
+        fsGroup: 1000
       volumes:
         - name: dind-volume-dir
           hostPath:

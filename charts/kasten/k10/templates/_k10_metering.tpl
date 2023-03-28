@@ -34,9 +34,6 @@ spec:
 ---
 {{- end }}{{/* if $.stateful */}}
 {{ $service_list := include "k10.restServices" . | splitList " " }}
-{{- if not (include "k10.isMulticlusterPrimary" .) -}}
-  {{- $service_list = without $service_list "mccontrollermanager" -}}
-{{- end -}}
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -239,6 +236,25 @@ spec:
           - name: K10_PROMOTION_ID
             value: {{ .Values.metering.promoID }}
 {{- end }}
+
+{{- if .Values.prometheus.server.enabled }}
+          - name: K10_PROMETHEUS_HOST
+            value: {{ include "k10.prometheus.service.name" . }}-exp
+          - name: K10_PROMETHEUS_PORT
+            value: {{ .Values.prometheus.server.service.servicePort | quote }}
+          - name: K10_PROMETHEUS_BASE_URL
+            value: {{ .Values.prometheus.server.baseURL }}
+{{- else -}}
+    {{- if and .Values.global.prometheus.external.host .Values.global.prometheus.external.port}}
+          - name: K10_PROMETHEUS_HOST
+            value: {{ .Values.global.prometheus.external.host }}
+          - name: K10_PROMETHEUS_PORT
+            value: {{ .Values.global.prometheus.external.port | quote }}
+          - name: K10_PROMETHEUS_BASE_URL
+            value: {{ .Values.global.prometheus.external.baseURL }}
+    {{- end -}}
+{{- end }}
+
 {{- if .Values.reportingSecret }}
           - name: AGENT_CONSUMER_ID
             valueFrom:

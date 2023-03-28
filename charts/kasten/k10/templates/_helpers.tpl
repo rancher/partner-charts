@@ -720,20 +720,6 @@ running in the same cluster.
 "kasten.io/k10"
 {{- end -}}
 
-{{/*
-  Indicates the multi-cluster mode
-*/}}
-{{- define "k10.multicluster" -}}
-  {{ (default .Values.features dict).multicluster }}
-{{- end -}}
-
-{{/*
-  Indicates whether K10 is configured as a multi-cluster primary
-*/}}
-{{- define "k10.isMulticlusterPrimary" -}}
-  {{ if eq (include "k10.multicluster" .) "primary" }}true{{ end }}
-{{- end -}}
-
 {{/* Check that image.values are not set. */}}
 {{- define "image.values.check" -}}
   {{- if not (empty .main.Values.image) }}
@@ -781,4 +767,24 @@ running in the same cluster.
   {{- else }}
       {{- $imageTag }}
   {{- end }}
+{{- end -}}
+
+{{- define "get.initImage" -}}
+  {{- (get .Values.global.images (include "init.ImageName" .)) | default (include "init.Image" .)  }}
+{{- end -}}
+
+{{- define "init.Image" -}}
+  {{- printf "%s:%s" (include "init.ImageRepo" .) (include "get.k10ImageTag" .) }}
+{{- end -}}
+
+{{- define "init.ImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "init.ImageName" .) }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "init.ImageName" .) }}
+  {{- end }}
+{{- end -}}
+
+{{- define "init.ImageName" -}}
+  {{- printf "init" }}
 {{- end -}}

@@ -21,7 +21,7 @@ initContainers:
 {{- end }}
 {{- if ( and .Values.global.persistence.enabled .Values.initChownData.enabled ) }}
   - name: init-chown-data
-    image: "{{ include "get.grafanaInitImage" . }}"
+    image: "{{ include "get.initImage" . }}"
     imagePullPolicy: {{ .Values.initChownData.image.pullPolicy }}
     securityContext:
       runAsNonRoot: false
@@ -41,7 +41,7 @@ initContainers:
     {{- if .Values.downloadDashboardsImage.sha }}
     image: "{{ .Values.downloadDashboardsImage.repository }}:{{ .Values.downloadDashboardsImage.tag }}@sha256:{{ .Values.downloadDashboardsImage.sha }}"
     {{- else }}
-    image: "{{ include "get.grafanaInitImage" . }}"
+    image: "{{ include "get.initImage" . }}"
     {{- end }}
     imagePullPolicy: {{ .Values.downloadDashboardsImage.pullPolicy }}
     command: ["/bin/sh"]
@@ -400,7 +400,7 @@ containers:
     {{- if .Values.image.sha }}
     image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}@sha256:{{ .Values.image.sha }}"
     {{- else }}
-    image: "{{ include "get.grafanaServerimage" . }}"
+    image: "{{ include "get.grafanaImage" . }}"
     {{- end }}
     imagePullPolicy: {{ .Values.image.pullPolicy }}
   {{- if .Values.command }}
