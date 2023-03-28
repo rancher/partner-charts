@@ -1,12 +1,47 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+* Added support for controller's gateway discovery.
+  With `ingressController.gatewayDiscovery.enabled` set to `true` Kong Ingress Controller
+  will enable gateway discovery using an Admin API service.
+  For more information on this please see [the corresponding README.md section][kic_gateway_discovery_readme].
+  This feature is only available when deploying chart with Kong Ingress Controller in version 2.9 or higher.
+  [#747](https://github.com/Kong/charts/pull/747)
+* Added experimental support for the ingress controller's Konnect sync feature via `ingressController.konnect.*` values.
+  This feature is only available when deploying chart with Kong Ingress Controller in version 2.9 or higher and
+  requires `ingressController.gatewayDiscovery.enabled` set to `true`. 
+  [#746](https://github.com/Kong/charts/pull/746)
+* Added support for annotations on the admission webhook ValidatingWebhookConfiguration.
+  [#760](https://github.com/Kong/charts/pull/760)
+* Added support for `subject` and `privateKey` properties on certificates.
+  [#762](https://github.com/Kong/charts/pull/762)
+* Added support for loadBalancerClass in LoadBalancer type services.
+  [#767](https://github.com/Kong/charts/pull/767)
+* Added support for `GRPCRoute`s.
+  [#772](https://github.com/Kong/charts/pull/772)
+* Default Kong version is bumped to 3.2.
+  [#773](https://github.com/Kong/charts/pull/773)
+
+### Under the hood
+
+* Add kube-linter to the CI pipeline to ensure produced manifests comply
+  with community best practices.
+  [#751](https://github.com/Kong/charts/pull/751)
+
+[kic_gateway_discovery_readme]: ./README.md#the-gatewaydiscovery-section
+
 ## 2.16.5
 
+### Fixed
+
 * Fix autoscaling version detection.
-  [#744](https://github.com/Kong/charts/pull/744)
+  [#752](https://github.com/Kong/charts/pull/752)
 * Don't include a clear-stale-pid initContainer when kong gateway is not
   enabled in the deployment.
-  [#744](https://github.com/Kong/charts/pull/744)
+  [#749](https://github.com/Kong/charts/pull/749)
 
 ## 2.16.4
 
@@ -24,14 +59,14 @@
 
 ## 2.16.2
 
-### Fixed 
+### Fixed
 
 * The admission webhook is disabled when the ingress controller is disabled, as
   the admission webhook requires a service provided by the ingress controller.
 
 ## 2.16.1
 
-### Fixed 
+### Fixed
 
 * serviceAccount projected volume is properly provisioned for GKE clusters >= 1.20.
   [#735](https://github.com/Kong/charts/pull/735)
