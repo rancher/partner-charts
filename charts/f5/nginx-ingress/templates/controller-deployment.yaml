@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ default (include "nginx-ingress.name" .) .Values.controller.name }}
+  name: {{ include "nginx-ingress.controller.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "nginx-ingress.labels" . | nindent 4 }}
@@ -13,13 +13,13 @@ spec:
   replicas: {{ .Values.controller.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "nginx-ingress.appName" . }}
+      {{- include "nginx-ingress.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ include "nginx-ingress.appName" . }}
+        {{- include "nginx-ingress.selectorLabels" . | nindent 8 }}
 {{- if .Values.nginxServiceMesh.enable }}
-        nsm.nginx.com/deployment: {{ default (include "nginx-ingress.name" .) .Values.controller.name }}
+        nsm.nginx.com/deployment: {{ include "nginx-ingress.controller.fullname" . }}
         spiffe.io/spiffeid: "true"
 {{- end }}
 {{- if .Values.controller.pod.extraLabels }}
@@ -57,8 +57,18 @@ spec:
       topologySpreadConstraints:
 {{ toYaml .Values.controller.topologySpreadConstraints | indent 8 }}
 {{- end }}
-{{- if or (.Values.controller.volumes) (.Values.nginxServiceMesh.enable) }}
+{{- if or .Values.controller.readOnlyRootFilesystem .Values.nginxServiceMesh.enable .Values.controller.volumes }}
       volumes:
+{{- end }}
+{{- if .Values.controller.readOnlyRootFilesystem }}
+      - name: nginx-etc
+        emptyDir: {}
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-lib
+        emptyDir: {}
+      - name: nginx-log
+        emptyDir: {}
 {{- end }}
 {{- if .Values.nginxServiceMesh.enable }}
       - hostPath:
@@ -74,6 +84,15 @@ spec:
 {{- end }}
       serviceAccountName: {{ include "nginx-ingress.serviceAccountName" . }}
       automountServiceAccountToken: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+{{- if .Values.controller.readOnlyRootFilesystem }}
+        fsGroup: 101 #nginx
+{{- end }}
+        sysctls:
+          - name: "net.ipv4.ip_unprivileged_port_start"
+            value: "0"
       terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
       hostNetwork: {{ .Values.controller.hostNetwork }}
       dnsPolicy: {{ .Values.controller.dnsPolicy }}
@@ -90,9 +109,9 @@ spec:
           containerPort: 80
         - name: https
           containerPort: 443
-{{ if .Values.controller.customPorts }}
+{{- if .Values.controller.customPorts }}
 {{ toYaml .Values.controller.customPorts | indent 8 }}
-{{ end }}
+{{- end }}
 {{- if .Values.prometheus.create }}
         - name: prometheus
           containerPort: {{ .Values.prometheus.port }}
@@ -114,16 +133,25 @@ spec:
         resources:
 {{ toYaml .Values.controller.resources | indent 10 }}
         securityContext:
-          allowPrivilegeEscalation: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: {{ .Values.controller.readOnlyRootFilesystem }}
           runAsUser: 101 #nginx
           runAsNonRoot: true
           capabilities:
             drop:
             - ALL
-            add:
-            - NET_BIND_SERVICE
-{{- if or (.Values.controller.volumeMounts) (.Values.nginxServiceMesh.enable) }}
+{{- if or .Values.controller.readOnlyRootFilesystem .Values.nginxServiceMesh.enable .Values.controller.volumeMounts }}
         volumeMounts:
+{{- end }}
+{{- if .Values.controller.readOnlyRootFilesystem }}
+        - mountPath: /etc/nginx
+          name: nginx-etc
+        - mountPath: /var/cache/nginx
+          name: nginx-cache
+        - mountPath: /var/lib/nginx
+          name: nginx-lib
+        - mountPath: /var/log/nginx
+          name: nginx-log
 {{- end }}
 {{- if .Values.nginxServiceMesh.enable }}
         - mountPath: /run/spire/sockets
@@ -141,6 +169,9 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+{{- if .Values.controller.env }}
+{{ toYaml .Values.controller.env | indent 8 }}
+{{- end }}
 {{- if .Values.nginxServiceMesh.enable }}
         - name: POD_SERVICEACCOUNT
           valueFrom:
@@ -193,9 +224,11 @@ spec:
 {{- else if .Values.controller.reportIngressStatus.externalService }}
           - -external-service={{ .Values.controller.reportIngressStatus.externalService }}
 {{- else if and (.Values.controller.service.create) (eq .Values.controller.service.type "LoadBalancer") }}
-          - -external-service={{ include "nginx-ingress.serviceName" . }}
+          - -external-service={{ include "nginx-ingress.controller.fullname" . }}
+{{- end }}
 {{- end }}
           - -enable-leader-election={{ .Values.controller.reportIngressStatus.enableLeaderElection }}
+{{- if .Values.controller.reportIngressStatus.enableLeaderElection }}
           - -leader-election-lock-name={{ include "nginx-ingress.leaderElectionName" . }}
 {{- end }}
 {{- if .Values.controller.wildcardTLS.secret }}
@@ -233,8 +266,28 @@ spec:
 {{- if .Values.controller.extraContainers }}
       {{ toYaml .Values.controller.extraContainers | nindent 6 }}
 {{- end }}
+{{- if or .Values.controller.readOnlyRootFilesystem .Values.controller.initContainers }}
+      initContainers:
+{{- end }}
+{{- if .Values.controller.readOnlyRootFilesystem }}
+      - name: init-{{ include "nginx-ingress.name" . }}
+        image: {{ include "nginx-ingress.image" . }}
+        imagePullPolicy: "{{ .Values.controller.image.pullPolicy }}"
+        command: ['cp', '-vdR', '/etc/nginx/.', '/mnt/etc']
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsUser: 101 #nginx
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /mnt/etc
+          name: nginx-etc
+{{- end }}
 {{- if .Values.controller.initContainers }}
-      initContainers: {{ toYaml .Values.controller.initContainers | nindent 8 }}
+{{ toYaml .Values.controller.initContainers | indent 6 }}
 {{- end }}
 {{- if .Values.controller.strategy }}
   strategy:

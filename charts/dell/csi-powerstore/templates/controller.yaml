@@ -35,7 +35,13 @@ rules:
     verbs: ["list", "watch", "create", "update", "patch"]
   - apiGroups: [""]
     resources: ["nodes"]
+  {{- if hasKey .Values "podmon" }}
+  {{- if eq .Values.podmon.enabled true }}
+    verbs: ["get", "list", "watch", "patch"]
+  {{- else }}
     verbs: ["get", "list", "watch"]
+  {{- end }}
+  {{- end }}
   - apiGroups: [""]
     resources: ["persistentvolumes"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
@@ -47,7 +53,13 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments"]
+  {{- if hasKey .Values "podmon" }}
+  {{- if eq .Values.podmon.enabled true }}
+    verbs: ["get", "list", "watch", "update", "patch", "delete"]
+  {{- else }}
     verbs: ["get", "list", "watch", "update", "patch"]
+  {{- end }}
+  {{- end }}
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list"]
@@ -81,7 +93,13 @@ rules:
     verbs: ["patch"]
   - apiGroups: [""]
     resources: ["pods"]
+  {{- if hasKey .Values "podmon" }}
+  {{- if eq .Values.podmon.enabled true }}
+    verbs: ["get", "list", "watch", "update", "delete"]
+  {{- else }}
     verbs: ["get", "list", "watch"]
+  {{- end }}
+  {{- end }}
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["create", "list", "watch", "delete"]
@@ -174,6 +192,33 @@ spec:
                       - {{ .Release.Name }}-controller
               topologyKey: "kubernetes.io/hostname"
       containers:
+        {{- if hasKey .Values "podmon" }}
+        {{- if eq .Values.podmon.enabled true }}
+        - name: podmon
+          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            {{- toYaml .Values.podmon.controller.args | nindent 12 }}
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: powerstore-config-params
+              mountPath: /powerstore-config-params
+        {{- end }}
+        {{- end }}
         {{- if hasKey .Values "dev" }}
         {{ if .Values.dev.enableTracing }}{{- include "pstore.tracing" . | nindent 8 }}{{ end }}
         {{- end }}
@@ -360,6 +405,20 @@ spec:
               value: /powerstore-config/config
             - name: X_CSI_POWERSTORE_CONFIG_PARAMS_PATH
               value: /powerstore-config-params/driver-config-params.yaml
+            {{- if hasKey .Values "podmon" }}
+            - name: X_CSI_PODMON_ENABLED
+              value: "{{ .Values.podmon.enabled }}"
+            {{- if eq .Values.podmon.enabled true }}
+              {{- range $key, $value := .Values.podmon.controller.args }}
+                {{- if contains "--arrayConnectivityPollRate" $value }}
+            - name: X_CSI_PODMON_ARRAY_CONNECTIVITY_POLL_RATE
+              value: "{{ (split "=" $value)._1 }}"
+                {{- end }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            - name: X_CSI_PODMON_API_PORT
+              value: "{{ .Values.podmonAPIPort }}"
             {{- if hasKey .Values.controller "replication" }}
             {{- if eq .Values.controller.replication.enabled true}}
             - name: X_CSI_REPLICATION_CONTEXT_PREFIX
