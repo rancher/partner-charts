@@ -1,5 +1,13 @@
 # Datadog changelog
 
+## 3.25.1
+
+* Fix CI to unblock release of charts
+
+## 3.25.0
+
+* Automatically collect Security Profiles when CWS is enabled.
+
 ## 3.24.0
 
 * Move `kube-state-metrics` default image registry from k8s.gcr.io to registry.k8s.io.
