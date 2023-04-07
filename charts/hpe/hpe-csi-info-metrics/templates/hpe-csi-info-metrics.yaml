@@ -1,0 +1,136 @@
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: hpe-csi-info-metrics-serviceaccount
+  namespace: {{ .Release.Namespace }}
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hpe-csi-info-metrics-role
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hpe-csi-info-metrics-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: hpe-csi-info-metrics-serviceaccount
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: hpe-csi-info-metrics-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: hpe-csi-info-metrics
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: hpe-csi-info-metrics
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hpe-csi-info-metrics
+    spec:
+      serviceAccount: hpe-csi-info-metrics-serviceaccount
+      containers:
+        - name: csi-info-metrics
+          image: {{ .Values.image.registry }}/hpestorage/csi-info-metrics:v1.0.1
+          ports:
+          - containerPort: 9099
+          args:
+            - "--telemetry.addr=:9099"
+            - "--telemetry.path=/metrics"
+            {{- if eq .Values.acceptEula true }}
+            - "--accept-eula"
+            {{- else }}
+            {{- fail "\n\nERROR: The acceptEula value must be set to true to confirm acceptance.\n\n" }}
+            {{- end }}
+            {{- if .Values.metrics }}
+            {{- if .Values.metrics.disableIntrospection }}
+            - "--metrics.disable-introspection"
+            {{- end }}
+            {{- end }}
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+
+---
+{{- $service := .Values.service | default dict }}
+kind: Service
+apiVersion: v1
+metadata:
+  name: hpe-csi-info-metrics-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: hpe-csi-info-metrics
+    {{- with $service.labels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+  annotations:
+    {{- with $service.annotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+spec:
+  {{- $serviceType := $service.type | default "ClusterIP" }}
+  type: {{ $serviceType | quote }}
+  ports:
+    - name: http-metrics
+      port: {{ $service.port | default 9090 }}
+      {{- if eq $serviceType "NodePort" }}
+      {{- if $service.nodePort }}
+      nodePort: {{ $service.nodePort }}
+      {{- end }}
+      {{- end }}
+      protocol: TCP
+      targetPort: 9099
+  selector:
+    app: hpe-csi-info-metrics
+{{- if .Values.serviceMonitor.enable }}
+{{- $targetlabels := .Values.serviceMonitor.targetLabels | default list }}
+---
+kind: ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+metadata:
+  name: hpe-csi-info-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    k8s-app: prometheus
+    release: prometheus
+    app: hpe-csi-info-metrics
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app: hpe-csi-info-metrics
+  endpoints:
+    - port: http-metrics
+      scheme: http
+      interval: 1m
+  targetLabels:
+    {{- with $targetlabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,116 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ template "hpe-array-exporter.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "hpe-array-exporter.name" . }}
+    chart: {{ template "hpe-array-exporter.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: hpe-array-exporter
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "hpe-array-exporter.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: array-exporter
+          image: {{ .Values.image.registry }}/hpestorage/array-exporter:v1.0.1
+          ports:
+            - containerPort: 8080
+          args:
+            - "--telemetry.addr=:8080"
+            - "--telemetry.path=/metrics"
+            {{- if eq .Values.acceptEula true }}
+            - "--accept-eula"
+            {{- else }}
+            {{- fail "\n\nERROR: The acceptEula value must be set to true to confirm acceptance.\n\n" }}
+            {{- end }}
+            {{- if .Values.metrics }}
+            {{- if .Values.metrics.disableIntrospection }}
+            - "--metrics.disable-introspection"
+            {{- end }}
+            {{- end }}
+            - "/etc/config"
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          volumeMounts:
+            - name: storage-system-config
+              mountPath: /etc/config
+      volumes:
+        - name: storage-system-config
+          secret:
+            secretName: {{ .Values.arraySecret | quote }}
+
+---
+{{- $service := .Values.service | default dict }}
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ template "hpe-array-exporter.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "hpe-array-exporter.name" . }}
+    chart: {{ template "hpe-array-exporter.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    {{- with $service.labels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+  annotations:
+    {{- with $service.annotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+spec:
+  {{- $serviceType := $service.type | default "ClusterIP" }}
+  type: {{ $serviceType | quote }}
+  ports:
+    - name: http-metrics
+      port: {{ $service.port | default 9090 }}
+      {{- if eq $serviceType "NodePort" }}
+      {{- if $service.nodePort }}
+      nodePort: {{ $service.nodePort }}
+      {{- end }}
+      {{- end }}
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: {{ template "hpe-array-exporter.name" . }}
+    release: {{ .Release.Name }}
+{{- if .Values.serviceMonitor.enable }}
+{{- $targetlabels := .Values.serviceMonitor.targetLabels | default list }}
+---
+kind: ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+metadata:
+  name: {{ template "hpe-array-exporter.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    k8s-app: prometheus
+    release: prometheus
+    app: {{ template "hpe-array-exporter.name" . }}
+    chart: {{ template "hpe-array-exporter.chart" . }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app: {{ template "hpe-array-exporter.name" . }}
+  endpoints:
+    - port: http-metrics
+      scheme: http
+      interval: 1m
+  targetLabels:
+    {{- with $targetlabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+{{- end }}
