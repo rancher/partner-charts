@@ -200,8 +200,6 @@ spec:
             value: "/var/reports/ubbagent"
 {{- else }}
             value: "/tmp/reports/ubbagent"
-          - name: K10_REPORTING_DIR
-            value: "/tmp/reports/k10/syncV2"
           - name: K10SYNCSTATUSDIR
             value: "/tmp/reports/k10"
           - name: GRACE_PERIOD_STORE
