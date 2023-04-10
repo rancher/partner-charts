@@ -25,9 +25,6 @@ spec:
 {{- end }}
       labels:
         app: {{ .Release.Name }}-yugaware
-{{- if .Values.yugaware.pod.labels }}                                                           
-{{ toYaml .Values.yugaware.pod.labels | indent 8 }}                                             
-{{- end }}
     spec:
       serviceAccountName: {{ .Release.Name }}
       imagePullSecrets:
@@ -38,30 +35,6 @@ spec:
         {{- if (semverCompare ">=1.20-x" .Capabilities.KubeVersion.Version) }}
         fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
         {{- end }}
-      {{- end }}
-      {{- if .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8}}
-      {{- end }}
-      {{- if .Values.tolerations }}
-      tolerations:
-      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
-      {{- end }}
-      {{- if .Values.zoneAffinity }}
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: failure-domain.beta.kubernetes.io/zone
-                operator: In
-                values:
-{{ toYaml .Values.zoneAffinity | indent 18 }}
-            - matchExpressions:
-              - key: topology.kubernetes.io/zone
-                operator: In
-                values:
-{{ toYaml .Values.zoneAffinity | indent 18 }}
       {{- end }}
       volumes:
         - name: yugaware-storage
@@ -271,9 +244,6 @@ spec:
             - --web.enable-admin-api
             - --web.enable-lifecycle
             - --storage.tsdb.retention.time={{ .Values.prometheus.retentionTime }}
-            - --query.max-concurrency={{ .Values.prometheus.queryConcurrency }}
-            - --query.max-samples={{ .Values.prometheus.queryMaxSamples }}
-            - --query.timeout={{ .Values.prometheus.queryTimeout }}
           ports:
             - containerPort: 9090
         - name: yugaware
@@ -332,9 +302,6 @@ spec:
           - name: yugaware-storage
             mountPath: /opt/yugabyte/releases/
             subPath: releases
-          - name: yugaware-storage
-            mountPath: /opt/yugabyte/ybc/releases/
-            subPath: ybc_releases
           # old path for backward compatibility
           - name: yugaware-storage
             mountPath: /opt/releases/
