@@ -2,7 +2,7 @@
 
 This repository is reserved for partner charts in the Rancher's v2.5+ catalog. As part of this catalog,
 all charts will benefit of a cloud native packaging system that directly references an upstream chart
-from a Helm or git repository and automates applying Rancher specific modifications and adding overlay
+from a Helm repository and automates applying Rancher specific modifications and adding overlay
 files on top of it.
 
 ## Requirements
@@ -26,7 +26,7 @@ files on top of it.
     * Managing CRDs and best practices: https://helm.sh/docs/chart_best_practices/custom_resource_definitions/
     * Semver Rules: https://semver.org/
 
-* Chart must be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/) or Git repository that we can reference.
+* Chart must be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/) (recommended) or Git repository that we can reference.
 
 * Chart must have the following Rancher specific add-ons (More details on this below).
     * kubeVersion set in the chart's metadata
@@ -44,15 +44,21 @@ mkdir -p packages/suse/kubewarden-controller
 
 ```
 #### 3. Create your [upstream.yaml](#configuration-file)
-Some [examples](#examples) are provided below
+
+The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chartyaml-file).
+
+**Important:** In GKE clusters, a Helm Chart will NOT display in Rancher Apps unless `kubeVersion` includes `-0` suffix in `Chart.yaml` For example:
+```bash
+kubeVersion: '>= 1.19.0-0'  
+```
+Some [example ustream.yaml](#examples) are provided below
 ```bash
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
 HelmRepo: https://charts.kubewarden.io
 HelmChart: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
-ChartMetadata:
-  kubeVersion: '>=1.21-0'
+ChartMetadata:  
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF
 ```
@@ -159,9 +165,6 @@ questions:
 ```
 
 ## Configuration File
-
-The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chartyaml-file).
-
 
 Options for `upstream.yaml`
 | Variable | Requires | Description |
