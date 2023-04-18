@@ -173,6 +173,9 @@ returns: formatted image string
 {{- end -}}
 
 {{- define "kuma.defaultEnv" -}}
+{{ if (and (eq .Values.controlPlane.environment "universal") (not (eq .Values.controlPlane.mode "global"))) }}
+  {{ fail "Currently you can only run universal mode on kubernetes in a global mode, this limitation might be lifted in the future" }}
+{{ end }}
 {{ if not (or (eq .Values.controlPlane.mode "zone") (eq .Values.controlPlane.mode "global") (eq .Values.controlPlane.mode "standalone")) }}
   {{ $msg := printf "controlPlane.mode invalid got:'%s' supported values: global,zone,standalone" .Values.controlPlane.mode }}
   {{ fail $msg }}
@@ -185,8 +188,8 @@ returns: formatted image string
     {{ fail "controlPlane.kdsGlobalAddress can't be empty when controlPlane.mode=='zone', needs to be the global control-plane address" }}
   {{ else }}
     {{ $url := urlParse .Values.controlPlane.kdsGlobalAddress }}
-    {{ if not (eq $url.scheme "grpcs") }}
-      {{ $msg := printf "controlPlane.kdsGlobalAddress must be a url with scheme grpcs:// got:'%s'" .Values.controlPlane.kdsGlobalAddress }}
+    {{ if not (or (eq $url.scheme "grpcs") (eq $url.scheme "grpc")) }}
+      {{ $msg := printf "controlPlane.kdsGlobalAddress must be a url with scheme grpcs:// or grpc:// got:'%s'" .Values.controlPlane.kdsGlobalAddress }}
       {{ fail $msg }}
     {{ end }}
   {{ end }}
@@ -221,7 +224,7 @@ env:
 - name: KUMA_API_SERVER_READ_ONLY
   value: "true"
 - name: KUMA_RUNTIME_KUBERNETES_ADMISSION_SERVER_PORT
-  value: "5443"
+  value: {{ .Values.controlPlane.admissionServerPort | default "5443" | quote }}
 - name: KUMA_RUNTIME_KUBERNETES_ADMISSION_SERVER_CERT_DIR
   value: /var/run/secrets/kuma.io/tls-cert
 - name: KUMA_RUNTIME_KUBERNETES_INJECTOR_CNI_ENABLED
@@ -268,14 +271,14 @@ env:
 - name: KUMA_EXPERIMENTAL_GATEWAY_API
   value: "true"
 {{- end }}
-{{- if .Values.experimental.cni }}
+{{- if and .Values.cni.enabled (not .Values.legacy.cni.enabled) }}
 - name: KUMA_RUNTIME_KUBERNETES_NODE_TAINT_CONTROLLER_ENABLED
   value: "true"
 - name: KUMA_RUNTIME_KUBERNETES_NODE_TAINT_CONTROLLER_CNI_APP
   value: "{{ include "kuma.name" . }}-cni"
 {{- end }}
-{{- if .Values.experimental.transparentProxy }}
-- name: KUMA_RUNTIME_KUBERNETES_INJECTOR_TRANSPARENT_PROXY_V2
+{{- if .Values.legacy.transparentProxy }}
+- name: KUMA_RUNTIME_KUBERNETES_INJECTOR_TRANSPARENT_PROXY_V1
   value: "true"
 {{- end }}
 {{- if .Values.experimental.ebpf.enabled }}
@@ -291,6 +294,59 @@ env:
   value: {{ .Values.experimental.ebpf.tcAttachIface }}
 - name: KUMA_RUNTIME_KUBERNETES_INJECTOR_EBPF_PROGRAMS_SOURCE_PATH
   value: {{ .Values.experimental.ebpf.programsSourcePath }}
+{{- end }}
+{{- end }}
+
+{{- define "kuma.universal.defaultEnv" -}}
+env:
+- name: KUMA_GENERAL_WORK_DIR
+  value: "/tmp/kuma"
+- name: KUMA_ENVIRONMENT
+  value: "universal"
+- name: KUMA_STORE_TYPE
+  value: "postgres"
+- name: KUMA_STORE_POSTGRES_PORT
+  value: "{{ .Values.postgres.port }}"
+- name: KUMA_DEFAULTS_SKIP_MESH_CREATION
+  value: {{ .Values.controlPlane.defaults.skipMeshCreation | quote }}
+- name: KUMA_MODE
+  value: "global"
+{{- if .Values.controlPlane.tls.apiServer.secretName }}
+- name: KUMA_API_SERVER_HTTPS_TLS_CERT_FILE
+  value: /var/run/secrets/kuma.io/api-server-tls-cert/tls.crt
+- name: KUMA_API_SERVER_HTTPS_TLS_KEY_FILE
+  value: /var/run/secrets/kuma.io/api-server-tls-cert/tls.key
+{{- end }}
+{{- if .Values.controlPlane.tls.apiServer.clientCertsSecretName }}
+- name: KUMA_API_SERVER_AUTH_CLIENT_CERTS_DIR
+  value: /var/run/secrets/kuma.io/api-server-client-certs/
+{{- end }}
+{{- if .Values.controlPlane.tls.kdsGlobalServer.secretName }}
+- name: KUMA_MULTIZONE_GLOBAL_KDS_TLS_CERT_FILE
+  value: /var/run/secrets/kuma.io/kds-server-tls-cert/tls.crt
+- name: KUMA_MULTIZONE_GLOBAL_KDS_TLS_KEY_FILE
+  value: /var/run/secrets/kuma.io/kds-server-tls-cert/tls.key
+{{- end }}
+{{- if or (eq .Values.postgres.tls.mode "verifyCa") (eq .Values.postgres.tls.mode "verifyFull") }}
+{{- if empty .Values.postgres.tls.caSecretName }}
+{{ fail "if mode is 'verifyCa' or 'verifyFull' then you must provide .Values.postgres.tls.caSecretName" }}
+{{- end }}
+{{- if .Values.postgres.tls.secretName }}
+- name: KUMA_STORE_POSTGRES_TLS_CERT_PATH
+  value: /var/run/secrets/kuma.io/postgres-tls-cert/tls.crt
+- name: KUMA_STORE_POSTGRES_TLS_KEY_PATH
+  value: /var/run/secrets/kuma.io/postgres-tls-cert/tls.key
+{{- end }}
+{{- if .Values.postgres.tls.caSecretName }}
+- name: KUMA_STORE_POSTGRES_TLS_CA_PATH
+  value: /var/run/secrets/kuma.io/postgres-tls-cert/ca.crt
+{{- end }}
+- name: KUMA_STORE_POSTGRES_TLS_MODE
+  value: {{ .Values.postgres.tls.mode }}
+{{- if .Values.postgres.tls.disableSSLSNI }}
+- name: KUMA_STORE_POSTGRES_TLS_DISABLE_SSLSNI
+  value: {{ .Values.postgres.tls.disableSSLSNI }}
+{{- end }}
 {{- end }}
 {{- end }}
 

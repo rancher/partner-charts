@@ -464,16 +464,39 @@ than 1 core.
 {{- end -}}
 {{- end -}}
 
+{{- define "fail-on-insecure-sasl-logging" -}}
+{{- if (include "sasl-enabled" .|fromJson).bool -}}
+  {{- $check := list
+      (include "redpanda-atleast-23-1-1" .|fromJson).bool
+      (include "redpanda-22-3-atleast-22-3-13" .|fromJson).bool
+      (include "redpanda-22-2-atleast-22-2-10" .|fromJson).bool
+  -}}
+  {{- if not (mustHas true $check) -}}
+    {{- fail "SASL is enabled and the redpanda version specified leaks secrets to the logs. Please choose a newer version of redpanda." -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "redpanda-atleast-22-1-1" -}}
 {{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.1.1"))) -}}
 {{- end -}}
-
 {{- define "redpanda-atleast-22-2-0" -}}
 {{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.2.0"))) -}}
 {{- end -}}
-
 {{- define "redpanda-atleast-22-3-0" -}}
 {{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.3.0"))) -}}
+{{- end -}}
+{{- define "redpanda-atleast-23-1-1" -}}
+{{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=23.1.1"))) -}}
+{{- end -}}
+{{- define "redpanda-atleast-23-1-2" -}}
+{{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=23.1.2"))) -}}
+{{- end -}}
+{{- define "redpanda-22-3-atleast-22-3-13" -}}
+{{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.3.13,<22.4"))) -}}
+{{- end -}}
+{{- define "redpanda-22-2-atleast-22-2-10" -}}
+{{- toJson (dict "bool" (or (not (eq .Values.image.repository "vectorized/redpanda")) (include "redpanda.semver" . | semverCompare ">=22.2.10,<22.3"))) -}}
 {{- end -}}
 
 # manage backward compatibility with renaming podSecurityContext to securityContext
@@ -529,13 +552,13 @@ but not enough ports for the number of replicas requested.
 {{- end -}}
 
 {{- /*
-advertised-host returns a json sring with the data neded for configuring the advertised listener
+advertised-host returns a json string with the data needed for configuring the advertised listener
 */ -}}
 {{- define "advertised-host" -}}
   {{- $host := dict "name" .externalName "address" .externalAdvertiseAddress "port" .port -}}
   {{- if .values.external.addresses -}}
-    {{- if (tpl (.values.external.domain | default "") $) }}
-      {{- $host = dict "name" .externalName "address" (printf "%s.%s" (index .values.external.addresses .replicaIndex) (tpl .values.external.domain $)) "port" .port -}}
+    {{- if ( .values.external.domain | default "" ) }}
+      {{- $host = dict "name" .externalName "address" (printf "%s.%s" (index .values.external.addresses .replicaIndex) (.values.external.domain)) "port" .port -}}
     {{- else -}}
       {{- $host = dict "name" .externalName  "address" (index .values.external.addresses .replicaIndex) "port" .port -}}
     {{- end -}}

@@ -1,0 +1,50 @@
+{{- if ne .Values.deployAsSidecar true }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-reverseproxy
+  namespace: {{ include "custom.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-reverseproxy
+  template:
+    metadata:
+      labels:
+        name: {{ .Release.Name }}-reverseproxy
+    spec:
+      serviceAccountName: {{ .Release.Name }}-reverseproxy
+      containers:
+        - name: csireverseproxy
+          image: {{ required "Must provided an image for reverseproxy container." .Values.image }}
+          imagePullPolicy: Always
+          env:
+            - name: X_CSI_REVPROXY_CONFIG_DIR
+              value: /etc/config/configmap
+            - name: X_CSI_REVPROXY_CONFIG_FILE_NAME
+              value: config.yaml
+            - name: X_CSI_REVRPOXY_IN_CLUSTER
+              value: "true"
+            - name: X_CSI_REVPROXY_TLS_CERT_DIR
+              value: /app/tls
+            - name: X_CSI_REVPROXY_WATCH_NAMESPACE
+              value: {{ include "custom.namespace" . }}
+          volumeMounts:
+            - name: configmap-volume
+              mountPath: /etc/config/configmap
+            - name: tls-secret
+              mountPath: /app/tls
+            - name: cert-dir
+              mountPath: /app/certs
+      volumes:
+        - name: configmap-volume
+          configMap:
+            name: {{ .Release.Name }}-reverseproxy-config
+            optional: true
+        - name: tls-secret
+          secret:
+            secretName: {{ .Values.tlsSecret }}
+        - name: cert-dir
+          emptyDir:
+{{- end }}

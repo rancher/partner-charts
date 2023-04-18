@@ -53,6 +53,5 @@ This will install the CloudCasa agent and complete registration of the cluster w
     ```    
     $ helm uninstall cloudcasa.io
     $ kubectl delete namespace/cloudcasa-io clusterrolebinding/cloudcasa-io
-    $ kubectl delete crds -l component=kubeagent-backup-helper
     ```
 *CloudCasa is a trademark of Catalogic Software Inc.*
