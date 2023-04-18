@@ -1,3 +1,4 @@
+{{- if (eq .Values.controlPlane.environment "kubernetes") }}
 # HELM first deletes RBAC of Kuma, then it tries to delete Secrets. We've got validating webhook on Secrets.
 # But even that the policy of this webhook is Ignore, it fails because Kuma does not have permission to access Secrets anymore.
 # Therefore we first need to delete webhook so we can delete the rest of the deployment
@@ -85,10 +86,8 @@ spec:
       {{ toYaml . | nindent 8 }}
       {{- end }}
       restartPolicy: OnFailure
-      {{- if .Values.hooks.podSecurityContext }}
       securityContext:
-      {{ toYaml .Values.hooks.podSecurityContext | trim | nindent 8 }}
-      {{- end }}
+      {{- toYaml .Values.hooks.podSecurityContext | trim | nindent 8 }}
       containers:
         - name: pre-delete-job
           image: {{ include "kubectl.formatImage" (dict "image" .Values.kubectl.image "root" $) | quote }}
@@ -97,10 +96,8 @@ spec:
             - 'delete'
             - 'ValidatingWebhookConfiguration'
             - {{ include "kuma.name" . }}-validating-webhook-configuration
-          {{- if .Values.hooks.containerSecurityContext }}
           securityContext:
-          {{ toYaml .Values.hooks.containerSecurityContext | trim | nindent 12 }}
-          {{- end }}
+          {{- toYaml (mergeOverwrite (dict "runAsUser" 65534) .Values.hooks.containerSecurityContext) | trim | nindent 12 }}
           resources:
              requests:
                cpu: "100m"
@@ -108,3 +105,4 @@ spec:
              limits:
                cpu: "100m"
                memory: "256Mi"
+{{- end }}

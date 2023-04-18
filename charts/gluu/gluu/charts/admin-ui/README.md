@@ -1,6 +1,6 @@
 # admin-ui
 
-![Version: 5.0.15](https://img.shields.io/badge/Version-5.0.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.16](https://img.shields.io/badge/Version-5.0.16-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Admin GUI. Requires license.
 
@@ -35,7 +35,7 @@ Kubernetes: `>=v1.21.0-0`
 | image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
 | image.repository | string | `"gluufederation/admin-ui"` | Image  to use for deploying. |
-| image.tag | string | `"1.0.11-1"` | Image  tag to use for deploying. |
+| image.tag | string | `"1.0.13_dev"` | Image  tag to use for deploying. |
 | lifecycle | object | `{}` |  |
 | livenessProbe | object | `{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5}` | Configure the liveness healthcheck for the admin ui if needed. |
 | readinessProbe | object | `{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5}` | Configure the readiness healthcheck for the admin ui if needed. |

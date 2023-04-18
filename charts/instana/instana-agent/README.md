@@ -123,14 +123,14 @@ The following table lists the configurable parameters of the Instana chart and t
 | `leaderElector.image.name`                          | The elector image name to pull                                                                                                                                                                                                                                                                                         | `instana/leader-elector`                                                                                                                |
 | `leaderElector.image.digest`                        | The image digest to pull; if specified, it causes `leaderElector.image.tag` to be ignored                                                                                                                                                                                                                              | `nil`                                                                                                                                   |
 | `leaderElector.image.tag`                           | The image tag to pull; this property is ignored if `leaderElector.image.digest` is specified                                                                                                                                                                                                                           | `latest`                                                                                                                                |
-| `k8s_sensor.deployment.enabled`                     | Isolate k8sensor with a deployment (tech preview)                                                                                                                                                                                                                                                                      | `false`                                                                                                                                 |
+| `k8s_sensor.deployment.enabled`                     | Isolate k8sensor with a deployment                                                                                                                                                                                                                                                                      | `false`                                                                                                                                 |
 | `k8s_sensor.image.name`                             | The k8sensor image name to pull                                                                                                                                                                                                                                                                                        | `gcr.io/instana/k8sensor`                                                                                                               |
 | `k8s_sensor.image.digest`                           | The image digest to pull; if specified, it causes `k8s_sensor.image.tag` to be ignored                                                                                                                                                                                                                                 | `nil`                                                                                                                                   |
 | `k8s_sensor.image.tag`                              | The image tag to pull; this property is ignored if `k8s_sensor.image.digest` is specified                                                                                                                                                                                                                              | `latest`                                                                                                                                |
-| `k8s_sensor.deployment.pod.limits.cpu`              | CPU request for the `k8sensor` pods (tech preview)                                                                                                                                                                                                                                                                     | `4`                                                                                                                                     |
-| `k8s_sensor.deployment.pod.limits.memory`           | Memory request limits for the `k8sensor` pods (tech preview)                                                                                                                                                                                                                                                           | `6144Mi`                                                                                                                                |
-| `k8s_sensor.deployment.pod.requests.cpu`            | CPU limit for the `k8sensor` pods (tech preview)                                                                                                                                                                                                                                                                       | `1.5`                                                                                                                                   |
-| `k8s_sensor.deployment.pod.requests.memory`         | Memory limit for the `k8sensor` pods (tech preview)                                                                                                                                                                                                                                                                    | `1024Mi`                                                                                                                                |
+| `k8s_sensor.deployment.pod.limits.cpu`              | CPU request for the `k8sensor` pods                                                                                                                                                                                                                                                                     | `4`                                                                                                                                     |
+| `k8s_sensor.deployment.pod.limits.memory`           | Memory request limits for the `k8sensor` pods                                                                                                                                                                                                                                                           | `6144Mi`                                                                                                                                |
+| `k8s_sensor.deployment.pod.requests.cpu`            | CPU limit for the `k8sensor` pods                                                                                                                                                                                                                                                                       | `1.5`                                                                                                                                   |
+| `k8s_sensor.deployment.pod.requests.memory`         | Memory limit for the `k8sensor` pods                                                                                                                                                                                                                                                                    | `1024Mi`                                                                                                                                |
 | `podSecurityPolicy.enable`                          | Whether a PodSecurityPolicy should be authorized for the Instana Agent pods. Requires `rbac.create` to be `true` as well and it is available until Kubernetes version v1.25.                                                                                                                                           | `false` See [PodSecurityPolicy](https://docs.instana.io/setup_and_manage/host_agent/on/kubernetes/#podsecuritypolicy) for more details. |
 | `podSecurityPolicy.name`                            | Name of an _existing_ PodSecurityPolicy to authorize for the Instana Agent pods. If not provided and `podSecurityPolicy.enable` is `true`, a PodSecurityPolicy will be created for you.                                                                                                                                | `nil`                                                                                                                                   |
 | `rbac.create`                                       | Whether RBAC resources should be created                                                                                                                                                                                                                                                                               | `true`                                                                                                                                  |
@@ -275,8 +275,6 @@ These options will be rarely used outside of development or debugging of the age
 
 ### Kubernetes Sensor Deployment
 
-**Note:** This functionality is in Technical Preview.
-
 The data about Kubernetes resources is collected by the Kubernetes sensor in the Instana agent.
 With default configurations, only one Instana agent at any one time is capturing the bulk of Kubernetes data.
 Which agent gets the task is coordinated by a leader elector mechanism running inside the `leader-elector` container of the `instana-agent` pods.
@@ -290,6 +288,19 @@ The `instana-agent` and `k8sensor` pods share the same configurations in terms o
 
 It is advised to use the `k8s_sensor.deployment.enabled=true` mode on clusters of more than 10 nodes, and in that case, you may be able to reduce the amount of resources assigned to the `instana-agent` pods, especially in terms of memory, using the [Agent Pod Sizing](#agent-pod-sizing) settings.
 The `k8s_sensor.deployment.pod.requests.cpu`, `k8s_sensor.deployment.pod.requests.memory`, `k8s_sensor.deployment.pod.limits.cpu` and `k8s_sensor.deployment.pod.limits.memory` settings, on the other hand, allows you to change the sizing of the `k8sensor` pods.
+
+#### Determine Special Mode Enabled
+To determine if Kubernetes sensor is running in a decidated `k8sensor` deployment, list deployments in the `instana-agent` namespace.
+```
+kubectl get deployments -n instana-agent
+```
+If it shows `k8sensor` in the list, then the special mode is enabled
+
+#### Upgrade Kubernetes Sensor
+To upgrade the kubernetes sensor to the lastest version, perform a rolling restart of the `k8sensor` deployment using the following command:
+```
+kubectl rollout restart deployment k8sensor -n instana-agent
+```
 
 ### Multiple Zones
 You can list zones to use affinities and tolerations as the basis to associate a specific daemonset per tainted node pool. Each zone will have the following data:
@@ -321,6 +332,12 @@ zones:
 ```
 
 ## Changelog
+
+### 1.2.57
+* Fix vulnerability in the leader-elector image
+
+### 1.2.49
+* Add zone name to label `io.instana/zone` in daemonset
 
 ### 1.2.48
 

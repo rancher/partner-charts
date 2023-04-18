@@ -1,6 +1,6 @@
 # auth-server-key-rotation
 
-![Version: 5.0.15](https://img.shields.io/badge/Version-5.0.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.16](https://img.shields.io/badge/Version-5.0.16-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Responsible for regenerating auth-keys per x hours
 
@@ -33,7 +33,7 @@ Kubernetes: `>=v1.21.0-0`
 | image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
 | image.repository | string | `"janssenproject/certmanager"` | Image  to use for deploying. |
-| image.tag | string | `"1.0.11-1"` | Image  tag to use for deploying. |
+| image.tag | string | `"1.0.13_dev"` | Image  tag to use for deploying. |
 | keysLife | int | `48` | Auth server key rotation keys life in hours |
 | lifecycle | object | `{}` |  |
 | nodeSelector | object | `{}` |  |

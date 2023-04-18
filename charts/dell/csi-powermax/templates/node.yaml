@@ -1,0 +1,398 @@
+{{- if or (eq .Values.migration.enabled true) (eq .Values.openshift true) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ include "custom.namespace" . }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  {{- if eq .Values.customDriverName.enabled true}}
+  name: {{ printf "%s-%s-node" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  {{- else }}
+  name: {{ .Release.Name }}-node
+  {{- end }}
+rules:
+  {{- if eq .Values.openshift true }}
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: ["privileged"]
+    verbs: ["use"]
+  {{- end }}
+    #below for node rescan sidecar
+  {{- if eq .Values.migration.enabled true}}
+  - apiGroups: ["replication.storage.dell.com"]
+    resources: ["dellcsimigrationgroups"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["replication.storage.dell.com"]
+    resources: ["dellcsimigrationgroups/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "list", "watch", "create", "update", "patch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list", "watch", "update", "patch" ]
+  {{- end}}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  {{- if eq .Values.customDriverName.enabled true}}
+  name: {{ printf "%s-%s-node" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  {{- else }}
+  name: {{ .Release.Name }}-node
+  {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-node
+    namespace: {{ include "custom.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  {{- if eq .Values.customDriverName.enabled true}}
+  name: {{ printf "%s-%s-node" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  {{- else }}
+  name: {{ .Release.Name }}-node
+  {{- end }}
+  apiGroup: rbac.authorization.k8s.io
+---
+{{ end }}
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ include "custom.namespace" . }}
+  {{- if hasKey .Values "authorization" }}
+  {{- if eq .Values.authorization.enabled true }}
+  annotations:
+    com.dell.karavi-authorization-proxy: "true"
+  {{ end }}
+  {{ end }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-node
+    spec:
+      {{- if or (eq .Values.migration.enabled true) (eq .Values.openshift true) }}
+      serviceAccountName: {{ .Release.Name }}-node
+      {{ end }}
+      {{ if .Values.node.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.node.nodeSelector | nindent 8 }}
+      {{ end }}
+      {{ if .Values.node.tolerations }}
+      tolerations:
+      {{- toYaml .Values.node.tolerations | nindent 6 }}
+      {{ end }}
+      hostIPC: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        {{- $_ := first .Values.global.storageArrays  }}
+        {{- $arraysStr := "" }}
+        {{- range $i, $array := .Values.global.storageArrays }}
+          {{- $arraysStr = trim (cat $arraysStr $array.storageArrayId) }}
+        {{- end }}
+        - name: driver
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: {{ required "Must provide the PowerMax driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [ "/csi-powermax.sh" ]
+          env:
+            - name: X_CSI_POWERMAX_DRIVER_NAME
+              {{- if eq .Values.customDriverName.enabled true }}
+              value: {{ required "Must provide a driver name" (printf "%s.%s.dellemc.com" ( include "custom.namespace" . ) .Values.customDriverName.value) }}
+              {{- else }}
+              value: csi-powermax.dellemc.com
+              {{- end }}
+            - name: CSI_ENDPOINT
+              value: unix://{{ .Values.kubeletConfigDir }}/plugins/powermax.emc.dell.com/csi_sock
+            - name: X_CSI_MODE
+              value: node
+            - name: X_CSI_PRIVATE_MOUNT_DIR
+              value: "{{ .Values.kubeletConfigDir }}/plugins/powermax.emc.dell.com/disks"
+            - name: X_CSI_MANAGED_ARRAYS
+              value: {{ $arraysStr | replace " " "," | quote }}
+            {{- $managementServer := first .Values.global.managementServers }}
+            - name: X_CSI_POWERMAX_ENDPOINT
+              value: {{ required "Must provide a Unisphere HTTPS endpoint." $managementServer.endpoint }}
+            - name: X_CSI_POWERMAX_DEBUG
+              value: {{ .Values.powerMaxDebug | default "false" | lower | quote }}
+            - name: X_CSI_POWERMAX_SKIP_CERTIFICATE_VALIDATION
+              value: {{ .Values.skipCertificateValidation | default "true" | lower | quote }}
+            - name: X_CSI_K8S_CLUSTER_PREFIX
+              value:  {{ required "Must provide a Cluster Prefix." .Values.clusterPrefix }}
+            - name: X_CSI_POWERMAX_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.defaultCredentialsSecret }}
+                  key: username
+            - name: X_CSI_POWERMAX_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.defaultCredentialsSecret }}
+                  key: password
+            - name: X_CSI_POWERMAX_NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            {{- if eq .Values.enableCHAP  true }}
+            - name: X_CSI_POWERMAX_ISCSI_ENABLE_CHAP
+              value: "true"
+            - name: X_CSI_POWERMAX_ISCSI_CHAP_USERNAME
+              value: ""
+            - name: X_CSI_POWERMAX_ISCSI_CHAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-creds
+                  key: chapsecret
+            {{- else }}
+            - name: X_CSI_POWERMAX_ISCSI_ENABLE_CHAP
+              value: "false"
+            {{- end }}
+            - name: X_CSI_POWERMAX_PROXY_SERVICE_NAME
+              value: {{ .Release.Name }}-reverseproxy
+            - name: X_CSI_ISCSI_CHROOT
+              value: {{ .Values.ISCSIChroot | default "/noderoot" }}
+            - name: X_CSI_GRPC_MAX_THREADS
+              value: "50"
+            - name: X_CSI_TRANSPORT_PROTOCOL
+              value: {{ .Values.transportProtocol | default "" }}
+            - name: SSL_CERT_DIR
+              value: /certs
+            - name: X_CSI_POWERMAX_CONFIG_PATH
+              value: /powermax-config-params/driver-config-params.yaml
+            - name: X_CSI_POWERMAX_TOPOLOGY_CONFIG_PATH
+              value: /node-topology-config/topologyConfig.yaml
+            - name: X_CSI_IG_NODENAME_TEMPLATE
+              value: {{ .Values.nodeNameTemplate | default "" }}
+            - name: X_CSI_IG_MODIFY_HOSTNAME
+              value: {{ .Values.modifyHostName | default "false" | lower | quote }}
+            - name: X_CSI_POWERMAX_PORTGROUPS
+              value: {{ .Values.portGroups | toJson }}
+            {{- if hasKey .Values.node "healthMonitor" }}
+            {{- if eq .Values.node.healthMonitor.enabled true }}
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.node.healthMonitor.enabled }}"
+            {{- end }}
+            {{- end }}
+            {{- if hasKey .Values.node "topologyControl" }}
+            {{- if eq .Values.node.topologyControl.enabled true }}
+            - name: X_CSI_TOPOLOGY_CONTROL_ENABLED
+              value: "{{ .Values.node.topologyControl.enabled }}"
+            {{- end }}
+            {{- end }}
+            - name: X_CSI_VSPHERE_ENABLED
+              value: "{{ .Values.vSphere.enabled }}"
+            {{- if eq .Values.vSphere.enabled true }}
+            - name: X_CSI_VSPHERE_PORTGROUP
+              value: {{ required "Must provide portgroup for vsphere" .Values.vSphere.fcPortGroup }}
+            - name: X_CSI_VSPHERE_HOSTNAME
+              value: {{ required "Must provide host group for vsphere" .Values.vSphere.fcHostName }}
+            - name: X_CSI_VCENTER_HOST
+              value: {{ required "Must provide hosr url for vsphere" .Values.vSphere.vCenterHost }}
+            - name: X_CSI_VCENTER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vSphere.vCenterCredSecret }}
+                  key: username
+            - name: X_CSI_VCENTER_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vSphere.vCenterCredSecret }}
+                  key: password
+            {{- end }}
+          volumeMounts:
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/powermax.emc.dell.com
+            - name: volumedevices-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/volumeDevices
+              mountPropagation: "Bidirectional"
+            - name: pods-path
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: sys
+              mountPath: /sys
+            - name: noderoot
+              mountPath: {{ .Values.ISCSIChroot | default "/noderoot" }}
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            - name: dbus-socket
+              mountPath: /run/dbus/system_bus_socket
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+            {{- if hasKey .Values.node "topologyControl" }}
+            {{- if eq .Values.node.topologyControl.enabled true }}
+            - name: node-topology-config
+              mountPath: /node-topology-config
+            {{- end }}
+            {{- end }}
+        - name: registrar
+          image: {{ required "Must provide the CSI node registrar container image." ( include "csi-powermax.registrarImage" . ) }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            #- --mode=node-register
+            #- --driver-requires-attachment=true
+            #- --pod-info-mount-version=v1
+            - --kubelet-registration-path={{ .Values.kubeletConfigDir }}/plugins/powermax.emc.dell.com/csi_sock
+          env:
+            - name: ADDRESS
+              value: /csi/csi_sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: registration-dir
+              mountPath: /registration
+            - name: driver-path
+              mountPath: /csi
+        {{- if hasKey .Values "migration" }}
+        {{- if eq .Values.migration.enabled true }}
+        - name: csi-node-rescanner
+          securityContext:
+            privileged: true
+            capabilities:
+              add: [ "SYS_ADMIN" ]
+            allowPrivilegeEscalation: true
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{  required "Must provide the node rescanner sidecar container image." .Values.migration.nodeRescanSidecarImage }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--retry-interval-start=1s"
+            - "--retry-interval-max=300s"
+            - "--timeout=300s"
+            - "--prefix={{ .Values.migration.migrationPrefix}}"
+          env:
+            - name: ADDRESS
+              value: /csi/csi_sock
+            - name: X_CSI_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: registration-dir
+              mountPath: /registration
+            - name: driver-path
+              mountPath: /csi
+            - name: dev
+              mountPath: /dev
+            - name: sys
+              mountPath: /sys
+            - name: noderoot
+              mountPath: {{ .Values.ISCSIChroot | default "/noderoot" }}
+            - name: volumedevices-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/volumeDevices
+              mountPropagation: "Bidirectional"
+            - name: pods-path
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+        {{ end }}
+        {{ end }}
+        {{- if hasKey .Values "authorization" }}
+        {{- if eq .Values.authorization.enabled true }}
+        - name: karavi-authorization-proxy
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{ required "Must provide the authorization sidecar container image." .Values.authorization.sidecarProxyImage }}
+          env:
+            - name: PROXY_HOST
+              value: "{{ .Values.authorization.proxyHost }}"
+            - name: SKIP_CERTIFICATE_VALIDATION
+              value: "{{ .Values.authorization.skipCertificateValidation }}"
+            - name: PLUGIN_IDENTIFIER
+              value: powermax
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: proxy-authz-tokens
+                  key: access
+            - name: REFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: proxy-authz-tokens
+                  key: refresh
+          volumeMounts:
+            - name: karavi-authorization-config
+              mountPath: /etc/karavi-authorization/config
+            - name: proxy-server-root-certificate
+              mountPath: /etc/karavi-authorization/root-certificates
+            - name: powermax-config-params
+              mountPath: /etc/karavi-authorization
+        {{ end }}
+        {{ end }}
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: driver-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/powermax.emc.dell.com
+            type: DirectoryOrCreate
+        - name: volumedevices-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/volumeDevices
+            type: DirectoryOrCreate
+        - name: pods-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/pods
+            type: Directory
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: noderoot
+          hostPath:
+            path: /
+            type: Directory
+        - name: dbus-socket
+          hostPath:
+            path: /run/dbus/system_bus_socket
+            type: Socket
+        - name: powermax-config-params
+          configMap:
+            name: {{ .Release.Name }}-config-params
+      {{- if hasKey .Values.node "topologyControl" }}
+      {{- if eq .Values.node.topologyControl.enabled true }}
+        - name: node-topology-config
+          configMap:
+            name: node-topology-config
+      {{- end }}
+      {{- end }}
+        - name: certs
+          secret:
+              secretName: {{ .Release.Name }}-certs
+              optional: true
+      {{- if hasKey .Values "authorization" }}
+      {{- if eq .Values.authorization.enabled true }}
+        - name: karavi-authorization-config
+          secret:
+            secretName: karavi-authorization-config
+        - name: proxy-server-root-certificate
+          secret:
+            secretName: proxy-server-root-certificate
+      {{ end }}
+      {{ end }}
