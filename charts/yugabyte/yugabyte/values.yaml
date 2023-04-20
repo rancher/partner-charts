@@ -2,10 +2,15 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 Component: "yugabytedb"
+
+fullnameOverride: ""
+nameOverride: ""
+
 Image:
   repository: "yugabytedb/yugabyte"
-  tag: 2.14.8.0-b17
+  tag: 2.16.3.0-b43
   pullPolicy: IfNotPresent
+  pullSecretName: ""
 
 storage:
   ephemeral: false  # will not allocate PVs when true
@@ -21,26 +26,37 @@ storage:
 resource:
   master:
     requests:
-      cpu: 2
+      cpu: "2"
       memory: 2Gi
     limits:
-      cpu: 2
+      cpu: "2"
       memory: 2Gi
   tserver:
     requests:
-      cpu: 2
+      cpu: "2"
       memory: 4Gi
     limits:
-      cpu: 2
+      cpu: "2"
       memory: 4Gi
 
 replicas:
   master: 3
   tserver: 3
+  ## Used to set replication factor when isMultiAz is set to true
+  totalMasters: 3
 
 partition:
   master: 0
   tserver: 0
+
+# Used in Multi-AZ setup
+masterAddresses: ""
+
+isMultiAz: false
+AZ: ""
+
+# Disable the YSQL
+disableYsql: false
 
 tls:
   # Set to true to enable the TLS.
@@ -52,10 +68,14 @@ tls:
   # Set enabled to true to use cert-manager instead of providing your own rootCA
   certManager:
     enabled: false
-    # Will create own ca certificate and issuer when set to false
+    # Will create own ca certificate and issuer when set to true
+    bootstrapSelfsigned: true
+    # Use ClusterIssuer when set to true, otherwise use Issuer
     useClusterIssuer: false
-    # ignored when useClusterIssuer is false
+    # Name of ClusterIssuer to use when useClusterIssuer is true
     clusterIssuer: cluster-ca
+    # Name of Issuer to use when useClusterIssuer is false
+    issuer: yugabyte-ca
     certificates:
       # The lifetime before cert-manager will issue a new certificate.
       # The re-issued certificates will not be automatically reloaded by the service.
@@ -67,10 +87,14 @@ tls:
       # Or 256, 384 or 521 for ECDSA
       keySize: 521
 
-  # Will be ignored when certManager.enabled=true
+  ## When certManager.enabled=false, rootCA.cert and rootCA.key are used to generate TLS certs.
+  ## When certManager.enabled=true and boostrapSelfsigned=true, rootCA is ignored.
+  ## When certManager.enabled=true and bootstrapSelfsigned=false, only rootCA.cert is used
+  ## to verify TLS certs generated and signed by the external provider.
   rootCA:
     cert: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM2VENDQWRHZ0F3SUJBZ0lCQVRBTkJna3Foa2lHOXcwQkFRc0ZBREFXTVJRd0VnWURWUVFERXd0WmRXZGgKWW5sMFpTQkVRakFlRncweE9UQXlNRGd3TURRd01qSmFGdzB5T1RBeU1EVXdNRFF3TWpKYU1CWXhGREFTQmdOVgpCQU1UQzFsMVoyRmllWFJsSUVSQ01JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBCnVOMWF1aWc4b2pVMHM0OXF3QXhrT2FCaHkwcTlyaVg2akVyZWJyTHJOWDJOeHdWQmNVcWJkUlhVc3VZNS96RUQKUC9CZTNkcTFuMm9EQ2ZGVEwweGkyNFdNZExRcnJBMndCdzFtNHM1WmQzcEJ1U04yWHJkVVhkeUx6dUxlczJNbgovckJxcWRscXp6LzAyTk9TOE9SVFZCUVRTQTBSOFNMQ1RjSGxMQmRkMmdxZ1ZmemVXRlVObXhWQ2EwcHA5UENuCmpUamJJRzhJWkh5dnBkTyt3aURQM1Y1a1ZEaTkvbEtUaGUzcTFOeDg5VUNFcnRJa1pjSkYvWEs3aE90MU1sOXMKWDYzb2lVMTE1Q2svbGFGRjR6dWgrZk9VenpOVXRXeTc2RE92cm5pVGlaU0tQZDBBODNNa2l2N2VHaDVkV3owWgpsKzJ2a3dkZHJaRzVlaHhvbGhGS3pRSURBUUFCbzBJd1FEQU9CZ05WSFE4QkFmOEVCQU1DQXFRd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUZCd01DTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3RFFZSktvWkkKaHZjTkFRRUxCUUFEZ2dFQkFEQjVRbmlYd1ptdk52eG5VbS9sTTVFbms3VmhTUzRUZldIMHY4Q0srZWZMSVBTbwpVTkdLNXU5UzNEUWlvaU9SN1Vmc2YrRnk1QXljMmNUY1M2UXBxTCt0V1QrU1VITXNJNk9oQ05pQ1gvQjNKWERPCkd2R0RIQzBVOHo3aWJTcW5zQ2Rid05kajAyM0lwMHVqNE9DVHJ3azZjd0RBeXlwVWkwN2tkd28xYWJIWExqTnAKamVQMkwrY0hkc2dKM1N4WWpkK1kvei9IdmFrZG1RZDJTL1l2V0R3aU1SRDkrYmZXWkJVRHo3Y0QyQkxEVmU0aAp1bkFaK3NyelR2Sjd5dkVodzlHSDFyajd4Qm9VNjB5SUUrYSszK2xWSEs4WnBSV0NXMnh2eWNrYXJSKytPS2NKClFsL04wWExqNWJRUDVoUzdhOTdhQktTamNqY3E5VzNGcnhJa2tKST0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
     key: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcEFJQkFBS0NBUUVBdU4xYXVpZzhvalUwczQ5cXdBeGtPYUJoeTBxOXJpWDZqRXJlYnJMck5YMk54d1ZCCmNVcWJkUlhVc3VZNS96RURQL0JlM2RxMW4yb0RDZkZUTDB4aTI0V01kTFFyckEyd0J3MW00czVaZDNwQnVTTjIKWHJkVVhkeUx6dUxlczJNbi9yQnFxZGxxenovMDJOT1M4T1JUVkJRVFNBMFI4U0xDVGNIbExCZGQyZ3FnVmZ6ZQpXRlVObXhWQ2EwcHA5UENualRqYklHOElaSHl2cGRPK3dpRFAzVjVrVkRpOS9sS1RoZTNxMU54ODlVQ0VydElrClpjSkYvWEs3aE90MU1sOXNYNjNvaVUxMTVDay9sYUZGNHp1aCtmT1V6ek5VdFd5NzZET3ZybmlUaVpTS1BkMEEKODNNa2l2N2VHaDVkV3owWmwrMnZrd2RkclpHNWVoeG9saEZLelFJREFRQUJBb0lCQUJsdW1tU3gxR1djWER1Mwpwei8wZEhWWkV4c2NsU3U0SGRmZkZPcTF3cFlCUjlmeGFTZGsxQzR2YXF1UjhMaWl6WWVtVWViRGgraitkSnlSCmpwZ2JNaDV4S1BtRkw5empwU3ZUTkN4UHB3OUF5bm5sM3dyNHZhcU1CTS9aZGpuSGttRC9kQzBadEEvL0JIZ3YKNHk4d3VpWCsvUWdVaER0Z1JNcmR1ZUZ1OVlKaFo5UE9jYXkzSkkzMFhEYjdJSS9vNFNhYnhTcFI3bTg5WjY0NwpUb3hsOEhTSzl0SUQxbkl1bHVpTmx1dHI1RzdDdE93WTBSc2N5dmZ2elg4a1d2akpLZVJVbmhMSCtXVFZOaExICjdZc0tMNmlLa1NkckMzeWVPWnV4R0pEbVdrZVgxTzNPRUVGYkc4TjVEaGNqL0lXbDh1dGt3LzYwTEthNHBCS2cKTXhtNEx3RUNnWUVBNnlPRkhNY2pncHYxLzlHZC8yb3c2YmZKcTFjM1dqQkV2cnM2ZXNyMzgrU3UvdVFneXJNcAo5V01oZElpb2dYZjVlNjV5ZlIzYVBXcjJJdWMxZ0RUNlYycDZFR2h0NysyQkF1YkIzczloZisycVNRY1lkS3pmCnJOTDdKalE4ZEVGZWdYd041cHhKOTRTTVFZNEI4Qm9hOHNJWTd3TzU4dHpVMjZoclVnanFXQ1VDZ1lFQXlVUUIKNzViWlh6MGJ5cEc5NjNwYVp0bGlJY0cvUk1XMnVPOE9rVFNYSGdDSjBob25uRm5IMGZOc1pGTHdFWEtnTTRORworU3ZNbWtUekE5eVVSMHpIMFJ4UW44L1YzVWZLT2k5RktFeWx6NzNiRkV6ZW1QSEppQm12NWQ4ZTlOenZmU0E0CkdpRTYrYnFyV3VVWWRoRWlYTnY1SFNPZ3I4bUx1TzJDbGlmNTg0a0NnWUFlZzlDTmlJWmlOODAzOHNNWFYzZWIKalI5ZDNnYXY3SjJ2UnVyeTdvNDVGNDlpUXNiQ3AzZWxnY1RnczY5eWhkaFpwYXp6OGNEVndhREpyTW16cHF4cQpWY1liaFFIblppSWM5MGRubS9BaVF2eWJWNUZqNnQ5b05VVWtreGpaV1haalJXOGtZMW55QmtDUmJWVnhER0k4CjZOV0ZoeTFGaUVVVGNJcms3WVZFQlFLQmdRREpHTVIrYWRFamtlRlUwNjVadkZUYmN0VFVPY3dzb1Foalc2akkKZVMyTThxakNYeE80NnhQMnVTeFNTWFJKV3FpckQ3NDRkUVRvRjRCaEdXS21veGI3M3pqSGxWaHcwcXhDMnJ4VQorZENxODE0VXVJR3BlOTBMdWU3QTFlRU9kRHB1WVdUczVzc1FmdTE3MG5CUWQrcEhzaHNFZkhhdmJjZkhyTGpQCjQzMmhVUUtCZ1FDZ3hMZG5Pd2JMaHZLVkhhdTdPVXQxbGpUT240SnB5bHpnb3hFRXpzaDhDK0ZKUUQ1bkFxZXEKZUpWSkNCd2VkallBSDR6MUV3cHJjWnJIN3IyUTBqT2ZFallwU1dkZGxXaWh4OTNYODZ0aG83UzJuUlYrN1hNcQpPVW9ZcVZ1WGlGMWdMM1NGeHZqMHhxV3l0d0NPTW5DZGFCb0M0Tkw3enJtL0lZOEUwSkw2MkE9PQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo="
+  ## When tls.certManager.enabled=false
   ## nodeCert and clientCert will be used only when rootCA.key is empty.
   ## Will be ignored and genSignedCert will be used to generate
   ## node and client certs if rootCA.key is provided.
@@ -85,33 +109,35 @@ tls:
 gflags:
   master:
     default_memory_limit_to_ram_ratio: 0.85
-# tserver:
+  tserver: {}
 #   use_cassandra_authentication: false
 
 PodManagementPolicy: Parallel
 
 enableLoadBalancer: true
 
-isMultiAz: false
-
 domainName: "cluster.local"
 
 serviceEndpoints:
   - name: "yb-master-ui"
     type: LoadBalancer
+    annotations: {}
+    clusterIP: ""
     ## Sets the Service's externalTrafficPolicy
-    # externalTrafficPolicy: ""
+    externalTrafficPolicy: ""
     app: "yb-master"
-    # loadBalancerIP: ""
+    loadBalancerIP: ""
     ports:
       http-ui: "7000"
 
   - name: "yb-tserver-service"
     type: LoadBalancer
+    annotations: {}
+    clusterIP: ""
     ## Sets the Service's externalTrafficPolicy
-    # externalTrafficPolicy: ""
+    externalTrafficPolicy: ""
     app: "yb-tserver"
-    # loadBalancerIP: ""
+    loadBalancerIP: ""
     ports:
       tcp-yql-port: "9042"
       tcp-yedis-port: "6379"
@@ -139,7 +165,8 @@ Services:
       http-yedis-met: "11000"
       http-ysql-met: "13000"
 
-## Should be set to true only if Istio is being used.
+## Should be set to true only if Istio is being used. This also adds
+## the Istio sidecar injection labels to the pods.
 ## TODO: remove this once
 ## https://github.com/yugabyte/yugabyte-db/issues/5641 is fixed.
 ##
@@ -155,6 +182,22 @@ multicluster:
   ## in it. A common service across different clusters for automatic
   ## failover. Useful when using new naming style.
   createCommonTserverService: false
+
+  ## Enable it to deploy YugabyteDB in a multi-cluster services enabled
+  ## Kubernetes cluster (KEP-1645). This will create ServiceExport.
+  ## GKE Ref - https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services#registering_a_service_for_export
+  ## You can use this gist for the reference to deploy the YugabyteDB in a multi-cluster scenario.
+  ## Gist - https://gist.github.com/baba230896/78cc9bb6f4ba0b3d0e611cd49ed201bf
+  createServiceExports: false
+
+  ## Mandatory variable when createServiceExports is set to true.
+  ## Use: In case of GKE, you need to pass GKE Hub Membership Name.
+  ## GKE Ref - https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services#enabling
+  kubernetesClusterId: ""
+
+  ## mcsApiVersion is used for the MCS resources created by the
+  ## chart. Set to net.gke.io/v1 when using GKE MCS.
+  mcsApiVersion: "multicluster.x-k8s.io/v1alpha1"
 
 serviceMonitor:
   ## If true, two ServiceMonitor CRs are created. One for yb-master
@@ -230,6 +273,10 @@ nodeSelector: {}
 affinity: {}
 
 statefulSetAnnotations: {}
+
+networkAnnotation: {}
+
+commonLabels: {}
 
 master:
   ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#affinity-v1-core
