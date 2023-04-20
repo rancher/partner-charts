@@ -2,18 +2,21 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+fullnameOverride: ""
+nameOverride: ""
+
 image:
   commonRegistry: ""
   # Setting commonRegistry to say, quay.io overrides the registry settings for all images
   # including the yugaware image
 
   repository: quay.io/yugabyte/yugaware
-  tag: 2.14.8.0-b17
+  tag: 2.16.3.0-b43
   pullPolicy: IfNotPresent
   pullSecret: yugabyte-k8s-pull-secret
   ## Docker config JSON File name
   ## If set, this file content will be used to automatically create secret named as above
-  # pullSecretFile:
+  pullSecretFile: ""
 
   thirdparty-deps:
     registry: quay.io
@@ -46,30 +49,39 @@ yugaware:
   storageClass: ""
   storageAnnotations: {}
   multiTenant: false
-  serviceAccount: yugaware
+  ## Name of existing ServiceAccount. When provided, the chart won't create a ServiceAccount.
+  ## It will attach the required RBAC roles to it. 
+  ## Helpful in Yugabyte Platform GKE App. 
+  serviceAccount: ''
   serviceMonitor:
     enabled: false
     annotations: {}
   serviceAccountAnnotations: {}
   service:
     annotations: {}
+    clusterIP: ""
     enabled: true
     ip: ""
     type: "LoadBalancer"
+    ## whitelist source CIDRs
+    #loadBalancerSourceRanges:
+    #- 0.0.0.0/0
+    #- 192.168.100.0/24
   pod:
     annotations: {}
+    labels: {}
   health:
     username: ""
     password: ""
     email: ""
   resources:
     requests:
-      cpu: 2
+      cpu: "2"
       memory: 4Gi
   enableProxyMetricsAuth: true
   ## List of additional alowed CORS origins in case of complex rev-proxy
   additionAllowedCorsOrigins: []
-  proxyEndpointTimeoutMs: 1 minute
+  proxyEndpointTimeoutMs: 3 minute
   ## Enables features specific for cloud deployments
   cloud:
     enabled: false
@@ -80,8 +92,14 @@ yugaware:
     # Note that the default of 0 doesn't really make sense since a StatefulSet isn't allowed to schedule extra replicas. However it is maintained as the default while we do additional testing. This value will likely change in the future.
     maxUnavailable: 0
 
+  universe_boot_script: ""
+
 ## Configure PostgreSQL part of the application
 postgres:
+  # DO NOT CHANGE if using OCP Certified helm chart
+  user: postgres
+  dbname: yugaware
+
   service:
     ## Expose internal Postgres as a Service
     enabled: false
@@ -94,12 +112,12 @@ postgres:
 
   resources:
     requests:
-      cpu: 0.5
+      cpu: "0.5"
       memory: 1Gi
 
   # If external.host is set then we will connect to an external postgres database server instead of starting our own.
   external:
-    host: null
+    host: ""
     port: 5432
     pass: ""
     dbname: postgres
@@ -147,8 +165,10 @@ nginx:
 
   resources:
     requests:
-      cpu: 0.25
+      cpu: "0.25"
       memory: 300Mi
+
+  proxyReadTimeoutSec: 600
 
 rbac:
   ## Set this to false if you don't have enough permissions to create
@@ -165,15 +185,45 @@ ocpCompatibility:
 # Extra containers to add to the pod.
 sidecars: []
 
+## Following two controls for placement of pod - nodeSelector and AZ affinity.
+## Note: Remember to also provide a yugaware.StorageClass that has a olumeBindingMode of
+## WaitForFirstConsumer so that the PVC is created in the right topology visible to this pod.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+## eg.
+## nodeSelector:
+##   topology.kubernetes.io/region: us-west1
+nodeSelector: {}
+
+## Affinity to a particular zone for the pod.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+## eg.
+## nodeAffinity:
+##   requiredDuringSchedulingIgnoredDuringExecution:
+##     nodeSelectorTerms:
+##       - matchExpressions:
+##         - key: failure-domain.beta.kubernetes.io/zone
+##           operator: In
+##           values:
+##           - us-west1-a
+##           - us-west1-b
+zoneAffinity: {}
+
+## The tolerations that the pod should have.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+tolerations: []
+
 ## Don't want prometheus to scrape nodes and evaluate alert rules in some cases (for example - cloud).
 prometheus:
   scrapeNodes: true
   evaluateAlertRules: true
   retentionTime: 15d
+  queryConcurrency: 20
+  queryMaxSamples: 5000000
+  queryTimeout: 30s
 
   resources:
     requests:
-      cpu: 2
+      cpu: "2"
       memory: 4Gi
 
   ## Prometheus remote write config, as described here:
@@ -194,8 +244,10 @@ prometheus:
 
 # Arbitrary key=value config entries for application.docker.conf
 additionalAppConf:
-  stringConf:
-  nonStringConf:
+  stringConf: {}
+  nonStringConf: {}
+
+jdbcParams: ""
 
 ## Override the APIVersion used by policy group for
 ## PodDisruptionBudget resources. The chart selects the correct
@@ -203,3 +255,4 @@ additionalAppConf:
 ## to modify this unless you are using helm template command i.e. GKE
 ## app's deployer image against a Kubernetes cluster >= 1.21.
 # pdbPolicyVersionOverride: "v1beta1"
+pdbPolicyVersionOverride: ""
