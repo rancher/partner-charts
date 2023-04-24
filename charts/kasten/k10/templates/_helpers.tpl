@@ -1,3 +1,105 @@
+{{/* Returns a string of the disabled K10 services */}}
+{{- define "get.disabledServices" -}}
+  {{/* Append services to this list based on helm values */}}
+  {{- $disabledServices := list -}}
+
+  {{- $disabledServices | join " " -}}
+{{- end -}}
+
+{{/* Removes disabled service names from the provided string of service names */}}
+{{- define "removeDisabledServicesFromList" -}}
+  {{- $disabledServices := include "get.disabledServices" .main | splitList " " -}}
+  {{- $services := .list | splitList " " -}}
+
+  {{- range $disabledServices -}}
+    {{- $services = without $services . -}}
+  {{- end -}}
+
+  {{- $services | join " " -}}
+{{- end -}}
+
+{{/* Removes keys with disabled service names from the provided YAML string */}}
+{{- define "removeDisabledServicesFromYaml" -}}
+  {{- $disabledServices := include "get.disabledServices" .main | splitList " " -}}
+  {{- $services := .yaml | fromYaml -}}
+
+  {{- range $disabledServices -}}
+    {{- $services =  unset $services . -}}
+  {{- end -}}
+
+  {{- if gt (len $services) 0 -}}
+    {{- $services | toYaml | trim | nindent 0}}
+  {{- else -}}
+    {{- print "" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Returns k10.additionalServices string with disabled services removed */}}
+{{- define "get.enabledAdditionalServices" -}}
+  {{- $list := include "k10.additionalServices" . -}}
+  {{- dict "main" . "list" $list | include "removeDisabledServicesFromList" -}}
+{{- end -}}
+
+{{/* Returns k10.restServices string with disabled services removed */}}
+{{- define "get.enabledRestServices" -}}
+  {{- $list := include "k10.restServices" . -}}
+  {{- dict "main" . "list" $list | include "removeDisabledServicesFromList" -}}
+{{- end -}}
+
+{{/* Returns k10.services string with disabled services removed */}}
+{{- define "get.enabledServices" -}}
+  {{- $list := include "k10.services" . -}}
+  {{- dict "main" . "list" $list | include "removeDisabledServicesFromList" -}}
+{{- end -}}
+
+{{/* Returns k10.exposedServices string with disabled services removed */}}
+{{- define "get.enabledExposedServices" -}}
+  {{- $list := include "k10.exposedServices" . -}}
+  {{- dict "main" . "list" $list | include "removeDisabledServicesFromList" -}}
+{{- end -}}
+
+{{/* Returns k10.statelessServices string with disabled services removed */}}
+{{- define "get.enabledStatelessServices" -}}
+  {{- $list := include "k10.statelessServices" . -}}
+  {{- dict "main" . "list" $list | include "removeDisabledServicesFromList" -}}
+{{- end -}}
+
+{{/* Returns k10.colocatedServices string with disabled services removed */}}
+{{- define "get.enabledColocatedServices" -}}
+  {{- $yaml := include "k10.colocatedServices" . -}}
+  {{- dict "main" . "yaml" $yaml | include "removeDisabledServicesFromYaml" -}}
+{{- end -}}
+
+{{/* Returns YAML of primary services mapped to their secondary services */}}
+{{/* The content will only have services which are not disabled */}}
+{{- define "get.enabledColocatedServiceLookup" -}}
+  {{- $colocatedServicesLookup := include "k10.colocatedServiceLookup" . | fromYaml -}}
+  {{- $disabledServices := include "get.disabledServices" . | splitList " " -}}
+  {{- $filteredLookup := dict -}}
+
+  {{/* construct filtered lookup */}}
+  {{- range $primaryService, $secondaryServices := $colocatedServicesLookup -}}
+    {{/* proceed only if primary service is enabled */}}
+    {{- if not (has $primaryService $disabledServices) -}}
+      {{/* filter out secondary services */}}
+      {{- range $disabledServices -}}
+        {{- $secondaryServices = without $secondaryServices . -}}
+      {{- end -}}
+      {{/* add entry for primary service only if secondary services exist */}}
+      {{- if gt (len $secondaryServices) 0 -}}
+        {{- $filteredLookup = set $filteredLookup $primaryService $secondaryServices -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+
+  {{/* return filtered lookup */}}
+  {{- if gt (len $filteredLookup) 0 -}}
+    {{- $filteredLookup | toYaml | trim | nindent 0 -}}
+  {{- else -}}
+    {{- print "" -}}
+  {{- end -}}
+{{- end -}}
+
 {{/* Check if basic auth is needed */}}
 {{- define "basicauth.check" -}}
   {{- if .Values.auth.basicAuth.enabled }}
@@ -154,8 +256,8 @@ Prometheus scrape config template for k10 services
       {{- else if eq "aggregatedapis" .k10service }}
       - {{ .k10service }}-svc.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:443
       {{- else }}
-      {{- $service := default .k10service (index (include "k10.colocatedServices" . | fromYaml) .k10service).primary }}
-      {{- $port := default .main.Values.service.externalPort (index (include "k10.colocatedServices" . | fromYaml) .k10service).port }}
+      {{- $service := default .k10service (index (include "get.enabledColocatedServices" . | fromYaml) .k10service).primary }}
+      {{- $port := default .main.Values.service.externalPort (index (include "get.enabledColocatedServices" . | fromYaml) .k10service).port }}
       - {{ $service }}-svc.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:{{ $port }}
       {{- end }}
       labels:
@@ -187,8 +289,8 @@ Prometheus scrape config template for k10 services
     {{- $serviceFqdn = printf "%s-svc.%s.svc.%s" .k10service .main.Release.Namespace .main.Values.cluster.domainName -}}
     {{- $servicePort = "443" -}}
   {{- else -}}
-    {{- $service := default .k10service (index (include "k10.colocatedServices" . | fromYaml) .k10service).primary -}}
-    {{- $port := default .main.Values.service.externalPort (index (include "k10.colocatedServices" . | fromYaml) .k10service).port | toString -}}
+    {{- $service := default .k10service (index (include "get.enabledColocatedServices" .main | fromYaml) .k10service).primary -}}
+    {{- $port := default .main.Values.service.externalPort (index (include "get.enabledColocatedServices" .main | fromYaml) .k10service).port | toString -}}
     {{- $serviceFqdn = printf "%s-svc.%s.svc.%s" $service .main.Release.Namespace .main.Values.cluster.domainName -}}
     {{- $servicePort = $port -}}
   {{- end }}
@@ -550,7 +652,7 @@ Lookup and return only enabled colocated services
 */}}
 {{- define "get.enabledColocatedSvcList" -}}
 {{- $enabledColocatedSvcList := dict }}
-{{- $colocatedList := include "k10.colocatedServiceLookup" . | fromYaml }}
+{{- $colocatedList := include "get.enabledColocatedServiceLookup" . | fromYaml }}
 {{- range $primary, $secondaryList := $colocatedList }}
   {{- $enabledSecondarySvcList := list }}
   {{- range $skip, $secondary := $secondaryList }}
@@ -567,7 +669,7 @@ Lookup and return only enabled colocated services
 
 {{- define "get.serviceContainersInPod" -}}
 {{- $podService := .k10_service_pod }}
-{{- $colocatedList := include "k10.colocatedServices" . | fromYaml }}
+{{- $colocatedList := include "get.enabledColocatedServices" .main | fromYaml }}
 {{- $colocatedLookupByPod := include "get.enabledColocatedSvcList" .main | fromYaml }}
 {{- $containerList := list $podService }}
 {{- if hasKey $colocatedLookupByPod $podService }}
@@ -582,8 +684,8 @@ Lookup and return only enabled colocated services
 {{- $containerList := (dict "main" .main "k10_service_pod" $podService | include "get.serviceContainersInPod" | splitList " ") }}
 {{- if .main.Values.global.persistence.enabled }}
   {{- range $skip, $containerInPod := $containerList }}
-    {{- $isRestService := has $containerInPod (include "k10.restServices" . | splitList " ") }}
-    {{- $isStatelessService := has $containerInPod (include "k10.statelessServices" . | splitList " ") }}
+    {{- $isRestService := has $containerInPod (include "get.enabledRestServices" $.main | splitList " ") }}
+    {{- $isStatelessService := has $containerInPod (include "get.enabledStatelessServices" $.main | splitList " ") }}
     {{- if and $isRestService (not $isStatelessService) }}
       {{- $statefulRestSvcsInPod = append $statefulRestSvcsInPod $containerInPod }}
     {{- end }}

@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "gitlab-zoekt.fullname" . }}
+  labels:
+    {{- include "gitlab-zoekt.labels" . | nindent 4 }}
+    {{- include "gitlab.standardLabels" . | nindent 4 }}
+    {{- include "gitlab.commonLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "gitlab-zoekt.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "gitlab-zoekt.fullname" . }}
+  replicas: 1 # See https://gitlab.com/gitlab-org/gitlab-build-images/-/issues/118
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "gitlab-zoekt.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gitlab-zoekt.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: zoekt-dynamic-indexserver
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ .Values.dynamicIndexserver.image.repository }}:{{ .Values.dynamicIndexserver.image.tag | default "latest" }}
+          imagePullPolicy: {{ coalesce .Values.dynamicIndexserver.image.pullPolicy .Values.image.pullPolicy }}
+          ports:
+          - containerPort: {{ .Values.dynamicIndexserver.listen.port }}
+            name: indexserver
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.dynamicIndexserver.listen.port }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.dynamicIndexserver.listen.port }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: zoekt-data
+            mountPath: /data/repos
+          - name: zoekt-index
+            mountPath: /data/index
+        - name: zoekt-webserver
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default "latest" }}
+          imagePullPolicy: {{ coalesce .Values.webserver.image.pullPolicy .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.webserver.listen.port }}
+              name: webserver
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.webserver.listen.port }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.webserver.listen.port }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: zoekt-index
+            mountPath: /data/index
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: zoekt-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.bareRepoStorageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.bareRepoStorage }}
+  - metadata:
+      name: zoekt-index
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName:  {{ .Values.indexStorageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.indexStorage }}

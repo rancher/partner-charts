@@ -2,6 +2,38 @@
 documentation](doc/development/changelog.md) for instructions on adding your own
 entry.
 
+## 6.11.0 (2023-04-21)
+
+### Added (7 changes)
+
+- [Add the ability to install the ebs_csi_driver](gitlab-org/charts/gitlab@5c978d41d7cb528eef7f90a520d73b0ce83c7dcf) ([merge request](gitlab-org/charts/gitlab!3083))
+- [Adding containerSecurityContext logic to sidekiq chart](gitlab-org/charts/gitlab@64e60de58e4c2ead512856a605bd30de273321c5) by @rgarcia65201 ([merge request](gitlab-org/charts/gitlab!3044))
+- [Add support for the workhorse GCS client](gitlab-org/charts/gitlab@70f6ea0c037bcc0343ae7fd7da258d8e43a087bd) ([merge request](gitlab-org/charts/gitlab!3060))
+- [Configurations for duo auth](gitlab-org/charts/gitlab@40b28a67dab49bd29f5b3c7604d323db58f958cb) ([merge request](gitlab-org/charts/gitlab!3043))
+- [Bump gitlab-zoekt version to 0.2.0](gitlab-org/charts/gitlab@05b450d0a28b1bfb46245d4e88ee47157f092eca) ([merge request](gitlab-org/charts/gitlab!3049))
+- [Add kubeval for Kubernetes 1.25](gitlab-org/charts/gitlab@973d2080aca68789a5ee061499f2d07a2eecf47a) ([merge request](gitlab-org/charts/gitlab!3031))
+- [Add the gitlab/gitlab-zoekt chart as optional (disabled) dependency](gitlab-org/charts/gitlab@4f02bb948502de173beec97bc436df84202e34af) ([merge request](gitlab-org/charts/gitlab!3018))
+
+### Fixed (2 changes)
+
+- [Add Prometheus annotations to postgres-metrics service](gitlab-org/charts/gitlab@a8ca140916db03aed9309760f68a944bdcc83098) by @remram44 ([merge request](gitlab-org/charts/gitlab!3079))
+- [Webservice: make Workhorse stick around for SHUTDOWN_BLACKOUT_SECONDS](gitlab-org/charts/gitlab@2a14d9b3e7034520cfaa63f9e4af1f60800820dd) ([merge request](gitlab-org/charts/gitlab!3084))
+
+### Changed (5 changes)
+
+- [Update gitlab-org/container-registry from 3.71.0-gitlab to 3.71.0-gitlab](gitlab-org/charts/gitlab@d716d2db682ba941c44481172773b12a8844384a) ([merge request](gitlab-org/charts/gitlab!3100))
+- [Bump Container Registry to v3.71.0-gitlab](gitlab-org/charts/gitlab@170b162a33c1c8727cbcf137c38388e0c3b1cb78) ([merge request](gitlab-org/charts/gitlab!3096))
+- [Update NLB example for AWS Load Balancer Controller](gitlab-org/charts/gitlab@03859fa3c19b41bdeb717eda7bc08c6c4118f669) ([merge request](gitlab-org/charts/gitlab!3014))
+- [Update gitlab-org/container-registry from 3.69.0-gitlab to 3.70.0-gitlab](gitlab-org/charts/gitlab@8b1c2eb3db3a00e738fbbd127ff7259579c2c4d9) ([merge request](gitlab-org/charts/gitlab!3069))
+- [Update gitlab-org/charts/gitlab-runner from 0.51.0 to 0.51.1](gitlab-org/charts/gitlab@3fc3b1280511b6c614d981cba6d27ca862fb1bb0) ([merge request](gitlab-org/charts/gitlab!3061))
+
+### Other (4 changes)
+
+- [Docs: Clarify `global.serviceAccount` usage](gitlab-org/charts/gitlab@e794742aabc27893b3e4c465fc27aa3fc744843c) ([merge request](gitlab-org/charts/gitlab!3110))
+- [Bump gitlab-zoekt to v0.3.0](gitlab-org/charts/gitlab@418f28559cbb547d2cb36b7e56c08bc6046f05c3) ([merge request](gitlab-org/charts/gitlab!3094))
+- [Remove references to unused 'fullnameOverride' key](gitlab-org/charts/gitlab@34b9c0d5d1f5227b8bb1b2496e3be6f9ff3a9ec0) ([merge request](gitlab-org/charts/gitlab!3092))
+- [checkConfig: verify format of omniauth provider content](gitlab-org/charts/gitlab@f419b34386799a83587eeecfea142070477e8029) ([merge request](gitlab-org/charts/gitlab!3054))
+
 ## 6.10.3 (2023-04-14)
 
 No changes.
@@ -46,6 +78,10 @@ No changes.
 - [Add docs and config check for gitlab-shell metrics](gitlab-org/charts/gitlab@e46e19b84a47f45018e39af1e5e0731be6982a1f) ([merge request](gitlab-org/charts/gitlab!3006))
 - [Add more context to sidekiq pod deprecation notices](gitlab-org/charts/gitlab@fdaef9d08c68beac06b0bcff16d0ec6b1bc274aa) ([merge request](gitlab-org/charts/gitlab!2966))
 - [Add more context to sidekiq pod deprecation notices](gitlab-org/charts/gitlab@378fd9116dc5147d9d4c23d81a72e0e8089f138e) ([merge request](gitlab-org/charts/gitlab!2972))
+
+## 6.9.4 (2023-03-30)
+
+No changes.
 
 ## 6.9.3 (2023-03-09)
 
@@ -99,6 +135,14 @@ No changes.
 - [Moved minio config to global in example config](gitlab-org/charts/gitlab@973557e4cf0c5ec1e0c399fcce557fae2a87de17) ([merge request](gitlab-org/charts/gitlab!2952))
 - [Doc - configure the GitLab chart with an decomposed database](gitlab-org/charts/gitlab@af72661b6f82f8f16dab591c8af67e44baf0b998) ([merge request](gitlab-org/charts/gitlab!2890))
 
+## 6.8.6 (2023-04-18)
+
+No changes.
+
+## 6.8.5 (2023-03-30)
+
+No changes.
+
 ## 6.8.4 (2023-03-02)
 
 No changes.
@@ -136,6 +180,10 @@ No changes.
 - [Update gitlab-org/charts/gitlab-runner from 0.48.0 to 0.48.1](gitlab-org/charts/gitlab@460c275eaca9b1e3bf063947ca49629edef57d80) ([merge request](gitlab-org/charts/gitlab!2915))
 - [Update gitlab-org/gitlab-exporter from 11.18.2 to 12.1.0](gitlab-org/charts/gitlab@428de3dd7c208a0469b18b927fece2bc54029b19) ([merge request](gitlab-org/charts/gitlab!2911))
 - [Update gitlab-org/container-registry from 3.63.0-gitlab to 3.64.0-gitlab](gitlab-org/charts/gitlab@a1edaea5f4d9d2a6d972b7412deafe6a2b50aedb) ([merge request](gitlab-org/charts/gitlab!2904))
+
+## 6.7.9 (2023-04-20)
+
+No changes.
 
 ## 6.7.8 (2023-03-02)
 

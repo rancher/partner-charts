@@ -3,11 +3,11 @@
 {{- $service_port := .Values.service.externalPort -}}
 {{- $aggregated_api_port := .Values.service.aggregatedApiPort -}}
 {{- $postfix := default .Release.Name .Values.ingress.urlPath -}}
-{{- $colocated_services := include "k10.colocatedServices" . | fromYaml -}}
-{{- $exposed_services := include "k10.exposedServices" . | splitList " " -}}
+{{- $colocated_services := include "get.enabledColocatedServices" . | fromYaml -}}
+{{- $exposed_services := include "get.enabledExposedServices" . | splitList " " -}}
 {{- $os_postfix := default .Release.Name .Values.route.path -}}
 {{- $main_context := . -}}
-{{ $service_list := append (include "k10.restServices" . | splitList " ") "frontend" }}
+{{ $service_list := append (include "get.enabledRestServices" . | splitList " ") "frontend" }}
 {{- range $service_list }}
   {{- $exposed_service := (has . $exposed_services) }}
   {{- $mc_exposed_service := (eq . "controllermanager") }}
@@ -50,7 +50,7 @@ metadata:
   {{- end }}
   {{- $colocatedList := include "get.enabledColocatedSvcList" $main_context | fromYaml }}
   {{- range $skip, $secondary := index $colocatedList . }}
-    {{- $colocConfig := index (include "k10.colocatedServices" . | fromYaml) $secondary }}
+    {{- $colocConfig := index (include "get.enabledColocatedServices" $main_context | fromYaml) $secondary }}
     {{- if $colocConfig.isExposed }}
       ---
       apiVersion: getambassador.io/v3alpha1
@@ -95,7 +95,7 @@ spec:
   {{- end }}
 {{- $colocatedList := include "get.enabledColocatedSvcList" $main_context | fromYaml }}
 {{- range $skip, $secondary := index $colocatedList . }}
-  {{- $colocConfig := index (include "k10.colocatedServices" . | fromYaml) $secondary }}
+  {{- $colocConfig := index (include "get.enabledColocatedServices" $main_context | fromYaml) $secondary }}
   - name: {{ $secondary }}
     protocol: TCP
     port: {{ $colocConfig.port }}
@@ -121,8 +121,8 @@ spec:
     run: {{ . }}-svc
 ---
   {{ end }}{{/* if not (hasKey $colocated_services $k10_service ) */}}
-{{ end -}}{{/* range append (include "k10.restServices" . | splitList " ") "frontend" */}}
-{{- range append (include "k10.services" . | splitList " ") "kanister" }}
+{{ end -}}{{/* range append (include "get.enabledRestServices" . | splitList " ") "frontend" */}}
+{{- range append (include "get.enabledServices" . | splitList " ") "kanister" }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -147,7 +147,7 @@ spec:
   {{- end }}
 {{- $colocatedList := include "get.enabledColocatedSvcList" $main_context | fromYaml }}
 {{- range $skip, $secondary := index $colocatedList . }}
-  {{- $colocConfig := index (include "k10.colocatedServices" . | fromYaml) $secondary }}
+  {{- $colocConfig := index (include "get.enabledColocatedServices" . | fromYaml) $secondary }}
   - name: {{ $secondary }}
     protocol: TCP
     port: {{ $colocConfig.port }}

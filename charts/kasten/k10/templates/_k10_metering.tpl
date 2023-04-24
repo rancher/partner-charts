@@ -33,7 +33,7 @@ spec:
 {{- end }}
 ---
 {{- end }}{{/* if $.stateful */}}
-{{ $service_list := include "k10.restServices" . | splitList " " }}
+{{ $service_list := include "get.enabledRestServices" . | splitList " " }}
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -83,13 +83,13 @@ data:
 {{- end }}
 {{- end }}
 {{- end }}
-{{- range include "k10.services" . | splitList " " }}
+{{- range include "get.enabledServices" . | splitList " " }}
 {{- if (or (ne . "aggregatedapis") ($rbac)) }}
 {{ $tmpcontx := dict "main" $main "k10service" . -}}
 {{ include "k10.prometheusTargetConfig" $tmpcontx | indent 4 -}}
 {{- end }}
 {{- end }}
-{{- range include "k10.additionalServices" . | splitList " " }}
+{{- range include "get.enabledAdditionalServices" . | splitList " " }}
 {{- if not (eq . "frontend") }}
 {{ $tmpcontx := dict "main" $main "k10service" . -}}
 {{ include "k10.prometheusTargetConfig" $tmpcontx | indent 4 -}}

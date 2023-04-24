@@ -2,7 +2,7 @@
 {{- $pod := .k10_pod }}
 {{- with .main }}
 {{- $main_context := . }}
-{{- $colocatedList := include "k10.colocatedServices" . | fromYaml }}
+{{- $colocatedList := include "get.enabledColocatedServices" . | fromYaml }}
 {{- $containerList := (dict "main" $main_context "k10_service_pod" $pod | include "get.serviceContainersInPod" | splitList " ") }}
       containers:
 {{- range $skip, $container := $containerList }}
