@@ -1,0 +1,54 @@
+include:
+  - template: Workflows/MergeRequest-Pipelines.gitlab-ci.yml
+
+stages:
+  - test
+  - publish
+
+variables:
+  HELM_INSTALL_IMAGE: registry.gitlab.com/gitlab-org/cluster-integration/helm-install-image:helm-3.10.2-kube-1.24.8-alpine-3.15
+
+lint:helm:
+  image: $HELM_INSTALL_IMAGE
+  script:
+    - helm lint
+
+publish:
+  stage: publish
+  script:
+  - chart_clone_subpath=${CI_PROJECT_PATH#"gitlab-org/"} # Strip leading gitlab-org/
+  - curl --request POST
+         --form "token=${CHARTS_TRIGGER_TOKEN}"
+         --form ref=master
+         --form "variables[CHART_NAME]=${CI_PROJECT_NAME}"
+         --form "variables[RELEASE_REF]=${CI_COMMIT_REF_NAME}"
+         --form "variables[CHART_CLONE_SUBPATH]=${chart_clone_subpath}"
+         https://gitlab.com/api/v4/projects/2860651/trigger/pipeline
+  rules:
+  - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$/ && $CI_PROJECT_URL == "https://gitlab.com/gitlab-org/cloud-native/charts/gitlab-zoekt"'
+
+test:install:
+  extends: .k3s
+  script:
+    - helm install gitlab-zoekt . --wait
+    - kubectl exec gitlab-zoekt-0 -- curl --fail -XPOST -d '{"CloneUrl":"https://gitlab.com/gitlab-org/gitlab-development-kit.git","RepoId":74823}' 'http://127.0.0.1:6060/index'  | tee /dev/stderr | grep '"Success":true'
+    - kubectl exec gitlab-zoekt-0 -- curl --fail -XPOST -d '{"Q":"gitaly"}' 'http://127.0.0.1:6070/api/search'  | tee /dev/stderr | grep "LineStart" # Some random thing that should appear when there are results
+
+test:upgrade:
+  extends: .k3s
+  script:
+    - helm install gitlab-zoekt . --wait
+    - helm upgrade gitlab-zoekt . --wait --reuse-values
+
+.k3s:
+  stage: test
+  image: $HELM_INSTALL_IMAGE
+  services:
+    - name: registry.gitlab.com/gitlab-org/cluster-integration/test-utils/k3s-gitlab-ci/releases/v1.26.0-k3s1
+      alias: k3s
+  before_script:
+    - apk add -u curl
+    - curl -f k3s:8081 > k3s.yaml
+    - export KUBECONFIG=$(pwd)/k3s.yaml
+    - kubectl version
+    - kubectl cluster-info

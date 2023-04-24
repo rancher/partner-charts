@@ -1,4 +1,7 @@
 {{/* Code generated automatically. DO NOT EDIT. */}}
+{{/* K10 services can be disabled by customers via helm value based feature flags.
+Therefore, fetching of a list or yaml with service names should be done with the get.enabled* helper functions.
+For example, the k10.restServices list can be fetched with get.enabledRestServices */}}
 {{- define "k10.additionalServices" -}}frontend kanister{{- end -}}
 {{- define "k10.restServices" -}}admin auth bloblifecyclemanager catalog controllermanager crypto dashboardbff events executor garbagecollector jobs logging metering state vbrintegrationapi{{- end -}}
 {{- define "k10.services" -}}aggregatedapis{{- end -}}
@@ -28,9 +31,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
-- bloblifecyclemanager
 - events
 - garbagecollector
+- bloblifecyclemanager
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -205,4 +208,4 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.90.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.91.0{{- end -}}
