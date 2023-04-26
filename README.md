@@ -31,7 +31,7 @@ files on top of it.
 * Chart must have the following Rancher specific add-ons (More details on this below).
     * kubeVersion set in the chart's metadata
     * app-readme.md
-    * questions.yaml (Optional)
+    * questions.yml (Optional)
 
 ## Workflow
 
@@ -63,7 +63,7 @@ ChartMetadata:
 EOF
 ```
 #### 4. [Create 'overlay' files](#overlay)
-Create any add-on files such as an app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
+Create any add-on files such as an app-readme.md and questions.yml in an 'overlay' subdirectory (Optional)
 ```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
@@ -125,12 +125,12 @@ d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
 
 ## Overlay
 
-Any files placed in the `packages/<vendor>/<chart>/overlay` directory will be overlayed onto the chart. This allows for adding or overwriting files within the chart as needed. The primary intended purpose is for adding the optional app-readme.md and questions.yaml files but it may be used for adding or replacing any chart files.
+Any files placed in the `packages/<vendor>/<chart>/overlay` directory will be overlayed onto the chart. This allows for adding or overwriting files within the chart as needed. The primary intended purpose is for adding the optional app-readme.md and questions.yml files but it may be used for adding or replacing any chart files.
 
 - `app-readme.md` - Write a brief description of the app and how to use it. It's recommended to keep
 it short as the longer `README.md` in your chart will be displayed in the UI as detailed description.
 
-- `questions.yaml` - Defines a set of questions to display in the chart's installation page in order for users to
+- `questions.yml` - Defines a set of questions to display in the chart's installation page in order for users to
 answer them and configure the chart using the UI instead of modifying the chart's values file directly.
 
 #### Questions example
