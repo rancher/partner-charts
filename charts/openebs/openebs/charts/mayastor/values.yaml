@@ -4,7 +4,17 @@ image:
   # -- Image registry's namespace
   repo: openebs
   # -- Release tag for our images
-  tag: v2.0.1
+  tag: v2.1.0
+  repoTags:
+    # Note: Below image tag configuration is optional and typically should never be
+    #       used. Setting specific image tags for the different repositories proves useful
+    #       for some integration testing scenarios. Use the 'tag' option above to set
+    #       release/pre-release container image tags.
+    #       The below tag values will be picked for images by default.
+    #       If not specified, 'tag' option provided above will be picked.
+    controlPlane: ""
+    dataPlane: ""
+    extensions: ""
   # -- ImagePullPolicy for our images
   pullPolicy: IfNotPresent
 
@@ -14,6 +24,10 @@ image:
 # should be removed and set 'nodeSelector' to empty '{}' as default value.
 nodeSelector:
   kubernetes.io/arch: amd64
+
+# -- Pod scheduling priority
+# ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+priorityClassName: ""
 
 earlyEvictionTolerations:
   - effect: NoExecute
@@ -119,6 +133,20 @@ agents:
   core:
     # -- Log level for the core service
     logLevel: info
+    capacity:
+      thin:
+        # -- The allowed pool commitment limit when dealing with thin provisioned volumes.
+        # Example: If the commitment is 250 and the pool is 10GiB we can overcommit the pool
+        # up to 25GiB (create 2 10GiB and 1 5GiB volume) but no further.
+        poolCommitment: "250%"
+        # -- When creating replicas for an existing volume, each replica pool must have at least
+        # this much free space percentage of the volume size.
+        # Example: if this value is 40, the pool has 40GiB free, then the max volume size allowed
+        # to be created on the pool is 100GiB.
+        volumeCommitment: "40%"
+        # -- Same as the `volumeCommitment` argument, but applicable only when creating replicas
+        # for a new volume.
+        volumeCommitmentInitial: "40%"
     resources:
       limits:
         # -- Cpu limits for core agents
@@ -250,7 +278,7 @@ csi:
 
 io_engine:
   # -- Log level for the io-engine service
-  logLevel: info,io_engine=info
+  logLevel: info
   api: "v1"
   target:
     nvmf:
@@ -263,8 +291,11 @@ io_engine:
   envcontext: ""
   reactorFreezeDetection:
     enabled: false
-  # -- The number of cpu that each io-engine instance will bind to.
+  # -- The number of cores that each io-engine instance will bind to.
   cpuCount: "2"
+  # -- If not empty, overrides the cpuCount and explicitly sets the list of cores.
+  # Example: --set='io_engine.coreList={30,31}'
+  coreList: []
   # -- Node selectors to designate storage nodes for diskpool creation
   # Note that if multi-arch images support 'kubernetes.io/arch: amd64'
   # should be removed.
@@ -349,9 +380,13 @@ etcd:
   # extra debug information on logs
   debug: false
   initialClusterState: "new"
-  # Pod anti-affinity preset
+
+  # -- Pod anti-affinity preset
   # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity
   podAntiAffinityPreset: "hard"
+  ## -- nodeSelector [object] Node labels for pod assignment
+  ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
+  nodeSelector: {}
 
   # etcd service parameters defines how the etcd service is exposed
   service:

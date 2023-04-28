@@ -28,6 +28,9 @@ spec:
       initContainers:
         {{- include "jaeger_agent_init_container" . }}
         {{- include "rest_agent_init_container" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
       {{- end }}
@@ -67,7 +70,7 @@ spec:
             requests:
               cpu: {{ .Values.csi.controller.resources.requests.cpu | quote }}
               memory: {{ .Values.csi.controller.resources.requests.memory | quote }}
-          image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-csi-controller:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-csi-controller:{{ default .Values.image.tag .Values.image.repoTags.controlPlane }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "--csi-socket=/var/lib/csi/sockets/pluginproxy/csi.sock"
@@ -89,4 +92,3 @@ spec:
       volumes:
         - name: socket-dir
           emptyDir:
-
