@@ -97,6 +97,8 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.uid
+          - name: DEPLOYMENT_NAME
+            value: {{ .Values.name }}
         {{- if .Values.managedCerts.enabled }}
           {{- if and (empty .Values.managedCerts.caCertificate.secretRef) (empty .Values.managedCerts.caCertificate.directoryPathInContainer) }}
           {{- $_ := required "secretRef or directoryPathInContainer must be configured when managedCerts is enabled" .Values.managedCerts.secretRef }}
@@ -139,10 +141,14 @@ spec:
           - name: CONFLUENT_LICENSE_DIRECTORY_PATH
             value: {{ .Values.license.directoryPathInContainer }}
           {{- end }}
-          {{- if .Values.telemetry.enabled }}
+          {{- if or (.Values.telemetry.enabled) (.Values.telemetry.operator.enabled) }}
           {{- if and (empty .Values.telemetry.secretRef) (empty .Values.telemetry.directoryPathInContainer) }}
           {{- $_ := required "secretRef or directoryPathInContainer must be configured when telemetry is enabled" .Values.telemetry.secretRef }}
           {{- end }}
+          - name: CP_TELEMETRY_ENABLED
+            value: {{ quote .Values.telemetry.enabled }}
+          - name: OPERATOR_TELEMETRY_ENABLED
+            value: {{ quote .Values.telemetry.operator.enabled }}
           {{- if .Values.telemetry.secretRef }}
           - name: CONFLUENT_TELEMETRY_SECRET_NAME
             value: {{ .Values.telemetry.secretRef }}
