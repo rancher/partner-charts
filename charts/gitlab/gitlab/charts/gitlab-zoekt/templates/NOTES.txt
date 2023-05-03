@@ -1,0 +1,23 @@
+1. Index a repo:
+   ```
+   kubectl exec gitlab-zoekt-0 -- curl -XPOST -d '{"CloneUrl":"https://gitlab.com/gitlab-org/gitlab-development-kit.git","RepoId":74823}' 'http://127.0.0.1:6060/index'
+   ```
+2. Search:
+   ```
+   kubectl exec gitlab-zoekt-0 -- curl -XPOST -d '{"Q":"gitaly"}' 'http://127.0.0.1:6070/api/search'
+   ```
+3. Services are exposed for port 6060 (indexserver), 6070 (webserver) for each replica (where the replica number is part of the DNS name) so you can connect from any other pod to index and search:
+   ```
+   kubectl exec <some-pod> -- curl -XPOST -d '{"Q":"gitaly"}' 'http://gitlab-zoekt-0.gitlab-zoekt.default.svc.cluster.local:6070/api/search'
+   ```
+{{- if .Values.ingress.enabled }}
+4. Get the IP of the ingress by running these commands:
+   ```
+   kubectl get ingress gitlab-zoekt
+   ```
+   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+5. Then do a search via the Ingress
+   ```
+   curl -H 'Host: gitlab-zoekt.local' -XPOST -d '{"Q":"gitaly"}' 'http://<IP_ADDRESS>/api/search'
+   ```
+{{- end }}

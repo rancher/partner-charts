@@ -2,7 +2,7 @@
 
 This repository is reserved for partner charts in the Rancher's v2.5+ catalog. As part of this catalog,
 all charts will benefit of a cloud native packaging system that directly references an upstream chart
-from a Helm or git repository and automates applying Rancher specific modifications and adding overlay
+from a Helm repository and automates applying Rancher specific modifications and adding overlay
 files on top of it.
 
 ## Requirements
@@ -26,12 +26,12 @@ files on top of it.
     * Managing CRDs and best practices: https://helm.sh/docs/chart_best_practices/custom_resource_definitions/
     * Semver Rules: https://semver.org/
 
-* Chart must be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/) or Git repository that we can reference.
+* Chart must be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/) (recommended) or Git repository that we can reference.
 
 * Chart must have the following Rancher specific add-ons (More details on this below).
     * kubeVersion set in the chart's metadata
     * app-readme.md
-    * questions.yaml (Optional)
+    * questions.yml (Optional)
 
 ## Workflow
 
@@ -44,20 +44,26 @@ mkdir -p packages/suse/kubewarden-controller
 
 ```
 #### 3. Create your [upstream.yaml](#configuration-file)
-Some [examples](#examples) are provided below
+
+The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chartyaml-file).
+
+**Important:** In GKE clusters, a Helm Chart will NOT display in Rancher Apps unless `kubeVersion` includes `-0` suffix in `Chart.yaml` For example:
+```bash
+kubeVersion: '>= 1.19.0-0'  
+```
+Some [example ustream.yaml](#examples) are provided below
 ```bash
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
 HelmRepo: https://charts.kubewarden.io
 HelmChart: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
-ChartMetadata:
-  kubeVersion: '>=1.21-0'
+ChartMetadata:  
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF
 ```
 #### 4. [Create 'overlay' files](#overlay)
-Create any add-on files such as an app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
+Create any add-on files such as an app-readme.md and questions.yml in an 'overlay' subdirectory (Optional)
 ```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
@@ -119,12 +125,12 @@ d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
 
 ## Overlay
 
-Any files placed in the `packages/<vendor>/<chart>/overlay` directory will be overlayed onto the chart. This allows for adding or overwriting files within the chart as needed. The primary intended purpose is for adding the optional app-readme.md and questions.yaml files but it may be used for adding or replacing any chart files.
+Any files placed in the `packages/<vendor>/<chart>/overlay` directory will be overlayed onto the chart. This allows for adding or overwriting files within the chart as needed. The primary intended purpose is for adding the optional app-readme.md and questions.yml files but it may be used for adding or replacing any chart files.
 
 - `app-readme.md` - Write a brief description of the app and how to use it. It's recommended to keep
 it short as the longer `README.md` in your chart will be displayed in the UI as detailed description.
 
-- `questions.yaml` - Defines a set of questions to display in the chart's installation page in order for users to
+- `questions.yml` - Defines a set of questions to display in the chart's installation page in order for users to
 answer them and configure the chart using the UI instead of modifying the chart's values file directly.
 
 #### Questions example
@@ -159,9 +165,6 @@ questions:
 ```
 
 ## Configuration File
-
-The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chartyaml-file).
-
 
 Options for `upstream.yaml`
 | Variable | Requires | Description |

@@ -31,6 +31,9 @@ spec:
       hostNetwork: true
       imagePullSecrets:
         {{- include "base_pull_secrets" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
       nodeSelector:
         {{- if .Values.nodeSelector }}
         {{- toYaml .Values.nodeSelector | nindent 8 }}
@@ -46,7 +49,7 @@ spec:
       # the same.
       containers:
       - name: csi-node
-        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-csi-node:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-csi-node:{{ default .Values.image.tag .Values.image.repoTags.controlPlane }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         # we need privileged because we mount filesystems and use mknod
         securityContext:
@@ -75,7 +78,7 @@ spec:
         - "--nvme-core-io-timeout={{ .Values.csi.node.nvme.io_timeout }}"{{ end }}{{ if .Values.csi.node.nvme.ctrl_loss_tmo }}
         - "--nvme-ctrl-loss-tmo={{ .Values.csi.node.nvme.ctrl_loss_tmo }}"{{ end }}{{ if .Values.csi.node.nvme.keep_alive_tmo }}
         - "--nvme-keep-alive-tmo={{ .Values.csi.node.nvme.keep_alive_tmo }}"{{ end }}
-        - "--nvme-nr-io-queues={{ .Values.io_engine.cpuCount }}"
+        - "--nvme-nr-io-queues={{ include "coreCount" . }}"
         {{- range $key, $val := .Values.csi.node.topology.segments }}
         - "--node-selector={{ $key }}={{ $val }}"
         {{- end }}

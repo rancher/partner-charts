@@ -28,12 +28,15 @@ spec:
       # To resolve services in the namespace
       dnsPolicy: ClusterFirstWithHostNet
       nodeSelector: {{- .Values.io_engine.nodeSelector | toYaml | nindent 8 }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
       initContainers:
         {{- include "base_init_containers" . }}
       containers:
       {{- if .Values.base.metrics.enabled }}
       - name: metrics-exporter-pool
-        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-metrics-exporter-pool:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-metrics-exporter-pool:{{ default .Values.image.tag .Values.image.repoTags.extensions }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: MY_NODE_NAME
@@ -55,7 +58,7 @@ spec:
             name: metrics
       {{- end }}
       - name: io-engine
-        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-io-engine:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-io-engine:{{ default .Values.image.tag .Values.image.repoTags.dataPlane }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: RUST_LOG
@@ -109,11 +112,11 @@ spec:
           mountPath: /dev/hugepages
         resources:
           limits:
-            cpu: {{ .Values.io_engine.resources.limits.cpu | default .Values.io_engine.cpuCount | quote }}
+            cpu: {{ .Values.io_engine.resources.limits.cpu | default (include "coreCount" .) | quote }}
             memory: {{ .Values.io_engine.resources.limits.memory | quote }}
             hugepages-2Mi: {{ .Values.io_engine.resources.limits.hugepages2Mi | quote }}
           requests:
-            cpu: {{ .Values.io_engine.resources.requests.cpu | default .Values.io_engine.cpuCount | quote }}
+            cpu: {{ .Values.io_engine.resources.requests.cpu | default (include "coreCount" .) | quote }}
             memory: {{ .Values.io_engine.resources.requests.memory | quote }}
             hugepages-2Mi: {{ .Values.io_engine.resources.requests.hugepages2Mi | quote }}
         ports:

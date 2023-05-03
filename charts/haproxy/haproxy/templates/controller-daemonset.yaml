@@ -34,10 +34,10 @@ metadata:
     {{- end }}
 spec:
   minReadySeconds: {{ .Values.controller.minReadySeconds }}
+  {{- with .Values.controller.strategy }}
   updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ template "kubernetes-ingress.name" . }}
@@ -102,6 +102,9 @@ spec:
           - --https-bind-port={{ .Values.controller.containerPort.https }}
 {{- if .Values.controller.ingressClass }}
           - --ingress.class={{ .Values.controller.ingressClass }}
+{{- end }}
+{{- if and .Values.controller.kubernetesGateway.enabled .Values.controller.kubernetesGateway.gatewayControllerName }}
+          - --gateway-controller-name={{ .Values.controller.kubernetesGateway.gatewayControllerName }}
 {{- end }}
 {{- if .Values.controller.publishService.enabled }}
           - --publish-service={{ template "kubernetes-ingress.publishServicePath" . }}

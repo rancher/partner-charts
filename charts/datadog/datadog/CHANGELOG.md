@@ -1,5 +1,45 @@
 # Datadog changelog
 
+## 3.28.1
+
+* Add `memfd_create` syscall to seccomp profile for system-probe.
+
+## 3.28.0
+
+* Adding support to use a FIPS compliant side car container in the Datadog Cluster Agent, the Datadog Agent, and the Datadog Cluster Check Runners pods.
+
+## 3.27.0
+
+* Default `Agent` and `Cluster-Agent` to `7.44.0` version.
+
+## 3.26.2
+
+* Adds statx syscall to seccomp for system-probe
+
+## 3.26.1
+
+* Add support for `topologySpreadConstraints` in pod templates
+
+## 3.26.0
+
+* Default `Agent` and `Cluster-Agent` to `7.43.2` version.
+
+## 3.25.5
+
+* Adds securityContext and resource annotations for initContainers in cluster agent
+
+## 3.25.4
+
+* Add `list` and `watch` permissions of `customresourcedefinitions` to `kube-state-metrics-core-rbac`.
+
+## 3.25.3
+
+* Remote Config is now enabled even if the Cluster Agent is disabled.
+
+## 3.25.2
+
+* Fix a bug with `datadog.remoteConfiguration.enabled` where Remote Config was only enabled for the main agent container but not other containers such as the trace-agent.
+
 ## 3.25.1
 
 * Fix CI to unblock release of charts

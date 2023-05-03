@@ -9,7 +9,7 @@ Walks `deployments` and merges `webservice.datamodel.blank` into each
 item, ensuring presence of all keys.
 */}}
 {{- define "webservice.datamodel.prepare" -}}
-{{- $fullname := include "webservice.fullname" $ -}}
+{{- $fullname := include "fullname" $ -}}
 {{- $blank := dict -}}
 {{/* make sure we always have at least one */}}
 {{- if not $.Values.deployments -}}

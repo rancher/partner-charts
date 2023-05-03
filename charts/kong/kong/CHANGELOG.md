@@ -1,6 +1,46 @@
 # Changelog
 
-## Unreleased
+## 2.20.0
+
+### Improvements
+
+* Added support for automatic license provisioning for Gateways managed by
+  Ingress Controllers in Konnect mode (`.Values.ingressController.konnect.enabled=true`).
+  [#787](https://github.com/Kong/charts/pull/787)
+
+## 2.19.1
+
+### Fixed
+
+* Fix `webhook-cert` being mounted regardless if `.Values.ingressController.enabled`
+  is set.
+  [#779](https://github.com/Kong/charts/pull/779)
+
+## 2.19.0
+
+### Improvements
+
+* Security context enforces read-only root filesystem by default. This is not
+  expected to affect most configurations, but [will affect custom plugins that
+  write to the container filesystem](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#2170).
+  [#770](https://github.com/Kong/charts/pull/770)
+
+## 2.18.0
+
+### Improvements
+
+* Added support for the Admin API service TLS client verification.
+  [#780](https://github.com/Kong/charts/pull/780
+
+## 2.17.1
+
+### Fixed
+
+* The `-redhat` suffix on official KIC images is no longer considered part of
+  the semver string for version checks.
+  [#779](https://github.com/Kong/charts/pull/779)
+
+## 2.17.0
 
 ### Improvements
 
@@ -24,6 +64,8 @@
   [#772](https://github.com/Kong/charts/pull/772)
 * Default Kong version is bumped to 3.2.
   [#773](https://github.com/Kong/charts/pull/773)
+* Added support for admissionhook to include labels.
+  [#768](https://github.com/Kong/charts/pull/768)
 
 ### Under the hood
 

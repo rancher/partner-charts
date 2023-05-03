@@ -1,4 +1,9 @@
 {{/*
+Copyright (c) HashiCorp, Inc.
+SPDX-License-Identifier: MPL-2.0
+*/}}
+
+{{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to
 this (by the DNS naming spec). If release name contains chart name it will
@@ -59,7 +64,7 @@ Compute if the server is enabled.
 {{- end -}}
 
 {{/*
-Compute if the server auth delegator serviceaccount is enabled.
+Compute if the server serviceaccount is enabled.
 */}}
 {{- define "vault.serverServiceAccountEnabled" -}}
 {{- $_ := set . "serverServiceAccountEnabled"
@@ -770,6 +775,16 @@ Sets the container resources if the user has set any.
   {{- if .Values.csi.resources -}}
           resources:
 {{ toYaml .Values.csi.resources | indent 12}}
+  {{ end }}
+{{- end -}}
+
+{{/*
+Sets the container resources for CSI's Agent sidecar if the user has set any.
+*/}}
+{{- define "csi.agent.resources" -}}
+  {{- if .Values.csi.agent.resources -}}
+          resources:
+{{ toYaml .Values.csi.agent.resources | indent 12}}
   {{ end }}
 {{- end -}}
 

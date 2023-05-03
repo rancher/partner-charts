@@ -15,6 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- include "fail-on-insecure-sasl-logging" . -}}
+
 {{- $values := .Values }}
 {{- $internalAdvertiseAddress := printf "%s.%s" "$(SERVICE_NAME)" (include "redpanda.internal.domain" .) -}}
 {{- $externalAdvertiseAddress := printf "$(SERVICE_NAME)" -}}
@@ -23,6 +25,16 @@ limitations under the License.
 {{- end -}}
 {{- $uid := dig "podSecurityContext" "runAsUser" .Values.statefulset.securityContext.runAsUser .Values.statefulset -}}
 {{- $gid := dig "podSecurityContext" "fsGroup" .Values.statefulset.securityContext.fsGroup .Values.statefulset -}}
+{{- $root := deepCopy . }}
+
+{{- if not (include "redpanda-atleast-22-2-0" . | fromJson).bool -}}
+  {{- if eq (get .Values "force" | default false) false -}}
+    {{- fail (
+    printf "\n\nError: The Redpanda version (%s) is no longer supported \nTo accept this risk, run the upgrade again adding `--set force=true`\n" (( include "redpanda.semver" . ))
+        )
+    -}}
+  {{- end -}}
+{{- end -}}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -50,6 +62,7 @@ spec:
         {{- toYaml . | nindent 8 }}
 {{- end }}
     spec:
+      terminationGracePeriodSeconds: {{ .Values.statefulset.terminationGracePeriodSeconds }}
       securityContext: {{ include "pod-security-context" . | nindent 8 }}
       serviceAccountName: {{ include "redpanda.serviceAccountName" . }}
       initContainers:
@@ -64,7 +77,7 @@ spec:
               rpk redpanda tune all
           securityContext:
             capabilities:
-              add: ["CAP_SYS_RESOURCE"]
+              add: ["SYS_RESOURCE"]
             privileged: true
             runAsUser: 0
             runAsGroup: 0
@@ -117,7 +130,7 @@ spec:
         {{- range $externalName, $externalVals := $listenerVals.external }}
           {{- $tmplVals := dict "listenerVals" $listenerVals "externalVals" $externalVals "replicaIndex" $replicaIndex "externalName" $externalName "externalAdvertiseAddress" $externalAdvertiseAddress "values" $values }}
           {{- $port := int (include "advertised-port" $tmplVals) }}
-          {{- $host := include "advertised-host" (mustMerge $tmplVals (dict "port" $port)) }}
+          {{- $host := tpl (include "advertised-host" (mustMerge $tmplVals (dict "port" $port)) ) $ }}
           {{- $listenerList = mustAppend $listenerList $host }}
         {{- end }}
     {{- end }}
@@ -143,9 +156,7 @@ spec:
 
               # Setup config files
               cp /tmp/base-config/redpanda.yaml "${CONFIG}"
-              {{- if (include "redpanda-atleast-22-1-1" . | fromJson).bool }}
               cp /tmp/base-config/bootstrap.yaml /etc/redpanda/.bootstrap.yaml
-              {{- end }}
 
               {{- if not (include "redpanda-atleast-22-3-0" . | fromJson).bool }}
               # Configure bootstrap
@@ -213,98 +224,60 @@ spec:
             preStop:
               exec:
                 command: ["/bin/bash", "-c", "./var/lifecycle/preStop.sh"]
+          # the startupProbe checks to see that the admin api is listening and that the broker has a node_id assigned. This
+          # check is only used to delay the start of the liveness and readiness probes until it passes.
           startupProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                {{- if (include "admin-internal-tls-enabled" . |fromJson).bool }}
-                - >
-                  curl https://localhost:{{ .Values.listeners.admin.port }}/v1/cluster/health_overview
-                  -svk --cacert /etc/tls/certs/{{ .Values.listeners.admin.tls.cert }}/ca.crt |
-                  awk '{
-                    id = $0; gsub(/.*"controller_id": /, "", id); gsub(/,.*/, "", id)
-                    nd_str = $0; gsub(/.*"nodes_down": \[/, "", nd_str); gsub(/\].*/, "", nd_str)
-                    FS=","
-                    split(nd_str, nd_list)
-                    for (i in nd_list) nodes_down[nd_list[i]]=""
-                    exit (id in nodes_down)
-                  }'
-                {{- else }}
-                - >
-                  curl -sv http://localhost:{{ .Values.listeners.admin.port }}/v1/cluster/health_overview |
-                  awk '{
-                    id = $0; gsub(/.*"controller_id": /, "", id); gsub(/,.*/, "", id)
-                    nd_str = $0; gsub(/.*"nodes_down": \[/, "", nd_str); gsub(/\].*/, "", nd_str)
-                    FS=","
-                    split(nd_str, nd_list)
-                    for (i in nd_list) nodes_down[nd_list[i]]=""
-                    exit (id in nodes_down)
-                  }'
-                {{- end }}
+                - |
+                  set -e
+                  RESULT=$(curl --silent --fail -k {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://localhost:{{ .Values.listeners.admin.port }}/v1/status/ready")
+                  echo $RESULT
+                  echo $RESULT | grep ready
             initialDelaySeconds: {{ .Values.statefulset.startupProbe.initialDelaySeconds }}
             failureThreshold: {{ .Values.statefulset.startupProbe.failureThreshold }}
             periodSeconds: {{ .Values.statefulset.startupProbe.periodSeconds }}
+          # the livenessProbe just checks to see that the admin api is listening and returning 200s.
           livenessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                {{- if (include "admin-internal-tls-enabled" . |fromJson).bool }}
-                - >
-                  curl https://localhost:{{ .Values.listeners.admin.port }}/v1/cluster/health_overview
-                  -svk --cacert /etc/tls/certs/{{ .Values.listeners.admin.tls.cert }}/ca.crt
-                {{- else }}
-                - >
-                  curl -sv http://localhost:{{ .Values.listeners.admin.port }}/v1/cluster/health_overview
-                {{- end }}
+                - curl --silent --fail -k {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://localhost:{{ .Values.listeners.admin.port }}/v1/status/ready"
             initialDelaySeconds: {{ .Values.statefulset.livenessProbe.initialDelaySeconds }}
             failureThreshold: {{ .Values.statefulset.livenessProbe.failureThreshold }}
             periodSeconds: {{ .Values.statefulset.livenessProbe.periodSeconds }}
+          # the readiness probe just checks that the cluster is healthy according to rpk cluster health.
+          # It's ok that this cluster-wide check affects all the pods as it's only used for the
+          # PodDisruptionBudget and we don't want to roll any pods if the Redpanda cluster isn't healthy.
+          # https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets
           readinessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                {{- if (include "admin-internal-tls-enabled" . |fromJson).bool }}
-                - >
-                  curl https://localhost:{{ .Values.listeners.admin.port }}/v1/cluster/health_overview
-                  -svk --cacert /etc/tls/certs/{{ .Values.listeners.admin.tls.cert }}/ca.crt |
-                  awk '{
-                    id = $0; gsub(/.*"controller_id": /, "", id); gsub(/,.*/, "", id)
-                    nd_str = $0; gsub(/.*"nodes_down": \[/, "", nd_str); gsub(/\].*/, "", nd_str)
-                    FS=","
-                    split(nd_str, nd_list)
-                    for (i in nd_list) nodes_down[nd_list[i]]=""
-                    exit (id in nodes_down)
-                  }'
-                {{- else }}
-                - >
-                  curl -sv http://localhost:{{ .Values.listeners.admin.port }}/v1/cluster/health_overview |
-                  awk '{
-                    id = $0; gsub(/.*"controller_id": /, "", id); gsub(/,.*/, "", id)
-                    nd_str = $0; gsub(/.*"nodes_down": \[/, "", nd_str); gsub(/\].*/, "", nd_str)
-                    FS=","
-                    split(nd_str, nd_list)
-                    for (i in nd_list) nodes_down[nd_list[i]]=""
-                    exit (id in nodes_down)
-                  }'
-                {{- end }}
+                - |
+                  set -x
+                  rpk cluster health {{ (include "rpk-flags" . | fromJson).admin }}
+                  rpk cluster health {{ (include "rpk-flags" . | fromJson).admin }} | grep 'Healthy:.*true'
             initialDelaySeconds: {{ .Values.statefulset.readinessProbe.initialDelaySeconds }}
             failureThreshold: {{ .Values.statefulset.readinessProbe.failureThreshold }}
             periodSeconds: {{ .Values.statefulset.readinessProbe.periodSeconds }}
             successThreshold: {{ .Values.statefulset.readinessProbe.initialDelaySeconds }}
           command:
-            - bash
-            - -c
-            - |
-              rpk redpanda start \
-                --smp={{ include "redpanda-smp" . }} \
-                --memory={{ template "redpanda-memory" . }}M \
-                --reserve-memory={{ template "redpanda-reserve-memory" . }}M \
-                --default-log-level={{ .Values.logging.logLevel }} \
-                --advertise-rpc-addr={{ $internalAdvertiseAddress }}:{{ .Values.listeners.rpc.port }} |
-              sed 's@RP_BOOTSTRAP_USER[^ ]\+@<censored>@g'
+            - rpk
+            - redpanda
+            - start
+            - --smp={{ include "redpanda-smp" . }}
+            - --memory={{ template "redpanda-memory" . }}M
+            - --reserve-memory={{ template "redpanda-reserve-memory" . }}M
+            - --default-log-level={{ .Values.logging.logLevel }}
+            - --advertise-rpc-addr={{ $internalAdvertiseAddress }}:{{ .Values.listeners.rpc.port }}
+            {{- with .Values.statefulset.additionalRedpandaCmdFlags }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
 {{- range $name, $listener := .Values.listeners }}
             - name: {{ lower $name }}
@@ -383,6 +356,7 @@ spec:
           emptyDir: {}
 {{- if (include "tls-enabled" . | fromJson).bool }}
   {{- range $name, $cert := .Values.tls.certs }}
+  {{- $r :=  set $root "tempCert" ( dict "name" $name "cert" $cert ) }}
         - name: redpanda-{{ $name }}-cert
           secret:
             defaultMode: 420
@@ -395,7 +369,7 @@ spec:
             - key: ca.crt
               path: ca.crt
     {{- end }}
-            secretName: {{ template "redpanda.fullname" $ }}-{{ $name }}-cert
+            secretName: {{ template "cert-secret-name" $r }}
   {{- end }}
 {{- end }}
         {{- if and .Values.auth.sasl.enabled (not (empty .Values.auth.sasl.secretRef )) }}
@@ -433,13 +407,13 @@ spec:
 {{- end }}
 {{- if semverCompare ">=1.16-0" .Capabilities.KubeVersion.GitVersion }}
       topologySpreadConstraints:
-      - labelSelector:
-          matchLabels: {{ include "statefulset-pod-labels" . | nindent 12 }}
-  {{- with .Values.statefulset.topologySpreadConstraints }}
-        maxSkew: {{ .maxSkew }}
-        topologyKey: {{ .topologyKey }}
-        whenUnsatisfiable: {{ .whenUnsatisfiable }}
-  {{- end }}
+    {{- range $v := .Values.statefulset.topologySpreadConstraints }}
+        - maxSkew: {{ $v.maxSkew }}
+          topologyKey: {{ $v.topologyKey }}
+          whenUnsatisfiable: {{ $v.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels: {{ include "statefulset-pod-labels" $ | nindent 14 }}
+    {{- end }}
 {{- end }}
 {{- with ( include "statefulset-nodeSelectors" . ) }}
       nodeSelector: {{- . | nindent 8 }}

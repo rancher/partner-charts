@@ -4,6 +4,10 @@ apiVersion: apps/v1
 metadata:
   name: {{ include "kuma.name" . }}-cni-node
   namespace: kube-system
+  annotations:
+    ignore-check.kube-linter.io/host-network: "The containers modify the host's network namespace"
+    ignore-check.kube-linter.io/no-read-only-root-fs: "The containers modify the filesystem"
+    ignore-check.kube-linter.io/run-as-non-root: "The containers modify /proc"
   labels: {{- include "kuma.cniLabels" . | nindent 4 }}
 spec:
   selector:
@@ -56,8 +60,8 @@ spec:
       {{- end }}
       containers:
         - name: install-cni
-          {{- if .Values.experimental.cni }}
-          image: {{ include "kuma.formatImage" (dict "image" .Values.cni.experimental.image "root" $) | quote }}
+          {{- if not .Values.legacy.cni.enabled }}
+          image: {{ include "kuma.formatImage" (dict "image" .Values.cni.image "root" $) | quote }}
           imagePullPolicy: {{ .Values.cni.image.imagePullPolicy }}
           readinessProbe:
             initialDelaySeconds: {{ .Values.cni.delayStartupSeconds }}
@@ -88,7 +92,7 @@ spec:
                 - --keep-going
                 - clean
           {{- else }}
-          image: {{ include "kuma.formatImage" (dict "image" .Values.cni.image "root" $) | quote }}
+          image: {{ include "kuma.formatImage" (dict "image" .Values.legacy.cni.image "root" $) | quote }}
           imagePullPolicy: {{ .Values.cni.image.imagePullPolicy }}
           command: [ "/bin/sh", "-c", "--" ]
           args: [ "sleep {{.Values.cni.delayStartupSeconds}} && exec /install-cni.sh" ]
@@ -121,6 +125,8 @@ spec:
             - name: CNI_LOG_LEVEL
               value: "{{ .Values.cni.logLevel }}"
           {{- end }}
+          resources:
+          {{- toYaml .Values.cni.resources | trim | nindent 12 }}
           volumeMounts:
             - mountPath: /host/opt/cni/bin
               name: cni-bin-dir

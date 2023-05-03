@@ -64,7 +64,7 @@ helm repo update
 # See current Chart & Traefik version
 helm search repo traefik/traefik
 # Upgrade Traefik
-helm upgrade --reuse-values traefik traefik/traefik
+helm upgrade traefik traefik/traefik
 ```
 
 New major version indicates that there is an incompatible breaking change.
@@ -76,6 +76,10 @@ With Helm v3, CRDs created by this chart can not be updated, cf the [Helm Docume
 ```bash
 kubectl apply --server-side --force-conflicts -k https://github.com/traefik/traefik-helm-chart/traefik/crds/
 ```
+
+### Upgrading after 18.X+
+
+It's detailed in [release notes](https://github.com/traefik/traefik-helm-chart/releases).
 
 ### Upgrading from 17.x to 18.x
 

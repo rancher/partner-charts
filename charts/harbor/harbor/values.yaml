@@ -170,14 +170,6 @@ internalTLS:
     crt: ""
     # Content of portal's TLS key file, only available when `certSource` is "manual"
     key: ""
-  # chartmuseum related cert configuration
-  chartmuseum:
-    # secret name for chartmuseum's tls certs
-    secretName: ""
-    # Content of chartmuseum's TLS key file, only available when `certSource` is "manual"
-    crt: ""
-    # Content of chartmuseum's TLS key file, only available when `certSource` is "manual"
-    key: ""
   # trivy related cert configuration
   trivy:
     # secret name for trivy's tls certs
@@ -222,13 +214,6 @@ persistence:
       accessMode: ReadWriteOnce
       size: 5Gi
       annotations: {}
-    chartmuseum:
-      existingClaim: ""
-      storageClass: ""
-      subPath: ""
-      accessMode: ReadWriteOnce
-      size: 5Gi
-      annotations: {}
     jobservice:
       jobLog:
         existingClaim: ""
@@ -262,7 +247,7 @@ persistence:
       accessMode: ReadWriteOnce
       size: 5Gi
       annotations: {}
-  # Define which storage backend is used for registry and chartmuseum to store
+  # Define which storage backend is used for registry to store
   # images and charts. Refer to
   # https://github.com/docker/distribution/blob/master/docs/configuration.md#storage
   # for the detail.
@@ -276,13 +261,12 @@ persistence:
     disableredirect: false
     # Specify the "caBundleSecretName" if the storage service uses a self-signed certificate.
     # The secret must contain keys named "ca.crt" which will be injected into the trust store
-    # of registry's and chartmuseum's containers.
+    # of registry's containers.
     # caBundleSecretName:
 
     # Specify the type of storage: "filesystem", "azure", "gcs", "s3", "swift",
     # "oss" and fill the information needed in the corresponding section. The type
     # must be "filesystem" if you want to use persistent volumes for registry
-    # and chartmuseum
     type: filesystem
     filesystem:
       rootdirectory: /storage
@@ -305,7 +289,6 @@ persistence:
       useWorkloadIdentity: false
     s3:
       # Set an existing secret for S3 accesskey and secretkey
-      # keys in the secret should be AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for chartmuseum
       # keys in the secret should be REGISTRY_STORAGE_S3_ACCESSKEY and REGISTRY_STORAGE_S3_SECRETKEY for registry
       #existingSecret: ""
       region: us-west-1
@@ -363,8 +346,7 @@ imagePullSecrets:
 #  - name: docker-registry-secret
 #  - name: internal-registry-secret
 
-# The update strategy for deployments with persistent volumes(jobservice, registry
-# and chartmuseum): "RollingUpdate" or "Recreate"
+# The update strategy for deployments with persistent volumes(jobservice, registry): "RollingUpdate" or "Recreate"
 # Set it as "Recreate" when "RWM" for volumes isn't supported
 updateStrategy:
   type: RollingUpdate
@@ -373,6 +355,10 @@ updateStrategy:
 logLevel: info
 
 # The initial password of Harbor admin. Change it from portal after launching Harbor
+# or give an existing secret for it
+# key in secret is given via (default to HARBOR_ADMIN_PASSWORD)
+# existingSecretAdminPassword:
+existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
 harborAdminPassword: "Harbor12345"
 
 # The name of the secret which contains key named "ca.crt". Setting this enables the
@@ -382,7 +368,7 @@ caSecretName: ""
 
 # The secret key used for encryption. Must be a string of 16 chars.
 secretKey: "not-a-secure-key"
-# If using existingSecretSecretKey, the key must be sercretKey
+# If using existingSecretSecretKey, the key must be secretKey
 existingSecretSecretKey: ""
 
 # The proxy settings for updating trivy vulnerabilities from the Internet and replicating
@@ -400,7 +386,7 @@ proxy:
 enableMigrateHelmHook: false
 
 # The custom ca bundle secret, the secret must contain key named "ca.crt"
-# which will be injected into the trust store for chartmuseum, core, jobservice, registry, trivy components
+# which will be injected into the trust store for core, jobservice, registry, trivy components
 # caBundleSecretName: ""
 
 ## UAA Authentication Options
@@ -414,7 +400,7 @@ enableMigrateHelmHook: false
 nginx:
   image:
     repository: goharbor/nginx-photon
-    tag: v2.7.1
+    tag: v2.8.0
   # set the service account to be used, default if left empty
   serviceAccountName: ""
   # mount the service account token
@@ -436,7 +422,7 @@ nginx:
 portal:
   image:
     repository: goharbor/harbor-portal
-    tag: v2.7.1
+    tag: v2.8.0
   # set the service account to be used, default if left empty
   serviceAccountName: ""
   # mount the service account token
@@ -458,7 +444,7 @@ portal:
 core:
   image:
     repository: goharbor/harbor-core
-    tag: v2.7.1
+    tag: v2.8.0
   # set the service account to be used, default if left empty
   serviceAccountName: ""
   # mount the service account token
@@ -511,7 +497,7 @@ core:
 jobservice:
   image:
     repository: goharbor/harbor-jobservice
-    tag: v2.7.1
+    tag: v2.8.0
   replicas: 1
   revisionHistoryLimit: 10
   # set the service account to be used, default if left empty
@@ -526,6 +512,14 @@ jobservice:
     # - stdout
   # The jobLogger sweeper duration (ignored if `jobLogger` is `stdout`)
   loggerSweeperDuration: 14 #days
+  notification:
+    webhook_job_max_retry: 3
+    webhook_job_http_client_timeout: 3 # in seconds
+  reaper:
+    # the max time to wait for a task to finish, if unfinished after max_update_hours, the task will be mark as error, but the task will continue to run, default value is 24
+    max_update_hours: 24
+    # the max time for execution in running state without new task created
+    max_dangling_hours: 168
 
   # resources:
   #   requests:
@@ -551,7 +545,7 @@ registry:
   registry:
     image:
       repository: goharbor/registry-photon
-      tag: v2.7.1
+      tag: v2.8.0
     # resources:
     #  requests:
     #    memory: 256Mi
@@ -559,7 +553,7 @@ registry:
   controller:
     image:
       repository: goharbor/harbor-registryctl
-      tag: v2.7.1
+      tag: v2.8.0
 
     # resources:
     #  requests:
@@ -609,33 +603,6 @@ registry:
     interval: 24h
     dryrun: false
 
-chartmuseum:
-  enabled: true
-  # set the service account to be used, default if left empty
-  serviceAccountName: ""
-  # mount the service account token
-  automountServiceAccountToken: false
-  # Harbor defaults ChartMuseum to returning relative urls, if you want using absolute url you should enable it by change the following value to 'true'
-  absoluteUrl: false
-  image:
-    repository: goharbor/chartmuseum-photon
-    tag: v2.7.1
-  replicas: 1
-  revisionHistoryLimit: 10
-  # resources:
-  #  requests:
-  #    memory: 256Mi
-  #    cpu: 100m
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-  ## Additional deployment annotations
-  podAnnotations: {}
-  ## The priority class to run the pod as
-  priorityClassName:
-  ## limit the number of parallel indexers
-  indexLimit: 0
-
 trivy:
   # enabled the flag to enable Trivy scanner
   enabled: true
@@ -643,7 +610,7 @@ trivy:
     # repository the repository for Trivy adapter image
     repository: goharbor/trivy-adapter-photon
     # tag the tag for Trivy adapter image
-    tag: v2.7.1
+    tag: v2.8.0
   # set the service account to be used, default if left empty
   serviceAccountName: ""
   # mount the service account token
@@ -718,7 +685,7 @@ notary:
     automountServiceAccountToken: false
     image:
       repository: goharbor/notary-server-photon
-      tag: v2.7.1
+      tag: v2.8.0
     replicas: 1
     # resources:
     #  requests:
@@ -740,7 +707,7 @@ notary:
     automountServiceAccountToken: false
     image:
       repository: goharbor/notary-signer-photon
-      tag: v2.7.1
+      tag: v2.8.0
     replicas: 1
     # resources:
     #  requests:
@@ -763,7 +730,7 @@ notary:
 
 database:
   # if external database is used, set "type" to "external"
-  # and fill the connection informations in "external" section
+  # and fill the connection information in "external" section
   type: internal
   internal:
     # set the service account to be used, default if left empty
@@ -772,7 +739,7 @@ database:
     automountServiceAccountToken: false
     image:
       repository: goharbor/harbor-db
-      tag: v2.7.1
+      tag: v2.8.0
     # The initial superuser password for internal database
     password: "changeit"
     # The size limit for Shared memory, pgSQL use it for shared_buffer
@@ -835,7 +802,7 @@ database:
 
 redis:
   # if external Redis is used, set "type" to "external"
-  # and fill the connection informations in "external" section
+  # and fill the connection information in "external" section
   type: internal
   internal:
     # set the service account to be used, default if left empty
@@ -844,7 +811,7 @@ redis:
     automountServiceAccountToken: false
     image:
       repository: goharbor/redis-photon
-      tag: v2.7.1
+      tag: v2.8.0
     # resources:
     #  requests:
     #    memory: 256Mi
@@ -866,8 +833,9 @@ redis:
     coreDatabaseIndex: "0"
     jobserviceDatabaseIndex: "1"
     registryDatabaseIndex: "2"
-    chartmuseumDatabaseIndex: "3"
     trivyAdapterIndex: "5"
+    # username field can be an empty string and it will be authenticated against the default user
+    username: ""
     password: ""
     # If using existingSecret, the key must be REDIS_PASSWORD
     existingSecret: ""
@@ -887,7 +855,7 @@ exporter:
   automountServiceAccountToken: false
   image:
     repository: goharbor/harbor-exporter
-    tag: v2.7.1
+    tag: v2.8.0
   nodeSelector: {}
   tolerations: []
   affinity: {}

@@ -15,9 +15,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 {{- if .Values.post_upgrade_job.enabled }}
-{{- if (include "redpanda-atleast-22-1-1" . | fromJson).bool }}
 {{- $rpkFlags := include "rpk-flags-no-sasl" . }}
 {{- $sasl := .Values.auth.sasl }}
+{{- $root := deepCopy . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -65,7 +65,9 @@ spec:
           - |
             rpk cluster config import -f /tmp/base-config/bootstrap.yaml {{ $rpkFlags }}
 {{- range $key, $value := .Values.config.cluster }}
+  {{- if $value }}
             rpk cluster config set {{ $key }} {{ $value }} {{ $rpkFlags }}
+  {{- end }}
 {{- end }}
 {{- if not (hasKey .Values.config.cluster "storage_min_free_bytes") }}
             rpk cluster config set storage_min_free_bytes {{ include "storage-min-free-bytes" . }} {{ $rpkFlags }}
@@ -107,6 +109,7 @@ spec:
           emptyDir: {}
 {{- if (include "tls-enabled" . | fromJson).bool }}
   {{- range $name, $cert := .Values.tls.certs }}
+    {{- $r :=  set $root "tempCert" ( dict "name" $name "cert" $cert ) }}
         - name: redpanda-{{ $name }}-cert
           secret:
             defaultMode: 420
@@ -119,7 +122,7 @@ spec:
             - key: ca.crt
               path: ca.crt
     {{- end }}
-            secretName: {{ template "redpanda.fullname" $ }}-{{ $name }}-cert
+            secretName: {{ template "cert-secret-name" $r }}
   {{- end }}
 {{- end -}}
         {{- if and $sasl.enabled (not (empty $sasl.secretRef )) }}
@@ -128,5 +131,4 @@ spec:
             secretName: {{ $sasl.secretRef }}
             optional: false
         {{- end }}
-{{- end }}
 {{- end }}

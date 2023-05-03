@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 # Available parameters and their default values for the Vault chart.
 
 global:
@@ -62,7 +65,7 @@ injector:
   # image sets the repo and tag of the vault-k8s image to use for the injector.
   image:
     repository: "hashicorp/vault-k8s"
-    tag: "1.1.0"
+    tag: "1.2.1"
     pullPolicy: IfNotPresent
 
   # agentImage sets the repo and tag of the Vault image to use for the Vault Agent
@@ -70,7 +73,7 @@ injector:
   # required.
   agentImage:
     repository: "hashicorp/vault"
-    tag: "1.12.1"
+    tag: "1.13.1"
 
   # The default values for the injected Vault Agent containers.
   agentDefaults:
@@ -89,6 +92,43 @@ injector:
     templateConfig:
       exitOnRetryFailure: true
       staticSecretRenderInterval: ""
+
+  # Used to define custom livenessProbe settings
+  livenessProbe:
+    # When a probe fails, Kubernetes will try failureThreshold times before giving up
+    failureThreshold: 2
+    # Number of seconds after the container has started before probe initiates
+    initialDelaySeconds: 5
+    # How often (in seconds) to perform the probe
+    periodSeconds: 2
+    # Minimum consecutive successes for the probe to be considered successful after having failed
+    successThreshold: 1
+    # Number of seconds after which the probe times out.
+    timeoutSeconds: 5
+  # Used to define custom readinessProbe settings
+  readinessProbe:
+    # When a probe fails, Kubernetes will try failureThreshold times before giving up
+    failureThreshold: 2
+    # Number of seconds after the container has started before probe initiates
+    initialDelaySeconds: 5
+    # How often (in seconds) to perform the probe
+    periodSeconds: 2
+    # Minimum consecutive successes for the probe to be considered successful after having failed
+    successThreshold: 1
+    # Number of seconds after which the probe times out.
+    timeoutSeconds: 5
+  # Used to define custom startupProbe settings
+  startupProbe:
+    # When a probe fails, Kubernetes will try failureThreshold times before giving up
+    failureThreshold: 12
+    # Number of seconds after the container has started before probe initiates
+    initialDelaySeconds: 5
+    # How often (in seconds) to perform the probe
+    periodSeconds: 5
+    # Minimum consecutive successes for the probe to be considered successful after having failed
+    successThreshold: 1
+    # Number of seconds after which the probe times out.
+    timeoutSeconds: 5
 
   # Mount Path of the Vault Kubernetes Auth Method.
   authPath: "auth/kubernetes"
@@ -332,7 +372,7 @@ server:
 
   image:
     repository: "hashicorp/vault"
-    tag: "1.12.1"
+    tag: "1.13.1"
     # Overrides the default Image Pull Policy
     pullPolicy: IfNotPresent
 
@@ -453,12 +493,20 @@ server:
   # extraArgs is a string containing additional Vault server arguments.
   extraArgs: ""
 
+  # extraPorts is a list of extra ports. Specified as a YAML list.
+  # This is useful if you need to add additional ports to the statefulset in dynamic way.
+  extraPorts: null
+    # - containerPort: 8300
+    #   name: http-monitoring
+
   # Used to define custom readinessProbe settings
   readinessProbe:
     enabled: true
     # If you need to use a http path instead of the default exec
     # path: /v1/sys/health?standbyok=true
 
+    # Port number on which readinessProbe will be checked.
+    port: 8200
     # When a probe fails, Kubernetes will try failureThreshold times before giving up
     failureThreshold: 2
     # Number of seconds after the container has started before probe initiates
@@ -473,6 +521,8 @@ server:
   livenessProbe:
     enabled: false
     path: "/v1/sys/health?standbyok=true"
+    # Port nuumber on which livenessProbe will be checked.
+    port: 8200
     # When a probe fails, Kubernetes will try failureThreshold times before giving up
     failureThreshold: 2
     # Number of seconds after the container has started before probe initiates
@@ -744,7 +794,7 @@ server:
 
       # Example configuration for enabling Prometheus metrics in your config.
       #telemetry {
-      #  prometheus_retention_time = "30s",
+      #  prometheus_retention_time = "30s"
       #  disable_hostname = true
       #}
 
@@ -838,7 +888,7 @@ server:
       # If you are using Prometheus Operator you can enable a ServiceMonitor resource below.
       # You may wish to enable unauthenticated metrics in the listener block above.
       #telemetry {
-      #  prometheus_retention_time = "30s",
+      #  prometheus_retention_time = "30s"
       #  disable_hostname = true
       #}
 
@@ -947,7 +997,7 @@ csi:
 
   image:
     repository: "hashicorp/vault-csi-provider"
-    tag: "1.2.1"
+    tag: "1.3.0"
     pullPolicy: IfNotPresent
 
   # volumes is a list of volumes made available to all containers. These are rendered
@@ -974,6 +1024,10 @@ csi:
   #   limits:
   #     cpu: 50m
   #     memory: 128Mi
+
+  # Override the default secret name for the CSI Provider's HMAC key used for
+  # generating secret versions.
+  hmacSecretName: ""
 
   # Settings for the daemonSet used to run the provider.
   daemonSet:
@@ -1011,7 +1065,26 @@ csi:
     # This should be a YAML map of the labels to apply to the csi provider pod
     extraLabels: {}
 
+  agent:
+    enabled: true
+    extraArgs: []
 
+    image:
+      repository: "hashicorp/vault"
+      tag: "1.13.1"
+      pullPolicy: IfNotPresent
+
+    logFormat: standard
+    logLevel: info
+
+    resources: {}
+    # resources:
+    #   requests:
+    #     memory: 256Mi
+    #     cpu: 250m
+    #   limits:
+    #     memory: 256Mi
+    #     cpu: 250m
 
   # Priority class for csi pods
   priorityClassName: ""
@@ -1080,7 +1153,7 @@ serverTelemetry:
   #
   # example:
   #  telemetry {
-  #    prometheus_retention_time = "30s",
+  #    prometheus_retention_time = "30s"
   #    disable_hostname = true
   #  }
   #

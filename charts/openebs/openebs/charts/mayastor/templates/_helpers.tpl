@@ -98,14 +98,38 @@ Usage:
     {{- end }}
 {{- end -}}
 
-{{/* Generate CPU list specification based on CPU count (-l param of mayastor) */}}
+{{/* Generate Core list specification (-l param of io-engine) */}}
 {{- define "cpuFlag" -}}
-{{- range $i, $e := until (int .Values.io_engine.cpuCount) }}
-{{- if gt $i 0 }}
-    {{- printf "," }}
-{{- end }}
-{{- printf "%d" (add $i 1) }}
-{{- end }}
+{{- include "coreListUniq" . -}}
+{{- end -}}
+
+{{/* Get the number of cores from the coreList */}}
+{{- define "coreCount" -}}
+{{- include "coreListUniq" . | split "," | len -}}
+{{- end -}}
+
+{{/* Get a list of cores as a comma-separated list */}}
+{{- define "coreListUniq" -}}
+{{- if .Values.io_engine.coreList -}}
+{{- $cores_pre := .Values.io_engine.coreList -}}
+{{- if not (kindIs "slice" .Values.io_engine.coreList) -}}
+{{- $cores_pre = list $cores_pre -}}
+{{- end -}}
+{{- $cores := list -}}
+{{- range $index, $value := $cores_pre | uniq -}}
+{{- $value = $value | toString | replace " " "" }}
+{{- if eq ($value | int | toString) $value -}}
+{{-   $cores = append $cores $value -}}
+{{- end -}}
+{{- end -}}
+{{- $first := first $cores | required (print "At least one core must be specified in io_engine.coreList") -}}
+{{- $cores | join "," -}}
+{{- else -}}
+{{- if gt 1 (.Values.io_engine.cpuCount | int) -}}
+{{- fail ".Values.io_engine.cpuCount must be >= 1" -}}
+{{- end -}}
+{{- untilStep 1 (add 1 .Values.io_engine.cpuCount | int) 1 | join "," -}}
+{{- end -}}
 {{- end }}
 
 {{/*

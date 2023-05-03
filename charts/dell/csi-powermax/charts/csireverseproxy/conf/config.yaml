@@ -1,0 +1,82 @@
+mode: {{ .Values.mode }}
+port: {{ .Values.port }}
+logLevel: {{ .Values.global.logLevel | default "debug" }}
+logFormat: {{ .Values.global.logFormat | default "TEXT" }}
+  {{- if eq .Values.mode "Linked" }}
+linkConfig:
+  primary:
+    {{- $primary := first .Values.global.managementServers }}
+    url: {{ required "Must provide a primary Unisphere HTTPS endpoint." $primary.endpoint }}
+    {{- if $primary.certSecret }}
+    {{- $check := toString $primary.skipCertificateValidation }}
+    skipCertificateValidation: {{ ternary $primary.skipCertificateValidation true (or (eq $check "true") (eq $check "false")) }}
+    {{- else }}
+    skipCertificateValidation: true
+    {{- end }}
+    certSecret: {{ $primary.certSecret | default "" }}
+    {{- if $primary.limits }}
+    {{- $limits := $primary.limits }}
+    limits:
+      maxActiveRead: {{ $limits.maxActiveRead | default 0 }}
+      maxActiveWrite: {{ $limits.maxActiveWrite | default 0 }}
+      maxOutStandingRead: {{ $limits.maxOutStandingRead | default 0 }}
+      maxOutStandingWrite: {{ $limits.maxOutStandingWrite | default 0 }}
+    {{- end }}
+  {{- if first (rest .Values.global.managementServers) }}
+  {{- $backup := first (rest .Values.global.managementServers) }}
+  backup:
+    url: {{ required "Must provide a primary Unisphere HTTPS endpoint." $backup.endpoint }}
+    {{- if $backup.certSecret }}
+    {{- $check := toString $backup.skipCertificateValidation }}
+    skipCertificateValidation: {{ ternary $backup.skipCertificateValidation true (or (eq $check "true") (eq $check "false")) }}
+    {{- else }}
+    skipCertificateValidation: true
+    {{- end }}
+    certSecret: {{ $backup.certSecret | default "" }}
+    {{- if $backup.limits }}
+    {{- $limits := $backup.limits }}
+    limits:
+      maxActiveRead: {{ $limits.maxActiveRead | default 0 }}
+      maxActiveWrite: {{ $limits.maxActiveWrite | default 0 }}
+      maxOutStandingRead: {{ $limits.maxOutStandingRead | default 0 }}
+      maxOutStandingWrite: {{ $limits.maxOutStandingWrite | default 0 }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+{{- if eq .Values.mode "StandAlone" }}
+standAloneConfig:
+  {{- $defaultProxyCreds := .Values.global.defaultCredentialsSecret }}
+  storageArrays:
+    {{- $_ := first .Values.global.storageArrays }}
+    {{- range $index, $value := .Values.global.storageArrays }}
+    - storageArrayId: {{ required "Must provide a storage array id." $value.storageArrayId | toJson }}
+      primaryURL: {{ required "Must provide a primary Unisphere HTTPS endpoint." $value.endpoint }}
+      backupURL: {{ $value.backupEndpoint | default "" }}
+      proxyCredentialSecrets:
+        - {{ required "Must provide secret for proxy credentials" $defaultProxyCreds }}
+    {{- end }}
+  managementServers:
+    {{- $_ := first .Values.global.managementServers }}
+    {{- range $index, $value := .Values.global.managementServers }}
+    - url: {{required "Must provide a Unisphere HTTPS endpoint." $value.endpoint }}
+      {{- if empty $value.credentialsSecret }}
+      arrayCredentialSecret: {{ required "Must provide an array credential secret" $defaultProxyCreds }}
+      {{- else }}
+      arrayCredentialSecret: {{ required "Must provide an array credential secret" $value.credentialsSecret }}
+      {{- end }}
+      {{- if $value.certSecret }}
+      {{- $check := toString $value.skipCertificateValidation }}
+      skipCertificateValidation: {{ ternary $value.skipCertificateValidation true (or (eq $check "true") (eq $check "false")) }}
+      {{- else }}
+      skipCertificateValidation: true
+      {{- end }}
+      certSecret: {{ $value.certSecret | default "" }}
+      {{- if $value.limits }}
+      limits:
+        maxActiveRead: {{ $value.limits.maxActiveRead | default 0 }}
+        maxActiveWrite: {{ $value.limits.maxActiveWrite | default 0 }}
+        maxOutStandingRead: {{ $value.limits.maxOutStandingRead | default 0 }}
+        maxOutStandingWrite: {{ $value.limits.maxOutStandingWrite | default 0 }}
+      {{- end }}
+    {{- end }}
+{{- end }}
