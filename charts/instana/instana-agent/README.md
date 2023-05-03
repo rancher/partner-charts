@@ -333,6 +333,9 @@ zones:
 
 ## Changelog
 
+### 1.2.58
+* Default to `internalTrafficPolicy` instead of `topologyKeys` for rendering of static YAMLs
+
 ### 1.2.57
 * Fix vulnerability in the leader-elector image
 
