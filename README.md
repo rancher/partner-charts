@@ -35,7 +35,8 @@ files on top of it.
 
 ## Workflow
 
-#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. Then create a new branch off of main-source
+#### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. 
+Then create a new branch off of main-source
 
 #### 2. Create subdirectories in **packages** in the form of `<vendor>/<chart>`
 ```bash
@@ -43,7 +44,7 @@ cd partner-charts
 mkdir -p packages/suse/kubewarden-controller
 
 ```
-#### 3. Create your [upstream.yaml](#configuration-file)
+#### 3. Create your [upstream.yaml](#configuration-file) in `packages/<vendor>/<chart>`
 
 The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chartyaml-file).
 
@@ -51,7 +52,7 @@ The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the
 ```bash
 kubeVersion: '>= 1.19.0-0'  
 ```
-Some [example ustream.yaml](#examples) are provided below
+Some [example upstream.yaml](#examples) are provided below
 ```bash
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
 HelmRepo: https://charts.kubewarden.io
@@ -63,7 +64,7 @@ ChartMetadata:
 EOF
 ```
 #### 4. [Create 'overlay' files](#overlay)
-Create any add-on files such as an app-readme.md and questions.yml in an 'overlay' subdirectory (Optional)
+Create any add-on files such as an `app-readme.md` and `questions.yml` in an `overlay` subdirectory (Optional)
 ```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
@@ -107,8 +108,8 @@ bin/partner-charts-ci validate
 1. If you haven't done so yet, pull down your new chart files into your local `partner-charts` repository:
 ```bash
 a) Get scripts: scripts/pull-ci-scripts
-b) List and find your company name/chart: bin/partner-charts-ci list | grep <company>
-c) set PACKAGE variable to your company/chart: export PACKAGE=<company>/<chart-name> or export PACKAGE=<company>
+b) List and find your company name/chart: bin/partner-charts-ci list | grep <vendor>
+c) set PACKAGE variable to your company/chart: export PACKAGE=<vendor>/<chart-name> or export PACKAGE=<vendor>
 d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
 ```
 2.  In your local `partner-charts` directory start a python3 http server:
@@ -253,11 +254,11 @@ These steps are for charts still using `package.yaml` to track upstream chart.  
 
 #### 1. Fork partner-charts repository, clone your fork, checkout the main-source branch and pull the latest changes. Then create a new branch off of main-source
 
-#### 2. Create directory structure for your company and chart in `packages/<company>/<chart>` e.g.
+#### 2. Create directory structure for your company and chart in `packages/<vendor>/<chart>` e.g.
 ```bash
 mkdir -p partner-charts/packages/suse/kubewarden-controller
 ```
-#### 3. Create an `upstream.yaml` in `packages/<company>/<chart>` 
+#### 3. Create an `upstream.yaml` in `packages/<vendor>/<chart>` 
 If your existing chart is using a high patch version like 5.5.100 due to old method of taking version 5.5.1 and modifying it with the PackageVersion, add `PackageVersion` to the `upstream.yaml` (set it to 01 , 00 is not valid). Ideally, when the the next minor version is released e.g. 5.6.X you can then remove `PackageVersion` from the `upstream.yaml` since 5.6.X > 5.5.XXX.  E.g.
 ```yaml	
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
@@ -271,7 +272,7 @@ ChartMetadata:
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 EOF 
 ```
-#### 4. If there is an `overlay` dir in `partner-charts/packages/<chart>/generated-changes/` move it to `packages/<company>/<chart>/` and ensure only necessary files are present in overlay dir e.g.
+#### 4. If there is an `overlay` dir in `partner-charts/packages/<chart>/generated-changes/` move it to `packages/<vendor>/<chart>/` and ensure only necessary files are present in overlay dir e.g.
 ```bash
 mv partner-charts/packages/kubewarden-controller/generated-changes/overlay partner-charts/packages/suse/kubewarden-controller/
 ```
@@ -286,16 +287,16 @@ git rm -r charts/<chart>
 
 #### 6. Stage your changes (To make sure the config works, and to setup the new charts and assets directories)
 ```bash
-export PACKAGE=<company>/<chart>
+export PACKAGE=<vendor>/<chart>
 bin/partner-charts-ci stage
 ```
 #### 7. Move the old assets files to the new directory (Sometimes this is unchanged but most times it does change)
 ```bash
-git mv assets/<chart>/* assets/<company>/
+git mv assets/<chart>/* assets/<vendor>/
 ```
 #### 8. Update the `index.yaml` to reflect the new assets path for existing entries
 ```bash
-sed -i 's%assets/<chart>%assets/<company>%' index.yaml
+sed -i 's%assets/<chart>%assets/<vendor>%' index.yaml
 ```
 After doing this,  run this loop to validate that every assets file referenced in the index actually exists, it makes sure your paths aren't edited incorrectly.
 ```bash
