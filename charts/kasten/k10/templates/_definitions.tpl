@@ -31,9 +31,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
-- events
 - garbagecollector
 - bloblifecyclemanager
+- events
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -209,3 +209,4 @@ state-svc:
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
 {{- define "k10.kanisterToolsImageTag" -}}0.91.0{{- end -}}
+{{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}

@@ -73,6 +73,11 @@ spec:
       restartPolicy: Always
       serviceAccountName: {{ template "cost-analyzer.serviceAccountName" . }}
       volumes:
+      {{- if .Values.global.gcpstore.enabled }}
+        - name: ubbagent-config
+          configMap:
+            name: ubbagent-config
+      {{- end }}
       {{- if .Values.hosted }}
         - name: config-store
           secret:
@@ -213,6 +218,16 @@ spec:
           secret:
             secretName: {{ .Values.saml.secretName }}
         {{- end }}
+        {{- if .Values.saml.encryptionCertSecret }}
+        - name: saml-encryption-cert
+          secret:
+            secretName: {{ .Values.saml.encryptionCertSecret }}
+        {{- end }}
+        {{- if .Values.saml.decryptionKeySecret }}
+        - name: saml-decryption-key
+          secret:
+            secretName: {{ .Values.saml.decryptionKeySecret }}
+        {{- end }}
         {{- if .Values.saml.metadataSecretName }}
         - name: metadata-secret-volume
           secret:
@@ -308,6 +323,29 @@ spec:
             runAsUser: 0
 {{ end }}
       containers:
+        {{- if .Values.global.gmp.enabled }}
+        - name: {{ .Values.global.gmp.gmpProxy.name }}
+          image: {{ .Values.global.gmp.gmpProxy.image }}
+          {{- if .Values.global.gmp.gmpProxy.imagePullPolicy }}
+          imagePullPolicy: {{ .Values.global.gmp.gmpProxy.imagePullPolicy }}
+          {{- else }}
+          imagePullPolicy: Always
+          {{- end }}
+          args:
+          - "--web.listen-address=:{{ .Values.global.gmp.gmpProxy.port }}"
+          - "--query.project-id={{ .Values.global.gmp.gmpProxy.projectId }}"
+          ports:
+          - name: web
+            containerPort: {{ .Values.global.gmp.gmpProxy.port | int }}
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: web
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: web
+        {{- end }}
         {{- if .Values.global.amp.enabled }}
         - name: sigv4proxy
           image: {{ .Values.sigV4Proxy.image }}
@@ -336,6 +374,28 @@ spec:
           env:
           {{- toYaml .Values.sigV4Proxy.extraEnv | nindent 10 }}
           {{- end }}
+        {{- end }}
+        {{- if .Values.global.gcpstore.enabled }}
+        - name: ubbagent
+          image: gcr.io/kubecost1/gcp-mp/ent/cost-model/ubbagent:1.0
+          env:
+          - name: AGENT_CONFIG_FILE
+            value: "/etc/ubbagent/config.yaml"
+          - name: AGENT_LOCAL_PORT
+            value: "6080"
+          - name: AGENT_ENCODED_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ default "kubecost-reporting-secret" .Values.reportingSecret }}
+                key: reporting-key
+          - name: AGENT_CONSUMER_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ default "kubecost-reporting-secret" .Values.reportingSecret }}
+                key: consumer-id
+          volumeMounts:
+          - name: ubbagent-config
+            mountPath: /etc/ubbagent
         {{- end }}
         {{- if .Values.kubecostModel }}
         {{- if .Values.kubecostModel.openSourceOnly }}
@@ -474,6 +534,14 @@ spec:
             - name: secret-volume
               mountPath: /var/configs/secret-volume
             {{- end }}
+            {{- if .Values.saml.encryptionCertSecret }}
+            - name: saml-encryption-cert
+              mountPath: /var/configs/saml-encryption-cert
+            {{- end }}
+            {{- if .Values.saml.decryptionKeySecret }}
+            - name: saml-decryption-key
+              mountPath: /var/configs/saml-decryption-key
+            {{- end }}
             {{- if .Values.saml.metadataSecretName }}
             - name: metadata-secret-volume
               mountPath: /var/configs/metadata-secret-volume
@@ -527,6 +595,10 @@ spec:
             {{- if .Values.assetReportConfigmapName }}
             - name: ASSET_REPORT_CONFIGMAP_NAME
               value: {{ .Values.assetReportConfigmapName }}
+            {{- end }}
+            {{- if .Values.cloudCostReportConfigmapName }}
+              - name: CLOUD_COST_REPORT_CONFIGMAP_NAME
+                value: {{ .Values.cloudCostReportConfigmapName }}
             {{- end }}
             {{- if .Values.savedReportConfigmapName }}
             - name: SAVED_REPORT_CONFIGMAP_NAME
@@ -899,6 +971,10 @@ spec:
             - name: SAML_RBAC_ENABLED
               value: "true"
             {{- end }}
+            {{- if and .Values.saml.encryptionCertSecret .Values.saml.decryptionKeySecret }}
+            - name: SAML_RESPONSE_ENCRYPTED
+              value: "true"
+            {{- end}}
             {{- end }}
             {{- end }}
             {{- if and (.Values.prometheus.server.global.external_labels.cluster_id) (not .Values.prometheus.server.clusterIDConfigmap) }}
