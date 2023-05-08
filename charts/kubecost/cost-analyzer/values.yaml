@@ -22,6 +22,27 @@ global:
     proxy: true # If true, the kubecost frontend will route to your grafana through its service endpoint
 #    fqdn: cost-analyzer-grafana.default.svc
 
+  # Enable only when you are using GCP Marketplace ENT listing. Learn more at https://console.cloud.google.com/marketplace/product/kubecost-public/kubecost-ent    
+  gcpstore:
+    enabled: false
+  
+  # Google Cloud Managed Service for Prometheus
+  gmp:
+  # Remember to set up these parameters when install the Kubecost Helm chart with `global.gmp.enabled=true` if you want to use GMP self-deployed collection (Recommended) to ultilize Kubecost scrape configs.
+  # If enabling GMP, it is highly recommended to utilize Google's distribution of Prometheus.
+  # Learn more at https://cloud.google.com/stackdriver/docs/managed-prometheus/setup-unmanaged
+  # --set prometheus.server.image.repository="gke.gcr.io/prometheus-engine/prometheus" \
+  # --set prometheus.server.image.tag="v2.35.0-gmp.2-gke.0"
+    enabled: false # If true, kubecost will be configured to use GMP Prometheus image and query from Google Cloud Managed Service for Prometheus.
+    prometheusServerEndpoint: http://localhost:8085/ # The prometheus service endpoint used by kubecost. The calls are forwarded through the GMP Prom proxy side car to the GMP database.
+    gmpProxy:
+      enabled: false
+      image: gke.gcr.io/prometheus-engine/frontend:v0.4.1-gke.0 # GMP Prometheus proxy image that serve as an endpoint to query metrics from GMP
+      imagePullPolicy: Always
+      name: gmp-proxy
+      port: 8085
+      projectId: YOUR_PROJECT_ID # example GCP project ID
+
   # Amazon Managed Service for Prometheus
   amp:
     enabled: false # If true, kubecost will be configured to remote_write and query from Amazon Managed Service for Prometheus.
@@ -165,6 +186,19 @@ global:
       cloudBreakdown: "service"
       cloudJoin: "label:kubernetes_namespace"
 
+  # Set saved Cloud Cost report(s) accessible from /reports
+  # Ref: http://docs.kubecost.com/saved-reports
+  cloudCostReports:
+    enabled: false # If true, overwrites report parameters set through UI
+    reports:
+      - title: "Cloud Cost Report 0"
+        window: "today"
+        aggregateBy: "type"
+        accumulate: false # daily resolution
+        filters:
+          - property: "cluster"
+            value: "cluster-one"
+
   podAnnotations: {}
     # iam.amazonaws.com/role: role-arn
   additionalLabels: {}
@@ -197,6 +231,8 @@ saml:
   # audienceURI: "http://localhost:9090" # by convention, the same as the appRootURL, but any string uniquely identifying kubecost to your samp IDP. Optional if you follow the convention
   # nameIDFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" If your SAML provider requires a specific nameid format
   # isGLUUProvider: false # An additional URL parameter must be appended for GLUU providers
+  # encryptionCertSecret: "kubecost-saml-cert" # k8s secret where the x509 certificate used to encrypt an Okta saml response is stored
+  # decryptionKeySecret: "kubecost-sank-decryption-key" # k8s secret where the private key associated with the encryptionCertSecret is stored
   rbac:
     enabled: false
     groups:
@@ -423,6 +459,9 @@ kubecostModel:
 ingress:
   enabled: false
   # className: nginx
+  labels:
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
   annotations:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
@@ -500,6 +539,8 @@ persistentVolume:
   enabled: true # Note that setting this to false means configurations will be wiped out on pod restart.
   # storageClass: "-" #
   # existingClaim: kubecost-cost-analyzer # a claim in the same namespace as kubecost
+  labels: {}
+  annotations: {}
 
 service:
   type: ClusterIP
@@ -606,15 +647,15 @@ prometheus:
       groups:
         - name: CPU
           rules:
-            - expr: sum(rate(container_cpu_usage_seconds_total{container_name!=""}[5m]))
+            - expr: sum(rate(container_cpu_usage_seconds_total{container!=""}[5m]))
               record: cluster:cpu_usage:rate5m
-            - expr: rate(container_cpu_usage_seconds_total{container_name!=""}[5m])
+            - expr: rate(container_cpu_usage_seconds_total{container!=""}[5m])
               record: cluster:cpu_usage_nosum:rate5m
-            - expr: avg(irate(container_cpu_usage_seconds_total{container_name!="POD", container_name!=""}[5m])) by (container_name,pod_name,namespace)
+            - expr: avg(irate(container_cpu_usage_seconds_total{container!="POD", container!=""}[5m])) by (container,pod,namespace)
               record: kubecost_container_cpu_usage_irate
-            - expr: sum(container_memory_working_set_bytes{container_name!="POD",container_name!=""}) by (container_name,pod_name,namespace)
+            - expr: sum(container_memory_working_set_bytes{container!="POD",container!=""}) by (container,pod,namespace)
               record: kubecost_container_memory_working_set_bytes
-            - expr: sum(container_memory_working_set_bytes{container_name!="POD",container_name!=""})
+            - expr: sum(container_memory_working_set_bytes{container!="POD",container!=""})
               record: kubecost_cluster_memory_working_set_bytes
         - name: Savings
           rules:
@@ -695,10 +736,10 @@ networkCosts:
 
       # Internet contains a list of address/range that will be
       # classified as internet traffic. This is synonymous with traffic
-      # that cannot be classified within the cluster. 
-      # NOTE: Internet classification filters are executed _after_ 
+      # that cannot be classified within the cluster.
+      # NOTE: Internet classification filters are executed _after_
       # NOTE: direct-classification, but before in-zone, in-region,
-      # NOTE: and cross-region. 
+      # NOTE: and cross-region.
       internet: []
 
       # Direct Classification specifically maps an ip address or range
@@ -768,11 +809,12 @@ kubecostDeployment:
   #     maxSurge: 1
   #     maxUnavailable: 1
   #   type: RollingUpdate
+  queryServiceReplicas: 0
 
 # Kubecost Cluster Controller for Right Sizing and Cluster Turndown
 clusterController:
   enabled: false
-  image: gcr.io/kubecost1/cluster-controller:v0.6.2
+  image: gcr.io/kubecost1/cluster-controller:v0.7.0
   imagePullPolicy: Always
   kubescaler:
     # If true, will cause all (supported) workloads to be have their requests
@@ -877,7 +919,7 @@ federatedETL:
     # If not set, the federator will attempt to federated all clusters pushing to the federated storage.
     clusters: []
     # federator.primaryClusterID is an optional parameter that should be used when reconciliation is expected to occur on the Primary.
-    # primaryClusterID: "cluster_id" 
+    # primaryClusterID: "cluster_id"
 
 kubecostAdmissionController:
   enabled: false
@@ -888,6 +930,7 @@ kubecostAdmissionController:
 # It is disabled by default to avoid problems in high-scale environments.
 costEventsAudit:
   enabled: false
+
 
 # readonly: false # disable updates to kubecost from the frontend UI and via POST request
 

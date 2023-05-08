@@ -3,6 +3,12 @@
   {{/* Append services to this list based on helm values */}}
   {{- $disabledServices := list -}}
 
+  {{- if .Values.reporting -}}
+    {{- if eq .Values.reporting.pdfReports false -}}
+      {{- $disabledServices = append $disabledServices "admin" -}}
+    {{- end -}}
+  {{- end -}}
+
   {{- $disabledServices | join " " -}}
 {{- end -}}
 
