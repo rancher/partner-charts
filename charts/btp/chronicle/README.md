@@ -35,6 +35,7 @@
 | `tp.image.tag` | the image tag | BTP2.1.0 |
 | `tp.extraVolumes` | extra volumes declarations for the chronicle-tp deployment | list | nil
 | `tp.extraVolumeMounts` | extra volume mounts for chronicle-tp deployment | list | nil
+| `tp.resources` | resources | map | nil |
 | `tp.maxUnavailable` | maximum unavailable nodes during a rolling upgrade |
 | `tp.minReadySeconds` | minimum time before node becomes available |
 | `postgres.enabled` | if true create an internal postgres instance | boolean | true |
@@ -47,7 +48,7 @@
 | `postgres.port` | port for the postgres database | int | 5432 |
 | `postgres.password` | password for the postgres database | string | "postgres" |
 | `postgres.existingPasswordSecret` | name of a secret containing the postgres password | string | nil |
-| `postgres.existingPasswordSecret` | name of the key in a secret containing the postgres password | string | password |
+| `postgres.existingPasswordSecret` | name of the key in a secret containing the postgres password | string | nil |
 | `postgres.tls` | postgres TLS configuration | string | nil |
 | `postgres.persistence` | postgres persistence settings | map | N/A |
 | `postgres.persistence.enabled` | if true allocate a PVC for the postgres instance | boolean | false |
@@ -55,4 +56,5 @@
 | `postgres.persistence.accessModes` | postgres PVC access modes | list | [ "ReadWriteOnce" ] |
 | `postgres.persistence.storageClass` | postgres PVC storageClass | string | nil |
 | `postgres.persistence.size` | postgres PVC volume size | string | "40Gi" |
-| `postgres.resources` | UI resources | map | nil |
+| `postgres.resources` | resources | map | nil |
+| `resources` | resources | map | nil |

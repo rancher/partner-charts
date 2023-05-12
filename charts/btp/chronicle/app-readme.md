@@ -8,5 +8,5 @@ You can find example domains and further instructions at https://examples.btp.wo
 
 ## *Important*
 
-*As Chronicle uses Sawtooth as it backing ledger, a minimum of 4 nodes is required for deployment.*
+*As Chronicle uses Sawtooth as its backing ledger, a minimum of 4 nodes is required for deployment.*
 *This helm chart will deploy and configure a 4 node Sawtooth network on your target cluster, so less than 4 nodes will result in the deployment failing.*

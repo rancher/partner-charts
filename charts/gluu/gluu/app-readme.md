@@ -1,3 +1,7 @@
+## Tutorial
+
+For a full walkthrough of the Gluu Flex Server on Rancher, please see the [Gluu Server on Rancher Tutorial](https://docs.gluu.org/stable/admin/recipes/getting-started-rancher/).
+
 ## Introduction
 The Gluu Server is a container distribution of free open source software (FOSS) for identity and access management (IAM). SaaS, custom, open source and commercial web and mobile applications can leverage a Gluu Server for user authentication, identity information, and policy decisions.
 
@@ -19,7 +23,6 @@ The Gluu Server can be deployed to support the following open standards for auth
 - OAuth 2.0    
 - OpenID Connect    
 - User Managed Access 2.0 (UMA)    
-- SAML 2.0   
 - System for Cross-domain Identity Management (SCIM)    
 - FIDO Universal 2nd Factor (U2F)
 - FIDO 2.0 / WebAuthn
