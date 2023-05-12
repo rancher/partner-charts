@@ -25,8 +25,11 @@ spec:
 {{- end }}
       labels:
         app: {{ .Release.Name }}-yugaware
+{{- if .Values.yugaware.pod.labels }}
+{{ toYaml .Values.yugaware.pod.labels | indent 8 }}
+{{- end }}
     spec:
-      serviceAccountName: {{ .Release.Name }}
+      serviceAccountName: {{ .Values.yugaware.serviceAccount | default .Release.Name }}
       imagePullSecrets:
       - name: {{ .Values.image.pullSecret }}
       {{- if .Values.securityContext.enabled }}
@@ -35,6 +38,30 @@ spec:
         {{- if (semverCompare ">=1.20-x" .Capabilities.KubeVersion.Version) }}
         fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
         {{- end }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8}}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- end }}
+      {{- if .Values.zoneAffinity }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: failure-domain.beta.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
       {{- end }}
       volumes:
         - name: yugaware-storage
@@ -166,7 +193,12 @@ spec:
         - name: postgres
           image: {{ include "full_image" (dict "containerName" "postgres" "root" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["-c", "huge_pages=off"]
+          args:
+          {{- if and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io") }}
+          - "run-postgresql"
+          {{- end }}
+          - "-c"
+          - "huge_pages=off"
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -183,6 +215,33 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-yugaware-global-config
                   key: postgres_db
+            {{- if and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io") }}
+            # Hardcoded the POSTGRESQL_USER because it's mandatory env var in RH PG image
+            # It doesn't have access to create the DB, so YBA fails to create the perf_advisor DB.
+            # Need to use admin user of RH PG image (postgres)
+            # Changing the user name won't be possible moving forward for OpenShift certified chart
+            - name: POSTGRESQL_USER
+              value: pg-yba
+              # valueFrom:
+              #   secretKeyRef:
+              #     name: {{ .Release.Name }}-yugaware-global-config
+              #     key: postgres_user
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_password
+            - name: POSTGRESQL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_password
+            - name: POSTGRESQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_db
+            {{- end }}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           ports:
@@ -244,6 +303,9 @@ spec:
             - --web.enable-admin-api
             - --web.enable-lifecycle
             - --storage.tsdb.retention.time={{ .Values.prometheus.retentionTime }}
+            - --query.max-concurrency={{ .Values.prometheus.queryConcurrency }}
+            - --query.max-samples={{ .Values.prometheus.queryMaxSamples }}
+            - --query.timeout={{ .Values.prometheus.queryTimeout }}
           ports:
             - containerPort: 9090
         - name: yugaware
@@ -302,6 +364,9 @@ spec:
           - name: yugaware-storage
             mountPath: /opt/yugabyte/releases/
             subPath: releases
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/ybc/releases/
+            subPath: ybc_releases
           # old path for backward compatibility
           - name: yugaware-storage
             mountPath: /opt/releases/
@@ -318,6 +383,7 @@ spec:
         - name: nginx
           image: {{ include "full_image" (dict "containerName" "nginx" "root" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["nginx", "-g", "daemon off;"]
           ports:
           - containerPort: 8080
 

@@ -63,7 +63,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgres.existingPasswordSecret }}
-                  key: password
+                  key: {{ .Values.postgres.existingPasswordSecretKey }}
               {{- else }}
               value: {{ .Values.postgres.password }}
               {{- end }}
@@ -80,14 +80,31 @@ spec:
           command: [ "bash", "-c"]
           args:
             - |
+              echo "Waiting 20 seconds for postgres to start";
+              sleep 20;
               /usr/local/bin/chronicle \
               -c /etc/chronicle/config/config.toml \
               --console-logging json \
               --sawtooth tcp://{{ include "chronicle.sawtooth.service" . }}:{{ include "chronicle.sawtooth.sawcomp" . }} \
-              serve-api --interface 0.0.0.0:{{ .Values.port}} {{ if .Values.webUi }} --open {{ end }}
+              --remote-database \
+              --database-name {{ .Values.postgres.database }} \
+              --database-username {{ .Values.postgres.user }} \
+              --database-host {{ .Values.postgres.host }} \
+              serve-graphql --interface 0.0.0.0:{{ .Values.port}} {{ if .Values.webUi }} --open {{ end }}
           env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
             - name: RUST_LOG
               value: {{ .Values.logLevel }}
+            - name: PGPASSWORD
+              {{- if .Values.postgres.existingPasswordSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingPasswordSecret }}
+                  key: {{ .Values.postgres.existingPasswordSecretKey }}
+              {{- else }}
+              value: {{ .Values.postgres.password }}
+              {{- end }}
+            {{- include "lib.safeToYaml" .Values.postgres.env | nindent 12 }}
+          resources: {{- include "lib.safeToYaml" .Values.resources | nindent 12 }}
           volumeMounts:
             - name: chronicle-config
               mountPath: /etc/chronicle/config/

@@ -1,0 +1,52 @@
+{{- if .Values.cosi.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-objectstorage-provisioner
+  labels:
+{{ include "s3gw.labels" . | indent 4}}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "s3gw-cosi.selectorLabels" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "s3gw-cosi.selectorLabels" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "s3gw-cosi.ServiceAccountName" . }}
+      volumes:
+        - name: socket
+          emptyDir: {}
+      containers:
+        - name: {{ .Release.Name }}-cosi-driver
+          image: {{ include "s3gw-cosi.driverImage" . | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.cosi.driver.imagePullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ include "s3gw-cosi.driverSecretName" . }}
+          volumeMounts:
+            - mountPath: /var/lib/cosi
+              name: socket
+        - name: {{ .Release.Name }}-cosi-sidecar
+          image: {{ include "s3gw-cosi.sidecarImage" . | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.cosi.sidecar.imagePullPolicy }}
+          args:
+            - {{ printf "--v=%s" (default "5" .Values.cosi.sidecar.logLevel) }}
+          envFrom:
+            - secretRef:
+                name: {{ include "s3gw-cosi.driverSecretName" . }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - mountPath: /var/lib/cosi
+              name: socket
+{{- end }}

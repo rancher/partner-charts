@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Chart.Name }}
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
 {{ include "s3gw.labels" . | indent 4 }}
@@ -20,19 +20,19 @@ spec:
     spec:
 {{- if .Values.imageCredentials }}
       imagePullSecrets:
-        - name: {{ .Chart.Name }}-image-pull-secret
+        - name: {{ .Release.Name }}-image-pull-secret
 {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ .Release.Name }}
           image: {{ include "s3gw.image" . | quote }}
           imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
           args:
             - "--rgw-dns-name"
 {{- if .Values.ingress.enabled }}
-            - {{ .Values.serviceName }}.{{ .Values.publicDomain }},
-              {{ .Values.serviceName }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
+            - {{ include "s3gw.serviceName" . }}.{{ .Values.publicDomain }},
+              {{ include "s3gw.serviceName" . }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
 {{- else}}
-            - {{ .Values.serviceName }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
+            - {{ include "s3gw.serviceName" . }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
 {{- end }}
             - "--rgw-backend-store"
             - sfs
@@ -70,7 +70,7 @@ spec:
 {{ end }}
           envFrom:
             - secretRef:
-                name: {{ .Values.defaultUserCredentialsSecret }}
+                name: {{ include "s3gw.defaultUserCredentialsSecret" . }}
           volumeMounts:
             - name: s3gw-lh-store
               mountPath: /data
@@ -82,14 +82,14 @@ spec:
             claimName: {{ .Release.Name }}-pvc
         - name: s3gw-cluster-ip-tls
           secret:
-            secretName: s3gw-cluster-ip-tls
+            secretName: {{ .Release.Name }}-{{ .Release.Namespace }}-cluster-ip-tls
             optional: false
 {{- if .Values.ui.enabled }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: '{{ .Chart.Name }}-ui'
+  name: '{{ .Release.Name }}-ui'
   namespace: {{ .Release.Namespace }}
   labels:
 {{ include "s3gw.labels" . | indent 4 }}
@@ -106,7 +106,7 @@ spec:
     spec:
 {{- if .Values.imageCredentials }}
       imagePullSecrets:
-        - name: {{ .Chart.Name }}-image-pull-secret
+        - name: {{ .Release.Name }}-image-pull-secret
 {{- end }}
       containers:
         - name: s3gw-ui
@@ -116,7 +116,7 @@ spec:
             - containerPort: 8080
           envFrom:
             - configMapRef:
-                name: s3gw-config
+                name: {{ include "s3gw.configMap" . }}
             - secretRef:
-                name: {{ .Values.defaultUserCredentialsSecret }}
+                name: {{ include "s3gw.defaultUserCredentialsSecret" . }}
 {{- end }}
