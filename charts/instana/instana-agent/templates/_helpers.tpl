@@ -76,10 +76,36 @@ helm.sh/chart: {{ include "instana-agent.chart" . }}
 {{- end -}}
 
 {{/*
+Add Helm metadata to resource labels.
+*/}}
+{{- define "k8s-sensor.commonLabels" -}}
+{{/* Following label is used to determine whether to disable the Kubernetes host sensor */}}
+app: k8sensor
+app.kubernetes.io/name: {{ include "instana-agent.name" . }}-k8s-sensor
+app.kubernetes.io/version: {{ .Chart.Version }}
+{{- if not .Values.templating }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ include "instana-agent.chart" . }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Add Helm metadata to selector labels specifically for deployments/daemonsets/statefulsets.
 */}}
 {{- define "instana-agent.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "instana-agent.name" . }}
+{{- if not .Values.templating }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Add Helm metadata to selector labels specifically for deployments/daemonsets/statefulsets.
+*/}}
+{{- define "k8s-sensor.selectorLabels" -}}
+app: k8sensor
+app.kubernetes.io/name: {{ include "instana-agent.name" . }}-k8s-sensor
 {{- if not .Values.templating }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
