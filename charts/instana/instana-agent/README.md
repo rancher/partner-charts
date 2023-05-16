@@ -333,6 +333,9 @@ zones:
 
 ## Changelog
 
+### 1.2.59
+* Introduce unique selectorLabels and commonLabels for k8s-sensor deployment
+
 ### 1.2.58
 * Default to `internalTrafficPolicy` instead of `topologyKeys` for rendering of static YAMLs
 

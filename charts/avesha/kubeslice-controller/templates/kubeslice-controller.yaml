@@ -22,7 +22,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.7.0
+    controller-gen.kubebuilder.io/version: v0.11.1
   creationTimestamp: null
   name: clusters.controller.kubeslice.io
 spec:
@@ -107,17 +107,57 @@ spec:
                 description: NetworkInterface is the network interface attached with the cluster.
                 type: string
               nodeIP:
-                description: NodeIP is the IP address of the Node
+                description: NodeIP is the IP address of the Node - deprecated field use Plural NodeIPs
                 type: string
+              nodeIPs:
+                items:
+                  type: string
+                type: array
             type: object
           status:
             description: ClusterStatus defines the observed state of Cluster
             properties:
+              clusterHealth:
+                description: ClusterHealth shows the health of the worker cluster
+                properties:
+                  clusterHealthStatus:
+                    description: ClusterHealthStatus shows the overall health status of the cluster
+                    enum:
+                    - Normal
+                    - Warning
+                    type: string
+                  componentStatuses:
+                    description: ComponentStatuses shows the health status of individual components in the cluster
+                    items:
+                      properties:
+                        component:
+                          description: Component name
+                          type: string
+                        componentHealthStatus:
+                          enum:
+                          - Normal
+                          - Warning
+                          - Error
+                          type: string
+                      required:
+                      - component
+                      - componentHealthStatus
+                      type: object
+                    type: array
+                  lastUpdated:
+                    description: LastUpdated is the timestamp when healthstatus was updated
+                    format: date-time
+                    type: string
+                type: object
               cniSubnet:
                 description: CniSubnet is the podip and service ip subnet of CNI
                 items:
                   type: string
                 type: array
+              isDeregisterInProgress:
+                description: IsDeregisterInProgress is the flag to check if the cluster
+                  deregister is InProgress
+                type: boolean
               namespaces:
                 description: Namespaces present in cluster
                 items:
@@ -128,6 +168,22 @@ spec:
                       type: string
                   type: object
                 type: array
+              nodeIPs:
+                description: NodeIPs of the gateway node of worker cluster
+                items:
+                  type: string
+                type: array
+              registrationStatus:
+                description: RegistrationStatus shows the status of cluster registration
+                enum:
+                - Pending
+                - InProgress
+                - Failed
+                - Registered
+                - DeregisterInProgress
+                - DeregisterFailed
+                - Deregistered
+                type: string
               secretName:
                 description: SecretName is the name of the secret for the worker cluster.
                 type: string
@@ -137,12 +193,6 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -208,7 +258,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.7.0
+    controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
   name: serviceexportconfigs.controller.kubeslice.io
 spec:
@@ -223,19 +273,30 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ServiceExportConfig is the Schema for the serviceexportconfigs API
+        description: ServiceExportConfig is the Schema for the serviceexportconfigs
+          API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
           spec:
             description: ServiceExportConfigSpec defines the desired state of ServiceExportConfig
             properties:
+              aliases:
+                description: Alias names for the exported service. The service could
+                  be addressed by the alias names in addition to the slice.local name.
+                items:
+                  type: string
+                type: array
               serviceDiscoveryEndpoints:
                 description: the service discovery endpoint array
                 items:
@@ -283,7 +344,8 @@ spec:
                 description: The name of the slice.
                 type: string
               sourceCluster:
-                description: clusterId is the id of the cluster where the service is available.
+                description: clusterId is the id of the cluster where the service
+                  is available.
                 type: string
             required:
             - serviceName
@@ -471,6 +533,46 @@ spec:
             type: object
           status:
             description: SliceConfigStatus defines the observed state of SliceConfig
+            properties:
+              kubesliceEvents:
+                items:
+                  properties:
+                    action:
+                      description: Trigger action. Examples - CLUSTER_OFFBOARDING,
+                        NAMESPCE_OFFBOARDING etc
+                      type: string
+                    components:
+                      description: list of effected components on which action failed
+                      items:
+                        type: string
+                      type: array
+                    event:
+                      description: Event name (from monitoring framework schema)
+                      type: string
+                    identifier:
+                      description: Identifier of the component for which the action
+                        was triggered
+                      type: string
+                    isEventRaised:
+                      default: false
+                      description: Flag to determine if kubernetes event is already
+                        raised
+                      type: boolean
+                    reason:
+                      description: Reason message for the event
+                      type: string
+                    timestamp:
+                      description: Timestamp of the event
+                      format: date-time
+                      type: string
+                    type:
+                      description: Type of the event. Can be one of Error, Success
+                        or InProgress
+                      type: string
+                  required:
+                  - event
+                  type: object
+                type: array
             type: object
         type: object
     served: true
@@ -1042,8 +1144,11 @@ spec:
                   items:
                     description: ApplyTo contains information about the namespace and the Subjects. It adds who information via Subjects and namespace information by which namespace it exists in.
                     properties:
+                      cluster:
+                        description: '''*'' Represents all clusters'
+                        type: string
                       namespace:
-                        description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error. '*' Represents all namespaces
+                        description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error.
                         type: string
                       subjects:
                         description: Subjects holds references to the objects the role applies to.
@@ -1098,6 +1203,9 @@ spec:
               roleRefConditions:
                 items:
                   properties:
+                    cluster:
+                      description: Name of the Cluster
+                      type: string
                     condition:
                       description: Condition defines conditions of a RoleRef, one of INVALID_NS, NOT_ACCESSIBLE, INVALID_RULE, INVALID_ROLE_BINDING.
                       type: string
@@ -1248,7 +1356,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.7.0
+    controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
   name: workerserviceimports.worker.kubeslice.io
 spec:
@@ -1263,19 +1371,30 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: WorkerServiceImport is the Schema for the workerserviceimport API
+        description: WorkerServiceImport is the Schema for the workerserviceimport
+          API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
           spec:
             description: WorkerServiceImportSpec defines the desired state of WorkerServiceImport
             properties:
+              aliases:
+                description: Alias names for the exported service. The service could
+                  be addressed by the alias names in addition to the slice.local name.
+                items:
+                  type: string
+                type: array
               serviceDiscoveryEndpoints:
                 description: the service discovery endpoint array
                 items:
@@ -1324,7 +1443,8 @@ spec:
                 description: The name of the slice.
                 type: string
               sourceClusters:
-                description: clusterId is the id of the cluster where the service is available.
+                description: clusterId is the id of the cluster where the service
+                  is available.
                 items:
                   type: string
                 type: array
@@ -1508,6 +1628,38 @@ spec:
                       type: string
                   type: object
                 type: array
+              sliceHealth:
+                description: SliceHealth shows the health of the slice in worker cluster
+                properties:
+                  componentStatuses:
+                    description: ComponentStatuses shows the health status of individual components in the cluster
+                    items:
+                      properties:
+                        component:
+                          description: Component name
+                          type: string
+                        componentHealthStatus:
+                          enum:
+                          - Normal
+                          - Warning
+                          - Error
+                          type: string
+                      required:
+                      - component
+                      - componentHealthStatus
+                      type: object
+                    type: array
+                  lastUpdated:
+                    description: LastUpdated is the timestamp when healthstatus was updated
+                    format: date-time
+                    type: string
+                  sliceHealthStatus:
+                    description: SliceHealthStatus shows the overall health status of the slice
+                    enum:
+                    - Normal
+                    - Warning
+                    type: string
+                type: object
             type: object
         type: object
     served: true
@@ -1578,8 +1730,16 @@ spec:
                     type: string
                   nodeIp:
                     type: string
+                  nodeIps:
+                    items:
+                      type: string
+                    type: array
                   nodePort:
                     type: integer
+                  nodePorts:
+                    items:
+                      type: integer
+                    type: array
                   vpnIp:
                     type: string
                 type: object
@@ -1593,8 +1753,16 @@ spec:
                     type: string
                   nodeIp:
                     type: string
+                  nodeIps:
+                    items:
+                      type: string
+                    type: array
                   nodePort:
                     type: integer
+                  nodePorts:
+                    items:
+                      type: integer
+                    type: array
                   vpnIp:
                     type: string
                 type: object
@@ -1608,6 +1776,93 @@ spec:
                 type: integer
               gatewayNumber:
                 type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: workerslicegwrecyclers.worker.kubeslice.io
+spec:
+  group: worker.kubeslice.io
+  names:
+    kind: WorkerSliceGwRecycler
+    listKind: WorkerSliceGwRecyclerList
+    plural: workerslicegwrecyclers
+    singular: workerslicegwrecycler
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: WorkerSliceGwRecycler is the Schema for the workerslicegwrecyclers
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WorkerSliceGwRecyclerSpec defines the desired state of WorkerSliceGwRecycler
+            properties:
+              gwPair:
+                properties:
+                  clientId:
+                    type: string
+                  serverId:
+                    type: string
+                type: object
+              request:
+                type: string
+              sliceGwClient:
+                type: string
+              sliceGwServer:
+                type: string
+              sliceName:
+                type: string
+              state:
+                type: string
+            type: object
+          status:
+            description: WorkerSliceGwRecyclerStatus defines the observed state of
+              WorkerSliceGwRecycler
+            properties:
+              client:
+                properties:
+                  recycledClient:
+                    type: string
+                  response:
+                    type: string
+                type: object
+              recycledServers:
+                items:
+                  type: string
+                type: array
+              serversToRecycle:
+                items:
+                  type: string
+                type: array
             type: object
         type: object
     served: true
@@ -2243,6 +2498,7 @@ spec:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           bindings:
+            description: RoleBinding references a role, but does not contain it.
             properties:
               applyTo:
                 description: ApplyTo contains information about the namespace and the Subjects.
@@ -2250,7 +2506,7 @@ spec:
                   description: ApplyTo contains information about the namespace and the Subjects. It adds who information via Subjects and namespace information by which namespace it exists in.
                   properties:
                     namespace:
-                      description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error. '*' Represents all namespaces
+                      description: Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty the Authorizer should report an error.
                       type: string
                     subjects:
                       description: Subjects holds references to the objects the role applies to.
@@ -2314,6 +2570,16 @@ spec:
             description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
+            type: object
+          spec:
+            description: WorkerSliceRoleBindingSpec defines the desired state of WorkerSliceRoleBinding
+            properties:
+              clusterName:
+                description: ClusterName defines the name of the cluster for the WorkerSliceRoleBinding
+                type: string
+              sliceName:
+                description: SliceName defines the name of the slice for the WorkerSliceRoleBinding
+                type: string
             type: object
           status:
             properties:
@@ -2562,6 +2828,7 @@ rules:
   - workerserviceimports
   - workersliceconfigs
   - workerslicegateways
+  - workerslicegwrecyclers
   - workerslicenodeaffinities
   - workersliceresourcequotas
   - workerslicerolebindings
@@ -2579,6 +2846,7 @@ rules:
   - workerserviceimports/finalizers
   - workersliceconfigs/finalizers
   - workerslicegateways/finalizers
+  - workerslicegwrecyclers/finalizers
   - workerslicenodeaffinities/finalizers
   - workersliceresourcequotas/finalizers
   - workerslicerolebindings/finalizers
@@ -2590,6 +2858,7 @@ rules:
   - workerserviceimports/status
   - workersliceconfigs/status
   - workerslicegateways/status
+  - workerslicegwrecyclers/status
   - workerslicenodeaffinities/status
   - workersliceresourcequotas/status
   - workerslicerolebindings/status
@@ -2770,38 +3039,6 @@ rules:
   - patch
   - update
 ---
-  {{ if .Values.kubeslice.prometheus.enabled}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kubeslice-controller-prometheus
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  - nodes/proxy
-  - services
-  - endpoints
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - extensions
-  resources:
-  - ingresses
-  verbs:
-  - get
-  - list
-  - watch
-- nonResourceURLs:
-  - /metrics
-  verbs:
-  - get
-  {{ end }}
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -2834,24 +3071,6 @@ subjects:
   name: kubeslice-controller-controller-manager
   namespace: kubeslice-controller
 ---
-  {{ if .Values.kubeslice.prometheus.enabled}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  labels:
-    app.kubernetes.io/name: kube-state-metrics
-    app.kubernetes.io/version: v1.8.0
-  name: kubeslice-controller-kube-state-metrics
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kubeslice-controller-kube-state-metrics
-subjects:
-- kind: ServiceAccount
-  name: kube-state-metrics
-  namespace: kube-system
-  {{ end }}
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -2877,21 +3096,6 @@ subjects:
 - kind: ServiceAccount
   name: kubeslice-controller-ovpn-manager
   namespace: kubeslice-controller
----
-  {{ if .Values.kubeslice.prometheus.enabled}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kubeslice-controller-prometheus
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kubeslice-controller-prometheus
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: kubeslice-controller
-  {{ end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -2925,77 +3129,6 @@ metadata:
   name: kubeslice-controller-manager-config
   namespace: kubeslice-controller
 ---
-  {{ if .Values.kubeslice.prometheus.enabled}}
-apiVersion: v1
-data:
-  prometheus.rules: |-
-    groups:
-    - name: Resource Quota violation alerts
-      rules:
-      - alert: Slice Resource Quota Violation
-        expr: kubeslice_controller_slice_quota_violation > 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Slice Resource Usage Exceeded Quota"
-          description: "The slice {{ "{{" }} $labels.slice_name}} has CPU usage {{ "{{" }} $labels.cpu}} and memory usage {{ "{{" }} $labels.memory}}: violated by {{ "{{" }} $labels.violated_resource_type}}"
-      - alert: Cluster Resource Quota Violation
-        expr: kubeslice_controller_cluster_quota_violation > 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Cluster Resource Usage Exceeded Quota"
-          description: "The cluster {{ "{{" }} $labels.cluster_name}} has CPU usage {{ "{{" }} $labels.cpu}} and memory usage {{ "{{" }} $labels.memory}}: violated by {{ "{{" }} $labels.violated_resource_type}}"
-      - alert: Namespace Resource Quota Violation
-        expr: kubeslice_controller_namespace_quota_violation > 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Namespace Resource Usage Exceeded Quota"
-          description: "The namespace {{ "{{" }}$labels.namespace}} has CPU usage {{ "{{" }}$labels.cpu}} and memory usage {{ "{{" }}$labels.memory}}: violated by {{ "{{" }}$labels.violated_resource_type}}"
-  prometheus.yml: |-
-    global:
-      scrape_interval: 5s
-      evaluation_interval: 5s
-    rule_files:
-      - /etc/prometheus/prometheus.rules
-    scrape_configs:
-      - job_name: 'kubernetes-pods'
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-            action: keep
-            regex: true
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-            action: replace
-            target_label: __metrics_path__
-            regex: (.+)
-          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-            action: replace
-            regex: ([^:]+)(?::\d+)?;(\d+)
-            replacement: $1:$2
-            target_label: __address__
-          - action: labelmap
-            regex: __meta_kubernetes_pod_label_(.+)
-          - source_labels: [__meta_kubernetes_namespace]
-            action: replace
-            target_label: kubernetes_namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            action: replace
-            target_label: kubernetes_pod_name
-kind: ConfigMap
-metadata:
-  labels:
-    name: prometheus-server-conf
-  name: kubeslice-controller-prometheus-server-conf
-  namespace: kubeslice-controller
-  {{ end }}
----
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -3012,21 +3145,6 @@ spec:
   selector:
     control-plane: controller-manager
 ---
-  {{ if .Values.kubeslice.prometheus.enabled}}
-apiVersion: v1
-kind: Service
-metadata:
-  name: kubeslice-controller-prometheus-service
-  namespace: kubeslice-controller
-spec:
-  ports:
-  - port: 9090
-    targetPort: 9090
-  selector:
-    app: prometheus-server
-  type: ClusterIP
-  {{ end }}
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -3039,598 +3157,3 @@ spec:
     targetPort: 9443
   selector:
     control-plane: controller-manager
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: kubeslice-controller-cleanup
-  annotations:
-    # This is what defines this resource as a hook. Without this line, the
-    # job is considered part of the release.
-    "helm.sh/hook": pre-delete
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
-spec:
-  template:
-    spec:
-      serviceAccountName: kubeslice-controller-controller-manager
-      containers:
-        - name: cleanup
-          image: '{{ .Values.kubeslice.controller.image }}:{{ .Values.kubeslice.controller.tag }}'
-          imagePullPolicy: '{{ .Values.kubeslice.controller.pullPolicy }}'
-          command:
-            - /cleanup
-          env:
-            - name: KUBESLICE_CONTROLLER_MANAGER_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-      imagePullSecrets:
-        - name: kubeslice-image-pull-secret
-      restartPolicy: Never
-  backoffLimit: 1
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: kubeslice-controller-manager
-  namespace: kubeslice-controller
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      control-plane: controller-manager
-  template:
-    metadata:
-      annotations:
-        kubectl.kubernetes.io/default-container: manager
-        prometheus.io/port: "18080"
-        prometheus.io/scrape: "true"
-      labels:
-        control-plane: controller-manager
-    spec:
-      containers:
-      - args:
-        - --secure-listen-address=0.0.0.0:8443
-        - --upstream=http://127.0.0.1:8080/
-        - --logtostderr=true
-        - --v=0
-        image: '{{ .Values.kubeslice.rbacproxy.image }}:{{ .Values.kubeslice.rbacproxy.tag }}'
-        name: kube-rbac-proxy
-        ports:
-        - containerPort: 8443
-          name: https
-          protocol: TCP
-      - args:
-        - --health-probe-bind-address=:8081
-        - --metrics-bind-address=127.0.0.1:8080
-        - --leader-elect
-        - --log-level={{ required "A valid value is required!" .Values.kubeslice.controller.logLevel }}
-        - --rbac-resource-prefix={{ required "A valid value is required!" .Values.kubeslice.controller.rbacResourcePrefix }}
-        - --project-namespace-prefix={{ required "A valid value is required!" .Values.kubeslice.controller.projectnsPrefix }}
-        - --controller-end-point={{ required "A valid value is required!" .Values.kubeslice.controller.endpoint }}
-        - --prometheus-service-endpoint={{ required "A valid value is required!" .Values.kubeslice.prometheus.url}}
-        - --ovpn-job-image={{ .Values.kubeslice.ovpnJob.image }}:{{ .Values.kubeslice.ovpnJob.tag }}
-        command:
-        - /manager
-        env:
-        - name: KUBESLICE_CONTROLLER_MANAGER_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        image: '{{ .Values.kubeslice.controller.image }}:{{ .Values.kubeslice.controller.tag }}'
-        imagePullPolicy: '{{ .Values.kubeslice.controller.pullPolicy }}'
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8081
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        name: manager
-        ports:
-        - containerPort: 9443
-          name: webhook-server
-          protocol: TCP
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 8081
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          limits:
-            cpu: 500m
-            memory: 128Mi
-          requests:
-            cpu: 10m
-            memory: 64Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-        volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: cert
-          readOnly: true
-      securityContext:
-        runAsNonRoot: true
-      serviceAccountName: kubeslice-controller-controller-manager
-      terminationGracePeriodSeconds: 10
-      volumes:
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: webhook-server-cert
-        {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
-      imagePullSecrets: 
-      - name: kubeslice-image-pull-secret
-        {{- end }}
----
-  {{ if .Values.kubeslice.prometheus.enabled}}
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: prometheus-server
-  name: kubeslice-controller-prometheus
-  namespace: kubeslice-controller
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: prometheus-server
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-    type: RollingUpdate
-  template:
-    metadata:
-      labels:
-        app: prometheus-server
-    spec:
-      containers:
-      - args:
-        - --config.file=/etc/prometheus/prometheus.yml
-        - --storage.tsdb.path=/prometheus/
-        image: prom/prometheus
-        name: prometheus
-        ports:
-        - containerPort: 9090
-        volumeMounts:
-        - mountPath: /etc/prometheus/
-          name: prometheus-config-volume
-        - mountPath: /prometheus/
-          name: prometheus-storage-volume
-      volumes:
-      - configMap:
-          defaultMode: 420
-          name: kubeslice-controller-prometheus-server-conf
-        name: prometheus-config-volume
-      - emptyDir: {}
-        name: prometheus-storage-volume
-  {{ end }}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: kubeslice-controller-serving-cert
-  namespace: kubeslice-controller
-spec:
-  dnsNames:
-  - kubeslice-controller-webhook-service.kubeslice-controller.svc
-  - kubeslice-controller-webhook-service.kubeslice-controller.svc.cluster.local
-  issuerRef:
-    kind: Issuer
-    name: kubeslice-controller-selfsigned-issuer
-  secretName: webhook-server-cert
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: kubeslice-controller-selfsigned-issuer
-  namespace: kubeslice-controller
-spec:
-  selfSigned: {}
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
-metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
-  name: kubeslice-controller-mutating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-sliceresourcequotaconfig
-  failurePolicy: Fail
-  name: msliceresourcequotaconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - sliceresourcequotaconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-slicerolebinding
-  failurePolicy: Fail
-  name: mslicerolebinding.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - slicerolebindings
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-cluster
-  failurePolicy: Fail
-  name: mcluster.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - clusters
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-project
-  failurePolicy: Fail
-  name: mproject.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - projects
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-serviceexportconfig
-  failurePolicy: Fail
-  name: mserviceexportconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - serviceexportconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-sliceconfig
-  failurePolicy: Fail
-  name: msliceconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - sliceconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-controller-kubeslice-io-v1alpha1-sliceqosconfig
-  failurePolicy: Fail
-  name: msliceqosconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - sliceqosconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-worker-kubeslice-io-v1alpha1-workersliceconfig
-  failurePolicy: Fail
-  name: mworkersliceconfig.kb.io
-  rules:
-  - apiGroups:
-    - worker.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - workersliceconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /mutate-worker-kubeslice-io-v1alpha1-workerslicegateway
-  failurePolicy: Fail
-  name: mworkerslicegateway.kb.io
-  rules:
-  - apiGroups:
-    - worker.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - workerslicegateways
-  sideEffects: None
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: kubeslice-controller/kubeslice-controller-serving-cert
-  name: kubeslice-controller-validating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-sliceresourcequotaconfig
-  failurePolicy: Fail
-  name: vsliceresourcequotaconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - sliceresourcequotaconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-slicerolebinding
-  failurePolicy: Fail
-  name: vslicerolebinding.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - slicerolebindings
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-sliceroletemplate
-  failurePolicy: Fail
-  name: vsliceroletemplate.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - sliceroletemplates
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-cluster
-  failurePolicy: Fail
-  name: vcluster.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - clusters
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-project
-  failurePolicy: Fail
-  name: vproject.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - projects
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-serviceexportconfig
-  failurePolicy: Fail
-  name: vserviceexportconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - serviceexportconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-sliceconfig
-  failurePolicy: Fail
-  name: vsliceconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - sliceconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-controller-kubeslice-io-v1alpha1-sliceqosconfig
-  failurePolicy: Fail
-  name: vsliceqosconfig.kb.io
-  rules:
-  - apiGroups:
-    - controller.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - sliceqosconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-worker-kubeslice-io-v1alpha1-workersliceconfig
-  failurePolicy: Fail
-  name: vworkersliceconfig.kb.io
-  rules:
-  - apiGroups:
-    - worker.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - workersliceconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: kubeslice-controller-webhook-service
-      namespace: kubeslice-controller
-      path: /validate-worker-kubeslice-io-v1alpha1-workerslicegateway
-  failurePolicy: Fail
-  name: vworkerslicegateway.kb.io
-  rules:
-  - apiGroups:
-    - worker.kubeslice.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - workerslicegateways
-  sideEffects: None

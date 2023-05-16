@@ -1,6 +1,6 @@
 # nri-kube-events
 
-![Version: 2.3.3](https://img.shields.io/badge/Version-2.3.3-informational?style=flat-square) ![AppVersion: 1.9.2](https://img.shields.io/badge/AppVersion-1.9.2-informational?style=flat-square)
+![Version: 3.0.0](https://img.shields.io/badge/Version-3.0.0-informational?style=flat-square) ![AppVersion: 2.0.0](https://img.shields.io/badge/AppVersion-2.0.0-informational?style=flat-square)
 
 A Helm chart to deploy the New Relic Kube Events router
 
@@ -63,6 +63,7 @@ Options that can be defined globally include `affinity`, `nodeSelector`, `tolera
 | proxy | string | `""` | Configures the integration to send all HTTP/HTTPS request through the proxy in that URL. The URL should have a standard format like `https://user:password@hostname:port`. Can be configured also with `global.proxy` |
 | rbac.create | bool | `true` | Specifies whether RBAC resources should be created |
 | resources | object | `{}` | Resources for the integration container |
+| scrapers | object | See `values.yaml` | Configure the various kinds of scrapers that should be run. |
 | serviceAccount | object | See `values.yaml` | Settings controlling ServiceAccount creation |
 | serviceAccount.create | bool | `true` | Specifies whether a ServiceAccount should be created |
 | sinks | object | See `values.yaml` | Configure where will the metrics be written. Mostly for debugging purposes. |

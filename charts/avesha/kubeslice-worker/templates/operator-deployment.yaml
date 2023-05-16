@@ -83,8 +83,6 @@ spec:
             value: "{{ .Values.routerSidecar.image }}:{{ .Values.routerSidecar.tag }}"
           - name: AVESHA_VL3_SIDECAR_IMAGE_PULLPOLICY
             value: {{ .Values.routerSidecar.pullPolicy }}
-          - name: NODE_IP
-            value: "{{ .Values.cluster.nodeIp }}"
           - name: CLUSTER_ENDPOINT
             value: "{{ .Values.cluster.endpoint }}"
           - name: AVESHA_GW_SIDECAR_IMAGE
@@ -128,6 +126,8 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
         volumeMounts:
+          - name: kubeslice-worker-event-schema-conf
+            mountPath: /events/event-schema/
           - mountPath: /var/run/secrets/kubernetes.io/hub-serviceaccount
             name: hub-secret
             readOnly: true
@@ -137,6 +137,10 @@ spec:
       serviceAccountName: kubeslice-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
+        - name: kubeslice-worker-event-schema-conf
+          configMap:
+            name: kubeslice-worker-event-schema-conf
+            defaultMode: 420
         - name: webhook-certs
           secret:
             secretName: kubeslice-admission-webhook-certs
@@ -153,3 +157,31 @@ spec:
       imagePullSecrets:
       - name: kubeslice-image-pull-secret
         {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubeslice.io/node-type
+                operator: In
+                values:
+                - gateway
+  
+---
+apiVersion: v1
+data:
+  {{ if .Values.events.disabled }}
+  worker.yaml: |-
+    disabledEvents:
+    - LicenseSecretNotFound
+  {{ else }}
+  worker.yaml: |- 
+    disabledEvents:
+    - LicenseSecretNotFound
+  {{ end }} 
+kind: ConfigMap
+metadata:
+  labels:
+    name: event-schema
+  name: kubeslice-worker-event-schema-conf
+  namespace: kubeslice-system
