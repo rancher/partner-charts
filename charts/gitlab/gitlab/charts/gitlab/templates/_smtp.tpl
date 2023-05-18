@@ -26,7 +26,13 @@ smtp_settings = {
   tls: {{ .Values.global.smtp.tls }},
   {{- end }}
   {{- if .Values.global.smtp.openssl_verify_mode }}
-  openssl_verify_mode: {{ .Values.global.smtp.openssl_verify_mode | quote }}
+  openssl_verify_mode: {{ .Values.global.smtp.openssl_verify_mode | quote }},
+  {{- end }}
+  {{- if .Values.global.smtp.open_timeout }}
+  open_timeout: {{ .Values.global.smtp.open_timeout | int }},
+  {{- end }}
+  {{- if .Values.global.smtp.read_timeout }}
+  read_timeout: {{ .Values.global.smtp.read_timeout | int }}
   {{- end }}
 }
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.21.0
+
+### Improvements
+
+* Added support for `startupProbe` on Kong pods. This can be configured via
+  `.Values.startupProbe`. To maintain backward compatibility, it is disabled by default.
+  [#792](https://github.com/Kong/charts/pull/792)
+* Customize Admission Webhook namespaceSelectors and compose them from values.
+  [#794](https://github.com/Kong/charts/pull/794)
+* Added `CustomResourceDefinition` `list` and `watch` permissions to controller's ClusterRole.
+  [#796](https://github.com/Kong/charts/pull/796)
+
 ## 2.20.2
 
 ### Fixed 

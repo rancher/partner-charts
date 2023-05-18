@@ -107,8 +107,6 @@ Notice that at any point you can turn off the integrations filters and scrape al
 `prometheus.io/scrape: true` by setting `config.kubernetes.integrations_filter.integrations_filter: false` or turning
 it off in any specific job.
 
-Check the [docs](https://github.com/newrelic/newrelic-prometheus-configurator/blob/main/docs/KubernetesTargetFilter.md) for more information about it usage.
-
 ### Kubernetes job examples
 
 #### API Server metrics

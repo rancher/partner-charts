@@ -1,2 +1,2 @@
 ### ⛓️ Dependencies
-- Updated common-library to v1.1.1 - [Changelog 🔗](https://github.com/newrelic/helm-charts/releases/tag/common-library-1.1.1)
+- Updated newrelic/newrelic-prometheus-configurator to v1.4.0 - [Changelog 🔗](https://github.com/newrelic/newrelic-prometheus-configurator/releases/tag/1.4.0)

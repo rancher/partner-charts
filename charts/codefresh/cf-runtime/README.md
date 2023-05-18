@@ -1,6 +1,6 @@
 ## Codefresh Runner
 
-![Version: 1.0.5](https://img.shields.io/badge/Version-1.0.5-informational?style=flat-square)
+![Version: 1.0.6](https://img.shields.io/badge/Version-1.0.6-informational?style=flat-square)
 
 ## Prerequisites
 
@@ -92,7 +92,7 @@ Kubernetes: `>=1.19.0-0`
 | re.dindDaemon.tlsverify | bool | `true` |  |
 | re.serviceAccount | object | `{"annotations":{}}` | Set annotation on engine Service Account Ref: https://codefresh.io/docs/docs/administration/codefresh-runner/#injecting-aws-arn-roles-into-the-cluster |
 | runner.env | object | `{}` | Add additional env vars |
-| runner.image | string | `"codefresh/venona:1.9.14"` | Set runner image |
+| runner.image | string | `"codefresh/venona:1.9.15"` | Set runner image |
 | runner.nodeSelector | object | `{}` | Set runner node selector |
 | runner.resources | object | `{}` | Set runner requests and limits |
 | runner.tolerations | list | `[]` | Set runner tolerations |
