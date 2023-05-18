@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common.names.fullname" . }}-api-test
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: api-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+        - name: test
+          {{- include "lib.image" (dict "imageRoot" .Values.test.image "global" .Values.global ) | nindent 10 }}
+          command: {{ .Values.test.command }}
+          env:
+            - name: HOST
+              value: {{ include "chronicle.service.name" . }}-chronicle-api
+            - name: PORT
+              value: {{ .Values.port | quote }}
+      serviceAccountName:  {{ include "lib.serviceAccountName" . }}
+      restartPolicy: Never

@@ -134,3 +134,62 @@ Make list of allowed CORS origins
 {{- end -}}
 ]
 {{- end -}}
+
+{{/*
+Get or generate server cert and key
+*/}}
+{{- define "getOrCreateServerCert" -}}
+{{- $root := .Root -}}
+{{- if and $root.Values.tls.certificate $root.Values.tls.key -}}
+server.key: {{ $root.Values.tls.key }}
+server.crt: {{ $root.Values.tls.certificate }}
+{{- else -}}
+  {{- $result := (lookup "v1" "Secret" .Namespace .Name).data -}}
+  {{- if $result -}}
+server.key: {{ index $result "server.key" }}
+server.crt: {{ index $result "server.crt" }}
+  {{- else -}}
+    {{- $cert := genSelfSignedCert $root.Values.tls.hostname nil nil 3560 -}}
+server.key: {{ $cert.Key | b64enc }}
+server.crt: {{ $cert.Cert | b64enc }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Get or generate server key cert in pem format
+*/}}
+{{- define "getOrCreateServerPem" -}}
+{{- $root := .Root -}}
+{{- if and $root.Values.tls.certificate $root.Values.tls.key -}}
+{{- $decodedKey := $root.Values.tls.key | b64dec -}}
+{{- $decodedCert := $root.Values.tls.certificate | b64dec -}}
+{{- $serverPemContentTemp := ( printf "%s\n%s" $decodedKey $decodedCert ) -}}
+{{- $serverPemContent := $serverPemContentTemp | b64enc -}}
+server.pem: {{ $serverPemContent }}
+{{- else -}}
+  {{- $result := (lookup "v1" "Secret" .Namespace .Name).data -}}
+  {{- if $result -}}
+{{- $serverPemContent := ( index $result "server.pem" ) -}}
+server.pem: {{ $serverPemContent }}
+  {{- else -}}
+    {{- $cert := genSelfSignedCert $root.Values.tls.hostname nil nil 3560 -}}
+{{- $serverPemContentTemp := ( printf "%s\n%s" $cert.Key $cert.Cert ) -}}
+{{- $serverPemContent := $serverPemContentTemp | b64enc -}}
+server.pem: {{ $serverPemContent }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check export of nss_wrapper environment variables required
+*/}}
+{{- define "checkNssWrapperExportRequired" -}}
+  {{- if .Values.securityContext.enabled -}}
+    {{- if and (ne (int .Values.securityContext.runAsUser) 0) (ne (int .Values.securityContext.runAsUser) 10001) -}}
+      {{- printf "true" -}}
+    {{- end -}}
+  {{- else -}}
+      {{- printf "false" -}}
+  {{- end -}}
+{{- end -}}

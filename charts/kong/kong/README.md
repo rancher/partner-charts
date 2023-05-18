@@ -736,6 +736,7 @@ section of `values.yaml` file:
 | admissionWebhook.certificate.provided      | Use a provided certificate. When set to false, the chart will automatically generate a certificate.                                                      | false                              |
 | admissionWebhook.certificate.secretName    | Name of the TLS secret for the provided webhook certificate                                                                                              |                                    |
 | admissionWebhook.certificate.caBundle      | PEM encoded CA bundle which will be used to validate the provided webhook certificate                                                                    |                                    |
+| admissionWebhook.namespaceSelector         | Add namespaceSelector to the webhook. Please go to [Kubernetes doc for the specs](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#matching-requests-namespaceselector)                                                                          |                                    |
 | userDefinedVolumes                         | Create volumes. Please go to Kubernetes doc for the spec of the volumes                                                                                  |                                    |
 | userDefinedVolumeMounts                    | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts                                                                        |                                    |
 | terminationGracePeriodSeconds              | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pod | 30                                 |
@@ -840,6 +841,7 @@ On the Gateway release side, set either `admin.tls.client.secretName` to the nam
 | updateStrategy                     | update strategy for deployment                                                        | `{}`                |
 | readinessProbe                     | Kong readiness probe                                                                  |                     |
 | livenessProbe                      | Kong liveness probe                                                                   |                     |
+| startupProbe                       | Kong startup probe                                                                    |                     |
 | lifecycle                          | Proxy container lifecycle hooks                                                       | see `values.yaml`   |
 | terminationGracePeriodSeconds      | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pods | 30                  |
 | affinity                           | Node/pod affinities                                                                   |                     |

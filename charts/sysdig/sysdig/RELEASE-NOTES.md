@@ -1,6 +1,6 @@
 # What's Changed
 
 ### Chores
-- **sysdig** [82bedb7](https://github.com/sysdiglabs/charts/commit/82bedb791cc03edd950e96fb973531add97ad47c): bump agent version to 12.14.0 ([#1075](https://github.com/sysdiglabs/charts/issues/1075))
+- **sysdig** [c8398346](https://github.com/sysdiglabs/charts/commit/c83983463b32841eef524f9cf2302a67088363d5): bump agent version to 12.14.1 ([#1105](https://github.com/sysdiglabs/charts/issues/1105))
 
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.7.7...sysdig-1.15.87
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.8.3...sysdig-1.15.88
