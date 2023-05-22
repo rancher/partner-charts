@@ -31,9 +31,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
-- garbagecollector
 - bloblifecyclemanager
 - events
+- garbagecollector
 dashboardbff:
 - vbrintegrationapi
 state:

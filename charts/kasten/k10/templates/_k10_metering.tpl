@@ -252,7 +252,23 @@ spec:
             value: {{ .Values.global.prometheus.external.baseURL }}
     {{- end -}}
 {{- end }}
-
+{{- if .Values.kanisterPodMetricSidecar.enabled }}
+          - name: K10_KANISTER_POD_METRICS_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarEnabled
+          - name: K10_PROMETHEUS_PUSHGATEWAY_METRIC_LIFETIME
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMetricLifetime
+          - name: PUSHGATEWAY_METRICS_INTERVAL
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodPushgatewayMetricsInterval
+{{- end }}
 {{- if .Values.reportingSecret }}
           - name: AGENT_CONSUMER_ID
             valueFrom:
