@@ -448,6 +448,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterEFSPostRestoreTimeout
+          - name: K10_JOB_MAX_WAIT_DURATION
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: k10JobMaxWaitDuration
 {{- end }}
 {{- if and (eq $service "executor") (.Values.awsConfig.efsBackupVaultName) }}
           - name: EFS_BACKUP_VAULT_NAME
@@ -499,6 +504,12 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: kanisterFunctionVersion
+{{- if and (eq $service "controllermanager") (.Values.global.airgapped.repository) }}
+          - name: K10_AIRGAPPED_INSTALL
+            value: "true"
+          - name: K10_IMAGE_PULL_SECRET
+            value: {{ .Values.global.imagePullSecret }}  
+{{- end }}
 {{- if and (eq $service "controllermanager") (.Values.injectKanisterSidecar.enabled) }}
           - name: K10_MUTATING_WEBHOOK_ENABLED
             value: "true"

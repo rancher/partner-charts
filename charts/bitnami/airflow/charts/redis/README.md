@@ -8,6 +8,8 @@ Redis(R) is an open source, advanced key-value store. It is often referred to as
 
 Disclaimer: Redis is a registered trademark of Redis Ltd. Any rights therein are reserved to Redis Ltd. Any use by Bitnami is for referential purposes only and does not indicate any sponsorship, endorsement, or affiliation between Redis Ltd.
 
+Looking to use Redis&reg; in production? Try [VMware Application Catalog](https://bitnami.com/enterprise), the enterprise edition of Bitnami Application Catalog.
+
 ## TL;DR
 
 ```console
@@ -495,6 +497,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | `metrics.service.loadBalancerIP`             | Redis&reg; exporter service Load Balancer IP                                                                        | `""`                     |
 | `metrics.service.loadBalancerSourceRanges`   | Redis&reg; exporter service Load Balancer sources                                                                   | `[]`                     |
 | `metrics.service.annotations`                | Additional custom annotations for Redis&reg; exporter service                                                       | `{}`                     |
+| `metrics.service.clusterIP`                  | Redis&reg; exporter service Cluster IP                                                                              | `""`                     |
 | `metrics.serviceMonitor.enabled`             | Create ServiceMonitor resource(s) for scraping metrics using PrometheusOperator                                     | `false`                  |
 | `metrics.serviceMonitor.namespace`           | The namespace in which the ServiceMonitor will be created                                                           | `""`                     |
 | `metrics.serviceMonitor.interval`            | The interval at which metrics should be scraped                                                                     | `30s`                    |

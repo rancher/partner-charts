@@ -160,6 +160,29 @@ spec:
     - protocol: TCP
       port: {{ $admin_port }}
 {{- end -}}
+{{- if .Values.kanisterPodMetricSidecar.enabled }}
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-metrics-kanister-pods
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: metering-svc
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          createdBy: kanister
+    ports:
+    - protocol: TCP
+      port: {{ .Values.service.externalPort }}
+{{- end -}}
 {{- if .Values.injectKanisterSidecar.enabled }}
 ---
 kind: NetworkPolicy

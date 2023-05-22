@@ -16,6 +16,7 @@ limitations under the License.
 */}}
 {{- $sasl := .Values.auth.sasl }}
 {{- $root := deepCopy . }}
+{{- $rpk := deepCopy . }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -54,8 +55,7 @@ spec:
 {{- if and (include "is-licensed" . | fromJson).bool .Values.storage.tieredConfig.cloud_storage_enabled }}
   {{- $cloudStorageFlags = "-c retention.bytes=80 -c segment.bytes=40 -c redpanda.remote.read=true -c redpanda.remote.write=true"}}
 {{- end }}
-{{- $useSaslSecret := and $sasl.enabled (not (empty $sasl.secretRef )) }}
-{{- if or (not $sasl.enabled) $useSaslSecret }}
+{{- if $sasl.enabled }}
           until rpk topic create produce.consume.test.$POD_NAME {{ include "rpk-topic-flags" . }} {{ $cloudStorageFlags }}
             do sleep 2
           done
@@ -75,7 +75,7 @@ spec:
           mountPath: {{ printf "/etc/tls/certs/%s" $name }}
   {{- end }}
 {{- end }}
-{{- if $useSaslSecret }}
+{{- if $sasl.enabled }}
         - name: {{ $sasl.secretRef }}
           mountPath: "/etc/secrets/users"
           readOnly: true
@@ -87,7 +87,7 @@ spec:
         name: {{ template "redpanda.fullname" . }}
     - name: config
       emptyDir: {}
-{{- if $useSaslSecret }}
+{{- if $sasl.enabled }}
     - name: {{ $sasl.secretRef }}
       secret:
         secretName: {{ $sasl.secretRef }}

@@ -81,3 +81,15 @@ email_smime:
   cert_file: /home/git/gitlab/.gitlab_smime_cert
 {{- end }}
 {{- end }}
+
+{{/* microsoftGraphMailer secrets */}}
+{{- define "gitlab.appConfig.microsoftGraphMailer.mountSecrets" -}}
+# mount secrets for microsoftGraphMailer
+{{- if $.Values.global.appConfig.microsoft_graph_mailer.enabled }}
+- secret:
+    name: {{ $.Values.global.appConfig.microsoft_graph_mailer.client_secret.secret | required "Missing required secret containing the OAuth2 Client ID for outgoing email. Make sure to set `global.appConfig.microsoft_graph_mailer.client_secret.secret`" }}
+    items:
+      - key: {{ $.Values.global.appConfig.microsoft_graph_mailer.client_secret.key }}
+        path: microsoft_graph_mailer/client_secret
+{{- end }}
+{{- end -}}{{/* "gitlab.appConfig.microsoftGraphMailer.mountSecrets" "*/}}
