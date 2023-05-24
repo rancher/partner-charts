@@ -218,10 +218,21 @@ Return the webservice TLS secret name
 {{- end -}}
 
 {{/*
-Return the webservice-metrics TLS secret name
+Return the webservice-metrics TLS secret name.
 */}}
 {{- define "webservice-metrics.tls.secret" -}}
-{{- default (printf "%s-webservice-metrics-tls" .Release.Name) $.Values.metrics.tls.secretName | quote -}}
+{{- $.Values.metrics.tls.secretName | default (include "webservice.tls.secret" .) }}
+{{- end -}}
+
+{{/*
+Return whether the webservice has TLS for metrics enabled.
+*/}}
+{{- define "webservice-metrics.tls.enabled" -}}
+{{- if hasKey $.Values.metrics.tls "enabled" }}
+{{-   $.Values.metrics.tls.enabled }}
+{{- else }}
+{{-   $.Values.tls.enabled }}
+{{- end }}
 {{- end -}}
 
 {{/*
@@ -229,4 +240,15 @@ Return the Workhorse TLS Secret name
 */}}
 {{- define "workhorse.tls.secret" -}}
 {{- default (printf "%s-workhorse-tls" .Release.Name) $.Values.workhorse.tls.secretName | quote -}}
+{{- end -}}
+
+{{/*
+Return whether the Workhorse exporter has TLS enabled.
+*/}}
+{{- define "workhorse.monitoring.exporter.tls.enabled" -}}
+{{- if hasKey $.Values.workhorse.monitoring.exporter.tls "enabled" }}
+{{-   $.Values.workhorse.monitoring.exporter.tls.enabled }}
+{{- else }}
+{{-   $.Values.global.workhorse.tls.enabled }}
+{{- end }}
 {{- end -}}

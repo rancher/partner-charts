@@ -146,6 +146,7 @@ imagePullPolicy: {{ $pullPolicy | quote }}
 {{- define "gitlab.certmanager_annotations" -}}
 {{- if (pluck "configureCertmanager" .Values.ingress .Values.global.ingress (dict "configureCertmanager" false) | first) -}}
 cert-manager.io/issuer: "{{ .Release.Name }}-issuer"
+acme.cert-manager.io/http01-edit-in-place: "true"
 {{- end -}}
 {{- end -}}
 
@@ -161,7 +162,7 @@ use the name of the service the upstream chart creates
 */}}
 {{- define "gitlab.psql.host" -}}
 {{- $local := pluck "psql" $.Values | first -}}
-{{- coalesce (pluck "host" $local .Values.global.psql | first) (printf "%s.%s.svc" (include "postgresql.fullname" .) $.Release.Namespace) -}}
+{{- coalesce (pluck "host" $local .Values.global.psql | first) (printf "%s.%s.svc" (include "postgresql.primary.fullname" .) $.Release.Namespace) -}}
 {{- end -}}
 
 {{/*
@@ -175,19 +176,31 @@ use the name of the initdb scripts ConfigMap the upstream chart creates
 {{- end -}}
 
 {{/*
-Alias of gitlab.psql.initdbscripts
-*/}}
-{{- define "postgresql.initdbScriptsCM" -}}
-{{- template "gitlab.psql.initdbscripts" . -}}
-{{- end -}}
-
-{{/*
 Overrides the full name of PostegreSQL in the upstream chart.
 */}}
-{{- define "postgresql.fullname" -}}
+{{- define "postgresql.primary.fullname" -}}
 {{- $local := pluck "psql" $.Values | first -}}
 {{- coalesce (pluck "serviceName" $local .Values.global.psql | first) (printf "%s-%s" $.Release.Name "postgresql") -}}
 {{- end -}}
+
+{{/*
+Overrides the username of PostegreSQL in the upstream chart.
+
+Alias of gitlab.psql.username
+*/}}
+{{- define "postgresql.username" -}}
+{{- template "gitlab.psql.username" . -}}
+{{- end -}}
+
+{{/*
+Overrides the database name of PostegreSQL in the upstream chart.
+
+Alias of gitlab.psql.database
+*/}}
+{{- define "postgresql.database" -}}
+{{- template "gitlab.psql.database" . -}}
+{{- end -}}
+
 
 {{/*
 Return the db database name
@@ -226,13 +239,6 @@ Defaults to a release-based name and falls back to .Values.global.psql.secretNam
 {{- $local := pluck "psql" $.Values | first -}}
 {{- $localPass := pluck "password" $local | first -}}
 {{- default (printf "%s-%s" .Release.Name "postgresql-password") (pluck "secret" $localPass $.Values.global.psql.password | first ) | quote -}}
-{{- end -}}
-
-{{/*
-Alias of gitlab.psql.password.secret to override upstream postgresql chart naming
-*/}}
-{{- define "postgresql.secretName" -}}
-{{- template "gitlab.psql.password.secret" . -}}
 {{- end -}}
 
 {{/*

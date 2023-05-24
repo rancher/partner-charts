@@ -40,7 +40,7 @@ global:
   edition: ee
 
   ## https://docs.gitlab.com/charts/charts/globals#gitlab-version
-  gitlabVersion: "15.11.5"
+  gitlabVersion: "16.0.1"
 
   ## https://docs.gitlab.com/charts/charts/globals#application-resource
   application:
@@ -127,7 +127,7 @@ global:
 
   ## https://docs.gitlab.com/charts/charts/globals#configure-redis-settings
   redis:
-    password:
+    auth:
       enabled: true
       # secret:
       # key:
@@ -192,10 +192,6 @@ global:
     credentials: {}
       # secret:
 
-  ## https://docs.gitlab.com/charts/charts/globals#configure-grafana-integration
-  grafana:
-    enabled: false
-
   ## https://docs.gitlab.com/charts/charts/globals#configure-appconfig-settings
   ## Rails based portions of this chart share many settings
   appConfig:
@@ -205,7 +201,6 @@ global:
     enableSeatLink: true
     enableImpersonation:
     applicationSettingsCacheSeconds: 60
-    defaultCanCreateGroup: true
     usernameChangingEnabled: true
     issueClosingPattern:
     defaultTheme:
@@ -592,6 +587,7 @@ global:
   ## https://docs.gitlab.com/charts/charts/globals#configure-registry-settings
   registry:
     bucket: registry
+
     certificate: {}
       # secret:
     httpSecret: {}
@@ -622,6 +618,16 @@ global:
       #         secret: gitlab-registry-specific-password
       #         key: password
       # events: {}
+
+    # Settings utilized by other services referencing registry:
+    enabled: true
+    host:
+    # port: 443
+    api:
+      protocol: http
+      serviceName: registry
+      port: 5000
+    tokenIssuer: gitlab-issuer
 
   pages:
     enabled: false
@@ -819,6 +825,7 @@ upgradeCheck:
     fsGroup: 65534
   tolerations: []
   annotations: {}
+  configMapAnnotations: {}
   resources:
     requests:
       cpu: 50m
@@ -862,6 +869,12 @@ nginx-ingress:
       ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:!aNULL:!eNULL:!EXPORT:!DES:!MD5:!PSK:!RC4"
       ssl-protocols: "TLSv1.3 TLSv1.2"
       server-tokens: "false"
+      # Configure smaller defaults for upstream-keepalive-*, see https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration
+      upstream-keepalive-connections: 100 # Limit of 100 held-open connections
+      upstream-keepalive-time:        30s # 30 second limit for connection reuse
+      upstream-keepalive-timeout:       5 # 5 second timeout to hold open idle connections
+      upstream-keepalive-requests:   1000 # 1000 requests per connection, before recycling
+
     service:
       externalTrafficPolicy: "Local"
     ingressClassByName: false
@@ -1052,9 +1065,11 @@ prometheus:
 ## https://docs.gitlab.com/charts/installation/deployment.html#redis
 redis:
   install: true
-  existingSecret: gitlab-redis-secret
-  existingSecretKey: redis-password
-  usePasswordFile: true
+  auth:
+    existingSecret: gitlab-redis-secret
+    existingSecretKey: redis-password
+    usePasswordFiles: true
+  architecture: standalone
   cluster:
     enabled: false
   metrics:
@@ -1063,17 +1078,23 @@ redis:
 ## Installation & configuration of stable/prostgresql
 ## See requirements.yaml for current version
 postgresql:
-  postgresqlUsername: gitlab
-  # This just needs to be set. It will use a second entry in existingSecret for postgresql-postgres-password
-  postgresqlPostgresPassword: bogus
   install: true
-  postgresqlDatabase: gitlabhq_production
+  auth:
+    ## These need to be set, for the sake of bitnami/postgresql upgrade patterns.
+    ## They are overridden by use of `existingSecret`
+    password: bogus-satisfy-upgrade
+    postgresPassword: bogus-satisfy-upgrade
+    ## 
+    usePasswordFiles: false
+    existingSecret: '{{ include "gitlab.psql.password.secret" . }}'
+    secretKeys:
+      adminPasswordKey: postgresql-postgres-password
+      userPasswordKey: '{{ include "gitlab.psql.password.key" $ }}'
   image:
-    tag: 12.7.0
-  usePasswordFile: true
-  existingSecret: bogus
-  initdbScriptsConfigMap: bogus
-  master:
+    tag: 14.8.0
+  primary:
+    initdb:
+      scriptsConfigMap: '{{ include "gitlab.psql.initdbscripts" $}}'
     extraVolumeMounts:
       - name: custom-init-scripts
         mountPath: /docker-entrypoint-preinitdb.d/init_revision.sh
@@ -1143,7 +1164,7 @@ gitlab-runner:
     config: |
       [[runners]]
         [runners.kubernetes]
-        image = "ubuntu:18.04"
+        image = "ubuntu:22.04"
         {{- if .Values.global.minio.enabled }}
         [runners.cache]
           Type = "s3"
@@ -1158,57 +1179,6 @@ gitlab-runner:
   podAnnotations:
     gitlab.com/prometheus_scrape: "true"
     gitlab.com/prometheus_port: 9252
-
-## Installation & configuration of stable/grafana
-## See requirements.yaml for current version
-## Controlled by `global.grafana.enabled`
-grafana:
-  # Overrides the Grafana image tag for the 7.5.16 security update
-  image:
-    tag: 7.5.16
-  ## Override and provide "bogus" administation secrets
-  ## gitlab/gitlab-grafana provides overrides via shared-secrets
-  nameOverride: grafana-app
-  admin:
-    existingSecret: bogus
-  env:
-    GF_SECURITY_ADMIN_USER: bogus
-    GF_SECURITY_ADMIN_PASSWORD: bogus
-  ## This override allows gitlab/gitlab-grafana to completely override the secret
-  ##   handling behavior of the upstream chart in combination with the above.
-  command: ["sh", "-x", "/tmp/scripts/import-secret.sh"]
-  ## The following settings allow Grafana to dynamically create
-  ## dashboards and datasources from configmaps. See
-  ## https://artifacthub.io/packages/helm/grafana/grafana#sidecar-for-dashboards
-  sidecar:
-    dashboards:
-      enabled: true
-      label: gitlab_grafana_dashboard
-    datasources:
-      enabled: true
-      label: gitlab_grafana_datasource
-  ## We host Grafana as a sub-url of GitLab
-  grafana.ini:
-    server:
-      serve_from_sub_path: true
-      root_url: http://localhost/-/grafana/
-    auth:
-      login_cookie_name: gitlab_grafana_session
-  ## We generate and provide random passwords
-  ## NOTE: the Secret & ConfigMap names are hard coded!
-  extraSecretMounts:
-    - name: initial-password
-      mountPath: /tmp/initial
-      readOnly: true
-      secretName: gitlab-grafana-initial-password
-      defaultMode: 400
-  extraConfigmapMounts:
-    - name: import-secret
-      mountPath: /tmp/scripts
-      configMap: gitlab-grafana-import-secret
-      readOnly: true
-  testFramework:
-    enabled: false
 
 ## Settings for individual sub-charts under GitLab
 ## Note: Many of these settings are configurable via globals
@@ -1233,8 +1203,6 @@ gitlab:
   ## https://docs.gitlab.com/charts/charts/gitlab/gitlab-shell
   #   gitlab-shell:
   #     enabled: false
-  ## https://docs.gitlab.com/charts/charts/gitlab/gitlab-grafana
-  #   gitlab-grafana:
   ## https://docs.gitlab.com/charts/charts/gitlab/gitlab-pages
   #   gitlab-pages:
   ## https://docs.gitlab.com/charts/charts/gitlab/kas

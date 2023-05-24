@@ -6,20 +6,8 @@ If the hostname is set in `global.hosts.registry.name`, that will be returned,
 otherwise the hostname will be assembed using `registry` as the prefix, and the `gitlab.assembleHost` function.
 */}}
 {{- define "gitlab.registry.hostname" -}}
-{{- coalesce .Values.registry.host .Values.global.hosts.registry.name (include "gitlab.assembleHost"  (dict "name" "registry" "context" . )) -}}
-{{- end -}}
-
-{{/*
-Return the registry external hostname
-If the chart registry host is provided, it will use that, otherwise it will fallback
-to the global registry host name.
-*/}}
-{{- define "gitlab.registry.host" -}}
-{{-   if .Values.registry.host -}}
-{{-     .Values.registry.host -}}
-{{-   else -}}
-{{-     template "gitlab.registry.hostname" . -}}
-{{-   end -}}
+{{-   $registryHost := pluck "host" (default (dict) .Values.registry) .Values.global.registry | first -}}
+{{-   coalesce $registryHost .Values.global.hosts.registry.name (include "gitlab.assembleHost"  (dict "name" "registry" "context" . )) -}}
 {{- end -}}
 
 {{/*
@@ -28,10 +16,13 @@ If the registry api host is provided, it will use that, otherwise it will fallba
 to the service name
 */}}
 {{- define "gitlab.registry.api.host" -}}
-{{-   if .Values.registry.api.host -}}
-{{-     .Values.registry.api.host -}}
+{{-   $localRegistry := default (dict) .Values.registry -}}
+{{-   $localRegistryApi :=  dig "api" (dict) $localRegistry -}}
+{{-   $globalRegistryApi := dig "registry" "api" (dict) .Values.global -}}
+{{-   if or $localRegistryApi.host $globalRegistryApi.host -}}
+{{-     coalesce $localRegistryApi.host $globalRegistryApi.host -}}
 {{-   else -}}
-{{-     $name := default .Values.global.hosts.registry.serviceName .Values.registry.api.serviceName -}}
+{{-     $name := coalesce $localRegistryApi.serviceName $globalRegistryApi.serviceName .Values.global.hosts.registry.serviceName -}}
 {{-     $name = printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{-     printf "%s.%s.svc" $name .Release.Namespace -}}
 {{-   end -}}
@@ -43,7 +34,10 @@ If the registry api port is provided, it will use that, otherwise it will fallba
 to the service default
 */}}
 {{- define "gitlab.registry.api.port" -}}
-{{- coalesce .Values.global.hosts.registry.servicePort .Values.registry.api.port "5000" -}}
+{{-   $localRegistry := default (dict) .Values.registry -}}
+{{-   $localRegistryApi :=  dig "api" (dict) $localRegistry -}}
+{{-   $globalRegistryApi := dig "registry" "api" (dict) .Values.global -}}
+{{-   coalesce .Values.global.hosts.registry.servicePort $localRegistryApi.port $globalRegistryApi.port "5000" -}}
 {{- end -}}
 
 {{/*
@@ -52,7 +46,10 @@ If the registry api protocol is provided, it will use that, otherwise it will fa
 to the service default
 */}}
 {{- define "gitlab.registry.api.protocol" -}}
-{{- coalesce .Values.global.hosts.registry.protocol .Values.registry.api.protocol "http" -}}
+{{-   $localRegistry := default (dict) .Values.registry -}}
+{{-   $localRegistryApi :=  dig "api" (dict) $localRegistry -}}
+{{-   $globalRegistryApi := dig "registry" "api" (dict) .Values.global -}}
+{{-   coalesce .Values.global.hosts.registry.protocol $localRegistryApi.protocol $globalRegistryApi.protocol "http" -}}
 {{- end -}}
 
 
@@ -60,21 +57,26 @@ to the service default
 Return the registry api url
 */}}
 {{- define "gitlab.registry.api.url" -}}
-{{- $scheme := include "gitlab.registry.api.protocol" . -}}
-{{- $host   := include "gitlab.registry.api.host" . -}}
-{{- $port   := include "gitlab.registry.api.port" . -}}
-{{ printf "%s://%s:%s" $scheme $host $port }}
+{{-   $scheme := include "gitlab.registry.api.protocol" . -}}
+{{-   $host   := include "gitlab.registry.api.host" . -}}
+{{-   $port   := include "gitlab.registry.api.port" . -}}
+{{    printf "%s://%s:%s" $scheme $host $port }}
 {{- end -}}
 
 {{- define "gitlab.appConfig.registry.configuration" -}}
+{{-   $registryPort := pluck "port" (default (dict) .Values.registry) .Values.global.registry | first -}}
+{{-   $localRegistry := default (dict) .Values.registry -}}
+{{-   $localRegistryEnabled :=  dig "enabled" false $localRegistry -}}
+{{-   $globalRegistryEnabled := dig "registry" "enabled" false .Values.global -}}
+{{-   $registryTokenIssuer := pluck "tokenIssuer" (default (dict) .Values.registry) .Values.global.registry | first -}}
 registry:
-  enabled: {{ or (not (kindIs "bool" .Values.registry.enabled)) .Values.registry.enabled }}
-  host: {{ template "gitlab.registry.host" . }}
-  {{- if .Values.registry.port }}
-  port: {{ .Values.registry.port }}
+  enabled: {{ or (not (kindIs "bool" $localRegistryEnabled )) (not (kindIs "bool" $globalRegistryEnabled )) $localRegistryEnabled $globalRegistryEnabled }}
+  host: {{ template "gitlab.registry.hostname" . }}
+  {{- if $registryPort }}
+  port: {{ $registryPort }}
   {{- end }}
   api_url: {{ template "gitlab.registry.api.url" . }}
   key: /etc/gitlab/registry/gitlab-registry.key
-  issuer: {{ .Values.registry.tokenIssuer }}
+  issuer: {{ default "gitlab-issuer" $registryTokenIssuer }}
   notification_secret: <%= YAML.load_file("/etc/gitlab/registry/notificationSecret").flatten.first %>
 {{- end -}}{{/* "gitlab.appConfig.registry.configuration" */}}

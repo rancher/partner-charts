@@ -92,6 +92,9 @@ Due to gotpl scoping, we can't make use of `range`, so we have to add action lin
 {{- $messages = append $messages (include "gitlab.checkConfig.webservice.gracePeriod" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.webservice.loadBalancer" .) -}}
 
+{{/* _checkConfig_workhorse.tpl*/}}
+{{- $messages = append $messages (include "gitlab.checkConfig.workhorse.exporter.tls.enabled" .) -}}
+
 {{/* _checkConfig_gitlab_shell.tpl*/}}
 {{- $messages = append $messages (include "gitlab.checkConfig.gitlabShell.proxyPolicy" .) -}}
 {{- $messages = append $messages (include "gitlab.checkConfig.gitlabShell.metrics" .) -}}

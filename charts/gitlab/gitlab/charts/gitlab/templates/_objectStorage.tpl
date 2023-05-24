@@ -100,6 +100,9 @@ Usage:
 {{-   if default false .config.enabled -}}
 {{ .name }}:
   bucket: {{ .config.bucket }}
+{{-   if kindIs "bool" .config.proxy_download }}
+  proxy_download: {{ .config.proxy_download }}
+{{-     end -}}
 {{-     if and .config.cdn (eq .name "artifacts") }}
   cdn: <%= YAML.load_file("/etc/gitlab/objectstorage/cdn/{{ .name }}").to_json %>
 {{-     end -}}

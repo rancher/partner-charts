@@ -29,10 +29,11 @@ Result:
 
 How:
   - mergeOverwrite `main` into `x.psql` (if present), so that `main` is the base of future blank
-  - ensure `main` exists in both global and local, if not present.
+  - ensure `main` exists in both global and local from future blank, if not present.
+  - ensure `ci` exists in both global and local from future blank, if not present.
   - mergeOverwrite `.global.psql` `.global.psql.x`
   - mergeOverwrite `.psql` `.psql.x`
-  - build $context dict, with .Release .Values.global.psql .Values.psql 
+  - build $context dict, with .Release .Values.global.psql .Values.psql
 
 Example object -
   local:
@@ -58,9 +59,11 @@ Example object -
 {{-   $global := mergeOverwrite (deepCopy $.Values.global.psql) (deepCopy (get $.Values.global.psql "main" | default (dict))) -}}
 {{-   $globalBlank := fromYaml (include "database.datamodel.blank" $global) -}}
 {{-   $_ := set $global "main" (deepCopy (get $.Values.global.psql "main" | default $globalBlank)) -}}
+{{-   $_ := set $global "ci" (deepCopy (get $.Values.global.psql "ci" | default $globalBlank)) -}}
 {{-   $local  := mergeOverwrite (deepCopy $.Values.psql) (deepCopy (get $.Values.psql "main") | default (dict)) -}}
 {{-   $localBlank := fromYaml (include "database.datamodel.blank" $local) -}}
 {{-   $_ := set $local "main" (deepCopy (get $.Values.psql "main" | default $localBlank))  -}}
+{{-   $_ := set $local "ci" (deepCopy (get $.Values.psql "ci" | default $localBlank))  -}}
 {{-   range $decomposedDatabase := $global.knownDecompositions -}}
 {{-     if or (hasKey $global $decomposedDatabase) (hasKey $local $decomposedDatabase) -}}
 {{-       $globalSchema := mergeOverwrite (deepCopy $globalBlank) (get $global $decomposedDatabase | default (dict)) -}}

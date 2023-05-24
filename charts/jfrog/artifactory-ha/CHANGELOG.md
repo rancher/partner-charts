@@ -1,9 +1,10 @@
 # JFrog Artifactory-ha Chart Changelog
 All changes to this chart will be documented in this file
 
-## [107.55.0] - Jan 31, 2023
+## [107.55.0] - Feb 21, 2023
 * Updated initContainerImage and logger image to `ubi9/ubi-minimal:9.1.0.1760`
 * Adding a custom preStop to Artifactory router for allowing graceful termination to complete
+* Fixed an invalid reference of node selector on artifactory-ha chart
 
 ## [107.53.0] - Jan 20, 2023
 * Updated initContainerImage and logger image to `ubi8/ubi-minimal:8.7.1049`

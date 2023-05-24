@@ -459,14 +459,26 @@ Resolve customSidecarContainers value
 {{- end -}}
 
 {{/*
-Resolve Artifactory pod node selector value
+Resolve Artifactory pod primary node selector value
 */}}
 {{- define "artifactory.nodeSelector" -}}
 nodeSelector:
 {{- if .Values.global.nodeSelector }}
 {{ toYaml .Values.global.nodeSelector | indent 2 }}
-{{- else if .Values.artifactory.nodeSelector }}
-{{ toYaml .Values.artifactory.nodeSelector | indent 2 }}
+{{- else if .Values.artifactory.primary.nodeSelector }}
+{{ toYaml .Values.artifactory.primary.nodeSelector | indent 2 }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Resolve Artifactory pod node nodeselector value
+*/}}
+{{- define "artifactory.node.nodeSelector" -}}
+nodeSelector:
+{{- if .Values.global.nodeSelector }}
+{{ toYaml .Values.global.nodeSelector | indent 2 }}
+{{- else if .Values.artifactory.node.nodeSelector }}
+{{ toYaml .Values.artifactory.node.nodeSelector | indent 2 }}
 {{- end -}}
 {{- end -}}
 
