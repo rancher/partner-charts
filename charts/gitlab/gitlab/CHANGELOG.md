@@ -2,9 +2,59 @@
 documentation](doc/development/changelog.md) for instructions on adding your own
 entry.
 
-## 6.11.5 (2023-05-19)
+## 7.0.1 (2023-05-22)
 
 No changes.
+
+## 7.0.0 (2023-05-18)
+
+### Added (5 changes)
+
+- [Registry; add support for database discovery for primary records](gitlab-org/charts/gitlab@02618c9b63bfac6c6baf257bc020439a45d3f220) ([merge request](gitlab-org/charts/gitlab!3142))
+- [Add SMTP read and write timeout values](gitlab-org/charts/gitlab@843467c988f90f358d58ace7c6514634443b384f) ([merge request](gitlab-org/charts/gitlab!3156))
+- [Add annotations to upgradeCheck ConfigMap](gitlab-org/charts/gitlab@9bd462052cc3ca33994ff262c66208ec8d70a7c8) by @LukasAuerbeck ([merge request](gitlab-org/charts/gitlab!3116))
+- [ Adding containerSecurityContext logic to geo chart](gitlab-org/charts/gitlab@10d9b8c945f10f9e84f1b280e88a040e33586f5b) ([merge request](gitlab-org/charts/gitlab!3127))
+- [Allow configuring an embedding database](gitlab-org/charts/gitlab@6a923ec7421e814add2fef3069320c13f28f354c) ([merge request](gitlab-org/charts/gitlab!3107))
+
+### Fixed (7 changes)
+
+- [Fix backup spec navigation](gitlab-org/charts/gitlab@76a7ce992586471bfb6c99efb58be1dc1cfce373) ([merge request](gitlab-org/charts/gitlab!3183))
+- [Mount the microsoft_graph_mailer client secret in the backup-job pod](gitlab-org/charts/gitlab@fe175620908510f3b1eb3728bc164cc4bad68e81) ([merge request](gitlab-org/charts/gitlab!3168))
+- [Geo: add geo psql SSL mounts](gitlab-org/charts/gitlab@0ed7ea60b8e3d37e1b9b71977c23f085a8df6250) ([merge request](gitlab-org/charts/gitlab!3170))
+- [Skip pages backup on database upgrade](gitlab-org/charts/gitlab@5efab9266397750252a457a230cddffee87c9143) ([merge request](gitlab-org/charts/gitlab!3167))
+- [Validate that SMTP settings do not enable both TLS and STARTTLS](gitlab-org/charts/gitlab@aefcfb104aaa871a70203fc04a07686d935761f5) ([merge request](gitlab-org/charts/gitlab!3158))
+- [Support configuring proxy_download for each object store type](gitlab-org/charts/gitlab@4db1b9b2b5c0e8da53bb43439d267343be34b447) ([merge request](gitlab-org/charts/gitlab!3154))
+- [Fix possessive](gitlab-org/charts/gitlab@68f0f088cdc7b3be96d92e65c8b21a3ed8104c2f) ([merge request](gitlab-org/charts/gitlab!3097))
+
+### Changed (14 changes)
+
+- [Update gitlab-org/container-registry from 3.73.0-gitlab to 3.73.1-gitlab](gitlab-org/charts/gitlab@5f160022cc68e214ea083189649f8332bdc5df34) ([merge request](gitlab-org/charts/gitlab!3185))
+- [Update bundled Redis sub-chart and add upgrade docs](gitlab-org/charts/gitlab@6e07c473134100d7b63b92d2eac8a369179e9d98) ([merge request](gitlab-org/charts/gitlab!3140))
+- [Use PostgreSQL Chart 11.9.13](gitlab-org/charts/gitlab@5b1febf0757464eac61744a3388acd14667d0d1b) ([merge request](gitlab-org/charts/gitlab!3143))
+- [Enable Sidekiq JSON logs by default](gitlab-org/charts/gitlab@92bb399c4fd13321c51114b2529171cbf71c8e24) ([merge request](gitlab-org/charts/gitlab!3169))
+- [Switch gitlab-shell logs to JSON by default](gitlab-org/charts/gitlab@59a722892c5421621e5a0af640a732ef0cbc8504) ([merge request](gitlab-org/charts/gitlab!3171))
+- [Update gitlab-org/gitlab-exporter from 12.1.1 to 13.0.0](gitlab-org/charts/gitlab@6e9477a65a963a5ae8e3197e76920b21193287ba) ([merge request](gitlab-org/charts/gitlab!3166))
+- [Update gitlab-org/container-registry from 3.72.0-gitlab to 3.73.0-gitlab](gitlab-org/charts/gitlab@aa8116c54b4014647c21044113b02043462c87f4) ([merge request](gitlab-org/charts/gitlab!3165))
+- [Default GitLab chart to have main, and ci connections](gitlab-org/charts/gitlab@f42289a275cb6886c5978c0546dcdb50ee04d991) ([merge request](gitlab-org/charts/gitlab!3132))
+- [Bump certmanager to 1.11.1](gitlab-org/charts/gitlab@e4f2bf7d6d7ed7ff02174957fa8408ebbca63322) ([merge request](gitlab-org/charts/gitlab!3108))
+- [Ensure upgrade path to 7.0](gitlab-org/charts/gitlab@0cdbf193e90b67c30a0cb6b6d02b0a9e8f8562ee) ([merge request](gitlab-org/charts/gitlab!3104))
+- [Unpin mail_room version](gitlab-org/charts/gitlab@ec946052deae64dea6cb7d49b34c26361874a233) ([merge request](gitlab-org/charts/gitlab!3075))
+- [Update gitlab-org/charts/gitlab-runner from 0.51.1 to 0.52.0](gitlab-org/charts/gitlab@7d54b3f3539b63ee661418f0a519c4509b5e1a2a) ([merge request](gitlab-org/charts/gitlab!3121))
+- [NGINX: tweak NGINX upstream configuration](gitlab-org/charts/gitlab@9cf76a7bf6c4c3487820103cb1bb48ef2bca2dbb) ([merge request](gitlab-org/charts/gitlab!3090))
+- [Bump default image to ubuntu:22.04](gitlab-org/charts/gitlab@70452769e698e6187e625cdc7db4d60555b07f4b) by @tlindsay42 ([merge request](gitlab-org/charts/gitlab!2986))
+
+### Removed (4 changes)
+
+- [Remove registry compatibility section](gitlab-org/charts/gitlab@b4a3e47b96a2ddc3b1c0250510f875e114d02445) ([merge request](gitlab-org/charts/gitlab!3117))
+- [Remove bundled Grafana chart and related configuration](gitlab-org/charts/gitlab@24d6c76d54e7800fd8fee20ee5fbba2180d36aae) ([merge request](gitlab-org/charts/gitlab!3112))
+- [Remove deprecated KAS `metrics.port` config](gitlab-org/charts/gitlab@b1bf1b4686c74015b8d93bd24dcef350490fac1b) ([merge request](gitlab-org/charts/gitlab!3040))
+- [Remove 'default_can_create_group' setting](gitlab-org/charts/gitlab@0d58ba1ea5b7d29da3891d6643afe2e72e1480a8) ([merge request](gitlab-org/charts/gitlab!3105))
+
+### Other (3 changes)
+
+- [Consolidate webservice TLS configuration](gitlab-org/charts/gitlab@7412c984cda3683c60ba3c3e48bf2474ec88209e) ([merge request](gitlab-org/charts/gitlab!3135))
+- [Update extraEnvFrom docs](gitlab-org/charts/gitlab@994ab9824f518701ed7059e28c7fdf1b2c97e446) ([merge request](gitlab-org/charts/gitlab!3025))
+- [Add tests for Webservice ConfigMap name](gitlab-org/charts/gitlab@6d51d3fe5475a84166f23d5c5a0f23a1b38ce489) ([merge request](gitlab-org/charts/gitlab!3091))
 
 ## 6.11.4 (2023-05-16)
 
@@ -60,6 +110,22 @@ No changes.
 - [Remove references to unused 'fullnameOverride' key](gitlab-org/charts/gitlab@34b9c0d5d1f5227b8bb1b2496e3be6f9ff3a9ec0) ([merge request](gitlab-org/charts/gitlab!3092))
 - [checkConfig: verify format of omniauth provider content](gitlab-org/charts/gitlab@f419b34386799a83587eeecfea142070477e8029) ([merge request](gitlab-org/charts/gitlab!3054))
 
+## 6.10.7 (2023-05-10)
+
+No changes.
+
+## 6.10.6 (2023-05-03)
+
+No changes.
+
+## 6.10.5 (2023-05-01)
+
+No changes.
+
+## 6.10.4 (2023-04-21)
+
+No changes.
+
 ## 6.10.3 (2023-04-14)
 
 No changes.
@@ -104,6 +170,22 @@ No changes.
 - [Add docs and config check for gitlab-shell metrics](gitlab-org/charts/gitlab@e46e19b84a47f45018e39af1e5e0731be6982a1f) ([merge request](gitlab-org/charts/gitlab!3006))
 - [Add more context to sidekiq pod deprecation notices](gitlab-org/charts/gitlab@fdaef9d08c68beac06b0bcff16d0ec6b1bc274aa) ([merge request](gitlab-org/charts/gitlab!2966))
 - [Add more context to sidekiq pod deprecation notices](gitlab-org/charts/gitlab@378fd9116dc5147d9d4c23d81a72e0e8089f138e) ([merge request](gitlab-org/charts/gitlab!2972))
+
+## 6.9.8 (2023-05-10)
+
+No changes.
+
+## 6.9.7 (2023-05-03)
+
+No changes.
+
+## 6.9.6 (2023-05-01)
+
+No changes.
+
+## 6.9.5 (2023-04-21)
+
+No changes.
 
 ## 6.9.4 (2023-03-30)
 

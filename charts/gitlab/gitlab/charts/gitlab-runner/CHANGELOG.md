@@ -1,20 +1,18 @@
-## v0.51.1 (2023-03-30)
+## v0.52.0 (2023-04-22)
 
 ### New features
 
-- Update GitLab Runner version to v15.10.1
+- Update GitLab Runner version to v15.11.0
 
-## v0.51.0 (2023-03-20)
+### Bug fixes
 
-### New features
-
-- Update GitLab Runner version to v15.10.0
-- Removing replicaCount from deployment when HPA is configured !368 (Gustavo Oliveira @gustoliv)
+- Enable ability to use tini instead of dumb-init !385
+- Invalid yaml when creating service account with no annotations !381 (Zev Isert @zevisert)
 
 ### Maintenance
 
-- Fix integration test scripting !383
-- Update the example reference to the helper image !382
+- Fix failure in integration tests !390
+- Add merge release config to be executed after stable branches are merged into the main branch !387
 
 ## v0.48.0 (2022-12-17)
 

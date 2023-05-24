@@ -40,6 +40,14 @@ database:
     maxidletime: {{ .Values.database.pool.maxidletime }}
     {{- end }}
   {{- end }}
+  {{- if .Values.database.discovery.enabled }}
+  discovery:
+    enabled: true
+    nameserver: {{ .Values.database.discovery.nameserver | quote }}
+    port: {{ default 53 .Values.database.discovery.port }}
+    primaryrecord: {{ .Values.database.discovery.primaryrecord | quote  }}
+    tcp: {{ default false .Values.database.discovery.tcp }}
+{{- end }}
 {{- end }}
 {{- end -}}
 

@@ -44,7 +44,6 @@ data:
         application_settings_cache_seconds: {{ .applicationSettingsCacheSeconds | int }}
         usage_ping_enabled: {{ eq .enableUsagePing true }}
         seat_link_enabled: {{ eq .enableSeatLink true }}
-        default_can_create_group: {{ eq .defaultCanCreateGroup true }}
         username_changing_enabled: {{ eq .usernameChangingEnabled true }}
         issue_closing_pattern: {{ .issueClosingPattern | quote }}
         default_theme: {{ .defaultTheme }}
@@ -139,7 +138,7 @@ data:
           enabled: {{ or .Values.monitoring.exporter.enabled (and .Values.metrics.enabled (eq .Values.metrics.port .Values.monitoring.exporter.port)) }}
           address: 0.0.0.0
           port: {{ .Values.monitoring.exporter.port }}
-          {{- if $.Values.metrics.tls.enabled }}
+          {{- if eq (include "webservice-metrics.tls.enabled" $) "true" }}
           tls_enabled: true
           tls_cert_path: "/etc/gitlab/webservice-metrics/webservice-metrics.crt"
           tls_key_path: "/etc/gitlab/webservice-metrics/webservice-metrics.key"
@@ -160,7 +159,7 @@ data:
       cp -v -L /init-config/puma/puma.crt /init-secrets/puma/puma.crt
       cp -v -L /init-config/puma/puma.key /init-secrets/puma/puma.key
     {{- end }}
-    {{- if $.Values.metrics.tls.enabled }}
+    {{- if eq (include "webservice-metrics.tls.enabled" $) "true" }}
       mkdir -p /init-secrets/webservice-metrics
       cp -v -L /init-config/webservice-metrics/webservice-metrics.crt /init-secrets/webservice-metrics/webservice-metrics.crt
       cp -v -L /init-config/webservice-metrics/webservice-metrics.key /init-secrets/webservice-metrics/webservice-metrics.key
@@ -203,7 +202,7 @@ data:
     SentinelMaster = "{{ template "gitlab.redis.host" $ }}"
     Sentinel = [ {{ template "gitlab.redis.workhorse.sentinel-list" $ }} ]
     {{- end }}
-    {{- if $.Values.global.redis.password.enabled }}
+    {{- if include "gitlab.redis.password.enabled" $ }}
     Password = {% file.Read "/etc/gitlab/redis/redis-password" | strings.TrimSpace | data.ToJSON %}
     {{- end }}
     {{- end }}
@@ -223,7 +222,8 @@ data:
     [metrics_listener]
     network = "tcp"
     addr = "0.0.0.0:{{ $.Values.workhorse.monitoring.exporter.port }}"
-    {{- if and $.Values.global.workhorse.tls.enabled $.Values.workhorse.monitoring.exporter.tls.enabled }}
+    {{- $workhorseExporterTlsEnabled := eq (include "workhorse.monitoring.exporter.tls.enabled" $ ) "true" }}
+    {{- if $workhorseExporterTlsEnabled }}
     [metrics_listener.tls]
     certificate = "/etc/gitlab/gitlab-workhorse/tls.crt"
     key = "/etc/gitlab/gitlab-workhorse/tls.key"
@@ -233,7 +233,7 @@ data:
       set -e
       mkdir -p /init-secrets-workhorse/gitlab-workhorse
       cp -v -r -L /init-config/gitlab-workhorse/secret /init-secrets-workhorse/gitlab-workhorse/secret
-      {{- if $.Values.global.redis.password.enabled }}
+      {{- if include "gitlab.redis.password.enabled" $ }}
       mkdir -p /init-secrets-workhorse/redis
       cp -v -r -L /init-config/redis/redis-password /init-secrets-workhorse/redis/
       {{- end }}

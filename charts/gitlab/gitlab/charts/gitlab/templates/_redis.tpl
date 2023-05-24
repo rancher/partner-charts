@@ -89,6 +89,14 @@ sentinels:
 {{- else -}}
 {{-   $_ := set . "redisMergedConfig" .Values.global.redis -}}
 {{- end -}}
+{{-   if not (kindIs "map" (get $.redisMergedConfig "password")) -}}
+{{-     $_ := set $.redisMergedConfig "password" $.Values.global.redis.auth -}}
+{{-   end -}}
+{{- range $key := keys $.Values.global.redis.auth -}}
+{{-   if not (hasKey $.redisMergedConfig.password $key) -}}
+{{-     $_ := set $.redisMergedConfig.password $key (index $.Values.global.redis.auth $key) -}}
+{{-   end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -110,9 +118,9 @@ Note: Workhorse only uses the primary Redis (global.redis)
 {{      include "gitlab.redis.secret" $ }}
 {{-   end }}
 {{- end -}}
-{{/* reset 'redisConfigName', to get global.redis.password's Secret item */}}
+{{/* reset 'redisConfigName', to get global.redis.auth's Secret item */}}
 {{- $_ := set . "redisConfigName" "" }}
-{{- if .Values.global.redis.password.enabled }}
+{{- if include "gitlab.redis.password.enabled" $ }}
 {{    include "gitlab.redis.secret" . }}
 {{- end }}
 {{- end -}}
