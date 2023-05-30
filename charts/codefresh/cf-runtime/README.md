@@ -1,6 +1,6 @@
 ## Codefresh Runner
 
-![Version: 1.0.6](https://img.shields.io/badge/Version-1.0.6-informational?style=flat-square)
+![Version: 1.0.7](https://img.shields.io/badge/Version-1.0.7-informational?style=flat-square)
 
 ## Prerequisites
 
@@ -92,7 +92,7 @@ Kubernetes: `>=1.19.0-0`
 | re.dindDaemon.tlsverify | bool | `true` |  |
 | re.serviceAccount | object | `{"annotations":{}}` | Set annotation on engine Service Account Ref: https://codefresh.io/docs/docs/administration/codefresh-runner/#injecting-aws-arn-roles-into-the-cluster |
 | runner.env | object | `{}` | Add additional env vars |
-| runner.image | string | `"codefresh/venona:1.9.15"` | Set runner image |
+| runner.image | string | `"codefresh/venona:1.9.16"` | Set runner image |
 | runner.nodeSelector | object | `{}` | Set runner node selector |
 | runner.resources | object | `{}` | Set runner requests and limits |
 | runner.tolerations | list | `[]` | Set runner tolerations |
@@ -111,7 +111,7 @@ Kubernetes: `>=1.19.0-0`
 | storage.gcedisk.volumeType | string | `"pd-ssd"` | Set GCP volume backend type (`pd-ssd`/`pd-standard`) |
 | storage.local.volumeParentDir | string | `"/var/lib/codefresh/dind-volumes"` | Set volume path on the host filesystem |
 | storage.localVolumeMonitor.env | object | `{}` |  |
-| storage.localVolumeMonitor.image | string | `"codefresh/dind-volume-utils:1.29.3"` | Set `dind-lv-monitor` image |
+| storage.localVolumeMonitor.image | string | `"codefresh/dind-volume-utils:1.29.4"` | Set `dind-lv-monitor` image |
 | storage.localVolumeMonitor.initContainer.image | string | `"alpine"` |  |
 | storage.localVolumeMonitor.nodeSelector | object | `{}` |  |
 | storage.localVolumeMonitor.resources | object | `{}` |  |

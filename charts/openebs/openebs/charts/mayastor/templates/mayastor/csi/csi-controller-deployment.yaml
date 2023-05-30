@@ -28,11 +28,14 @@ spec:
       initContainers:
         {{- include "jaeger_agent_init_container" . }}
         {{- include "rest_agent_init_container" . }}
-      {{- if .Values.priorityClassName }}
-      priorityClassName: {{ .Values.priorityClassName }}
+      {{- if $pcName := include "priority_class" (dict "template" . "localPriorityClass" .Values.csi.controller.priorityClassName) }}
+      priorityClassName: {{ $pcName }}
       {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if $tolerations := include "tolerations" (dict "template" . "localTolerations" .Values.csi.controller.tolerations) }}
+      tolerations: {{ $tolerations }}
       {{- end }}
       containers:
         - name: csi-provisioner
@@ -43,6 +46,7 @@ spec:
             - "--feature-gates=Topology=true"
             - "--strict-topology=false"
             - "--default-fstype=ext4"
+            - "--extra-create-metadata" # This is needed for volume group feature to work
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock

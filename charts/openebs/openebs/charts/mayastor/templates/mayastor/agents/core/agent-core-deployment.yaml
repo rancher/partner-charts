@@ -25,11 +25,15 @@ spec:
         {{- include "base_pull_secrets" . }}
       initContainers:
         {{- include "base_init_core_containers" . }}
-      priorityClassName: {{ default "system-cluster-critical" .Values.priorityClassName }}
+      {{- if $pcName := include "priority_class_with_default" (dict "template" . "localPriorityClass" .Values.agents.core.priorityClassName) }}
+      priorityClassName: {{ $pcName }}
+      {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
       {{- end }}
-      tolerations: {{- toYaml .Values.earlyEvictionTolerations | nindent 8}}
+      {{- if $tolerations := include "tolerations_with_early_eviction" (dict "template" . "localTolerations" .Values.agents.core.tolerations) }}
+      tolerations: {{ $tolerations }}
+      {{- end }}
       containers:
         - name: agent-core
           resources:
@@ -49,7 +53,8 @@ spec:
             - "--grpc-server-addr=0.0.0.0:50051"
             - "--pool-commitment={{ .Values.agents.core.capacity.thin.poolCommitment }}"
             - "--volume-commitment-initial={{ .Values.agents.core.capacity.thin.volumeCommitmentInitial }}"
-            - "--volume-commitment={{ .Values.agents.core.capacity.thin.volumeCommitment }}"
+            - "--volume-commitment={{ .Values.agents.core.capacity.thin.volumeCommitment }}"{{ if .Values.agents.core.partialRebuildWaitPeriod }}
+            - "--faulted-child-wait-period={{ .Values.agents.core.partialRebuildWaitPeriod }}"{{ end }}
           ports:
             - containerPort: 50051
           env:

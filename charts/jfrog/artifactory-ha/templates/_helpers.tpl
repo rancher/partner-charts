@@ -360,6 +360,9 @@ Resolve requiredServiceTypes value
 */}}
 {{- define "artifactory-ha.router.requiredServiceTypes" -}}
 {{- $requiredTypes := "jfrt,jfac" -}}
+{{- if not .Values.access.enabled -}}
+  {{- $requiredTypes = "jfrt" -}}
+{{- end -}}
 {{- if .Values.observability.enabled -}}
   {{- $requiredTypes = printf "%s,%s" $requiredTypes "jfob" -}}
 {{- end -}}

@@ -24,11 +24,15 @@ spec:
         {{- include "base_pull_secrets" . }}
       initContainers:
         {{- include "base_init_containers" . }}
-      priorityClassName: {{ default "system-cluster-critical" .Values.priorityClassName }}
+      {{- if $pcName := include "priority_class_with_default" (dict "template" . "localPriorityClass" .Values.apis.rest.priorityClassName) }}
+      priorityClassName: {{ $pcName }}
+      {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
       {{- end }}
-      tolerations: {{- toYaml .Values.earlyEvictionTolerations | nindent 8 }}
+      {{- if $tolerations := include "tolerations_with_early_eviction" (dict "template" . "localTolerations" .Values.apis.rest.tolerations) }}
+      tolerations: {{ $tolerations }}
+      {{- end }}
       containers:
         - name: api-rest
           resources:

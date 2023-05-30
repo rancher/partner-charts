@@ -10,6 +10,12 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.15.90
+### New Features
+* **sysdig** [a1a22e4c](https://github.com/sysdiglabs/charts/commit/a1a22e4c0d439a1dc254a172e3d8fb4eaa801dd4): Update legacy engine HostAnalyzer with security updates ([#1128](https://github.com/sysdiglabs/charts/issues/1128))
+
+    * Security updates (May 2023) for HostAnalyzer. Fixed 1 CVE:
+	* CVE-2023-28840
 # v1.15.89
 ### New Features
 * **sysdig** [a6d4b61e](https://github.com/sysdiglabs/charts/commit/a6d4b61e484b9c07df3fb195a6243f37cd4c9410): Update legacy engine NIA with security updates ([#1123](https://github.com/sysdiglabs/charts/issues/1123))
