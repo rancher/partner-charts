@@ -141,3 +141,69 @@ Usage:
     {{ $product := .Files.Get "product.yaml" | fromYaml }}
     {{- print $product.domain -}}
 {{- end -}}
+
+<<<<<<< HEAD
+
+{{/*
+Creates the tolerations based on the global and component wise tolerations, with early eviction
+Usage:
+{{ include "tolerations_with_early_eviction" (dict "template" . "localTolerations" .Values.path.to.local.tolerations) }}
+*/}}
+{{- define "tolerations_with_early_eviction" -}}
+{{- toYaml .template.Values.earlyEvictionTolerations | nindent 8 }}
+{{- if .localTolerations }}
+    {{- toYaml .localTolerations | nindent 8 }}
+{{- else if .template.Values.tolerations }}
+    {{- toYaml .template.Values.tolerations | nindent 8 }}
+{{- end }}
+{{- end }}
+
+
+{{/*
+Creates the tolerations based on the global and component wise tolerations
+Usage:
+{{ include "tolerations" (dict "template" . "localTolerations" .Values.path.to.local.tolerations) }}
+*/}}
+{{- define "tolerations" -}}
+{{- if .localTolerations }}
+    {{- toYaml .localTolerations | nindent 8 }}
+{{- else if .template.Values.tolerations }}
+    {{- toYaml .template.Values.tolerations | nindent 8 }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generates the priority class name, with the given `template` and the `localPriorityClass`
+Usage:
+{{ include "priority_class" (dict "template" . "localPriorityClass" .Values.path.to.local.priorityClassName) }}
+*/}}
+{{- define "priority_class" -}}
+    {{- if typeIs "string" .localPriorityClass }}
+        {{- if .localPriorityClass -}}
+            {{ printf "%s" .localPriorityClass -}}
+        {{- else if .template.Values.priorityClassName -}}
+            {{ printf "%s" .template.Values.priorityClassName -}}
+        {{- else -}}
+            {{ printf "" -}}
+        {{- end -}}
+    {{- end -}}
+{{- end -}}
+
+
+{{/*
+Generates the priority class name, with the given `template` and the `localPriorityClass`, sets to mayastor default priority class
+if both are empty
+Usage:
+{{ include "priority_class_with_default" (dict "template" . "localPriorityClass" .Values.path.to.local.priorityClassName) }}
+*/}}
+{{- define "priority_class_with_default" -}}
+    {{- if typeIs "string" .localPriorityClass }}
+        {{- if .localPriorityClass -}}
+            {{ printf "%s" .localPriorityClass -}}
+        {{- else if .template.Values.priorityClassName -}}
+            {{ printf "%s" .template.Values.priorityClassName -}}
+        {{- else -}}
+            {{ printf "%s-cluster-critical" .template.Release.Name -}}
+        {{- end -}}
+    {{- end -}}
+{{- end -}}

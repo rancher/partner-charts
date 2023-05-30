@@ -4,7 +4,7 @@ image:
   # -- Image registry's namespace
   repo: openebs
   # -- Release tag for our images
-  tag: v2.1.0
+  tag: v2.2.0
   repoTags:
     # Note: Below image tag configuration is optional and typically should never be
     #       used. Setting specific image tags for the different repositories proves useful
@@ -25,8 +25,10 @@ image:
 nodeSelector:
   kubernetes.io/arch: amd64
 
-# -- Pod scheduling priority
-# ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# -- Pod scheduling priority.
+# Setting this value will apply to all components except the external Chart dependencies.
+# If any component has `priorityClassName` set, then this value would be overridden for that component.
+# For external components like etcd, jaeger or loki-stack, PriorityClass can only be set at component level.
 priorityClassName: ""
 
 earlyEvictionTolerations:
@@ -38,6 +40,11 @@ earlyEvictionTolerations:
     key: node.kubernetes.io/not-ready
     operator: Exists
     tolerationSeconds: 5
+
+# -- Tolerations to be applied to all components except external Chart dependencies.
+# If any component has tolerations set, then it would override this value.
+# For external components like etcd, jaeger and loki-stack, tolerations can only be set at component level.
+tolerations: []
 
 base:
   # -- Request timeout for rest & core agents
@@ -115,6 +122,10 @@ operators:
         cpu: "50m"
         # -- Memory requests for diskpool operator
         memory: "16Mi"
+    # -- Set tolerations, overrides global
+    tolerations: []
+    # -- Set PriorityClass, overrides global
+    priorityClassName: ""
 
 jaeger-operator:
   # Name of jaeger operator
@@ -128,6 +139,8 @@ jaeger-operator:
   rbac:
     # Create a clusterRole for Jaeger
     clusterRole: true
+  tolerations: []
+  priorityClassName: ""
 
 agents:
   core:
@@ -158,6 +171,17 @@ agents:
         cpu: "500m"
         # -- Memory requests for core agents
         memory: "32Mi"
+    # -- If a faulted replica comes back online within this time period then it will be
+    # rebuilt using the partial rebuild capability (using a log of missed IO), hence a bit
+    # faster depending on the log size. Otherwise, the replica will be fully rebuilt.
+    # A blank value "" means internally derived value will be used.
+    partialRebuildWaitPeriod: ""
+    # -- Set tolerations, overrides global
+    tolerations: []
+    # -- Set PriorityClass, overrides global.
+    # If both local and global are not set, the final deployment manifest has a mayastor custom critical priority class assigned to the pod by default.
+    # Refer the `templates/_helpers.tpl` and `templates/mayastor/agents/core/agent-core-deployment.yaml` for more details.
+    priorityClassName: ""
   ha:
     enabled: true
     node:
@@ -174,6 +198,10 @@ agents:
           cpu: "100m"
           # -- Memory requests for ha node agent
           memory: "64Mi"
+      # -- Set tolerations, overrides global
+      tolerations: []
+      # -- Set PriorityClass, overrides global
+      priorityClassName: ""
     cluster:
       # -- Log level for the ha cluster service
       logLevel: info
@@ -216,6 +244,12 @@ apis:
         http: 30011
         # NodePort associated with https port
         https: 30010
+    # -- Set tolerations, overrides global
+    tolerations: []
+    # -- Set PriorityClass, overrides global.
+    # If both local and global are not set, the final deployment manifest has a mayastor custom critical priority class assigned to the pod by default.
+    # Refer the `templates/_helpers.tpl` and `templates/mayastor/apis/rest/api-rest-deployment.yaml` for more details.
+    priorityClassName: ""
 
 csi:
   image:
@@ -246,6 +280,10 @@ csi:
         cpu: "16m"
         # -- Memory requests for csi controller
         memory: "64Mi"
+    # -- Set tolerations, overrides global
+    tolerations: []
+    # -- Set PriorityClass, overrides global
+    priorityClassName: ""
   node:
     logLevel: info
     topology:
@@ -275,6 +313,10 @@ csi:
     kubeletDir: /var/lib/kubelet
     pluginMounthPath: /csi
     socketPath: csi.sock
+    # -- Set tolerations, overrides global
+    tolerations: []
+    # -- Set PriorityClass, overrides global
+    priorityClassName: ""
 
 io_engine:
   # -- Log level for the io-engine service
@@ -317,6 +359,10 @@ io_engine:
       memory: "1Gi"
       # -- Hugepage size available on the nodes
       hugepages2Mi: "2Gi"
+  # -- Set tolerations, overrides global
+  tolerations: []
+  # -- Set PriorityClass, overrides global
+  priorityClassName: ""
 
 etcd:
   # Pod labels; okay to remove the openebs logging label if required
@@ -403,6 +449,8 @@ etcd:
       # Port from where etcd endpoints are accessible from outside cluster
       clientPort: 31379
       peerPort: ""
+  tolerations: []
+  priorityClassName: ""
 
 loki-stack:
   # -- Enable loki log collection for our components
@@ -476,6 +524,8 @@ loki-stack:
       port: 3100
       # Port where REST endpoints of Loki are accessible from outside cluster
       nodePort: 31001
+    tolerations: []
+    priorityClassName: ""
 
   # promtail configuration
   promtail:
@@ -487,6 +537,7 @@ loki-stack:
     enabled: true
     # -- Disallow promtail from running on the master node
     tolerations: []
+    priorityClassName: ""
     config:
       # -- The Loki address to post logs to
       lokiAddress: http://{{ .Release.Name }}-loki:3100/loki/api/v1/push
@@ -549,3 +600,7 @@ obs:
         cpu: "50m"
         # -- Memory requests for callhome
         memory: "16Mi"
+    # -- Set tolerations, overrides global
+    tolerations: []
+    # -- Set PriorityClass, overrides global
+    priorityClassName: ""
