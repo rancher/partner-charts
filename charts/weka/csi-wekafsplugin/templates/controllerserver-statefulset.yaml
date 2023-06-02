@@ -12,52 +12,118 @@ spec:
     matchLabels:
       app: {{ .Release.Name }}-controller
   serviceName: {{ .Release.Name }}-controller
-  replicas: 1
+  replicas: {{ .Values.controller.replicas | default 1 }}
   template:
     metadata:
       labels:
         app: {{ .Release.Name }}-controller
         component: {{ .Release.Name }}-controller
         release: {{ .Release.Name }}
+    {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '{{ .Values.metrics.port | default 9090 }}'
+    {{- end }}
     spec:
       {{- if .Values.nodeSelector }}
       nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8}}
       {{- end }}
       serviceAccountName: {{ .Release.Name }}-controller
       containers:
-        - name: csi-attacher
-          image: {{ required "csi attacher sidercar image." .Values.images.attachersidecar }}
-          securityContext:
-            privileged: true
-          args:
-            - "--csi-address=$(ADDRESS)"
-            - "--v={{ .Values.logLevel | default 5 }}"
-          env:
-            - name: ADDRESS
-              value: unix:///csi/csi.sock
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /csi
         - name: csi-provisioner
           image: {{ required "csi provisioner sidecar container image." .Values.images.provisionersidecar }}
           args:
             - "--v={{ .Values.logLevel | default 5 }}"
             - "--csi-address=$(ADDRESS)"
             - "--feature-gates=Topology=true"
+            - "--timeout=60s"
+            - "--prevent-volume-mode-conversion"
+          {{- if .Values.controller.configureProvisionerLeaderElection | default true }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+          {{- end }}
+            - "--worker-threads={{ .Values.controller.maxConcurrentRequests }}"
+            - "--retry-interval-start=10s"
+          {{- if or .Values.metrics.enabled .Values.controller.configureProvisionerLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.provisionerPort | default 9091 }}"
+          {{- end }}
+          {{- if .Values.controller.configureProvisionerLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.provisionerPort | default 9091 }}
+              path: /healthz/leader-election
+          {{- end }}
           env:
             - name: ADDRESS
               value: unix:///csi/csi.sock
           volumeMounts:
             - name: socket-dir
               mountPath: "/csi"
+          ports:
+            - containerPort: {{ .Values.metrics.provisionerPort }}
+              name: pr-metrics
+              protocol: TCP
         - name: csi-resizer
           image: {{ required "csi attacher sidercar image." .Values.images.resizersidecar }}
           args:
             - "--v={{ .Values.logLevel | default 5 }}"
             - "--csi-address=$(ADDRESS)"
+            - "--timeout=60s"
+          {{- if or .Values.metrics.enabled .Values.controller.configureResizerLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.resizerPort | default 9092 }}"
+          {{- end }}
+          {{- if .Values.controller.configureResizerLeaderElection | default true }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+          {{- end }}
+            - "--workers={{ .Values.controller.maxConcurrentRequests }}"
+            - "--retry-interval-start=10s"
+          {{- if .Values.controller.configureResizerLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.resizerPort | default 9092 }}
+              path: /healthz/leader-election
+          {{- end }}
           env:
             - name: ADDRESS
               value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          ports:
+            - containerPort: {{ .Values.metrics.resizerPort }}
+              name: rs-metrics
+              protocol: TCP
+        - name: csi-snapshotter
+          image: {{ required "csi snapshotter sidecar image." .Values.images.snapshottersidecar }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=60s"
+          {{- if .Values.controller.configureSnapshotterLeaderElection | default true }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+          {{- end }}
+            - "--worker-threads={{ .Values.controller.maxConcurrentRequests }}"
+            - "--retry-interval-start=10s"
+          {{- if or .Values.metrics.enabled .Values.controller.configureSnapshotterLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.snapshotterPort | default 9093 }}"
+          {{- end }}
+          {{- if .Values.controller.configureSnapshotterLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.snapshotterPort | default 9093 }}
+              path: /healthz/leader-election
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.metrics.snapshotterPort }}
+              name: sn-metrics
+              protocol: TCP
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
@@ -74,10 +140,58 @@ spec:
             - "--nodeid=$(KUBE_NODE_NAME)"
             - "--dynamic-path=$(CSI_DYNAMIC_PATH)"
             - "--csimode=$(X_CSI_MODE)"
+            - "--newvolumeprefix={{ .Values.pluginConfig.objectNaming.volumePrefix | default "csivol-" | trunc 7 }}"
+            - "--newsnapshotprefix={{ .Values.pluginConfig.objectNaming.snapshotPrefix | default "csisnp-" | trunc 7 }}"
+            - "--seedsnapshotprefix={{ .Values.pluginConfig.objectNaming.seedSnapshotPrefix | default "csisnp-seed-" | trunc 12 }}"
+          {{- if .Values.pluginConfig.allowedOperations.autoCreateFilesystems | default true }}
+            - "--allowautofscreation"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowedOperations.autoExpandFilesystems | default true }}
+            - "--allowautofsexpansion"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowedOperations.snapshotDirectoryVolumes }}
+            - "--allowsnapshotsoflegacyvolumes"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowedOperations.snapshotVolumesWithoutQuotaEnforcement }}
+            - "--alwaysallowsnapshotvolumes"
+          {{- end }}
+          {{- if .Values.tracingUrl }}
+            - "--tracingurl={{ .Values.tracingUrl }}"
+          {{- end }}
+          {{- if .Values.metrics.enabled }}
+            - "--enablemetrics"
+            - "--metricsport={{ .Values.metrics.port | default 9090 }}"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowInsecureHttps }}
+            - "--allowinsecurehttps"
+          {{- end }}
+          {{- if .Values.pluginConfig.mutuallyExclusiveMountOptions }}
+            {{- range  .Values.pluginConfig.mutuallyExclusiveMountOptions }}
+            - "--mutuallyexclusivemountoptions={{ . }}"
+            {{- end }}
+          {{- end}}
+          {{- if .Values.useJsonLogging }}
+            - "--usejsonlogging"
+          {{- end }}
+          {{- if .Values.controller.grpcRequestTimeoutSeconds }}
+            - "--grpcrequesttimeoutseconds={{ .Values.controller.grpcRequestTimeoutSeconds | default "5" }}"
+          {{- end }}
+          {{- if .Values.controller.concurrency }}
+            - "--concurrency.createVolume={{ .Values.controller.concurrency.createVolume | default "1" }}"
+            - "--concurrency.deleteVolume={{ .Values.controller.concurrency.deleteVolume | default "1" }}"
+            - "--concurrency.expandVolume={{ .Values.controller.concurrency.expandVolume | default "1" }}"
+            - "--concurrency.createSnapshot={{ .Values.controller.concurrency.createSnapshot | default "1" }}"
+            - "--concurrency.deleteSnapshot={{ .Values.controller.concurrency.deleteSnapshot | default "1" }}"
+          {{- end }}
           ports:
             - containerPort: 9898
               name: healthz
               protocol: TCP
+          {{- if .Values.metrics.enabled }}
+            - containerPort: {{ .Values.metrics.port }}
+              name: metrics
+              protocol: TCP
+          {{- end }}
           livenessProbe:
             failureThreshold: 5
             httpGet:
@@ -106,10 +220,10 @@ spec:
           volumeMounts:
             - mountPath: /csi
               name: socket-dir
-            - mountPath:  {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+            - mountPath: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
               mountPropagation: Bidirectional
               name: mountpoint-dir
-            - mountPath:  {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+            - mountPath: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
               mountPropagation: Bidirectional
               name: plugins-dir
             - mountPath: /var/lib/csi-wekafs-data

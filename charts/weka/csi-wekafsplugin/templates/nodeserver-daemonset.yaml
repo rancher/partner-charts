@@ -14,6 +14,12 @@ spec:
         app: {{ .Release.Name }}-node
         component: {{ .Release.Name }}-node
         release: {{ .Release.Name }}
+    {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '{{ .Values.metrics.port | default 9090 }}'
+    {{- end }}
     spec:
       affinity:
         nodeAffinity:
@@ -45,10 +51,43 @@ spec:
             - "--nodeid=$(KUBE_NODE_NAME)"
             - "--dynamic-path=$(CSI_DYNAMIC_PATH)"
             - "--csimode=$(X_CSI_MODE)"
+            - "--newvolumeprefix={{ .Values.pluginConfig.objectNaming.volumePrefix | default "csivol-" | trunc 7 }}"
+            - "--newsnapshotprefix={{ .Values.pluginConfig.objectNaming.snapshotPrefix | default "csisnp-" | trunc 7 }}"
+            - "--seedsnapshotprefix={{ .Values.pluginConfig.objectNaming.seedSnapshotPrefix | default "csisnp-seed-" | trunc 12 }}"
+          {{- if .Values.tracingUrl }}
+            - "--tracingurl={{ .Values.tracingUrl }}"
+          {{- end }}
+          {{- if .Values.metrics.enabled }}
+            - "--enablemetrics"
+            - "--metricsport={{ .Values.metrics.port | default 9090 }}"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowInsecureHttps }}
+            - "--allowinsecurehttps"
+          {{- end }}
+          {{- if .Values.useJsonLogging }}
+            - "--usejsonlogging"
+          {{- end }}
+          {{- if .Values.pluginConfig.mutuallyExclusiveMountOptions }}
+            {{- range  .Values.pluginConfig.mutuallyExclusiveMountOptions }}
+            - "--mutuallyexclusivemountoptions={{ . }}"
+            {{- end }}
+          {{- end }}
+          {{- if .Values.node.grpcRequestTimeoutSeconds }}
+            - "--grpcrequesttimeoutseconds={{ .Values.node.grpcRequestTimeoutSeconds | default "5" }}"
+          {{- end }}
+          {{- if .Values.node.concurrency }}
+            - "--concurrency.nodePublishVolume={{ .Values.node.concurrency.nodePublishVolume | default "1" }}"
+            - "--concurrency.nodeUnpublishVolume={{ .Values.node.concurrency.nodeUnpublishVolume | default "1" }}"
+          {{- end }}
           ports:
             - containerPort: 9898
               name: healthz
               protocol: TCP
+          {{- if .Values.metrics.enabled }}
+            - containerPort: {{ .Values.metrics.port }}
+              name: metrics
+              protocol: TCP
+          {{- end }}
           livenessProbe:
             failureThreshold: 5
             httpGet:
@@ -109,6 +148,17 @@ spec:
             - "--v={{ .Values.logLevel | default 5 }}"
             - "--csi-address=$(ADDRESS)"
             - "--kubelet-registration-path=$(KUBELET_REGISTRATION_PATH)"
+            - "--timeout=60s"
+            - "--health-port=9809"
+          ports:
+            - containerPort: 9809
+              name: healthz
+          livenessProbe:
+            httpGet:
+              port: healthz
+              path: /healthz
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
           securityContext:
             privileged: true
           env:

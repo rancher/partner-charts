@@ -5,18 +5,18 @@ dynamicProvisionPath: "csi-volumes"
 # -- Name of the driver (and provisioner)
 csiDriverName: "csi.weka.io"
 # -- CSI driver version
-csiDriverVersion: &csiDriverVersion 0.8.4
+csiDriverVersion: &csiDriverVersion 2.0.0
 images:
   # -- CSI liveness probe sidecar image URL
-  livenessprobesidecar: k8s.gcr.io/sig-storage/livenessprobe:v2.6.0
-  # -- CSI attacher sidecar image URL
-  attachersidecar: k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
+  livenessprobesidecar: registry.k8s.io/sig-storage/livenessprobe:v2.10.0
   # -- CSI provisioner sidecar image URL
-  provisionersidecar: k8s.gcr.io/sig-storage/csi-provisioner:v3.1.0
+  provisionersidecar: registry.k8s.io/sig-storage/csi-provisioner:v3.5.0
   # -- CSI registrar sidercar
-  registrarsidecar: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.0
-  # -- CSI provisioner sidecar image URL
-  resizersidecar: k8s.gcr.io/sig-storage/csi-resizer:v1.4.0
+  registrarsidecar: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
+  # -- CSI resizer sidecar image URL
+  resizersidecar: registry.k8s.io/sig-storage/csi-resizer:v1.8.0
+  # -- CSI snapshotter sidecar image URL
+  snapshottersidecar: registry.k8s.io/sig-storage/csi-snapshotter:v6.2.1
   # -- CSI driver main image URL
   csidriver: quay.io/weka.io/csi-wekafs
   # -- CSI driver tag
@@ -32,8 +32,41 @@ controllerPluginTolerations: *globalPluginTolerations
 nodePluginTolerations: *globalPluginTolerations
 # -- Optional nodeSelector for CSI plugin deployment on certain Kubernetes nodes only
 nodeSelector: {}
+# -- Controller-specific parameters, please do not change unless explicitly guided
+controller:
+  # -- Controller number of replicas
+  replicas: 2
+  # -- Maximum concurrent requests from sidecars (global)
+  maxConcurrentRequests: 5
+  # -- maximum concurrent operations per operation type (to avoid API starvation)
+  concurrency:
+    createVolume: 5
+    deleteVolume: 1
+    expandVolume: 5
+    createSnapshot: 5
+    deleteSnapshot: 5
+  # -- Return GRPC Unavailable if request waits in queue for that long time (seconds)
+  grpcRequestTimeoutSeconds: 30
+  # -- Configure provisioner sidecar for leader election
+  configureProvisionerLeaderElection: true
+  # -- Configure resizer sidecar for leader election
+  configureResizerLeaderElection: true
+  # -- Configure snapshotter sidecar for leader election
+  configureSnapshotterLeaderElection: true
+# -- Node-specific parameters, please do not change unless explicitly guided
+node:
+  # -- Maximum concurrent requests from sidecars (global)
+  maxConcurrentRequests: 5
+  # -- maximum concurrent operations per operation type (to avoid API starvation)
+  concurrency:
+    nodePublishVolume: 5
+    nodeUnpublishVolume: 5
+  # -- Return GRPC Unavailable if request waits in queue for that long time (seconds)
+  grpcRequestTimeoutSeconds: 30
 # -- Log level of CSI plugin
 logLevel: 5
+# -- Use JSON structured logging instead of human-readable logging format (for exporting logs to structured log parser)
+useJsonLogging: false
 # -- for migration of pre-CSI 0.7.0 volumes only, default API secret. Must reside in same namespace as the plugin
 legacyVolumeSecretName: ""
 # -- Optional CSI Plugin priorityClassName
@@ -43,10 +76,52 @@ priorityClassName: ""
 #    In `mixed` mode, separate CSI node components will be installed on SELinux-enabled and regular hosts
 #    In `off` mode, only non-SELinux-enabled node components will be run on hosts without label.
 #    WARNING: if SELinux is not enabled, volume provisioning and publishing might fail!
-selinuxSupport: off
-# -- This label must be set to "true" on SELinux-enabled Kubernetes nodes,
+selinuxSupport: "off"
+# -- This label must be set to `"true"` on SELinux-enabled Kubernetes nodes,
 #    e.g., to run the node server in secure mode on SELinux-enabled node, the node must have label
-#    csi.weka.io/selinux_enabled="true"
+#    `csi.weka.io/selinux_enabled="true"`
 selinuxNodeLabel: "csi.weka.io/selinux_enabled"
 # -- kubelet path, in cases Kubernetes is installed not in default folder
 kubeletPath: "/var/lib/kubelet"
+metrics:
+  # -- Enable Prometheus Metrics
+  enabled: true
+  # -- Metrics port
+  port: 9090
+  # -- Provisioner metrics port
+  provisionerPort: 9091
+  # -- Resizer metrics port
+  resizerPort: 9092
+  # -- Snapshotter metrics port
+  snapshotterPort: 9093
+# -- Tracing URL (For Jaeger tracing engine / OpenTelemetry), optional
+# @ignore
+tracingUrl: ""
+pluginConfig:
+  # -- Allow insecure HTTPS (skip TLS certificate verification)
+  allowInsecureHttps: false
+  objectNaming:
+    # -- Prefix that will be added to names of Weka cluster filesystems / snapshots assocciated with CSI volume,
+    # must not exceed 7 symbols.
+    volumePrefix: "csivol-"
+    # -- Prefix that will be added to names of Weka cluster snapshots assocciated with CSI snapshot,
+    # must not exceed 7 symbols.
+    snapshotPrefix: "csisnp-"
+    # -- Prefix that will be added to automatically created "seed" snapshot of empty filesytem,
+    # must not exceed 12 symbols.
+    seedSnapshotPrefix: "csisnp-seed-"
+  allowedOperations:
+    # -- Allow automatic provisioning of CSI volumes based on distinct Weka filesystem
+    autoCreateFilesystems: true
+    # -- Allow automatic expansion of filesystem on which Weka snapshot-backed CSI volumes,
+    # e.g. in case a required volume capacity exceeds the size of filesystem.
+    # Note: the filesystem is not expanded automatically when a new directory-backed volume is provisioned
+    autoExpandFilesystems: true
+    # -- Create snapshots of legacy (dir/v1) volumes. By default disabled.
+    # Note: when enabled, for every legacy volume snapshot, a full filesystem snapshot will be created (wasteful)
+    snapshotDirectoryVolumes: false
+    # -- Allow creation of snapshot-backed volumes even on unsupported Weka cluster versions, off by default
+    # Note: On versions of Weka < v4.2 snapshot-backed volume capacity cannot be enforced
+    snapshotVolumesWithoutQuotaEnforcement: false
+  mutuallyExclusiveMountOptions:
+    - "readcache,writecache,coherent"
