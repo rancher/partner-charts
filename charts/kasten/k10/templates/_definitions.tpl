@@ -39,7 +39,7 @@ dashboardbff:
 state:
 - admin
 {{- end -}}
-{{- define "k10.aggregatedAPIs" -}}actions apps vault repositories{{- end -}}
+{{- define "k10.aggregatedAPIs" -}}actions apps repositories vault{{- end -}}
 {{- define "k10.configAPIs" -}}config{{- end -}}
 {{- define "k10.profiles" -}}profiles{{- end -}}
 {{- define "k10.policies" -}}policies{{- end -}}
@@ -208,5 +208,5 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.91.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.92.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}

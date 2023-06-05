@@ -16,7 +16,7 @@ the [Helm](https://helm.sh) package manager.
 
 ## Prerequisites
 
-- Kubernetes 1.7+ with Beta APIs enabled
+- Kubernetes 1.23 - 1.26
 
 ## Installing the Chart
 
@@ -244,6 +244,7 @@ Parameter | Description | Default
 `garbagecollector.retireActions.enabled` | Enables ``retireActions`` collector | `false`
 `kubeVirtVMs.snapshot.unfreezeTimeout` | Defines the time duration within which the the VMs must be unfrozen while backing them up. To know more about format [go doc](https://pkg.go.dev/time#ParseDuration) can be followed | `5m`
 `excludedApps` | Specifies a list of applications to be excluded from the dashboard & compliance considerations. Format should be a :ref:`YAML array<k10_compliance>` | `None`
+`maxJobWaitDuration` | Set a maximum duration of waiting for child jobs. If the execution of the subordinate jobs exceeds this value, the parent job will be canceled. If no value is set, a default of 10 hours will be used | `None`
 
 ## Helm tips and tricks
 
