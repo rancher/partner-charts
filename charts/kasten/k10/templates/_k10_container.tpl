@@ -448,11 +448,13 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterEFSPostRestoreTimeout
+{{- if .Values.maxJobWaitDuration }}
           - name: K10_JOB_MAX_WAIT_DURATION
             valueFrom:
               configMapKeyRef:
                 name: k10-config
                 key: k10JobMaxWaitDuration
+{{- end }}
 {{- end }}
 {{- if and (eq $service "executor") (.Values.awsConfig.efsBackupVaultName) }}
           - name: EFS_BACKUP_VAULT_NAME
