@@ -1,11 +1,16 @@
 # CloudCasa Kubernetes Agent
 
-[CloudCasa](https://cloudcasa.io) - A Smart Home in the Cloud for Kubernetes Backups
+[CloudCasa](https://cloudcasa.io) - Leader in Kubernetes Data Protection and Application Resiliency
 
 # Introduction
 
-CloudCasa is a SaaS solution that provides class-leading data protection services for Kubernetes and cloud native applications.
-Configuration is quick and easy, and basic service is free.
+CloudCasa is a SaaS data protection, recovery and migration solution for Kubernetes. Configuration is quick and easy, and the basic service is free. 
+
+CloudCasa provides two types of backup services for Kubernetes: 
+* **CloudCasa for Velero** provides centralized management and monitoring, guided recovery, and commercial support for existing Velero backup installations. 
+* **CloudCasa Pro** provides centralized backup services for large, complex, multi-cluster, multi-cloud, and hybrid cloud environments. It includes multi-cloud account integration, managed backup storage, and advanced cross-cloud recovery. 
+
+Whether you are managing existing Velero installations or using the advanced Pro features, with CloudCasa you don’t need to be a storage or data protection expert to back up and restore your Kubernetes clusters.  
 
 This Helm chart installs and configures the CloudCasa agent on a Kubernetes cluster.
 See the CloudCasa [Getting Started Guide](https://cloudcasa.io/get-started) for more information.
