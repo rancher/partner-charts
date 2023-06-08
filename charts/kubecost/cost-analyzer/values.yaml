@@ -361,13 +361,11 @@ kubecostMetrics:
     serviceMonitor: # the kubecost included prometheus uses scrapeConfigs and does not support service monitors. The following options assume an existing prometheus that supports serviceMonitors.
       enabled: false
       additionalLabels: {}
-      networkCosts:
-        enabled: false
-        scrapeTimeout: 10s
-        additionalLabels: {}
+      metricRelabelings: []
+      relabelings: []
     ## PriorityClassName
     ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
-    priorityClassName: []
+    priorityClassName: ""
     additionalLabels: {}
     nodeSelector: {}
     extraArgs: []
@@ -417,6 +415,16 @@ kubecostModel:
   etlWeeklyStoreDurationWeeks: 53
   # For deploying kubecost in a cluster that does not self-monitor
   etlReadOnlyMode: false
+
+  ## Feature to view your out-of-cluster costs and their k8s utilization
+  ## Ref: https://docs.kubecost.com/using-kubecost/navigating-the-kubecost-ui/cloud-costs-explorer
+  cloudCost:
+    enabled: true
+    labelList:
+      IsIncludeList: false
+      # format labels as comma separated string (ex. "label1,label2,label3")
+      labels: ""
+    topNItems: 1000
 
   allocation:
     # Enables or disables adding node labels to allocation data (i.e. workloads).
@@ -523,7 +531,7 @@ networkPolicy:
     #     - namespaceSelector: {}
 
 podSecurityPolicy:
-  enabled: true
+  enabled: false
 
 ## @param extraVolumes A list of volumes to be added to the pod
 ##
@@ -558,12 +566,17 @@ remoteWrite:
     initImagePullPolicy: Always
     installLocal: true
     remotePostgresAddress: "" # ignored if installing locally
+    ## PriorityClassName
+    ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+    priorityClassName: ""
     persistentVolume:
       size: 200Gi
     auth:
       password: admin # change me
 
 prometheus:
+  podSecurityPolicy:
+    enabled: false
   extraScrapeConfigs: |
     - job_name: kubecost
       honor_labels: true
@@ -788,7 +801,7 @@ networkCosts:
 
   ## PriorityClassName
   ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
-  priorityClassName: []
+  priorityClassName: ""
   ## PodMonitor
   ## Allows scraping of network metrics from a dedicated prometheus operator setup
   podMonitor:
@@ -814,8 +827,11 @@ kubecostDeployment:
 # Kubecost Cluster Controller for Right Sizing and Cluster Turndown
 clusterController:
   enabled: false
-  image: gcr.io/kubecost1/cluster-controller:v0.7.0
+  image: gcr.io/kubecost1/cluster-controller:v0.11.0
   imagePullPolicy: Always
+  ## PriorityClassName
+  ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+  priorityClassName: ""
   kubescaler:
     # If true, will cause all (supported) workloads to be have their requests
     # automatically right-sized on a regular basis.
@@ -839,10 +855,14 @@ reporting:
 serviceMonitor: # the kubecost included prometheus uses scrapeConfigs and does not support service monitors. The following options assume an existing prometheus that supports serviceMonitors.
   enabled: false
   additionalLabels: {}
+  metricRelabelings: []
+  relabelings: []
   networkCosts:
     enabled: false
     scrapeTimeout: 10s
     additionalLabels: {}
+    metricRelabelings: []
+    relabelings: []
 
 prometheusRule:
   enabled: false
@@ -857,13 +877,12 @@ initChownData:
     #  cpu: "50m"
     #  memory: "20Mi"
 
-
 grafana:
   # namespace_datasources: kubecost # override the default namespace here
   # namespace_dashboards: kubecost # override the default namespace here
   rbac:
     # Manage the Grafana Pod Security Policy
-    pspEnabled: true
+    pspEnabled: false
   datasources:
     datasources.yaml:
       apiVersion: 1
@@ -898,6 +917,9 @@ serviceAccount:
 awsstore:
   useAwsStore: false
   createServiceAccount: false
+  ## PriorityClassName
+  ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+  priorityClassName: ""
 
 federatedETL:
   # federatedCluster indicates whether this cluster should push data to the Federated store
@@ -1034,7 +1056,7 @@ costEventsAudit:
 #  productKey: # apply business or enterprise product license
 #    key: ""
 #    enabled: false
-#    secretname: productkeysecret # create a secret out of a file named productkey.json of format { "key": "kc-b1325234" }
+#    secretname: productkeysecret # create a secret out of a file named productkey.json of format { "key": "kc-b1325234" }. If the secretname is specified, a configmap with the key will not be created
 #    mountPath: "/some/custom/path/productkey.json" # (use instead of secretname) declare the path at which the product key file is mounted (eg. by a secrets provisioner). The file must be of format { "key": "kc-b1325234" }
 #  cloudIntegrationSecret: "cloud-integration"
 #  ingestPodUID: false # Enables using UIDs to uniquely ID pods. This requires either Kubecost's replicated KSM metrics, or KSM v2.1.0+. This may impact performance, and changes the default cost-model allocation behavior.

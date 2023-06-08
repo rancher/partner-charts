@@ -398,6 +398,16 @@ spec:
   selector:
     control-plane: controller-manager
 ---
+{{- if .Values.privateRegistry.registrySecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-operator-private-registry
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ printf "{\"auths\": {\"%s\": {\"auth\": \"%s\"}}}" .Values.privateRegistry.registryUrl (printf "%s:%s" .Values.privateRegistry.registryUser .Values.privateRegistry.registrySecret | b64enc) | b64enc }}
+{{- end }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -415,6 +425,10 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
+      {{- if .Values.privateRegistry.registrySecret }}
+      imagePullSecrets:
+      - name: {{ .Release.Name }}-operator-private-registry
+      {{- end }}
       containers:
       - args:
         {{- if .Values.controllerExtraArgs }}
@@ -427,8 +441,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: "{{ .Values.image.hub }}/intel-deviceplugin-operator:{{ .Values.image.tag | default .Chart.AppVersion  }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        image: "{{ .Values.manager.image.hub }}/intel-deviceplugin-operator:{{ .Values.manager.image.tag | default .Chart.AppVersion  }}"
+        imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
         name: manager
         ports:
         - containerPort: 9443
@@ -437,10 +451,10 @@ spec:
         resources:
           limits:
             cpu: 100m
-            memory: 50Mi
+            memory: 120Mi
           requests:
             cpu: 100m
-            memory: 20Mi
+            memory: 100Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -462,7 +476,7 @@ spec:
         - --logtostderr=true
         - --tls-cipher-suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
         - --v=10
-        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
+        image: "{{ .Values.kubeRbacProxy.image.hub }}/{{ .Values.kubeRbacProxy.image.hubRepo }}/kube-rbac-proxy:{{ .Values.kubeRbacProxy.image.tag }}"
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
