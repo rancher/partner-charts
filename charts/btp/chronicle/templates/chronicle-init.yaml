@@ -1,0 +1,228 @@
+{{$stlServiceName := include "lib.call-nested" (list . "sawtooth" "common.names.fullname")}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  name: {{ include "common.names.fullname" . }}-init
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: chronicle
+spec:
+  template:
+    metadata:
+      labels: {{ include "chronicle.labels" . | nindent 8 }}
+        component: chronicle
+    spec:
+      restartPolicy: Never
+      serviceAccountName:  {{ include "lib.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      volumes: {{- include "lib.volumes" .Values.opa.tp.extraVolumes | nindent 8 }}
+        - name: shared-data
+          emptyDir: {}
+      initContainers:
+        - name: get-secret
+          image: alpine/k8s:1.24.13
+          command: [ "sh", "-ec" ]
+          args:
+            - |
+              if kubectl get secret {{ include "chronicle.root-key.secret" . }} -n {{.Release.Namespace}} >/dev/null 2>&1; then
+                echo "Secret found."
+                kubectl get secret {{ include "chronicle.root-key.secret" . }} -n {{.Release.Namespace}} -o jsonpath='{.data.*}' | base64 -d > /shared-data/root.pem
+                touch /shared-data/secret-found
+              else
+                echo "Secret not found."
+              fi
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        - name: generate-secret
+          {{- include "lib.image" (dict "imageRoot" .Values.opa.opaInit.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-ec"]
+          args:
+            - |
+              if [[ ! -f "/shared-data/root.pem" ]]; then
+                echo "Generating new root key."
+                opactl generate --output /shared-data/root.pem
+              else
+                echo "Root key already exists."
+              fi
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+            - name: RUST_BACKTRACE
+              value: {{ .Values.backtraceLevel }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        - name: create-secret
+          image: alpine/k8s:1.24.13
+          command: [ "sh", "-ec" ]
+          args:
+            - |
+              if [ -f "/shared-data/secret-found" ]; then
+                echo "Secret already exists."
+              else
+                echo "Creating k8s secret from key."
+                kubectl create secret generic {{ include "chronicle.root-key.secret" . }} \
+                  -n {{ .Release.Namespace }} \
+                  --from-file=/shared-data/root.pem
+              fi
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        {{ if .Values.opa.enabled }}
+        - name: opa-bootstrap-root
+          {{- include "lib.image" (dict "imageRoot" .Values.opa.opaInit.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-ec"]
+          args:
+            - |
+              wait-for-it $HOST:$PORT --timeout=0
+              echo "Waiting to ensure Sawtooth validator is ready ..."
+              sleep 100
+
+              if [[ -f "/shared-data/secret-found" ]]; then
+                echo "Skipping root key bootstrap."
+              else
+                opactl \
+                  --sawtooth-address tcp://$HOST:$PORT \
+                    bootstrap \
+                      --root-key /shared-data/root.pem
+              fi
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: HOST
+              value: {{ $stlServiceName }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: PORT
+              value: "{{ include "chronicle.sawtooth.sawcomp" . }}"
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+            - name: RUST_BACKTRACE
+              value: {{ .Values.backtraceLevel }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        {{ if .Values.opa.policy.url }}
+        - name: wait-for-sawtooth-rest-api
+          {{- include "lib.image" (dict "imageRoot" .Values.opa.opaInit.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-ec"]
+          args:
+            - |
+              wait-for-it $HOST:$PORT --timeout=0
+              echo "Sawtooth rest API is ready."
+          env:
+            - name: HOST
+              value: {{ $stlServiceName }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: PORT
+              value: "{{ include "chronicle.sawtooth.rest" . }}"
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+            - name: RUST_BACKTRACE
+              value: {{ .Values.backtraceLevel }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        - name: opa-settings
+          {{- include "lib.image" (dict "imageRoot" .Values.sawset.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-ec"]
+          args:
+            - |
+              if sawtooth settings list --url http://$HOST:$PORT | grep -q "chronicle.opa.policy_name"; then
+                echo "Skipping setting Sawtooth OPA settings."
+                exit 0
+              else
+                echo "Creating Sawtooth settings batch."
+                sawset proposal create \
+                  -k /etc/sawtooth/keys/{{ $stlServiceName }}-0 \
+                  chronicle.opa.policy_name={{ required "opa.policy.id required!" .Values.opa.policy.id }} \
+                  chronicle.opa.entrypoint={{ required "opa.policy.entrypoint required!" .Values.opa.policy.entrypoint }} \
+                  -o /shared-data/opa-settings.batch
+
+                echo "Submitting Sawtooth OPA settings batch."
+                sawtooth batch submit \
+                  -f /shared-data/opa-settings.batch \
+                  --url http://$HOST:$PORT \
+                  --wait 60
+              fi
+          env:
+            - name: HOST
+              value: {{ $stlServiceName }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: PORT
+              value: "{{ include "chronicle.sawtooth.rest" . }}"
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+            - name: validator-secret
+              mountPath: /etc/sawtooth/keys
+              readOnly: true
+        - name: get-policy
+          {{- include "lib.image" (dict "imageRoot" .Values.opa.opaInit.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-ec"]
+          args:
+            - |
+              if opactl \
+                  --sawtooth-address tcp://$HOST:$PORT \
+                    get-policy \
+                      --id {{ .Values.opa.policy.id }} \
+                      --output policy.bin >/dev/null 2>&1; then
+                echo "Policy already set."
+                touch /shared-data/policy-already-set
+              else
+                echo "Policy not found."
+                exit 0
+              fi
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: HOST
+              value: {{ $stlServiceName }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: PORT
+              value: "{{ include "chronicle.sawtooth.sawcomp" . }}"
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+            - name: RUST_BACKTRACE
+              value: {{ .Values.backtraceLevel }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        - name: set-policy
+          {{- include "lib.image" (dict "imageRoot" .Values.opa.opaInit.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-ec"]
+          args:
+            - |
+              if [[ -f "/shared-data/policy-already-set" ]]; then
+                echo "Skipping setting policy."
+                exit 0
+              else
+                echo "Policy not found on chain. Setting policy."
+                opactl \
+                  --sawtooth-address tcp://$HOST:$PORT \
+                    set-policy \
+                      --id {{ .Values.opa.policy.id }} \
+                      -p {{ .Values.opa.policy.url }} \
+                      --root-key /shared-data/root.pem
+              fi
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: HOST
+              value: {{ $stlServiceName }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: PORT
+              value: "{{ include "chronicle.sawtooth.sawcomp" . }}"
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+            - name: RUST_BACKTRACE
+              value: {{ .Values.backtraceLevel }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        {{ end }}
+        {{ end }}
+      containers:
+        - name: chronicle-init
+          image: busybox:1.36
+          command: [ "sh", "-c"]
+          args:
+            - |
+              echo "Chronicle bootstrap and OPA settings initialization complete."
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+        - name: validator-secret
+          configMap:
+            name: validator-secret

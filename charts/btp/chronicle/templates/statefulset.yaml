@@ -1,3 +1,4 @@
+{{$stlServiceName := include "lib.call-nested" (list . "sawtooth" "common.names.fullname")}}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -48,6 +49,27 @@ spec:
             - name: chronicle-secrets
               mountPath: /var/lib/chronicle/secrets/
               readOnly: false
+        {{- if and .Values.opa.enabled .Values.opa.policy.url }}
+        - name: wait-for-opa-settings
+          {{- include "lib.image" (dict "imageRoot" .Values.sawset.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-exc"]
+          args:
+            - |
+              keepTrying=true
+              while [ $keepTrying = "true" ]; do
+                if sawtooth settings list --url http://$HOST:$PORT | grep -q "chronicle.opa.policy_name"; then
+                  break
+                else
+                  echo "Waiting for OPA policy id."
+                  sleep 10
+                fi
+              done
+          env:
+            - name: HOST
+              value: {{ $stlServiceName }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: PORT
+              value: "{{ include "chronicle.sawtooth.rest" . }}"
+        {{- end }}
       containers:
         {{- if .Values.postgres.enabled }}
         - name: postgres
@@ -80,17 +102,38 @@ spec:
           command: [ "bash", "-c"]
           args:
             - |
+              {{ if .Values.auth.required }}
+              {{ if and (not .Values.auth.jwks.url) (not .Values.auth.userinfo.url) (not .Values.devIdProvider.enabled) }}
+              {{ required "If auth.required you need to provide at least auth.jwks.url or auth.userinfo.url" .Values.auth.jwks.url }}
+              {{ end }}
+              {{ end }}
+
               echo "Waiting 20 seconds for postgres to start";
               sleep 20;
-              /usr/local/bin/chronicle \
-              -c /etc/chronicle/config/config.toml \
-              --console-logging json \
-              --sawtooth tcp://{{ include "chronicle.sawtooth.service" . }}:{{ include "chronicle.sawtooth.sawcomp" . }} \
-              --remote-database \
-              --database-name {{ .Values.postgres.database }} \
-              --database-username {{ .Values.postgres.user }} \
-              --database-host {{ .Values.postgres.host }} \
-              serve-graphql --interface 0.0.0.0:{{ .Values.port}} {{ if .Values.webUi }} --open {{ end }}
+              chronicle \
+                -c /etc/chronicle/config/config.toml \
+                --console-logging json \
+                --sawtooth tcp://{{ include "chronicle.sawtooth.service" . }}:{{ include "chronicle.sawtooth.sawcomp" . }} \
+                --remote-database \
+                --database-name {{ .Values.postgres.database }} \
+                --database-username {{ .Values.postgres.user }} \
+                --database-host {{ .Values.postgres.host }} \
+                {{- if not .Values.opa.enabled }}
+                --embedded-opa-policy \
+                {{- end }}
+                serve-api \
+                  --interface 0.0.0.0:{{ .Values.port}} \
+                  {{- if .Values.auth.required }}
+                  --require-auth \
+                  --id-claims {{ .Values.auth.id.claims }} \
+                  {{- if .Values.auth.jwks.enabled }}
+                  --jwks-address {{ include "chronicle.jwksUrl" . }} \
+                  {{- end }}
+                  {{- if .Values.auth.userinfo.url }}
+                  --userinfo-address {{ include "chronicle.userinfoUrl" . }} \
+                  {{- end }}
+                  {{- end }}
+                  ;
           env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
             - name: RUST_LOG
               value: {{ .Values.logLevel }}

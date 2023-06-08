@@ -1,11 +1,10 @@
----
 {{$stlServiceName := include "lib.call-nested" (list . "sawtooth" "common.names.fullname")}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "common.names.fullname" . }}-tp
   labels: {{ include "chronicle.labels" . | nindent 4 }}
-    component: tp
+    component: chronicle-tp
 spec:
   replicas: {{ include "tp.replicas" . }}
   serviceName: {{ include "common.names.fullname" . }}-tp
@@ -34,10 +33,11 @@ spec:
           args:
             - |
               HOST={{ $stlServiceName }}-${HOST##*-}.{{ .Release.Namespace }}.svc.cluster.local
-              echo tcp://$HOST:{{ include "chronicle.sawtooth.sawcomp" . }} &&
+              PORT={{ include "chronicle.sawtooth.sawcomp" . }}
+              echo tcp://$HOST:$PORT &&
               /usr/local/bin/chronicle_sawtooth_tp \
               --console-logging json \
-              --connect tcp://$HOST:{{ include "chronicle.sawtooth.sawcomp" . }}
+              --connect tcp://$HOST:$PORT
           resources: {{- include "lib.safeToYaml" .Values.tp.resources | nindent 12 }}
           env:
             - name: RUST_LOG
@@ -48,4 +48,30 @@ spec:
                   fieldPath: metadata.name
             {{- include "lib.safeToYaml" .Values.tp.env | nindent 12 }}
           volumeMounts: {{- include "lib.volumeMounts" .Values.tp.extraVolumeMounts | nindent 12 }}
+        {{- if .Values.opa.enabled }}
+        - name: opa-tp
+          {{- include "lib.image" (dict "imageRoot" .Values.opa.tp.image "global" .Values.global ) | nindent 10 }}
+          command: [ "bash", "-xc"]
+          args:
+            - |
+              HOST={{ $stlServiceName }}-${HOST##*-}.{{ .Release.Namespace }}.svc.cluster.local
+              PORT={{ include "chronicle.sawtooth.sawcomp" . }}
+              wait-for-it $HOST:$PORT --timeout=0
+              echo tcp://$HOST:$PORT &&
+              /usr/local/bin/opa-tp \
+                -C tcp://$HOST:$PORT \
+                --console-logging json
+          resources: {{- include "lib.safeToYaml" .Values.opa.tp.resources | nindent 12 }}
+          env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
+            - name: RUST_LOG
+              value: {{ .Values.logLevel }}
+            - name: RUST_BACKTRACE
+              value: {{ .Values.backtraceLevel }}
+            - name: HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- include "lib.safeToYaml" .Values.tp.env | nindent 12 }}
+          volumeMounts: {{- include "lib.volumeMounts" .Values.opa.tp.extraVolumeMounts | nindent 12 }}
+        {{- end }}
       volumes: {{- include "lib.volumes" .Values.tp.extraVolumes | nindent 8 }}
