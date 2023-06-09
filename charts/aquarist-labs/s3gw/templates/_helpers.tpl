@@ -229,3 +229,13 @@ COSI cluster role binding name
 {{- $name := $dcrn }}
 {{- $name }}
 {{- end }}
+
+{{/*
+COSI endpoint
+*/}}
+{{- define "s3gw-cosi.endpoint" -}}
+{{- $sn := include "s3gw.serviceName" . }}
+{{- $defaultendpoint := printf "http://%s.%s.%s" $sn .Release.Namespace .Values.privateDomain}}
+{{- $endpoint := default $defaultendpoint .Values.cosi.driver.endpoint }}
+{{- $endpoint }}
+{{- end }}

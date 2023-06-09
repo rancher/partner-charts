@@ -20,10 +20,10 @@ Slack template
 {{- printf "\n      {{- if eq .Status \"firing\" }}" -}}
 {{- printf "\n      {{- if .CommonLabels.asserts_site }}" -}}
 {{- printf "\n      :warning: *<%s/incidents?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_notification_rule_name }}|View Impact>*" $assertsUrl $plus30min -}}
-{{- printf "\n     :fire: *<%s/insights/top?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n     :fire: *<%s/assertions?env[0]={{ .CommonLabels.asserts_env }}&site[0]={{ .CommonLabels.asserts_site }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
 {{- printf "\n      {{- else }}" -}}
 {{- printf "\n      :warning: *<%s/incidents?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_notification_rule_name }}|View Impact>*" $assertsUrl $plus30min -}}
-{{- printf "\n     :fire: *<%s/insights/top?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
+{{- printf "\n     :fire: *<%s/assertions?env[0]={{ .CommonLabels.asserts_env }}&start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}|Start Troubleshooting>*" $assertsUrl $plus30min -}}
 {{- printf "\n      {{- end }}" -}}
 {{- printf "\n      {{- end }}" -}}
 {{- printf "\n      *Alert details*:" -}}
