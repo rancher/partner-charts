@@ -4,7 +4,7 @@
 
 # Introduction
 
-CloudCasa is a SaaS data protection, recovery and migration solution for Kubernetes. Configuration is quick and easy, and the basic service is free. 
+CloudCasa is a SaaS data protection, recovery, and migration solution for Kubernetes. Configuration is quick and easy, and the basic service is free. 
 
 CloudCasa provides two types of backup services for Kubernetes: 
 * **CloudCasa for Velero** provides centralized management and monitoring, guided recovery, and commercial support for existing Velero backup installations. 
