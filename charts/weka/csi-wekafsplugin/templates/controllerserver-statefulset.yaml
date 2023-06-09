@@ -31,6 +31,23 @@ spec:
       {{- end }}
       serviceAccountName: {{ .Release.Name }}-controller
       containers:
+        - name: csi-attacher
+          image: {{ required "csi attacher sidercar image." .Values.images.attachersidecar }}
+          securityContext:
+            privileged: true
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--timeout=60s"
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+            - "--worker-threads={{ .Values.controller.maxConcurrentRequests }}"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
         - name: csi-provisioner
           image: {{ required "csi provisioner sidecar container image." .Values.images.provisionersidecar }}
           args:

@@ -5,10 +5,12 @@ dynamicProvisionPath: "csi-volumes"
 # -- Name of the driver (and provisioner)
 csiDriverName: "csi.weka.io"
 # -- CSI driver version
-csiDriverVersion: &csiDriverVersion 2.0.0
+csiDriverVersion: &csiDriverVersion 2.0.1
 images:
   # -- CSI liveness probe sidecar image URL
   livenessprobesidecar: registry.k8s.io/sig-storage/livenessprobe:v2.10.0
+  # -- CSI attacher sidecar image URL
+  attachersidecar: registry.k8s.io/sig-storage/csi-attacher:v4.3.0
   # -- CSI provisioner sidecar image URL
   provisionersidecar: registry.k8s.io/sig-storage/csi-provisioner:v3.5.0
   # -- CSI registrar sidercar
@@ -32,13 +34,13 @@ controllerPluginTolerations: *globalPluginTolerations
 nodePluginTolerations: *globalPluginTolerations
 # -- Optional nodeSelector for CSI plugin deployment on certain Kubernetes nodes only
 nodeSelector: {}
-# -- Controller-specific parameters, please do not change unless explicitly guided
+# Controller-specific parameters, please do not change unless explicitly guided
 controller:
   # -- Controller number of replicas
   replicas: 2
   # -- Maximum concurrent requests from sidecars (global)
   maxConcurrentRequests: 5
-  # -- maximum concurrent operations per operation type (to avoid API starvation)
+  # -- maximum concurrent operations per operation type
   concurrency:
     createVolume: 5
     deleteVolume: 1
@@ -53,7 +55,7 @@ controller:
   configureResizerLeaderElection: true
   # -- Configure snapshotter sidecar for leader election
   configureSnapshotterLeaderElection: true
-# -- Node-specific parameters, please do not change unless explicitly guided
+# Node-specific parameters, please do not change unless explicitly guided
 node:
   # -- Maximum concurrent requests from sidecars (global)
   maxConcurrentRequests: 5
@@ -102,26 +104,26 @@ pluginConfig:
   allowInsecureHttps: false
   objectNaming:
     # -- Prefix that will be added to names of Weka cluster filesystems / snapshots assocciated with CSI volume,
-    # must not exceed 7 symbols.
+    #    must not exceed 7 symbols.
     volumePrefix: "csivol-"
     # -- Prefix that will be added to names of Weka cluster snapshots assocciated with CSI snapshot,
-    # must not exceed 7 symbols.
+    #    must not exceed 7 symbols.
     snapshotPrefix: "csisnp-"
     # -- Prefix that will be added to automatically created "seed" snapshot of empty filesytem,
-    # must not exceed 12 symbols.
+    #    must not exceed 12 symbols.
     seedSnapshotPrefix: "csisnp-seed-"
   allowedOperations:
     # -- Allow automatic provisioning of CSI volumes based on distinct Weka filesystem
     autoCreateFilesystems: true
     # -- Allow automatic expansion of filesystem on which Weka snapshot-backed CSI volumes,
-    # e.g. in case a required volume capacity exceeds the size of filesystem.
-    # Note: the filesystem is not expanded automatically when a new directory-backed volume is provisioned
+    #    e.g. in case a required volume capacity exceeds the size of filesystem.
+    #    Note: the filesystem is not expanded automatically when a new directory-backed volume is provisioned
     autoExpandFilesystems: true
     # -- Create snapshots of legacy (dir/v1) volumes. By default disabled.
-    # Note: when enabled, for every legacy volume snapshot, a full filesystem snapshot will be created (wasteful)
+    #    Note: when enabled, for every legacy volume snapshot, a full filesystem snapshot will be created (wasteful)
     snapshotDirectoryVolumes: false
     # -- Allow creation of snapshot-backed volumes even on unsupported Weka cluster versions, off by default
-    # Note: On versions of Weka < v4.2 snapshot-backed volume capacity cannot be enforced
+    #    Note: On versions of Weka < v4.2 snapshot-backed volume capacity cannot be enforced
     snapshotVolumesWithoutQuotaEnforcement: false
   mutuallyExclusiveMountOptions:
     - "readcache,writecache,coherent"

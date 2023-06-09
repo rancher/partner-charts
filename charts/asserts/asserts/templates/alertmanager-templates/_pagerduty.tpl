@@ -16,7 +16,7 @@ PagerDuty template
 {{- printf "\n    {{- end }}" -}}
 {{- printf "\n    " -}}
 {{- printf "\n    {{ define \"pagerduty.notification.link.insights\" -}}" -}}
-{{- printf "\n      %s/insights/top?start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}" $assertsUrl $plus30min -}}
+{{- printf "\n      %s/assertions?start={{(index .Alerts 0).StartsAt.Unix}}000-30m&end={{(index .Alerts 0).StartsAt.Unix}}000%s&search={{ .CommonLabels.asserts_assertion_name }}" $assertsUrl $plus30min -}}
 {{- printf "\n    {{- end }}" -}}
 {{- printf "\n    " -}}
 {{- printf "\n    {{/* PagerDuty Slo */}}" -}}
