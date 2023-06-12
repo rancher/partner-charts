@@ -98,7 +98,8 @@ Their default values and other configurable parameters are specified inside valu
 | global.commonLabels                                            | Common labels to be added to resources                                                                                             |
 | global.podAnnotations                                          | Annotations to be added to pods                                                                                                    |
 | global.podLabels                                               | Labels to be added to pods                                                                                                         |
-| global.resourcesEnabled                                        | Boolean to specify if you want to apply resources limits/requests settings                                                         |
+| global.resourcesLimitsEnabled                                  | Boolean to specify if you want to apply resources limits settings                                                                  |
+| global.resourcesRequestsEnabled                                | Boolean to specify if you want to apply resources requests settings                                                                |
 
 
 ### alamedaAi Parameters
@@ -106,6 +107,13 @@ Their default values and other configurable parameters are specified inside valu
 | Parameter                                                      | Description                                      |
 | -------------------------------------------------------------- | ------------------------------------------------ |
 | alamedaAi.persistence.dataStorageSize                          | Persistence storage size for data volume                                                                                           |
+
+
+### alamedaExecutor Parameters
+
+| Parameter                                                      | Description                                      |
+| -------------------------------------------------------------- | ------------------------------------------------ |
+| alamedaExecutor.enabled                                        | Enable deployment of alameda-executor            |
 
 
 ### alamedaInfluxdb Parameters
@@ -147,6 +155,13 @@ Their default values and other configurable parameters are specified inside valu
 | federatoraiDashboardFrontend.service.externalTrafficPolicy     | Enable client source IP preservation                                                                                               |
 | federatoraiDashboardFrontend.service.healthCheckNodePort       | Specifies the health check node port (numeric port number) for the service if `externalTrafficPolicy` is set to Local.             |
 | federatoraiDashboardFrontend.service.annotations               | Additional annotations for REST service                                                                                            |
+
+
+### federatoraiOperator Parameters
+
+| Parameter                                                      | Description                                      |
+| -------------------------------------------------------------- | ------------------------------------------------ |
+| federatoraiOperator.enabled                                    | Enable deployment of federatorai-operator        |
 
 
 ### federatoraiPostgresql Parameters

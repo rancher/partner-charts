@@ -1,8 +1,15 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
-  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
     app.kubernetes.io/part-of: federatorai
     app: alameda
     component: federatorai-agent
@@ -18,94 +25,114 @@ spec:
     type: Recreate
   template:
     metadata:
-      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
-      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
         app.kubernetes.io/part-of: federatorai
         app: alameda
         component: federatorai-agent
     spec:
-      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiAgent.affinity "context" .) | nindent 8 }}
+      affinity:
+{{- if .Values.federatoraiAgent.affinity }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAgent.affinity "context" .) | nindent 8 }}
+{{- end }}
       containers:
-      - env:
-        - name: NAMESPACE_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.name
-        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
-          value: "1932735283"
-        image: {{ .Values.global.imageRegistry }}/federatorai-agent-ubi:{{ .Values.global.imageTag }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-        livenessProbe:
-          exec:
-            command:
-            - /opt/alameda/federatorai-agent/bin/transmitter
-            - probe
-            - --type=liveness
-          failureThreshold: 20
-          initialDelaySeconds: 5
-          periodSeconds: 60
-          successThreshold: 1
-          timeoutSeconds: 5
-        name: federatorai-agent
-        readinessProbe:
-          exec:
-            command:
-            - /opt/alameda/federatorai-agent/bin/transmitter
-            - probe
-            - --type=readiness
-          failureThreshold: 20
-          initialDelaySeconds: 5
-          periodSeconds: 60
-          successThreshold: 1
-          timeoutSeconds: 5
-        resources:
-        {{- if .Values.global.resourcesEnabled }}
-          {{ include "render-value" ( dict "value" .Values.federatoraiAgent.resources "context" .) | nindent 10 }}
-        {{- end }}
-        volumeMounts:
-        - mountPath: /var/log/alameda
-          name: federatorai-agent-log-storage
-        - mountPath: /etc/alameda/federatorai-agent/transmitter.toml
-          name: federatorai-agent-config
-          subPath: transmitter.toml
-        - mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_cluster_daily.toml
-          name: federatorai-agent-config
-          subPath: cost_analysis_normal_cluster_daily.toml
-        - mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_daily.toml
-          name: federatorai-agent-config
-          subPath: cost_analysis_normal_daily.toml
-        - mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_high_recommendation.toml
-          name: federatorai-agent-config
-          subPath: cost_analysis_high_recommendation.toml
-        - mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_weekly.toml
-          name: federatorai-agent-config
-          subPath: cost_analysis_normal_weekly.toml
-        - mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_monthly.toml
-          name: federatorai-agent-config
-          subPath: cost_analysis_normal_monthly.toml
-        - mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_yearly.toml
-          name: federatorai-agent-config
-          subPath: cost_analysis_normal_yearly.toml
-      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+        - env:
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+          image: {{ .Values.global.imageRegistry }}/federatorai-agent-ubi:{{ .Values.global.imageTag }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - /opt/alameda/federatorai-agent/bin/transmitter
+                - probe
+                - --type=liveness
+            failureThreshold: 20
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: federatorai-agent
+          readinessProbe:
+            exec:
+              command:
+                - /opt/alameda/federatorai-agent/bin/transmitter
+                - probe
+                - --type=readiness
+            failureThreshold: 20
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiAgent.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiAgent.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/transmitter.toml
+              subPath: transmitter.toml
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_daily.toml
+              subPath: cost_analysis_normal_daily.toml
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_cluster_daily.toml
+              subPath: cost_analysis_normal_cluster_daily.toml
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_high_recommendation.toml
+              subPath: cost_analysis_high_recommendation.toml
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_weekly.toml
+              subPath: cost_analysis_normal_weekly.toml
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_yearly.toml
+              subPath: cost_analysis_normal_yearly.toml
+            - name: federatorai-agent-config
+              mountPath: /etc/alameda/federatorai-agent/input/cost_analysis_normal_monthly.toml
+              subPath: cost_analysis_normal_monthly.toml
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
       securityContext:
         fsGroup: 1001
-        {{- include "render-value" ( dict "value" .Values.federatoraiAgent.podSecurityContext "context" .) | nindent 8 }}
+{{- if .Values.federatoraiAgent.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAgent.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
       serviceAccount: federatorai-agent
       serviceAccountName: federatorai-agent
-      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiAgent.tolerations "context" .) | nindent 6 }}
+      tolerations:
+{{- if .Values.federatoraiAgent.tolerations }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAgent.tolerations "context" .) | nindent 6 }}
+{{- end }}
       volumes:
-      - configMap:
-          defaultMode: 420
+        - configMap:
+            defaultMode: 420
+            name: federatorai-agent-config
           name: federatorai-agent-config
-        name: federatorai-agent-config
-      - emptyDir: {}
-        name: federatorai-agent-data-storage
-      - name: federatorai-agent-log-storage
-        persistentVolumeClaim:
-          claimName: federatorai-agent-log.pvc
+        - emptyDir: {}
+          name: federatorai-agent-data-storage
+        - name: federatorai-agent-log-storage
+          persistentVolumeClaim:
+            claimName: federatorai-agent-log.pvc

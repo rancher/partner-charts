@@ -1,8 +1,15 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
-  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
     app.kubernetes.io/part-of: federatorai
     app: alameda
     component: federatorai-dashboard-backend
@@ -21,82 +28,104 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
-      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
         app.kubernetes.io/part-of: federatorai
         app: alameda
         component: federatorai-dashboard-backend
     spec:
-      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.affinity "context" .) | nindent 8 }}
+      affinity:
+{{- if .Values.federatoraiDashboardBackend.affinity }}
+{{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.affinity "context" .) | nindent 8 }}
+{{- end }}
       containers:
-      - env:
-        - name: NAMESPACE_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.name
-        - name: FEDERATORAI_DASHBOARD_BACKEND_SERVICE_NAME
-          value: federatorai-dashboard-backend
-        - name: FEDERATORAI_DASHBOARD_BACKEND_PORT
-          value: "8081"
-        - name: FEDERATORAI_DASHBOARD_ENABLE_PLANNING_REC
-          value: "false"
-        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
-          value: "1932735283"
-        image: {{ .Values.global.imageRegistry }}/federatorai-dashboard-backend:{{ .Values.global.imageTag }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-        livenessProbe:
-          exec:
-            command:
-            - /probe.sh
-            - --type=liveness
-          failureThreshold: 3
-          initialDelaySeconds: 5
-          periodSeconds: 60
-          successThreshold: 1
-          timeoutSeconds: 5
-        name: federatorai-dashboard-backend
-        ports:
-        - containerPort: 8081
-          protocol: TCP
-        readinessProbe:
-          exec:
-            command:
-            - /probe.sh
-            - --type=readiness
-          failureThreshold: 3
-          initialDelaySeconds: 5
-          periodSeconds: 60
-          successThreshold: 1
-          timeoutSeconds: 5
-        resources:
-        {{- if .Values.global.resourcesEnabled }}
-          {{ include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.resources "context" .) | nindent 10 }}
-        {{- end }}
-        volumeMounts:
-        - mountPath: /var/log/alameda
-          name: federatorai-backend-log-storage
-        - mountPath: /federatorai-portal/server/config
-          name: federatorai-dashboard-backend-config
-      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+        - env:
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: FEDERATORAI_DASHBOARD_BACKEND_SERVICE_NAME
+              value: federatorai-dashboard-backend
+            - name: FEDERATORAI_DASHBOARD_BACKEND_PORT
+              value: "8081"
+            - name: FEDERATORAI_DASHBOARD_ENABLE_PLANNING_REC
+              value: "false"
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+          image: {{ .Values.global.imageRegistry }}/federatorai-dashboard-backend:{{ .Values.global.imageTag }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - /probe.sh
+                - --type=liveness
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: federatorai-dashboard-backend
+          ports:
+            - containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - /probe.sh
+                - --type=readiness
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/log/alameda
+              name: federatorai-backend-log-storage
+            - mountPath: /federatorai-portal/server/config
+              name: federatorai-dashboard-backend-config
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
       securityContext:
         fsGroup: 1001
-        {{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.podSecurityContext "context" .) | nindent 8 }}
+{{- if .Values.federatoraiDashboardBackend.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
       serviceAccount: federatorai-dashboard-backend
       serviceAccountName: federatorai-dashboard-backend
-      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.tolerations "context" .) | nindent 6 }}
+      tolerations:
+{{- if .Values.federatoraiDashboardBackend.tolerations }}
+{{- include "render-value" ( dict "value" .Values.federatoraiDashboardBackend.tolerations "context" .) | nindent 6 }}
+{{- end }}
       volumes:
-      - configMap:
-          defaultMode: 420
+        - configMap:
+            defaultMode: 420
+            name: federatorai-dashboard-backend-config
           name: federatorai-dashboard-backend-config
-        name: federatorai-dashboard-backend-config
-      - emptyDir: {}
-        name: federatorai-backend-data-storage
-      - name: federatorai-backend-log-storage
-        persistentVolumeClaim:
-          claimName: federatorai-backend-log.pvc
+        - emptyDir: {}
+          name: federatorai-backend-data-storage
+        - name: federatorai-backend-log-storage
+          persistentVolumeClaim:
+            claimName: federatorai-backend-log.pvc
