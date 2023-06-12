@@ -1,0 +1,60 @@
+---
+{{- if .Values.federatoraiAgentPreloader.enabled }}
+apiVersion: v1
+data:
+  transmitter.toml: |-
+    [log]
+     set-logcallers = false
+     output-level = "info" # debug, info, warn, error, fatal, none
+
+    [input_jobs]
+      [input_jobs.preloader]
+      name = "alameda_preloader"
+      lib-path = "/lib/inputlib/alamedapreloader.so"
+      lib-configuration = "/etc/alameda/federatorai-agent/input/alameda_preloader.toml"
+
+  alameda_preloader.toml: |
+    [global]
+    enable = false
+    target_database = ""
+    target_address = "alameda-datahub:50050"
+    target_user = ""
+    target_password = ""
+
+    [source]
+    address = "alameda-datahub:50050"
+    user = ""
+    password = ""
+
+    [preloader]
+    cpu_metrics_file = "/etc/alameda/federatorai-agent/csv/container_cpu.csv"
+    cpu_metrics_file_granularity = 60
+    mem_metrics_file = "/etc/alameda/federatorai-agent/csv/container_memory.csv"
+    mem_metrics_file_granularity = 60
+    node_cpu_metrics_file = "/etc/alameda/federatorai-agent/csv/node_metric_cpu.csv"
+    node_cpu_metrics_file_granularity = 60
+    node_mem_metrics_file = "/etc/alameda/federatorai-agent/csv/node_metric_memory.csv"
+    node_mem_metrics_file_granularity = 60
+    granularity = 60
+    preload_count = 4
+    preload_unit = "month"
+    max_write_data_length = 1000
+    disable_load_current_metrics = false
+    disable_load_history_metrics = false
+    disable_load_all_node_metrics = false
+
+kind: ConfigMap
+metadata:
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+  name: federatorai-agent-preloader-config
+  namespace: {{ .Release.Namespace }}
+{{- end }}

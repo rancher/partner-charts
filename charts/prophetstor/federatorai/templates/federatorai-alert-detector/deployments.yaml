@@ -1,8 +1,15 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
-  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
     app.kubernetes.io/part-of: federatorai
     app: alameda
     component: alert-detector
@@ -18,47 +25,69 @@ spec:
     type: Recreate
   template:
     metadata:
-      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
-      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
         app.kubernetes.io/part-of: federatorai
         app: alameda
         component: alert-detector
     spec:
-      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.affinity "context" .) | nindent 8 }}
+      affinity:
+{{- if .Values.federatoraiAlertDetector.affinity }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.affinity "context" .) | nindent 8 }}
+{{- end }}
       containers:
-      - command:
-        - /opt/federatorai/alert-manager/bin/detector
-        env:
-        - name: DETECT_DATAHUB_HOST
-          value: alameda-datahub.federatorai.svc
-        - name: DETECT_DATAHUB_PORT
-          value: "50050"
-        - name: DETECT_RABBITMQ_HOST
-          value: alameda-rabbitmq.federatorai.svc
-        - name: DETECT_RABBITMQ_PORT
-          value: "5672"
-        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
-          value: "1932735283"
-        image: {{ .Values.global.imageRegistry }}/federatorai-alert-manager:{{ .Values.global.imageTag }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-        name: alert-detector
-        resources:
-        {{- if .Values.global.resourcesEnabled }}
-          {{ include "render-value" ( dict "value" .Values.federatoraiAlertDetector.resources "context" .) | nindent 10 }}
-        {{- end }}
-        volumeMounts:
-        - mountPath: /var/log/alameda
-          name: federatorai-alert-detector-log-storage
-      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+        - command:
+            - /opt/federatorai/alert-manager/bin/detector
+          env:
+            - name: DETECT_DATAHUB_HOST
+              value: alameda-datahub.federatorai.svc
+            - name: DETECT_DATAHUB_PORT
+              value: "50050"
+            - name: DETECT_RABBITMQ_HOST
+              value: alameda-rabbitmq.federatorai.svc
+            - name: DETECT_RABBITMQ_PORT
+              value: "5672"
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+          image: {{ .Values.global.imageRegistry }}/federatorai-alert-manager:{{ .Values.global.imageTag }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          name: alert-detector
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/log/alameda
+              name: federatorai-alert-detector-log-storage
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
       securityContext:
         fsGroup: 1001
-        {{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.podSecurityContext "context" .) | nindent 8 }}
+{{- if .Values.federatoraiAlertDetector.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
       serviceAccount: federatorai-alert-detector
       serviceAccountName: federatorai-alert-detector
-      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.tolerations "context" .) | nindent 6 }}
+      tolerations:
+{{- if .Values.federatoraiAlertDetector.tolerations }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertDetector.tolerations "context" .) | nindent 6 }}
+{{- end }}
       volumes:
-      - emptyDir: {}
-        name: federatorai-alert-detector-data-storage
-      - name: federatorai-alert-detector-log-storage
-        persistentVolumeClaim:
-          claimName: federatorai-alert-detector-log.pvc
+        - emptyDir: {}
+          name: federatorai-alert-detector-data-storage
+        - name: federatorai-alert-detector-log-storage
+          persistentVolumeClaim:
+            claimName: federatorai-alert-detector-log.pvc

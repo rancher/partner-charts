@@ -1,9 +1,17 @@
+---
+{{- if .Values.federatoraiOperator.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
     "helm.sh/hook-weight": "1000"
-  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
     app.kubernetes.io/part-of: federatorai
     name: federatorai-operator
     app: Federator.ai
@@ -18,17 +26,31 @@ spec:
       name: federatorai-operator
   template:
     metadata:
-      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
-      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
         app.kubernetes.io/part-of: federatorai
         name: federatorai-operator
         app: Federator.ai
     spec:
-      affinity: {{- include "render-value" ( dict "value" .Values.federatoraiOperator.affinity "context" .) | nindent 8 }}
-      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+      affinity:
+{{- if .Values.federatoraiOperator.affinity }}
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.affinity "context" .) | nindent 8 }}
+{{- end }}
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
       securityContext:
         fsGroup: 1001
-        {{- include "render-value" ( dict "value" .Values.federatoraiOperator.podSecurityContext "context" .) | nindent 8 }}
+{{- if .Values.federatoraiOperator.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
       serviceAccountName: federatorai-operator
       initContainers:
         - name: upgrader
@@ -39,7 +61,7 @@ spec:
           {{- end }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
-          - "upgrade"
+            - "upgrade"
           env:
             - name: DO_NOT_DEPLOY_ASSETS
               value: "true"
@@ -58,15 +80,20 @@ spec:
             - name: FEDERATORAI_OPERATOR_INFLUXDB_PASSWORD
               value: adminpass
           resources:
-          {{- if .Values.global.resourcesEnabled }}
-            {{ include "render-value" ( dict "value" .Values.federatoraiOperator.resources "context" .) | nindent 12 }}
-          {{- end }}
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.resources.requests "context" .) | nindent 14 }}
+{{- end }}
           volumeMounts:
-          - mountPath: /var/log/alameda
-            name: log
-          - mountPath: /tmp/k8s-webhook-server/serving-certs
-            name: cert
-            readOnly: true
+            - mountPath: /var/log/alameda
+              name: log
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
       containers:
         - name: federatorai-operator
           # Replace this with the built image name
@@ -102,16 +129,24 @@ spec:
             successThreshold: 1
             timeoutSeconds: 5
           resources:
-          {{- if .Values.global.resourcesEnabled }}
-            {{ include "render-value" ( dict "value" .Values.federatoraiOperator.resources "context" .) | nindent 12 }}
-          {{- end }}
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.resources.requests "context" .) | nindent 14 }}
+{{- end }}
           volumeMounts:
-          - mountPath: /var/log/alameda
-            name: log
-          - mountPath: /tmp/k8s-webhook-server/serving-certs
-            name: cert
-            readOnly: true
-      tolerations: {{- include "render-value" ( dict "value" .Values.federatoraiOperator.tolerations "context" .) | nindent 6 }}
+            - mountPath: /var/log/alameda
+              name: log
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      tolerations:
+{{- if .Values.federatoraiOperator.tolerations }}
+{{- include "render-value" ( dict "value" .Values.federatoraiOperator.tolerations "context" .) | nindent 6 }}
+{{- end }}
       volumes:
         - name: log
           emptyDir: {}
@@ -119,3 +154,4 @@ spec:
           secret:
             defaultMode: 420
             secretName: federatorai-operator-service-cert
+{{- end }}

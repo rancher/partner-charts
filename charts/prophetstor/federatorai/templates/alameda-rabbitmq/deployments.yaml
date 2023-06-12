@@ -1,8 +1,15 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {{ include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
-  labels: {{ include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
     app.kubernetes.io/part-of: federatorai
     app: alameda
     component: alameda-rabbitmq
@@ -18,82 +25,104 @@ spec:
     type: Recreate
   template:
     metadata:
-      annotations: {{ include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
-      labels: {{ include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
         app.kubernetes.io/part-of: federatorai
         app: alameda
         component: alameda-rabbitmq
     spec:
-      affinity: {{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.affinity "context" .) | nindent 8 }}
+      affinity:
+{{- if .Values.alamedaRabbitmq.affinity }}
+{{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.affinity "context" .) | nindent 8 }}
+{{- end }}
       containers:
-      - env:
-        - name: NAMESPACE_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.name
-        - name: RABBITMQ_DEFAULT_USER
-          value: admin
-        - name: RABBITMQ_DEFAULT_PASS
-          value: adminpass
-        - name: TRACE_ENABLED
-          value: "false"
-        - name: FEDERATORAI_MAXIMUM_LOG_SIZE
-          value: "1932735283"
-        image: {{ .Values.global.imageRegistry }}/alameda-rabbitmq:{{ .Values.global.imageTag }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-        livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - /prob.sh liveness
-          failureThreshold: 3
-          initialDelaySeconds: 60
-          periodSeconds: 60
-          successThreshold: 1
-          timeoutSeconds: 15
-        name: rabbitmq
-        ports:
-        - containerPort: 15672
-          name: http
-          protocol: TCP
-        - containerPort: 5672
-          name: amqp
-          protocol: TCP
-        readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - /prob.sh readiness
-          failureThreshold: 3
-          initialDelaySeconds: 20
-          periodSeconds: 60
-          successThreshold: 1
-          timeoutSeconds: 30
-        resources:
-        {{- if .Values.global.resourcesEnabled }}
-          {{ include "render-value" ( dict "value" .Values.alamedaRabbitmq.resources "context" .) | nindent 10 }}
-        {{- end }}
-        volumeMounts:
-        - mountPath: /definitions.json
-          name: rabbitmq-config
-          subPath: definitions.json
-      imagePullSecrets: {{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+        - env:
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: RABBITMQ_DEFAULT_USER
+              value: admin
+            - name: RABBITMQ_DEFAULT_PASS
+              value: adminpass
+            - name: TRACE_ENABLED
+              value: "false"
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+          image: {{ .Values.global.imageRegistry }}/alameda-rabbitmq:{{ .Values.global.imageTag }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - /prob.sh liveness
+            failureThreshold: 3
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 15
+          name: rabbitmq
+          ports:
+            - containerPort: 15672
+              name: http
+              protocol: TCP
+            - containerPort: 5672
+              name: amqp
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - /prob.sh readiness
+            failureThreshold: 3
+            initialDelaySeconds: 20
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 30
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /definitions.json
+              name: rabbitmq-config
+              subPath: definitions.json
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
       securityContext:
         fsGroup: 1001
-        {{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.podSecurityContext "context" .) | nindent 8 }}
+{{- if .Values.alamedaRabbitmq.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
       serviceAccount: alameda-rabbitmq
       serviceAccountName: alameda-rabbitmq
-      tolerations: {{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.tolerations "context" .) | nindent 6 }}
+      tolerations:
+{{- if .Values.alamedaRabbitmq.tolerations }}
+{{- include "render-value" ( dict "value" .Values.alamedaRabbitmq.tolerations "context" .) | nindent 6 }}
+{{- end }}
       volumes:
-      - configMap:
-          defaultMode: 420
+        - configMap:
+            defaultMode: 420
+            name: rabbitmq-config
           name: rabbitmq-config
-        name: rabbitmq-config
