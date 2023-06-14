@@ -1,7 +1,12 @@
 # Datadog changelog
 
+## 3.32.2
+
+* Set the `priority` field of the OpenShift’s SCC to `null` in order to not have a higher priority than the OpenShift 4.11+ default `restricted-v2` SCC.
+
 ## 3.32.1
 
+* Add AP1 Site Comment at `value.yaml`.
 * Fix CVE in the FIPS compliant side car container  
 
 ## 3.32.0

@@ -104,7 +104,7 @@ spec:
             - |
               {{ if .Values.auth.required }}
               {{ if and (not .Values.auth.jwks.url) (not .Values.auth.userinfo.url) (not .Values.devIdProvider.enabled) }}
-              {{ required "If auth.required you need to provide at least auth.jwks.url or auth.userinfo.url" .Values.auth.jwks.url }}
+              {{ required "If 'auth.required' you need to provide at least 'auth.jwks.url' or 'auth.userinfo.url', or 'devIdProvider.enabled' must be 'true'!" .Values.auth.jwks.url }}
               {{ end }}
               {{ end }}
 
@@ -122,17 +122,13 @@ spec:
                 --embedded-opa-policy \
                 {{- end }}
                 serve-api \
-                  --interface 0.0.0.0:{{ .Values.port}} \
+                  --interface 0.0.0.0:{{ .Values.port }} \
                   {{- if .Values.auth.required }}
                   --require-auth \
-                  --id-claims {{ .Values.auth.id.claims }} \
-                  {{- if .Values.auth.jwks.enabled }}
-                  --jwks-address {{ include "chronicle.jwksUrl" . }} \
                   {{- end }}
-                  {{- if .Values.auth.userinfo.url }}
-                  --userinfo-address {{ include "chronicle.userinfoUrl" . }} \
-                  {{- end }}
-                  {{- end }}
+                  {{ include "chronicle.jwks-url.cli" . }}
+                  {{ include "chronicle.userinfo-url.cli" . }}
+                  {{ include "chronicle.id-claims" . }}
                   ;
           env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
             - name: RUST_LOG
