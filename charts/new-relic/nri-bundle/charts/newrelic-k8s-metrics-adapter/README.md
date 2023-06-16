@@ -29,6 +29,7 @@ A Helm chart to deploy the New Relic Kubernetes Metrics Adapter.
 | config.accountID | string | `nil` | New Relic [Account ID](https://docs.newrelic.com/docs/accounts/accounts-billing/account-structure/account-id/) where the configured metrics are sourced from. (**Required**) |
 | config.cacheTTLSeconds | int | `30` | Period of time in seconds in which a cached value of a metric is consider valid. |
 | config.externalMetrics | string | See `values.yaml` | Contains all the external metrics definition of the adapter. Each key of the externalMetric entry represents the metric name and contains the parameters that defines it. |
+| config.nrdbClientTimeoutSeconds | int | 30 | Defines the NRDB client timeout. The maximum allowed value is 120. |
 | config.region | string | Automatically detected from `licenseKey`. | New Relic account region. If not set, it will be automatically derived from the License Key. |
 | containerSecurityContext | string | `nil` | Configure containerSecurityContext |
 | extraEnv | list | `[]` | Array to add extra environment variables |
