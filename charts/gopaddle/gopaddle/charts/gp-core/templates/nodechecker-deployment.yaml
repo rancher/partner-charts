@@ -45,6 +45,21 @@ spec:
       - args:
         - |-
           #!/bin/bash
+          apk add --no-cache openrc busybox-initscripts
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > nodechecker.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
+
           ./nodechecker kube > /var/log/gopaddle/nodechecker.log
           tail -f /var/log/gopaddle/nodechecker.log
         command:
@@ -60,9 +75,13 @@ spec:
         envFrom:
         - secretRef:
             name: nodechecker-nodechecker-envsecret-jdvy9
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/nodechecker:{{ .Values.nodechecker.nodechecker.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/nodechecker:{{ .Values.nodechecker.nodechecker.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8020
@@ -76,7 +95,7 @@ spec:
           name: 8020-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8020

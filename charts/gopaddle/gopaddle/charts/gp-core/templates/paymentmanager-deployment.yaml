@@ -1,4 +1,3 @@
-{{- if eq (.Values.global.installer.edition | toString) "Enterprise" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,6 +46,21 @@ spec:
       - args:
         - |-
           #!/bin/bash
+          apk add --no-cache openrc busybox-initscripts
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > paymentmanager.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
+
           ./paymentmanager kube > /var/log/gopaddle/paymentmanager.log
           tail -f /var/log/gopaddle/paymentmanager.log
         command:
@@ -62,9 +76,13 @@ spec:
         envFrom:
         - secretRef:
             name: paymentmanager-paymentmanager-envsecret-cgatk
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/paymentmanager:{{ .Values.paymentmanager.paymentmanager.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/paymentmanager:{{ .Values.paymentmanager.paymentmanager.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8021
@@ -78,7 +96,7 @@ spec:
           name: 8021-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8021
@@ -114,4 +132,3 @@ spec:
       - emptyDir: {}
         name: log
 status: {}
-{{- end }}

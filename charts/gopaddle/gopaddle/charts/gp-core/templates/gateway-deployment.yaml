@@ -46,6 +46,21 @@ spec:
       - args:
         - |-
           #!/bin/bash
+          apk add --no-cache openrc busybox-initscripts
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > gateway.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
+
           ./gateway kube > /var/log/gopaddle/gateway.log
           tail -f /var/log/gopaddle/gateway.log
         command:
@@ -61,9 +76,13 @@ spec:
         envFrom:
         - secretRef:
             name: gateway-gateway-envsecret-gctwp
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/gateway:{{ .Values.gateway.gateway.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/gateway:{{ .Values.gateway.gateway.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /status
             port: 8006
@@ -80,7 +99,7 @@ spec:
           name: 8017-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /status
             port: 8006
@@ -118,13 +137,17 @@ spec:
         - name: HOST
           value: {{ quote .Values.gateway.gpkubeux.envMap.HOST }}
         - name: GP_RELEASE
-          value: {{ quote .Values.gateway.gpkubeux.gpReleaseVersion }}
+          value: {{ quote .Chart.AppVersion }}
         - name: BASE_SERVER
           value: {{ template "gopaddle.baseServer" . }}
         - name: INSTALL_SOURCE
+{{- if eq (.Values.global.installer.edition | toString) "Enterprise" }}
+          value: "onprem"
+{{- else }}
           value: {{quote (lower .Values.global.installer.edition) }}
+{{- end }}
         - name: NODE_IP
-{{- if eq (.Values.global.cluster.type | toString) "docker" }}
+{{- if .Values.global.cluster.nodeIP }}
           value: {{ template "gopaddle.clusterNodeIP" . }}
 {{- else }}
           value: {{ template "gopaddle.baseServer" . }}
@@ -138,7 +161,11 @@ spec:
         envFrom:
         - secretRef:
             name: gateway-gpkubeux-envsecret-ai5wl
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/gpkubeux:{{ .Values.gateway.gpkubeux.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/gpkubeux:{{ .Values.gateway.gpkubeux.imageTag }}
+{{- end }}
         livenessProbe:
           exec:
             command:

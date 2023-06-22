@@ -8,4 +8,8 @@ This chart deploys a SQL Server availability group managed by DxEnterprise clust
 - A DxEnterprise license key with availability group management features and tunnels enabled
 - Optional: DxAdmin installed on a Windows machine. Installation instructions for DxAdmin can be found in [DH2i documentation](https://support.dh2i.com/docs/v22.0/guides/dxenterprise/installation/dxadmin-qsg)
 
+# Additional Information
+
 Instructions for creating this chart using Rancher can be found in the [DxEnterprise Rancher guide](https://support.dh2i.com/docs/v22.0/guides/dxenterprise/containers/kubernetes/mssql-ag-rancher#install-the-helm-chart), and additional DxEnterprise Kubernetes documentation can be found [here](https://support.dh2i.com/docs/v22.0/category/guides/dxenterprise/containers/kubernetes/).
+
+Before creating an availability group, reference SQL Server's [quorum considerations](https://support.dh2i.com/docs/kbs/sql_server/availability_groups/quorum-considerations-for-sql-server-availability-groups) when determining the quantity of replicas to deploy.
