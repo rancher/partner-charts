@@ -90,11 +90,11 @@ Node_IP for gopaddle webhook
     {{- end -}}
     {{/*asign a value to Node_IP */}}
     {{- if .Values.global.staticIP -}}
-         {{- printf "http://%s:30004" .Values.global.staticIP -}}
+         {{- printf "http://%s:30007" .Values.global.staticIP -}}
     {{- else if $externalIP -}}
-         {{- printf "http://%s:30004" $externalIP -}}
+         {{- printf "http://%s:30007" $externalIP -}}
     {{- else -}}
-         {{- printf "http://%s:30004" $internalIP -}}
+         {{- printf "http://%s:30007" $internalIP -}}
     {{- end -}}
    {{- else if eq (.Values.global.accessMode | toString) "private" -}}
     {{/* InternalIP from node*/}}
@@ -108,9 +108,9 @@ Node_IP for gopaddle webhook
     {{- end -}}
     {{/*asign a value to Node_IP */}}
     {{- if .Values.global.staticIP -}}
-         {{- printf "http://%s:30004" .Values.global.staticIP -}}
+         {{- printf "http://%s:30007" .Values.global.staticIP -}}
     {{- else -}}
-         {{- printf "http://%s:30004" $internalIP -}}
+         {{- printf "http://%s:30007" $internalIP -}}
     {{- end -}}
    {{- end -}}
 
@@ -118,7 +118,7 @@ Node_IP for gopaddle webhook
 {{- end -}}
 
 {{/*
-BASE_SERVER for gopaddle ui
+BASE_SERVER for gopaddle ui [BackEnd]
 */}}
 {{- define "gopaddle.baseServer" -}}
 {{- if eq (.Values.global.routingType | toString) "NodePortWithIngress" -}}
@@ -177,10 +177,69 @@ BASE_SERVER for gopaddle ui
 {{- end -}}
 
 {{/*
+BASE_SERVER for gopaddle ui [FrontEnd]
+*/}}
+{{- define "gopaddle.baseServerUI" -}}
+{{- if eq (.Values.global.routingType | toString) "NodePortWithIngress" -}}
+      {{- if .Values.global.gopaddle.https -}}
+      {{- printf "https://%s:30002" .Values.global.gopaddle.domainName -}}
+      {{- else -}}
+      {{- printf "https://%s:30002" .Values.global.gopaddle.domainName -}}
+      {{- end -}}
+{{- else if eq (.Values.global.routingType | toString) "LoadBalancer" -}}
+      {{- if .Values.global.gopaddle.https -}}
+      {{- printf "https://%s" .Values.global.gopaddle.domainName -}}
+      {{- else -}}
+      {{- printf "https//:%s" .Values.global.gopaddle.domainName -}}
+      {{- end -}}
+{{- else if eq (.Values.global.routingType | toString) "NodePortWithOutIngress" -}}
+  {{- if eq (.Values.global.accessMode | toString) "public" -}}
+    {{/* ExternalIP from node*/}}
+    {{- $externalIP := "" -}}
+    {{- $internalIP :="" -}}
+    {{- range $index, $node := (lookup "v1" "Node" "" "").items -}}
+        {{- range $address:= $node.status.addresses -}}
+            {{- if eq ($address.type | toString) "ExternalIP" -}}
+                {{- $externalIP = $address.address -}}
+            {{- else if eq ($address.type | toString) "InternalIP" -}}
+                {{- $internalIP = $address.address -}}
+            {{- end -}}
+        {{- end -}}
+    {{- end -}}
+    {{/*asign a value to BASE_SERVER */}}
+    {{- if .Values.global.staticIP -}}
+         {{- printf "http://%s:30003" .Values.global.staticIP -}}
+    {{- else if $externalIP -}}
+         {{- printf "http://%s:30003" $externalIP -}}
+    {{- else -}}
+         {{- printf "http://%s:30003" $internalIP -}}
+    {{- end -}}
+   {{- else if eq (.Values.global.accessMode | toString) "private" -}}
+    {{/* InternalIP from node*/}}
+    {{- $internalIP := "" -}}
+    {{- range $index, $node := (lookup "v1" "Node" "" "").items -}}
+        {{- range $address:= $node.status.addresses -}}
+            {{- if eq ($address.type | toString) "InternalIP" -}}
+                {{- $internalIP = $address.address -}}
+            {{- end -}}
+        {{- end -}}
+    {{- end -}}
+    {{/*asign a value to BASE_SERVER */}}
+    {{- if .Values.global.staticIP -}}
+         {{- printf "http://%s:30003" .Values.global.staticIP -}}
+    {{- else -}}
+         {{- printf "http://%s:30003" $internalIP -}}
+    {{- end -}}
+   {{- end -}}
+
+{{- end -}}
+{{- end -}}
+
+{{/*
 NODE_IP_ENDPOINT for gopaddle GPCTL
 */}}
 {{- define "gopaddle.clusterNodeIP" -}}
-{{- if eq (.Values.global.cluster.type | toString) "docker" -}}
+{{- if .Values.global.cluster.nodeIP -}}
     {{- printf "http://%s:30004" .Values.global.cluster.nodeIP -}}
 {{- end -}}
 {{- end -}}
@@ -193,34 +252,44 @@ NODE_IP_ENDPOINT for gopaddle GPCTL
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf appworker.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf appworker.tar.gz appworker.log" >>/app/logcleanscript.sh
-          echo "echo  > appworker.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > appworker.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
+          # echo "----------- start conatainer ------------"
           ./appworker kube > /var/log/gopaddle/appworker.log
           tail -f /var/log/gopaddle/appworker.log
 {{- else if eq (.Values.global.cluster.provider | toString) "hpe" -}}
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf appworker.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf appworker.tar.gz appworker.log" >>/app/logcleanscript.sh
-          echo "echo  > appworker.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > appworker.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start appworker --------"
+          # echo "----------- start appworker --------"
           ./appworker kube > /var/log/gopaddle/appworker.log
           tail -f /var/log/gopaddle/appworker.log
 {{- end -}}
@@ -235,34 +304,42 @@ NODE_IP_ENDPOINT for gopaddle GPCTL
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf deploymentmanager.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf deploymentmanager.tar.gz deploymentmanager.log" >>/app/logcleanscript.sh
-          echo "echo  > deploymentmanager.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > deploymentmanager.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
           ./deploymentmanager kube > /var/log/gopaddle/deploymentmanager.log
           tail -f /var/log/gopaddle/deploymentmanager.log
 {{- else if eq (.Values.global.cluster.provider | toString) "hpe" -}}
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf deploymentmanager.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf deploymentmanager.tar.gz deploymentmanager.log" >>/app/logcleanscript.sh
-          echo "echo  > deploymentmanager.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > deploymentmanager.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start deploymentmanager --------"
           ./deploymentmanager kube > /var/log/gopaddle/deploymentmanager.log
           tail -f /var/log/gopaddle/deploymentmanager.log
 {{- end -}}
@@ -277,34 +354,44 @@ NODE_IP_ENDPOINT for gopaddle GPCTL
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf clustermanager.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf clustermanager.tar.gz clustermanager.log" >>/app/logcleanscript.sh
-          echo "echo  > clustermanager.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > clustermanager.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
+          # echo "----------- start conatainer ------------"
           ./clustermanager kube > /var/log/gopaddle/clustermanager.log
           tail -f /var/log/gopaddle/clustermanager.log
 {{- else if eq (.Values.global.cluster.provider | toString) "hpe" -}}
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf clustermanager.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf clustermanager.tar.gz clustermanager.log" >>/app/logcleanscript.sh
-          echo "echo  > clustermanager.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > clustermanager.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start clustermanager --------"
+          # echo "----------- start clustermanager --------"
           ./clustermanager kube > /var/log/gopaddle/clustermanager.log
           tail -f /var/log/gopaddle/clustermanager.log
 {{- end -}}
@@ -319,33 +406,44 @@ NODE_IP_ENDPOINT for gopaddle GPCTL
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf gpcore.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf gpcore.tar.gz gpcore.log" >>/app/logcleanscript.sh
-          echo "echo  > gpcore.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > gpcore.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
+          # echo "----------- start conatainer ------------"
           ./gpcore kube > /var/log/gopaddle/gpcore.log
           tail -f /var/log/gopaddle/gpcore.log
 {{- else if eq (.Values.global.cluster.provider | toString) "hpe" -}}
         args:
         - |-
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "tar -cvzf gpcore.tar.gz gpcore.log" >>/app/logcleanscript.sh
-          echo "echo  > gpcore.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > gpcore.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
+          # echo "----------- start conatainer ------------"
           ./gpcore kube > /var/log/gopaddle/gpcore.log
           tail -f /var/log/gopaddle/gpcore.log
 {{- end -}}
@@ -499,7 +597,7 @@ routingType for gopaddle
     {{- $repoPath := .Values.global.airgapped.imageRegistryInfo.repoPath | trimPrefix "/" | trimSuffix "/"  -}}
     {{- printf "%s/%s" $registryUrl $repoPath -}}
 {{- else -}}
-    {{- printf "gcr.io/bluemeric-1308" -}}
+    {{- printf "trov" -}}
 {{- end -}}
 {{- end -}}
 
@@ -613,7 +711,7 @@ routingType for gopaddle
 {{- if and (.Values.global.airgapped.enabled) (eq (.Values.global.airgapped.imageRegistryType | toString ) "private") -}}
       {{- $registryUrl := .Values.global.airgapped.imageRegistryInfo.registryUrl | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/"  -}}
       {{- $repoPath := .Values.global.airgapped.imageRegistryInfo.repoPath | trimPrefix "/" | trimSuffix "/"  -}}
-      {{- printf "%s/%s/node-exporter:v0.16.0" $registryUrl $repoPath -}}
+      {{- printf "%s/%s/node-exporter:v1.5.0" $registryUrl $repoPath -}}
 {{- end -}}
 {{- end -}}
 
@@ -641,7 +739,7 @@ routingType for gopaddle
 {{- if and (.Values.global.airgapped.enabled) (eq (.Values.global.airgapped.imageRegistryType | toString ) "private") -}}
       {{- $registryUrl := .Values.global.airgapped.imageRegistryInfo.registryUrl | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/"  -}}
       {{- $repoPath := .Values.global.airgapped.imageRegistryInfo.repoPath | trimPrefix "/" | trimSuffix "/"  -}}
-      {{- printf "%s/%s/configmap-reload:v0.2.2" $registryUrl $repoPath -}}
+      {{- printf "%s/%s/configmap-reload:v0.8.0" $registryUrl $repoPath -}}
 {{- end -}}
 {{- end -}}
 
@@ -660,7 +758,7 @@ routingType for gopaddle
 {{- if and (.Values.global.airgapped.enabled) (eq (.Values.global.airgapped.imageRegistryType | toString ) "private") -}}
       {{- $registryUrl := .Values.global.airgapped.imageRegistryInfo.registryUrl | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/"  -}}
       {{- $repoPath := .Values.global.airgapped.imageRegistryInfo.repoPath | trimPrefix "/" | trimSuffix "/"  -}}
-      {{- printf "%s/%s/grafana:v7.0.3-00ee734baf" $registryUrl $repoPath -}}
+      {{- printf "%s/%s/grafana/grafana:8.5.22" $registryUrl $repoPath -}}
 {{- end -}}
 {{- end -}}
 
@@ -762,68 +860,3 @@ routingType for gopaddle
 {{- end -}}
 {{- end -}}
 
-{{/* mongo */}}
-{{- define "gopaddle.mongo" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- printf "mongo" -}}
-{{- else -}}
-     {{- printf "arm64v8/mongo" -}}
-{{- end -}}
-{{- end -}}
-
-
-{{/* influxdb */}}
-{{- define "gopaddle.influxdb" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- printf "influxdb" -}}
-{{- else -}}
-    {{- printf "arm64v8/influxdb" -}}
-{{- end -}}
-{{- end -}}
-
-{{/* esearch */}}
-{{- define "gopaddle.esearch" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- printf "elasticsearch" -}}
-{{- else -}}
-    {{- printf "arm64v8/elasticsearch" -}}
-{{- end -}}
-{{- end -}}
-
-
-{{/* redis */}}
-{{- define "gopaddle.redis" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- printf "redis" -}}
-{{- else -}}
-    {{- printf "arm64v8/redis" -}}
-{{- end -}}
-{{- end -}}
-
-{{/* rabbitmq */}}
-{{- define "gopaddle.rabbitmq" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- printf "rabbitmq" -}}
-{{- else -}}
-    {{- printf "arm64v8/rabbitmq" -}}
-{{- end -}}
-{{- end -}}
-
-{{/* defaultbackend */}}
-{{- define "gopaddle.defaultbackend" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- printf "defaultbackend" -}}
-{{- else -}}
-    {{- printf "defaultbackend-arm64" -}}
-{{- end -}}
-{{- end -}}
-
-
-{{/* nginx */}}
-{{- define "gopaddle.esearch.imageTag" -}}
-{{- if ne (.Values.global.installer.arch | toString) "arm64" -}}
-    {{- .Values.esearch.esearch.imageTag -}}
-{{- else -}}
-    {{- printf "7.8.0" -}} 
-{{- end -}}
-{{- end -}}

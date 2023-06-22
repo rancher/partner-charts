@@ -46,6 +46,21 @@ spec:
       - args:
         - |-
           #!/bin/bash
+          apk add --no-cache openrc busybox-initscripts
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > cloudmanager.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
+
           ./cloudmanager kube > /var/log/gopaddle/cloudmanager.log
           tail -f /var/log/gopaddle/cloudmanager.log
         command:
@@ -61,9 +76,13 @@ spec:
         envFrom:
         - secretRef:
             name: cloudmanager-cloudmanager-envsecret-onluv
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/cloudmanager:{{ .Values.cloudmanager.cloudmanager.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/cloudmanager:{{ .Values.cloudmanager.cloudmanager.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8018
@@ -77,7 +96,7 @@ spec:
           name: 8018-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8018

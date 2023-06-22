@@ -46,8 +46,24 @@ spec:
       - args:
         - |-
           #!/bin/bash
+          apk add --no-cache openrc busybox-initscripts
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > marketplace.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
+          chmod +x helm
+          mv helm /usr/local/bin
+          # echo "----------- start conatainer ------------"
           ./marketplace kube > /var/log/gopaddle/marketplace.log
           tail -f /var/log/gopaddle/marketplace.log
         command:
@@ -63,9 +79,13 @@ spec:
         envFrom:
         - secretRef:
             name: marketplace-marketplace-envsecret-rmadj
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/marketplace:{{ .Values.marketplace.marketplace.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/marketplace:{{ .Values.marketplace.marketplace.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8023
@@ -79,7 +99,7 @@ spec:
           name: 8023-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8023
@@ -89,11 +109,11 @@ spec:
           timeoutSeconds: 10
         resources:
           limits:
-            cpu: 100m
-            memory: 100M
+            cpu: 300m
+            memory: 500M
           requests:
-            cpu: 10m
-            memory: 50M
+            cpu: 100m
+            memory: 200M
         securityContext: {}
         volumeMounts:
         - mountPath: /app/config

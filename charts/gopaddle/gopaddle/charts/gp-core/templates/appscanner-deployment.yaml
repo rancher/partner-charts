@@ -46,17 +46,22 @@ spec:
       - args:
         - |
           #!/bin/bash
-          echo "cd /var/log/gopaddle/" > /app/logcleanscript.sh
-          echo "rm -rf appscanner.tar.gz" >> /app/logcleanscript.sh
-          echo "tar -cvzf appscanner.tar.gz appscanner.log" >>/app/logcleanscript.sh
-          echo "echo  > appscanner.log" >> /app/logcleanscript.sh
-          crontab -l
-          chmod 0777 /app/logcleanscript.sh
-          echo */1 */8 * * */5 /app/logcleanscript.sh > /var/log/cron.log 2>&1 >> logclean.cron
-          crontab logclean.cron
-          service cron restart
+          apk add busybox-openrc
+          openrc
+          touch /run/openrc/softlevel
+          rc-service crond start
+          cat <<EOF >/etc/periodic/15min/logcleanscript
+          #!/bin/sh
+          cd /var/log/gopaddle/
+          rm -rf *.tar.gz
+          tar -cvzf log.tar.gz *.log
+          echo "" > appscanner.log
+          EOF
+          chmod a+x /etc/periodic/15min/logcleanscript
+          echo "0 0 * * * /etc/periodic/15min/logcleanscript > /var/log/cron.log 2>&1" >> logclean.cron
+          /usr/bin/crontab logclean.cron
 
-          echo "----------- start conatainer ------------"
+          # echo "----------- start conatainer ------------"
           ./appscanner kube > /var/log/gopaddle/appscanner.log
           tail -f /var/log/gopaddle/appscanner.log
         command:
@@ -72,9 +77,13 @@ spec:
         envFrom:
         - secretRef:
             name: appscanner-appscanner-envsecret-06oce
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/appscanner:{{ .Values.appscanner.appscanner.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/appscanner:{{ .Values.appscanner.appscanner.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8022
@@ -88,7 +97,7 @@ spec:
           name: 8022-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8022

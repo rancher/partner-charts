@@ -108,13 +108,24 @@ spec:
           value: {{ .Values.global.airgapped.imageRegistryInfo.authType }}
     {{- end}}
   {{- end }}
+{{- else }}
+        - name: DEFAULT_BACKEND_IMAGE
+    {{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+          value: {{ template "gopaddle.googleContainer.registryUrl" . }}/{{ .Values.defaultbackend.defaultbackend.imageArm }}:{{ .Values.defaultbackend.defaultbackend.imageTag }}
+    {{- else }}
+          value: {{ template "gopaddle.googleContainer.registryUrl" . }}/{{ .Values.defaultbackend.defaultbackend.image }}:{{ .Values.defaultbackend.defaultbackend.imageTag }}
+    {{- end }}
 {{- end }}
         envFrom:
         - secretRef:
             name: clustermanager-clustermanager-envsecret-ipy9y
+{{- if eq (.Values.global.installer.arch | toString) "arm64" }}
+        image: {{ template "gopaddle.registryUrl" . }}/clustermanager:{{ .Values.clustermanager.clustermanager.imageTagArm }}
+{{- else }}
         image: {{ template "gopaddle.registryUrl" . }}/clustermanager:{{ .Values.clustermanager.clustermanager.imageTag }}
+{{- end }}
         livenessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8013
@@ -128,7 +139,7 @@ spec:
           name: 8013-tcp
           protocol: TCP
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /api/status
             port: 8013

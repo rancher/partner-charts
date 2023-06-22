@@ -2,23 +2,29 @@
 
 # [gopaddle](https://gopaddle.io/)
 
-## Simple low-code platform for Kubernetes developers and operators.
+## Simplest DevSecOps platform for Kubernetes developers and operators.
 
-Provision multi-cloud clusters, Dockerize applications, Deploy, Monitor and Build DevOps pipelines within a fraction of time and cost.
+gopaddle is a simple low-code Internal Developer Platform (IDP) for Kubernetes developers and operators. Using gopaddle, developers can generate everything they need to set up Kubernetes infrastructure on multiple cloud environments and deployment applications with ease. From Dockerfiles to Kubernetes YAML files, Helm Charts, and pipeline code, gopaddle will help  containerize and get the applications running in minutes. Developers can also efficiently manage existing applications on the Kubernetes cluster by monitoring the application performance and setting alerts and notificications.
 <br>
+
+## gopaddle Lite
+gopaddle Lite is a life-time free community edition of gopaddle that can be installed in a single node/single user mode on a Kubernetes cluster. gopaddle lite comes with many capabilities that helps developers to built a self-service portal for a small scale Kubernetes deployment at zero cost.  gopaddle Lite is available on a variety of marketplaces like microk8s add-on, SUSE Rancher Prime, ArtifactHub and many more.
 
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gopaddle-lite)](https://artifacthub.io/packages/search?repo=gopaddle-lite)
 [![Slack Channel](https://img.shields.io/badge/Slack-Join-purple)](https://gopaddleio.slack.com/join/shared_invite/zt-1l73p8wfo-vYk1XcbLAZMo9wcV_AChvg#/shared-invite/email/expanded-email-form)
 [![Twitter](https://img.shields.io/twitter/follow/gopaddleio?style=social)](https://twitter.com/gopaddleio)
 [![YouTube Channel](https://img.shields.io/badge/YouTube-Subscribe-red)](https://www.youtube.com/channel/UCtbfM3vjjJJBAka8DCzKKYg)
-<br><br><br><br>
+<br><br>
 
 ## Installation 
 
 ### Minimum System Requirements
 gopaddle installation requires a minimum of `8GB RAM` and `4 vCPUs`
 
-### Step to install
+### Firewall Ports
+The following incoming firewall ports need to be opened - `30003`, `30004`, `30006`, `32000` and any port that is needed for nodeport based application deployment.
+
+### Step to install using Helm Charts
 
 Add the helm repo
 
@@ -48,7 +54,7 @@ pod/rabbitmq-0 condition met
 pod/gpcore-85c7c6f65b-5vfmh condition met
 ```
 
-One the installation is complete, gopaddle dashboard can be accessed at http://<NodeIP>:30003/
+One the installation is complete, gopaddle dashboard can be accessed at http://[NodeIP]:30003/
 
 NodeIP can be obtained by executing the command below:
 
@@ -56,6 +62,20 @@ NodeIP can be obtained by executing the command below:
 root@localhost:~# kubectl get nodes -o wide
 ```
 
+## microk8s addon for gopaddle lite
+
+The microk8s addon for gopaddle community (lite) edition uses this helm
+repository for helm-based installation of gopaddle-lite.
+
+For documentation specific to microk8s addon for gopaddle community (lite)
+edition, see:
+https://help.gopaddle.io/en/articles/6654354-install-gopaddle-lite-microk8s-addon-on-ubuntu
+
+## gopaddle lite on SUSE Rancher Prime
+gopaddle Lite can be easily installed by choosing the gopaddle chart from the Rancher Prime marketplace place. 
+For documentation specific to installing gopaddle community (lite) edition on Rancher Prime, see:
+
+https://help.gopaddle.io/en/articles/6977654-install-gopaddle-lite-on-suse-rancher-prime
 
 ## Getting started with gopaddle
 
@@ -84,21 +104,72 @@ In the final step of the Containerize and Deploy Quickstart wizard, enable the o
 
 All the artificats generated during the process can be edited and re-deployed at a later stage.
 
-### Application Templates - Marketplace
+## Features 
+## 1\. DevOps Dashboard
 
-Under Templates, the Marketplace Applications hosts a variety of pre-built Kubernetes templates. Developers can subscribe to these templates and deploy them on the local microk8s cluster.
+The main dashboard gives a bird's eye view of the clusters, volumes, applications, events and projects imported and managed by gopaddle.
 
-<img width="1445" alt="gp-app-templates-1" src="https://user-images.githubusercontent.com/74309181/205758999-2a50eac6-d292-4280-85dd-3d617eda623a.png">
+![DevOps Dashboard](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-dashboard.png>)
 
+## 2\. Builds & Vulnerabilities
 
-## microk8s addon for gopaddle community (lite) edition
+The builds and vulnerabilities dashboard captures the status of the Docker builds and the severity of the vulnerabilities identified in the builds.
 
-The microk8s addon for gopaddle community (lite) edition uses this helm
-repository for helm-based installation of gopaddle-lite.
+![Builds & Vulnerabilities](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-devops-dashboard.png>)
 
-For documentation specific to microk8s addon for gopaddle community (lite)
-edition, see:
-https://github.com/gopaddle-io/microk8s-community-addons-gplite/blob/main/README.md
+## 3\. Quick start wizards
+
+gopaddle offers 3 type of quick start wizards -
+
+**1\. Provision Clusters** \- Onboard GKE or AWS cloud accounts with fine grained access controls and provision multi-cloud Kubernetes cluster. Available only in SaaS & Enterprise Editions.
+
+**2\. Dockerize & Deploy** \- Automatically generate Dockerfiles and Kubernetes YAML files by analyzing the source code in GitHub or GitLab accounts and deploy them on to Kubernetes clusters.
+
+**3\.Generate Pipeline code** \- Generate Jenkins or GitHub Actions or Azure DevOps pipeline Code for an application deployed through gopaddle.
+
+![Quickstart Wizards](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/quick-start-wizards.png>)
+
+## 4\. Marketplace
+
+Subscribe to a gopaddle marketplace application, and visualize the helm chart in the design studio. These templates can be launched on a Kubernetes cluster using simple UI based wizards.
+
+![Marketplace](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-marketplace.png>)
+
+## 5\. Cluster Management
+
+Clusters can be centrally managed. gopaddle automatically installs a few addons on these clusters - like Prometheus and Grafana for an out-of-the-box monitoring and alerting capabilties.
+
+![Cluster Management](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-cluster.png>)
+
+## 6\. Designer Studio
+
+Design Studio provides a visual representation of the Kubernetes resources and helps to quickly design and compose Kubernetes resources without having to learn YAML.
+
+![Designer Studio](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-designstudio.png>)
+
+## 7\. Application Management
+
+Centrally monitor the existing Kubernetes deployments.
+
+![Application Management](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-app-dashboard.png>)
+
+## 8\. Alerts & Notifications
+
+Set alerts and notifications for the applications and clusters managed by gopaddle. gopaddle supports any type of incoming webhooks, slack, AWS SNS, Jenkins Jobs and PagerDuty as notification channel.
+
+![Alerts & Notifications](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-alerts-notifications.png>)
+
+## 9\. Developer Tools - Container Terminal
+
+Easily troubleshoot issues in deployments using inbuilt developer tools like Container terminal without having to use Kubectl commands.
+
+![Container Terminal](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-devtools-1.png>)
+
+## 10\. Developer Tools - Container Logs
+
+Easily troubleshoot issues in deployments using inbuilt developer tools like Container logs without having to use Kubectl commands.
+
+![Container Logs](<https://gopaddle-marketing.s3.ap-southeast-2.amazonaws.com/docker-desktop-screenshots/gp-devtools-2.png>)
 
 ## Help
 
