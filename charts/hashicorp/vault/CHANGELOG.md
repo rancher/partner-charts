@@ -1,5 +1,21 @@
 ## Unreleased
 
+## 0.25.0 (June 26, 2023)
+
+Changes:
+* Latest Kubernetes version tested is now 1.27
+* server: Headless service ignores `server.service.publishNotReadyAddresses` setting and always sets it as `true` [GH-902](https://github.com/hashicorp/vault-helm/pull/902)
+* `vault` updated to 1.14.0 [GH-916](https://github.com/hashicorp/vault-helm/pull/916)
+* `vault-csi-provider` updated to 1.4.0 [GH-916](https://github.com/hashicorp/vault-helm/pull/916)
+
+Improvements:
+* CSI: Make `nodeSelector` and `affinity` configurable for CSI daemonset's pods [GH-862](https://github.com/hashicorp/vault-helm/pull/862)
+* injector: Add `ephemeralLimit` and `ephemeralRequest` as options for configuring Agent's ephemeral storage resources [GH-798](https://github.com/hashicorp/vault-helm/pull/798)
+* Minimum kubernetes version for chart reverted to 1.20.0 to allow installation on clusters older than the oldest tested version [GH-916](https://github.com/hashicorp/vault-helm/pull/916)
+
+Bugs:
+* server: Set the default for `prometheusRules.rules` to an empty list [GH-886](https://github.com/hashicorp/vault-helm/pull/886)
+
 ## 0.24.1 (April 17, 2023)
 
 Bugs:

@@ -2,7 +2,7 @@
 ########################
 # version: version of this values file
 # Note: Do not change this value
-version: "v2.6.1"
+version: "v2.7.0"
 
 # CSI driver log level
 # Allowed values: "error", "warn"/"warning", "info", "debug"
@@ -63,7 +63,7 @@ enableCustomTopology: false
 # Allowed values:
 #   ReadWriteOnceWithFSType: supports volume ownership and permissions change only if the fsType is defined
 #   and the volume's accessModes contains ReadWriteOnce.
-#   File: kubernetes may use fsGroup to change permissions and ownership of the volume 
+#   File: kubernetes may use fsGroup to change permissions and ownership of the volume
 #   to match user requested fsGroup in the pod's security policy regardless of fstype or access mode.
 #   None: volumes will be mounted with no modifications.
 # Default value: ReadWriteOnceWithFSType
@@ -110,6 +110,10 @@ controller:
     # Default value: 5s
     leaderElectionRetryPeriod: 5s
 
+  # Image for csi-metadata-retriever
+  metadataretriever:
+    image: dellemc/csi-metadata-retriever:v1.4.0
+
   # replication: allows to configure replication
   # Replication CRDs must be installed before installing driver
   replication:
@@ -123,11 +127,11 @@ controller:
     # image: Image to use for dell-csi-replicator. This shouldn't be changed
     # Allowed values: string
     # Default value: None
-    image: dellemc/dell-csi-replicator:v1.4.0
+    image: dellemc/dell-csi-replicator:v1.5.0
 
     # replicationContextPrefix: prefix to use for naming of resources created by replication feature
     # Allowed values: string
-    # Default value: powerstore
+    # Default value: powerscale
     replicationContextPrefix: "powerscale"
 
     # replicationPrefix: prefix to prepend to storage classes parameters
@@ -273,7 +277,6 @@ node:
     # Default value: None
     enabled: false
 
-
 ## PLATFORM ATTRIBUTES
 ######################
 # endpointPort: Specify the HTTPs port number of the PowerScale OneFS API server
@@ -357,22 +360,36 @@ autoProbe: true
 authorization:
   enabled: false
   # sidecarProxyImage: the container image used for the csm-authorization-sidecar.
-  # Default value: dellemc/csm-authorization-sidecar:v1.6.0
-  sidecarProxyImage: dellemc/csm-authorization-sidecar:v1.6.0
+  # Default value: dellemc/csm-authorization-sidecar:v1.7.0
+  sidecarProxyImage: dellemc/csm-authorization-sidecar:v1.7.0
   # proxyHost: hostname of the csm-authorization server
   # Default value: None
   proxyHost:
   # skipCertificateValidation: certificate validation of the csm-authorization server
   # Allowed Values:
   #   "true" - TLS certificate verification will be skipped
-  #   "false" - TLS certificate will be verified 
-  # Default value: "true" 
+  #   "false" - TLS certificate will be verified
+  # Default value: "true"
   skipCertificateValidation: true
+
+# Storage Capacity Tracking
+# Note: Capacity tracking is supported in kubernetes v1.24 and above, this feature will be automatically disabled in older versions.
+storageCapacity:
+  # enabled : Enable/Disable storage capacity tracking
+  # Allowed values:
+  #   true: enable storage capacity tracking
+  #   false: disable storage capacity tracking
+  # Default value: true
+  enabled: true
+  # pollInterval : Configure how often external-provisioner polls the driver to detect changed capacity
+  # Allowed values: 1m,2m,3m,...,10m,...,60m etc
+  # Default value: 5m
+  pollInterval: 5m
 
 # Enable this feature only after contact support for additional information
 podmon:
   enabled: false
-  image: dellemc/podmon:v1.5.0
+  image: dellemc/podmon:v1.6.0
   #controller:
   #  args:
   #    - "--csisock=unix:/var/run/csi/csi.sock"
@@ -413,15 +430,15 @@ encryption:
   # logLevel: Log level of the encryption driver.
   # Allowed values: "error", "warning", "info", "debug", "trace".
   logLevel: "error"
-  
-  # livenessPort: HTTP liveness probe port number. 
+
+  # livenessPort: HTTP liveness probe port number.
   # Leave empty to disable the liveness probe.
   # Example: 8080
   livenessPort:
 
   # ocp: Enable when running on OpenShift Container Platform with CoreOS worker nodes.
   ocp: false
-  
+
   # ocpCoreID: User ID and group ID of user core on CoreOS worker nodes.
   # Ignored when ocp is set to false.
   ocpCoreID: "1000:1000"

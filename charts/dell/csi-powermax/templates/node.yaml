@@ -3,13 +3,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ .Release.Name }}-node
-  namespace: {{ include "custom.namespace" . }}
+  namespace: {{ .Release.Namespace }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   {{- if eq .Values.customDriverName.enabled true}}
-  name: {{ printf "%s-%s-node" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  name: {{ printf "%s-%s-node" .Release.Namespace .Values.customDriverName.value }}
   {{- else }}
   name: {{ .Release.Name }}-node
   {{- end }}
@@ -43,18 +43,18 @@ kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   {{- if eq .Values.customDriverName.enabled true}}
-  name: {{ printf "%s-%s-node" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  name: {{ printf "%s-%s-node" .Release.Namespace .Values.customDriverName.value }}
   {{- else }}
   name: {{ .Release.Name }}-node
   {{- end }}
 subjects:
   - kind: ServiceAccount
     name: {{ .Release.Name }}-node
-    namespace: {{ include "custom.namespace" . }}
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   {{- if eq .Values.customDriverName.enabled true}}
-  name: {{ printf "%s-%s-node" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  name: {{ printf "%s-%s-node" .Release.Namespace .Values.customDriverName.value }}
   {{- else }}
   name: {{ .Release.Name }}-node
   {{- end }}
@@ -65,7 +65,7 @@ kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: {{ .Release.Name }}-node
-  namespace: {{ include "custom.namespace" . }}
+  namespace: {{ .Release.Namespace }}
   {{- if hasKey .Values "authorization" }}
   {{- if eq .Values.authorization.enabled true }}
   annotations:
@@ -113,7 +113,7 @@ spec:
           env:
             - name: X_CSI_POWERMAX_DRIVER_NAME
               {{- if eq .Values.customDriverName.enabled true }}
-              value: {{ required "Must provide a driver name" (printf "%s.%s.dellemc.com" ( include "custom.namespace" . ) .Values.customDriverName.value) }}
+              value: {{ required "Must provide a driver name" (printf "%s.%s.dellemc.com" .Release.Namespace .Values.customDriverName.value) }}
               {{- else }}
               value: csi-powermax.dellemc.com
               {{- end }}
