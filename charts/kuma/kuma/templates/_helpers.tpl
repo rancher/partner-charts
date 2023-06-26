@@ -172,6 +172,9 @@ returns: formatted image string
 {{- define "kuma.parentEnv" -}}
 {{- end -}}
 
+{{- define "kuma.parentSecrets" -}}
+{{- end -}}
+
 {{- define "kuma.defaultEnv" -}}
 {{ if (and (eq .Values.controlPlane.environment "universal") (not (eq .Values.controlPlane.mode "global"))) }}
   {{ fail "Currently you can only run universal mode on kubernetes in a global mode, this limitation might be lifted in the future" }}
@@ -183,6 +186,14 @@ returns: formatted image string
 {{ if eq .Values.controlPlane.mode "zone" }}
   {{ if empty .Values.controlPlane.zone }}
     {{ fail "Can't have controlPlane.zone to be empty when controlPlane.mode=='zone'" }}
+  {{ else }}
+    {{ if gt (len .Values.controlPlane.zone) 253 }}
+      {{ fail "controlPlane.zone must be no more than 253 characters" }}
+    {{ else }}
+      {{ if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" .Values.controlPlane.zone) }}
+        {{ fail "controlPlane.zone must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" }}
+      {{ end }}
+    {{ end }}
   {{ end }}
   {{ if empty .Values.controlPlane.kdsGlobalAddress }}
     {{ fail "controlPlane.kdsGlobalAddress can't be empty when controlPlane.mode=='zone', needs to be the global control-plane address" }}
@@ -295,6 +306,18 @@ env:
 - name: KUMA_RUNTIME_KUBERNETES_INJECTOR_EBPF_PROGRAMS_SOURCE_PATH
   value: {{ .Values.experimental.ebpf.programsSourcePath }}
 {{- end }}
+{{- if .Values.experimental.deltaKds }}
+- name: KUMA_EXPERIMENTAL_KDS_DELTA_ENABLED
+  value: "true"
+{{- end }}
+{{- if .Values.controlPlane.tls.kdsZoneClient.skipVerify }}
+- name: KUMA_MULTIZONE_ZONE_KDS_TLS_SKIP_VERIFY
+  value: "true"
+{{- end }}
+{{- end }}
+
+{{- define "kuma.controlPlane.tls.general.caSecretName" -}}
+{{ .Values.controlPlane.tls.general.caSecretName | default .Values.controlPlane.tls.general.secretName | default (printf "%s-tls-cert" (include "kuma.name" .)) | quote }}
 {{- end }}
 
 {{- define "kuma.universal.defaultEnv" -}}

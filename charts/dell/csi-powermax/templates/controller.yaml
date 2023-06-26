@@ -2,13 +2,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{.Release.Name}}-controller
-  namespace: {{ include "custom.namespace" . }}
+  namespace: {{ .Release.Namespace }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   {{- if eq .Values.customDriverName.enabled true}}
-  name: {{printf "%s-%s-controller" ( include "custom.namespace" . ) .Values.customDriverName.value}}
+  name: {{printf "%s-%s-controller" .Release.Namespace .Values.customDriverName.value}}
   {{- else }}
   name: {{ .Release.Name }}-controller
   {{- end }}
@@ -97,18 +97,18 @@ kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   {{- if eq .Values.customDriverName.enabled true}}
-  name: {{ printf "%s-%s-controller" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  name: {{ printf "%s-%s-controller" .Release.Namespace .Values.customDriverName.value }}
   {{- else }}
   name: {{ .Release.Name }}-controller
   {{- end }}
 subjects:
   - kind: ServiceAccount
     name: {{ .Release.Name }}-controller
-    namespace: {{ include "custom.namespace" . }}
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   {{- if eq .Values.customDriverName.enabled true}}
-  name: {{ printf "%s-%s-controller" ( include "custom.namespace" . ) .Values.customDriverName.value }}
+  name: {{ printf "%s-%s-controller" .Release.Namespace .Values.customDriverName.value }}
   {{- else }}
   name: {{ .Release.Name }}-controller
   {{- end }}
@@ -118,7 +118,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}-controller
-  namespace: {{ include "custom.namespace" . }}
+  namespace: {{ .Release.Namespace }}
   {{- if hasKey .Values "authorization" }}
   {{- if eq .Values.authorization.enabled true }}
   annotations:
@@ -345,7 +345,7 @@ spec:
             {{- end }}
             - name: X_CSI_POWERMAX_DRIVER_NAME
               {{- if eq .Values.customDriverName.enabled true}}
-              value: {{ required "Must provide a driver name" (printf "%s.%s.dellemc.com" ( include "custom.namespace" . ) .Values.customDriverName.value) }}
+              value: {{ required "Must provide a driver name" (printf "%s.%s.dellemc.com" .Release.Namespace .Values.customDriverName.value) }}
               {{- else }}
               value: csi-powermax.dellemc.com
               {{- end }}
@@ -448,7 +448,7 @@ spec:
             - name: X_CSI_REVPROXY_TLS_CERT_DIR
               value: /app/tls
             - name: X_CSI_REVPROXY_WATCH_NAMESPACE
-              value: {{ include "custom.namespace" . }}
+              value: {{ .Release.Namespace }}
             - name: X_CSI_REVPROXY_IS_LEADER_ENABLED
               value: "true"
           volumeMounts:

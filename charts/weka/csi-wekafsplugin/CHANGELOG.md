@@ -1,17 +1,17 @@
 <!-- Release notes generated using configuration in .github/release.yaml at main -->
 
 ## What's Changed
-### New features
-* feat(CSI-67): sign helm chart by @dontbreakit in https://github.com/weka/csi-wekafs/pull/116
 
+### Bug fixes
+* fix(CSI-75): compatibilityMap has duplicate parameter for same functionality https://github.com/weka/csi-wekafs/pull/120
+* fix(CSI-76): filtering Rest API allowed only from 4.1 but should be from 4.0 https://github.com/weka/csi-wekafs/pull/120
+* fix(CSI-110): CSI does not propagate error when failing to init API client from secrets https://github.com/weka/csi-wekafs/pull/120
+* fix(CSI-112): panic when creating CSI snapshot-based volume and failing to initialize API client https://github.com/weka/csi-wekafs/pull/120
+* fix(CSI-113) plugin incorrectly handles secret with API endpoints separated by newline rather than comma https://github.com/weka/csi-wekafs/pull/120
 
-### Security
-* fix(CSI-109): update registry.k8s.io/sig-storage/csi-snapshotter to v6.2.2 by @renovate in https://github.com/weka/csi-wekafs/pull/113
-* update Golang dependencies for the csi binary
-  * fix(deps): update module golang.org/x/sync to v0.3.0 by @renovate in https://github.com/weka/csi-wekafs/pull/105
-  * fix(deps): update module k8s.io/apimachinery to v0.27.3 by @renovate in https://github.com/weka/csi-wekafs/pull/106
-  * fix(deps): update module github.com/prometheus/client_golang to v1.16.0 by @renovate in https://github.com/weka/csi-wekafs/pull/107
-  * fix(deps): update module google.golang.org/grpc to v1.56.1 by @renovate in https://github.com/weka/csi-wekafs/pull/108
-  * fix(deps): update module github.com/kubernetes-csi/csi-lib-utils to v0.14.0 by @renovate in https://github.com/weka/csi-wekafs/pull/117
+### Miscellaneous
+* fix(CSI-111): Replace deprecated ioutil.ReadFile / WriteFile https://github.com/weka/csi-wekafs/pull/120
+* docs(CSI-115): document incorrectly states version of Weka for snapshot quotas https://github.com/weka/csi-wekafs/pull/123
 
+**Full Changelog**: https://github.com/weka/csi-wekafs/compare/v2.1.0...v2.1.1
 
