@@ -258,11 +258,15 @@ stating that types are not same for the equality check
             {{- end }}{{/* if .Values.global.airgapped.repository */}}
 
           - name: K10_KANISTER_POD_METRICS_IMAGE
+            {{- if not .Values.global.rhMarketPlace }}
             {{- if .Values.global.airgapped.repository }}
             value: {{ (include "get.k10ImageTag" .)  | print .Values.global.airgapped.repository "/metric-sidecar:" }}
             {{- else }}
             value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/metric-sidecar:" }}
             {{- end }}{{/* if .Values.global.airgapped.repository */}}
+            {{- else }}
+            value: {{ index .Values.global.images "metric-sidecar" }}
+            {{- end }}{{/* if not .Values.global.rhMarketPlace */}}
 
           - name: KANISTER_POD_READY_WAIT_TIMEOUT
             valueFrom:
@@ -370,6 +374,12 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: AWSAssumeRoleDuration
+{{- if (list "dashboardbff" "catalog" | has $service) }}
+    {{- if .Values.metering.mode }}
+          - name: K10REPORTMODE
+            value: {{ .Values.metering.mode }}
+    {{- end }}
+{{- end }}
 {{- if eq $service "garbagecollector" }}
           - name: K10_GC_DAEMON_PERIOD
             valueFrom:

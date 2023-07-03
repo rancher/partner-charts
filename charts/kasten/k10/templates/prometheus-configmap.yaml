@@ -69,4 +69,26 @@ data:
           - source_labels: [__meta_kubernetes_pod_container_port_number]
             action: keep
             regex: 8\d{3}
+{{- if ne .Values.metering.mode "airgap" }}
+      - job_name: k10-grafana
+        scheme: http
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              own_namespace: true
+            selectors:
+              - role: pod
+                label: "component=grafana"
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: 3000
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: grafana_http_request_duration_seconds_count
+            action: keep
+{{- end}}
 {{- end -}}

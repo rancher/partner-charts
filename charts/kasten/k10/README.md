@@ -242,14 +242,17 @@ Parameter | Description | Default
 `garbagecollector.keepMaxActions` | Sets maximum actions to keep | `1000`
 `garbagecollector.importRunActions.enabled` | Enables ``importRunActions`` collector | `false`
 `garbagecollector.retireActions.enabled` | Enables ``retireActions`` collector | `false`
-`kubeVirtVMs.snapshot.unfreezeTimeout` | Defines the time duration within which the the VMs must be unfrozen while backing them up. To know more about format [go doc](https://pkg.go.dev/time#ParseDuration) can be followed | `5m`
+`kubeVirtVMs.snapshot.unfreezeTimeout` | Defines the time duration within which the VMs must be unfrozen while backing them up. To know more about format [go doc](https://pkg.go.dev/time#ParseDuration) can be followed | `5m`
 `excludedApps` | Specifies a list of applications to be excluded from the dashboard & compliance considerations. Format should be a :ref:`YAML array<k10_compliance>` | `None`
+`kanisterPodMetricSidecar.enabled` | Enable the sidecar container to gather metrics from ephemeral pods | `true`
+`kanisterPodMetricSidecar.metricLifetime` | Check periodically for metrics that should be removed | `2m`
+`kanisterPodMetricSidecar.pushGatewayInterval` | Set the interval for sending metrics into the Prometheus | `30s`
 `maxJobWaitDuration` | Set a maximum duration of waiting for child jobs. If the execution of the subordinate jobs exceeds this value, the parent job will be canceled. If no value is set, a default of 10 hours will be used | `None`
 
 ## Helm tips and tricks
 
 There is a way of setting values via a yaml file instead of using `--set`.
-You can copy/paste values into a file (e.g., my_values.yaml):
+First, copy/paste values into a file (e.g., my_values.yaml):
 
 ```yaml
 secrets:
@@ -260,13 +263,20 @@ secrets:
 and then run:
 
 ```bash
-  envsubst < my_values.yaml > my_values_out.yaml && helm install helm/k10 -f my_values_out.yaml
+  envsubst < my_values.yaml > my_values_out.yaml && helm install k10 kasten/k10 -f my_values_out.yaml
 ```
+
+To set a single value from a file, `--set-file` may be used over `--set`:
+
+```bash
+  helm install k10 kasten/k10  --set-file license=my_license.lic
+```
+
 
 To use non-default GCP ServiceAccount (SA) credentials, the credentials JSON file needs to be encoded into a base64
 string.
 
 ```bash
   sa_key=$(base64 -w0 sa-key.json)
-  helm install kasten/k10 --name=k10 --namespace=kasten-io --set secrets.googleApiKey=$sa_key
+  helm install k10 kasten/k10 --namespace=kasten-io --set secrets.googleApiKey=$sa_key
 ```
