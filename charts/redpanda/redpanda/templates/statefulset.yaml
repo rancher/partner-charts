@@ -191,7 +191,9 @@ spec:
               {{- if (include "redpanda-atleast-22-3-0" . | fromJson).bool }}
                 {{- if .Values.rackAwareness.enabled }}
                 # Configure Rack Awareness
+                set +x
                 RACK=$(curl --silent --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt --fail -H 'Authorization: Bearer '$(cat /run/secrets/kubernetes.io/serviceaccount/token) "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}/api/v1/nodes/${KUBERNETES_NODE_NAME}?pretty=true" | grep {{ .Values.rackAwareness.nodeAnnotation | quote | squote }} | grep -v '\"key\":' | sed 's/.*": "\([^"]\+\).*/\1/')
+                set -x
                 rpk --config "$CONFIG" redpanda config set redpanda.rack "${RACK}"
                 {{- end }}
               {{- end }}
@@ -333,6 +335,9 @@ spec:
             - /etc/secrets/config-watcher/scripts/sasl-user.sh
           {{- if get .Values.statefulset.sideCars.configWatcher "resources" }}
           resources: {{- toYaml .Values.statefulset.sideCars.configWatcher.resources | nindent 12 }}
+          {{- end }}
+          {{- if get .Values.statefulset.sideCars.configWatcher "securityContext" }}
+          securityContext: {{- toYaml .Values.statefulset.sideCars.configWatcher.securityContext | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: {{ template "redpanda.fullname" . }}-config-watcher
