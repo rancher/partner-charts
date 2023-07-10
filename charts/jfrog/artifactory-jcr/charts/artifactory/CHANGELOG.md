@@ -1,7 +1,7 @@
 # JFrog Artifactory Chart Changelog
 All changes to this chart will be documented in this file.
 
-## [107.59.11] - May 31, 2023
+## [107.59.12] - May 31, 2023
 * Fixed reference of `terminationGracePeriodSeconds`
 * Added Support for Cold Artifact Storage as part of the systemYaml configuration (disabled by default)
 * Added new binary provider `s3-storage-v3-archive`
