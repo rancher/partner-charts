@@ -1,6 +1,6 @@
 # config
 
-![Version: 5.0.18](https://img.shields.io/badge/Version-5.0.18-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.19](https://img.shields.io/badge/Version-5.0.19-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Configuration parameters for setup and initial configuration secret and config layers used by Gluu services.
 
@@ -79,7 +79,7 @@ Kubernetes: `>=v1.21.0-0`
 | fullNameOverride | string | `""` |  |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
 | image.repository | string | `"janssenproject/configurator"` | Image  to use for deploying. |
-| image.tag | string | `"1.0.14-1"` | Image  tag to use for deploying. |
+| image.tag | string | `"1.0.15-1"` | Image  tag to use for deploying. |
 | ldapPassword | string | `"P@ssw0rds"` | LDAP admin password if OpennDJ is used for persistence. |
 | lifecycle | object | `{}` |  |
 | migration | object | `{"enabled":false,"migrationDataFormat":"ldif","migrationDir":"/ce-migration"}` | CE to CN Migration section |
