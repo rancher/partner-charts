@@ -1,7 +1,7 @@
 global:
   # zone: cluster.local (use only if your DNS server doesn't live in the same zone as kubecost)
   prometheus:
-    enabled: true # If false, Prometheus will not be installed -- please read this before disabling: https://github.com/kubecost/docs/blob/main/custom-prom.md
+    enabled: true # If false, Prometheus will not be installed -- Warning: Before changing this setting, please read to understand this setting https://docs.kubecost.com/install-and-configure/install/custom-prom
     fqdn: http://cost-analyzer-prometheus-server.default.svc #example address of a prometheus to connect to. Include protocol (http:// or https://) Ignored if enabled: true
     # insecureSkipVerify : false # If true, kubecost will not check the TLS cert of prometheus
     # queryServiceBasicAuthSecretName: dbsecret # kubectl create secret generic dbsecret -n kubecost --from-file=USERNAME --from-file=PASSWORD
@@ -22,10 +22,10 @@ global:
     proxy: true # If true, the kubecost frontend will route to your grafana through its service endpoint
 #    fqdn: cost-analyzer-grafana.default.svc
 
-  # Enable only when you are using GCP Marketplace ENT listing. Learn more at https://console.cloud.google.com/marketplace/product/kubecost-public/kubecost-ent    
+  # Enable only when you are using GCP Marketplace ENT listing. Learn more at https://console.cloud.google.com/marketplace/product/kubecost-public/kubecost-ent
   gcpstore:
     enabled: false
-  
+
   # Google Cloud Managed Service for Prometheus
   gmp:
   # Remember to set up these parameters when install the Kubecost Helm chart with `global.gmp.enabled=true` if you want to use GMP self-deployed collection (Recommended) to ultilize Kubecost scrape configs.
@@ -54,6 +54,20 @@ global:
       # secret_key: SECRET_KEY # AWS Secret key
       # role_arn: ROLE_ARN # AWS role arn
       # profile: PROFILE # AWS profile
+
+  # Mimir Proxy to help Kubecost to query metrics from multi-tenant Grafana Mimir.
+  # Set `global.mimirProxy.enabled=true` and `global.prometheus.enabled=false` to enable Mimir Proxy.
+  # You also need to set `global.prometheus.fqdn=http://kubecost-cost-analyzer-mimir-proxy.kubecost.svc:8085/prometheus`
+  # or `global.prometheus.fqdn=http://{{ template "cost-analyzer.fullname" . }}-mimir-proxy.{{ .Release.Namespace }}.svc:8085/prometheus'
+  # Learn more at https://grafana.com/docs/mimir/latest/operators-guide/secure/authentication-and-authorization/#without-an-authenticating-reverse-proxy
+  mimirProxy:
+    enabled: false
+    name: mimir-proxy
+    image: nginxinc/nginx-unprivileged
+    port: 8085
+    mimirEndpoint: $mimir_endpoint #Your Mimir query endpoint. If your Mimir query endpoint is http://example.com/prometheus, replace $mimir_endpoint with http://example.com/
+    orgIdentifier: $your_tenant_ID #Your Grafana Mimir tenant ID
+
 
   notifications:
     # Kubecost alerting configuration
@@ -193,11 +207,11 @@ global:
     reports:
       - title: "Cloud Cost Report 0"
         window: "today"
-        aggregateBy: "type"
-        accumulate: false # daily resolution
-        filters:
-          - property: "cluster"
-            value: "cluster-one"
+        aggregateBy: "service"
+        accumulate: false  # daily resolution
+        # filters:
+        #   - property: "service"
+        #     value: "service1" # corresponds to a value to filter cloud cost aggregate by service data on.
 
   podAnnotations: {}
     # iam.amazonaws.com/role: role-arn
@@ -263,24 +277,24 @@ oidc:
   discoveryURL: "https://my.auth.server/.well-known/openid-configuration" # url for OIDC endpoint discovery
 #  hostedDomain: "example.com" # optional, blocks access to the auth domain specified in the hd claim of the provider ID token
   rbac:
-      enabled: false
-      groups:
-        - name: admin
-          enabled: false # if admin is disabled, all SAML users will be able to make configuration changes to the kubecost frontend
-          assertionName: "preferred_username" # field used for role matching in the OIDC access token
-          assertionValues:
-            - "admin"
-            - "superusers"
-        - name: readonly
-          enabled: false # if readonly is disabled, all users authorized on SAML will default to readonly
-          assertionName:  "preferred_username"
-          assertionValues:
-            - "readonly"
-        - name: editor
-          enabled: false # if editor is enabled, editors will be allowed to edit reports/alerts scoped to them, and act as readers otherwise. Users will never default to editor.
-          assertionName: "preferred_username"
-          assertionValues:
-            - "editor"
+    enabled: false
+    groups:
+      - name: admin
+        enabled: false # if admin is disabled, all authenticated users will be able to make configuration changes to the kubecost frontend
+        claimName: "roles" # Kubecost matches this string against the JWT's payload key containing RBAC info (this value is unique across identity providers)
+        claimValues: # Kubecost matches these strings with the roles created in your identity provider
+          - "admin"
+          - "superusers"
+      - name: readonly
+        enabled: false # if readonly is disabled, all authenticated users will default to readonly
+        claimName:  "roles"
+        claimValues:
+          - "readonly"
+      - name: editor
+        enabled: false # if editor is enabled, editors will be allowed to edit reports/alerts scoped to them, and act as readers otherwise. Users will never default to editor.
+        claimName: "roles"
+        claimValues:
+          - "editor"
 
 # Adds an httpProxy as an environment variable. systemProxy.enabled must be `true`to have any effect.
 # Ref: https://www.oreilly.com/library/view/security-with-go/9781788627917/5ea6a02b-3d96-44b1-ad3c-6ab60fcbbe4f.xhtml
@@ -695,7 +709,7 @@ networkCosts:
   enabled: false
   podSecurityPolicy:
     enabled: false
-  image: gcr.io/kubecost1/kubecost-network-costs:v0.16.6
+  image: gcr.io/kubecost1/kubecost-network-costs:v0.16.7
   imagePullPolicy: Always
   updateStrategy:
     type: RollingUpdate
@@ -717,8 +731,8 @@ networkCosts:
       cpu: 500m # can be less, will depend on cluster size
       # memory: it is not recommended to set a memory limit
     requests:
-     cpu: 50m
-     memory: 20Mi
+      cpu: 50m
+      memory: 20Mi
   extraArgs: []
   config:
     # Configuration for traffic destinations, including specific classification
@@ -810,6 +824,21 @@ networkCosts:
   additionalLabels: {}
   nodeSelector: {}
   annotations: {}
+  healthCheckProbes: {}
+    # readinessProbe:
+    #   tcpSocket:
+    #     port: 3001
+    #   initialDelaySeconds: 5
+    #   periodSeconds: 10
+    #   failureThreshold: 5
+    # livenessProbe:
+    #   tcpSocket:
+    #     port: 3001
+    #   initialDelaySeconds: 5
+    #   periodSeconds: 10
+    #   failureThreshold: 5
+  additionalSecurityContext: {}
+    # readOnlyRootFilesystem: true
 
 # Kubecost Deployment Configuration
 # Used for HA mode in Business & Enterprise tier
@@ -822,8 +851,16 @@ kubecostDeployment:
   #     maxSurge: 1
   #     maxUnavailable: 1
   #   type: RollingUpdate
+
+  # QueryServiceReplicas
+  # Ref: https://docs.kubecost.com/install-and-configure/advanced-configuration/query-service-replicas
   queryServiceReplicas: 0
   queryService:
+    resources:
+      requests:
+        # You can use the Kubecost savings report for 'Right-size your container requests' to determine the recommended resource requests once the pod has run for 24 hours.
+        cpu: 1000m
+        memory: 500Mi
     # default storage class
     storageClass: ""
     databaseVolumeSize: 100Gi
@@ -842,6 +879,9 @@ clusterController:
     # automatically right-sized on a regular basis.
     defaultResizeAll: false
 #  fqdn: kubecost-cluster-controller.kubecost.svc.cluster.local:9731
+  namespaceTurndown:
+    rbac:
+      enabled: true
 
 reporting:
   # Kubecost bug report feature: Logs access/collection limited to .Release.Namespace
@@ -927,28 +967,16 @@ awsstore:
   priorityClassName: ""
 
 federatedETL:
-  # federatedCluster indicates whether this cluster should push data to the Federated store
-  federatedCluster: false
-  # primaryCluster indicates whether this cluster should load data from the combined section of the Federated store
-  primaryCluster: false
-  # redirectS3Backup changes the dir of S3 backup to the Federated combined store, for using Thanos-federated data in the Federated ETL
-  # Note S3 backup should be enabled separately for this.
-  redirectS3Backup: false
-  # useExistingS3Config will attempt to use existing object-store.yaml configs for S3 backup/Thanos as config for the Federated store
-  useExistingS3Config: false
-  # useMultiClusterDB should be set to true if you have a single federated PromQL DB with metrics from all monitored clusters but want to use federation for performance
-  useMultiClusterDB: false
+  federatedCluster: false # whether this cluster should push data to the Federated store
+  primaryCluster: false # whether this cluster should load data from the combined section of the Federated store
+  useExistingS3Config: false # will attempt to use existing object-store.yaml configs for S3 backup/Thanos as config for the Federated store
+  redirectS3Backup: false # changes the dir of S3 backup to the Federated combined store, for using Thanos-federated data in the Federated ETL. Note S3 backup should be enabled separately for this.
+  useMultiClusterDB: false # set to true if you have a single federated PromQL DB with metrics from all monitored clusters but want to use federation for performance
   federator:
-    # federationCutoffDate is an RFC 3339-formatted string. All ETL files with windows that fall before this time are not processed by the Federator.
-    # If this is not set, the Federator will process all files regardless of date.
-    # federationCutoffDate: "2022-10-18T00:00:00.000Z"
-    # federator.enabled enables the federator to run inside the costmodel container, federating the data in the Federated store
-    enabled: false
-    # federator.clusters is an optional whitelist of clusters by cluster id.
-    # If not set, the federator will attempt to federated all clusters pushing to the federated storage.
-    clusters: []
-    # federator.primaryClusterID is an optional parameter that should be used when reconciliation is expected to occur on the Primary.
-    # primaryClusterID: "cluster_id"
+    enabled: false # enables the federator to run inside the costmodel container, federating the data in the Federated store
+    clusters: [] # optional. Whitelist of clusters by cluster id. If not set, the federator will attempt to federated all clusters pushing to the federated storage.
+    # primaryClusterID: "cluster_id" # optional. Used when reconciliation is expected to occur on the Primary.
+    # federationCutoffDate: "2022-10-18T00:00:00.000Z" # an RFC 3339-formatted string. All ETL files with windows that fall before this time are not processed by the Federator. If this is not set, the Federator will process all files regardless of date.
 
 kubecostAdmissionController:
   enabled: false
@@ -961,12 +989,12 @@ costEventsAudit:
   enabled: false
 
 
-# readonly: false # disable updates to kubecost from the frontend UI and via POST request
+#readonly: false # disable updates to kubecost from the frontend UI and via POST request
 
 # These configs can also be set from the Settings page in the Kubecost product UI
 # Values in this block override config changes in the Settings UI on pod restart
 #
-# kubecostProductConfigs:
+#kubecostProductConfigs:
 # An optional list of cluster definitions that can be added for frontend access. The local
 # cluster is *always* included by default, so this list is for non-local clusters.
 # Ref: https://github.com/kubecost/docs/blob/main/multi-cluster.md
@@ -1073,3 +1101,34 @@ costEventsAudit:
 #  enabled: true
 #  secretName: webhook-server-tls
 #  caBundle: ${CA_BUNDLE}
+
+# -- Array of extra K8s manifests to deploy
+## Note: Supports use of custom Helm templates
+extraObjects: []
+# Cloud Billing Integration:
+#   - apiVersion: v1
+#     kind: Secret
+#     metadata:
+#       name: cloud-integration
+#       namespace: kubecost
+#     type: Opaque
+#     data:
+#       cloud-integration.json: BASE64_SECRET
+#  Istio:
+#   - apiVersion: networking.istio.io/v1alpha3
+#     kind: VirtualService
+#     metadata:
+#       name: my-virtualservice
+#     spec:
+#       hosts:
+#       - kubecost.myorg.com
+#       gateways:
+#       - my-gateway
+#       http:
+#       - route:
+#         - destination:
+#             host: kubecost.kubecost.svc.cluster.local
+#             port:
+#               number: 80
+
+
