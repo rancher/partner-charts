@@ -308,8 +308,8 @@ httpGet:
   host: 127.0.0.1 # localhost because Pod has hostNetwork=true
   path: /status
   port: 42699
-initialDelaySeconds: 300 # startupProbe isnt available before K8s 1.16
-timeoutSeconds: 3
+initialDelaySeconds: 600 # startupProbe isnt available before K8s 1.16
+timeoutSeconds: 5
 periodSeconds: 10
 failureThreshold: 3
 {{- end -}}
