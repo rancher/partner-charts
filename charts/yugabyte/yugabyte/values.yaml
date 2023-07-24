@@ -8,7 +8,7 @@ nameOverride: ""
 
 Image:
   repository: "yugabytedb/yugabyte"
-  tag: 2.18.1.0-b84
+  tag: 2.16.6.0-b43
   pullPolicy: IfNotPresent
   pullSecretName: ""
 
@@ -82,10 +82,10 @@ tls:
       # It is necessary to provide some external means of restarting the pods.
       duration: 2160h # 90d
       renewBefore: 360h # 15d
-      algorithm: RSA # ECDSA or RSA
-      # Can be 2048, 4096 or 8192 for RSA
+      algorithm: ECDSA # ECDSA or RSA
+      # Can be 2046, 4096 or 8192 for RSA
       # Or 256, 384 or 521 for ECDSA
-      keySize: 2048
+      keySize: 521
 
   ## When certManager.enabled=false, rootCA.cert and rootCA.key are used to generate TLS certs.
   ## When certManager.enabled=true and boostrapSelfsigned=true, rootCA is ignored.
@@ -115,9 +115,6 @@ gflags:
 PodManagementPolicy: Parallel
 
 enableLoadBalancer: true
-
-ybc:
-  enabled: false
 
 domainName: "cluster.local"
 
@@ -284,15 +281,6 @@ commonLabels: {}
 master:
   ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#affinity-v1-core
   ## This might override the default affinity from service.yaml
-  # To successfully merge, we need to follow rules for merging nodeSelectorTerms that kubernentes 
-  # has. Each new node selector term is ORed together, and each match expression or match field in 
-  # a single selector is ANDed together. 
-  # This means, if a pod needs to be scheduled on a label 'custom_label_1' with a value 
-  # 'custom_value_1', we need to add this 'subterm' to each of our pre-defined node affinity
-  # terms.
-  #
-  # Pod anti affinity is a simpler merge. Each term is applied separately, and the weight is tracked.
-  # The pod that achieves the highest weight is selected.
   ## Example.
   # affinity:
   #   podAntiAffinity:
@@ -304,8 +292,6 @@ master:
   #           values:
   #           - "yb-master"
   #       topologyKey: kubernetes.io/hostname
-  #
-  # For further examples, see examples/yugabyte/affinity_overrides.yaml
   affinity: {}
 
   ## Extra environment variables passed to the Master pods.
@@ -366,15 +352,6 @@ master:
 tserver:
   ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#affinity-v1-core
   ## This might override the default affinity from service.yaml
-  # To successfully merge, we need to follow rules for merging nodeSelectorTerms that kubernentes 
-  # has. Each new node selector term is ORed together, and each match expression or match field in 
-  # a single selector is ANDed together. 
-  # This means, if a pod needs to be scheduled on a label 'custom_label_1' with a value 
-  # 'custom_value_1', we need to add this 'subterm' to each of our pre-defined node affinity
-  # terms.
-  #
-  # Pod anti affinity is a simpler merge. Each term is applied separately, and the weight is tracked.
-  # The pod that achieves the highest weight is selected.
   ## Example.
   # affinity:
   #   podAntiAffinity:
@@ -386,7 +363,6 @@ tserver:
   #           values:
   #           - "yb-tserver"
   #       topologyKey: kubernetes.io/hostname
-  # For further examples, see examples/yugabyte/affinity_overrides.yaml
   affinity: {}
 
   ## Extra environment variables passed to the TServer pods.
@@ -399,16 +375,13 @@ tserver:
   #       fieldPath: status.hostIP
   extraEnv: []
 
-  ## secretEnv variables are used to expose secrets data as env variables in the tserver pods.
-  ## If namespace field is not specified we assume that user already
-  ## created the secret in the same namespace as DB pods.
-  ## Example
+  # secretEnv variables are used to expose secrets data as env variables in the tserver pods.
+  # TODO Add namespace also to support copying secrets from other namespace.
   # secretEnv:
   # - name: MYSQL_LDAP_PASSWORD
   #   valueFrom:
   #     secretKeyRef:
   #       name: secretName
-  #       namespace: my-other-namespace-with-ldap-secret
   #       key: password
   secretEnv: []
 
