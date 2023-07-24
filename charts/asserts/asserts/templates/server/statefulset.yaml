@@ -55,6 +55,11 @@ spec:
                   name: {{ include "asserts.grafanaFullname" . }}
                   key: grafana-admin-password
                   optional: false
+            # set license file location
+            {{- if .Values.licenseFileSecret }}
+            - name: LICENSE_FILE_LOCATION
+              value: /opt/asserts/license/AssertsActivationFile.skm
+            {{- end }}
           {{- with .Values.server.extraEnv }}
           {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -72,6 +77,12 @@ spec:
               readOnly: true
             - name: data
               mountPath: {{ .Values.server.dataPath }}
+            {{- if .Values.licenseFileSecret }}
+            - name: license-file
+              mountPath: /opt/asserts/license/AssertsActivationFile.skm
+              subPath: AssertsActivationFile.skm
+              readOnly: true
+            {{- end }}
           {{- with .Values.server.extraVolumeMounts }}
           {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -91,6 +102,11 @@ spec:
             items:
               - key: application.yml
                 path: application.yml
+        {{- if .Values.licenseFileSecret }}
+        - name: license-file
+          secret:
+           secretName: {{ .Values.licenseFileSecret }}
+        {{- end }}
         {{- with .Values.server.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
