@@ -4,7 +4,7 @@
 ## Chart Details
 New Relic offers a [Fluent Bit](https://fluentbit.io/) output [plugin](https://github.com/newrelic/newrelic-fluent-bit-output) to easily forward your logs to [New Relic Logs](https://docs.newrelic.com/docs/logs/new-relic-logs/get-started/introduction-new-relic-logs). This plugin is also provided in a standalone Docker image that can be installed in a [Kubernetes](https://kubernetes.io/) cluster in the form of a [DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/), which we refer as the Kubernetes plugin.
 
-This document explains how to install it in your cluster, either using a [Helm](https://helm.sh/) chart (recommended), or manually by applying Kubernetes manifests.
+This document explains how to install it in your cluster using our [Helm](https://helm.sh/) chart.
 
 
 ## Install / Uninstall instructions
@@ -155,6 +155,7 @@ See [values.yaml](values.yaml) for the default values
 | `fluentBit.config.extraOutputs`                            | Contains extra fluent-bit.conf Outputs config                                                                                                                                                                                                                                                                                                                  |                                                                                 |
 | `fluentBit.config.parsers`                                 | Contains parsers.conf Parsers config                                                                                                                                                                                                                                                                                                                           |                                                                                 |
 | `fluentBit.retryLimit`                                     | Amount of times to retry sending a given batch of logs to New Relic. This prevents data loss if there is a temporary network disruption, if a request to the Logs API is lost or when receiving a recoverable HTTP response. Set it to "False" for unlimited retries.                                                                                          | 5                                                                               |
+| `dnsConfig`                                                | [DNS configuration](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-dns-config) that will be added to the pods. Can be configured also with `global.dnsConfig`.                                                                                                                                                                   | `{}`                                                                            |
 
 
 ### Proxy support
