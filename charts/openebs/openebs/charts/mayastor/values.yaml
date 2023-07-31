@@ -4,7 +4,7 @@ image:
   # -- Image registry's namespace
   repo: openebs
   # -- Release tag for our images
-  tag: v2.2.0
+  tag: v2.3.0
   repoTags:
     # Note: Below image tag configuration is optional and typically should never be
     #       used. Setting specific image tags for the different repositories proves useful
@@ -160,6 +160,11 @@ agents:
         # -- Same as the `volumeCommitment` argument, but applicable only when creating replicas
         # for a new volume.
         volumeCommitmentInitial: "40%"
+        # -- When creating snapshots for an existing volume, each replica pool must have at least
+        # this much free space percentage of the volume size.
+        # Example: if this value is 40, the pool has 40GiB free, then the max volume size allowed
+        # to be snapped on the pool is 100GiB.
+        snapshotCommitment: "40%"
     resources:
       limits:
         # -- Cpu limits for core agents
@@ -263,6 +268,10 @@ csi:
     provisionerTag: v2.2.1
     # -- csi-attacher image release tag
     attacherTag: v3.2.1
+    # -- csi-snapshotter image release tag
+    snapshotterTag: v6.2.1
+    # -- csi-snapshot-controller image release tag
+    snapshotControllerTag: v6.2.1
     # -- csi-node-driver-registrar image release tag
     registrarTag: v2.1.0
 
@@ -583,6 +592,36 @@ loki-stack:
               - __meta_kubernetes_pod_uid
               - __meta_kubernetes_pod_container_name
               target_label: __path__
+
+# Eventing which enables or disables eventing-related components.
+# This feature is in progress and will be available from next release.
+eventing:
+  enabled: false
+
+# Configuration for the nats message-bus. This is an eventing component, and is enabled when
+# 'eventing.enabled' is set to 'true'.
+nats:
+  nats:
+    image:
+      pullPolicy: IfNotPresent
+      # Defaults to docker.io
+      registry: ""
+    jetstream:
+      enabled: true
+      memStorage:
+        enabled: true
+        # Size of nats message is around 0.3 KB, so it can store around 10K messages.
+        size: "5Mi"
+      fileStorage:
+        enabled: false
+  cluster:
+    enabled: true
+    replicas: 3
+  # The nats box can be installed for debugging, by default its enabled.
+  natsbox:
+    enabled: false
+
+
 obs:
   callhome:
     # -- Enable callhome
@@ -604,3 +643,27 @@ obs:
     tolerations: []
     # -- Set PriorityClass, overrides global
     priorityClassName: ""
+  # Eventing component enabled/disabled based on obs.callhome.enabled value
+  stats:
+    # -- Log level for stats
+    logLevel: "info"
+    resources:
+      limits:
+        # -- Cpu limits for stats
+        cpu: "100m"
+        # -- Memory limits for stats
+        memory: "32Mi"
+      requests:
+        # -- Cpu requests for stats
+        cpu: "50m"
+        # -- Memory requests for stats
+        memory: "16Mi"
+    service:
+      # -- Rest K8s service type
+      type: ClusterIP
+      # Ports from where rest endpoints are accessible from outside the cluster, only valid if type is NodePort
+      nodePorts:
+        # NodePort associated with http port
+        http: 90011
+        # NodePort associated with https port
+        https: 90010

@@ -10,6 +10,7 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.16.4
 # v1.16.3
 ### New Features
 * **sysdig** [ec78a545](https://github.com/sysdiglabs/charts/commit/ec78a545637a86aa98c5cef41010c8012bccdfc7): updated legacy engine NIA compoment with latest release. ([#1266](https://github.com/sysdiglabs/charts/issues/1266))
