@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "koor-operator.jobName" . }}
+  labels:
+    app.kubernetes.io/created-by: koor-operator
+    app.kubernetes.io/part-of: koor-operator
+    {{- include "koor-operator.labels" . | nindent 4 }}
+spec:
+  template:
+    metadata:
+      name: {{ include "koor-operator.jobName" . }}
+      labels:
+        {{- include "koor-operator.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "koor-operator.jobName" . }}
+      containers:
+      - name: {{ include "koor-operator.fullname" . }}-koorcluster-install-job
+        image: bitnami/kubectl:1.26
+        command:
+          - "bin/bash"
+          - "-c"
+        args:
+          - |-
+            sleep 1;
+            cat <<EOF | kubectl apply -f -
+            {{- include "koor-operator.koorCluster" . | nindent 12 }}
+            EOF
