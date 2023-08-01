@@ -1,0 +1,29 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "koor-operator.fullname" . }}-validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "koor-operator.fullname" . }}-serving-cert
+  labels:
+  {{- include "koor-operator.labels" . | nindent 4 }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: '{{ include "koor-operator.fullname" . }}-webhook-service'
+      namespace: '{{ .Release.Namespace }}'
+      path: /validate-storage-koor-tech-v1alpha1-koorcluster
+  failurePolicy: Fail
+  name: vkoorcluster.kb.io
+  rules:
+  - apiGroups:
+    - storage.koor.tech
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - koorclusters
+  sideEffects: None
