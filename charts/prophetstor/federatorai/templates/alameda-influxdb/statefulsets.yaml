@@ -64,7 +64,11 @@ spec:
               value: "0"
             - name: FEDERATORAI_MAXIMUM_LOG_SIZE
               value: "1932735283"
+{{- if .Values.alamedaInfluxdb.image }}
+          image: {{ .Values.alamedaInfluxdb.image }}
+{{- else }}
           image: {{ .Values.global.imageRegistry }}/alameda-influxdb:{{ .Values.global.imageTag }}
+{{- end }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           livenessProbe:
             exec:
@@ -99,9 +103,6 @@ spec:
 {{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.resources.requests "context" .) | nindent 14 }}
 {{- end }}
           volumeMounts:
-            - mountPath: /var/log/influxdb
-              name: influxdb-log-storage
-              subPath: influxdb
             - mountPath: /var/lib/influxdb
               name: influxdb-data-storage
               subPath: influxdb
@@ -124,8 +125,5 @@ spec:
         - name: influxdb-data-storage
           persistentVolumeClaim:
             claimName: my-alameda.influxdb-data.pvc
-        - name: influxdb-log-storage
-          persistentVolumeClaim:
-            claimName: my-alameda.influxdb-log.pvc
   updateStrategy:
     type: RollingUpdate

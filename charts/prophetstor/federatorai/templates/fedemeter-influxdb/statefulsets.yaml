@@ -46,7 +46,11 @@ spec:
               value: warn
             - name: FEDERATORAI_MAXIMUM_LOG_SIZE
               value: "1932735283"
+{{- if .Values.fedemeterInfluxdb.image }}
+          image: {{ .Values.fedemeterInfluxdb.image }}
+{{- else }}
           image: {{ .Values.global.imageRegistry }}/fedemeter-influxdb:{{ .Values.global.imageTag }}
+{{- end }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           livenessProbe:
             exec:
@@ -73,9 +77,6 @@ spec:
 {{- include "render-value" ( dict "value" .Values.fedemeterInfluxdb.resources.requests "context" .) | nindent 14 }}
 {{- end }}
           volumeMounts:
-            - mountPath: /var/log/influxdb
-              name: fedemeter-influxdb-log-storage
-              subPath: influxdb
             - mountPath: /influxdb
               name: fedemeter-influxdb-data-storage
               subPath: influxdb
@@ -98,8 +99,5 @@ spec:
         - name: fedemeter-influxdb-data-storage
           persistentVolumeClaim:
             claimName: fedemeter.influxdb-data.pvc
-        - name: fedemeter-influxdb-log-storage
-          persistentVolumeClaim:
-            claimName: fedemeter.influxdb-log.pvc
   updateStrategy:
     type: RollingUpdate
