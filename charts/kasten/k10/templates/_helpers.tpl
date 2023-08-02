@@ -500,7 +500,22 @@ Check if Google creds are specified
 */}}
 {{- define "check.googlecreds" -}}
 {{- if .Values.secrets.googleApiKey -}}
-{{- print true -}}
+  {{- if eq (include "check.isBase64" .Values.secrets.googleApiKey) "false" -}}
+    {{- fail "secrets.googleApiKey must be base64 encoded" -}}
+  {{- end -}}
+  {{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if Google Project ID is specified
+*/}}
+{{- define "check.googleproject" -}}
+{{- if .Values.secrets.googleProjectId -}}
+  {{- if not .Values.secrets.googleApiKey -}}
+    {{- fail "secrets.googleApiKey field is required when using secrets.googleProjectId" -}}
+  {{- end -}}
+  {{- print true -}}
 {{- end -}}
 {{- end -}}
 

@@ -50,7 +50,11 @@ spec:
               value: postgres
             - name: FEDERATORAI_MAXIMUM_LOG_SIZE
               value: "1932735283"
+{{- if .Values.federatoraiPostgresql.image }}
+          image: {{ .Values.federatoraiPostgresql.image }}
+{{- else }}
           image: {{ .Values.global.imageRegistry }}/federatorai-postgresql:{{ .Values.global.imageTag }}
+{{- end }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           livenessProbe:
             exec:
@@ -89,9 +93,6 @@ spec:
 {{- include "render-value" ( dict "value" .Values.federatoraiPostgresql.resources.requests "context" .) | nindent 14 }}
 {{- end }}
           volumeMounts:
-            - mountPath: /var/log/postgresql
-              name: federatorai-postgresql-log-storage
-              subPath: postgresql
             - mountPath: /var/lib/postgresql/data
               name: federatorai-postgresql-data-storage
       imagePullSecrets:
@@ -113,8 +114,5 @@ spec:
         - name: federatorai-postgresql-data-storage
           persistentVolumeClaim:
             claimName: federatorai-postgresql-data.pvc
-        - name: federatorai-postgresql-log-storage
-          persistentVolumeClaim:
-            claimName: federatorai-postgresql-log.pvc
   updateStrategy:
     type: RollingUpdate

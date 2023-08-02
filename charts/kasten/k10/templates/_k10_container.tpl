@@ -83,6 +83,13 @@ stating that types are not same for the equality check
           - name: GOOGLE_APPLICATION_CREDENTIALS
             value: "/var/run/secrets/kasten.io/kasten-gke-sa.json"
 {{- end }}
+{{- if eq (include "check.googleproject" .) "true" }}
+          - name: projectID
+            valueFrom:
+              secretKeyRef:
+                name: google-secret
+                key: kasten-gke-project
+{{- end }}
 {{- if eq (include "check.ibmslcreds" .) "true" }}
           - name: IBM_SL_API_KEY
             valueFrom:
@@ -374,7 +381,7 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: AWSAssumeRoleDuration
-{{- if (list "dashboardbff" "catalog" | has $service) }}
+{{- if (list "dashboardbff" "catalog" "executor" | has $service) }}
     {{- if .Values.metering.mode }}
           - name: K10REPORTMODE
             value: {{ .Values.metering.mode }}

@@ -88,7 +88,8 @@ Parameter | Description | Default
 `secrets.awsAccessKeyId` | AWS access key ID (required for AWS deployment) | `None`
 `secrets.awsSecretAccessKey` | AWS access key secret | `None`
 `secrets.awsIamRole` | ARN of the AWS IAM role assumed by K10 to perform any AWS operation. | `None`
-`secrets.googleApiKey` | Non-default base64 encoded GCP Service Account key file | `None`
+`secrets.googleApiKey` | Non-default base64 encoded GCP Service Account key | `None`
+`secrets.googleProjectId` | Sets Google Project ID other than the one used in the GCP Service Account | `None`
 `secrets.azureTenantId` | Azure tenant ID (required for Azure deployment) | `None`
 `secrets.azureClientId` | Azure Service App ID | `None`
 `secrets.azureClientSecret` | Azure Service APP secret | `None`
@@ -243,7 +244,7 @@ Parameter | Description | Default
 `garbagecollector.importRunActions.enabled` | Enables ``importRunActions`` collector | `false`
 `garbagecollector.retireActions.enabled` | Enables ``retireActions`` collector | `false`
 `kubeVirtVMs.snapshot.unfreezeTimeout` | Defines the time duration within which the VMs must be unfrozen while backing them up. To know more about format [go doc](https://pkg.go.dev/time#ParseDuration) can be followed | `5m`
-`excludedApps` | Specifies a list of applications to be excluded from the dashboard & compliance considerations. Format should be a :ref:`YAML array<k10_compliance>` | `None`
+`excludedApps` | Specifies a list of applications to be excluded from the dashboard & compliance considerations. Format should be a :ref:`YAML array<k10_compliance>` | `["kube-system", "kube-ingress", "kube-node-lease", "kube-public", "kube-rook-ceph"]`
 `kanisterPodMetricSidecar.enabled` | Enable the sidecar container to gather metrics from ephemeral pods | `true`
 `kanisterPodMetricSidecar.metricLifetime` | Check periodically for metrics that should be removed | `2m`
 `kanisterPodMetricSidecar.pushGatewayInterval` | Set the interval for sending metrics into the Prometheus | `30s`
@@ -274,9 +275,17 @@ To set a single value from a file, `--set-file` may be used over `--set`:
 
 
 To use non-default GCP ServiceAccount (SA) credentials, the credentials JSON file needs to be encoded into a base64
-string.
+string:
 
 ```bash
   sa_key=$(base64 -w0 sa-key.json)
   helm install k10 kasten/k10 --namespace=kasten-io --set secrets.googleApiKey=$sa_key
+```
+
+If the Google Service Account belongs to a project other than the one in which the cluster
+is located, then the project's ID of the cluster must be also provided during the installation:
+
+```bash
+  sa_key=$(base64 -w0 sa-key.json)
+  helm install k10 kasten/k10 --namespace=kasten-io --set secrets.googleApiKey=$sa_key --set secrets.googleProjectId=<project-id>
 ```

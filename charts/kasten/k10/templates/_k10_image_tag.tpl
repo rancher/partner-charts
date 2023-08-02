@@ -1,1 +1,1 @@
-{{- define "k10.imageTag" -}}6.0.3{{- end -}}
+{{- define "k10.imageTag" -}}6.0.4{{- end -}}
