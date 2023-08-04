@@ -16,7 +16,7 @@ To install s3gw using Helm add the chart to your Helm repository and then run
 `helm install`:
 
 ```bash
-helm add repo s3gw https://aquarist-labs.github.io/s3gw-charts/
+helm repo add s3gw https://aquarist-labs.github.io/s3gw-charts/
 helm \
   --namespace s3gw-system \
   install s3gw \
