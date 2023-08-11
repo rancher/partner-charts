@@ -1197,6 +1197,24 @@ role sets used in the charts. Updating these requires separating out cluster
 resource roles into their separate templates.
 */}}
 {{- define "kong.kubernetesRBACRules" -}}
+{{- if (semverCompare ">= 2.11.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongconsumergroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongconsumergroups/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 {{- if (semverCompare "< 2.10.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
 - apiGroups:
   - ""
@@ -1599,4 +1617,14 @@ networking.k8s.io/v1beta1
 {{- else -}}
 extensions/v1beta1
 {{- end -}}
+{{- end -}}
+
+{{- define "kong.proxy.compatibleReadiness" -}}
+{{- $proxyReadiness := .Values.readinessProbe -}}
+{{- if (or (semverCompare "< 3.3.0" (include "kong.effectiveVersion" .Values.image)) (and .Values.ingressController.enabled (semverCompare "< 2.11.0" (include "kong.effectiveVersion" .Values.ingressController.image)))) -}}
+    {{- if (eq $proxyReadiness.httpGet.path "/status/ready") -}}
+        {{- $_ := set $proxyReadiness.httpGet "path" "/status" -}}
+    {{- end -}}
+{{- end -}}
+{{- (toYaml $proxyReadiness) -}}
 {{- end -}}
