@@ -175,6 +175,7 @@ spec:
       # ingress-gateway-init registers the ingress gateway service with Consul.
       - name: ingress-gateway-init
         image: {{ $root.Values.global.imageK8S }}
+        {{- include "consul.restrictedSecurityContext" $ | nindent 8 }}
         env:
         - name: NAMESPACE
           valueFrom:
@@ -211,7 +212,7 @@ spec:
           -gateway-kind="ingress-gateway" \
           -proxy-id-file=/consul/service/proxy-id \
           -service-name={{ template "consul.fullname" $root }}-{{ .name }} \
-          -log-level={{ default $root.Values.global.logLevel }} \
+          -log-level={{ default $root.Values.global.logLevel $root.Values.ingressGateways.logLevel }} \
           -log-json={{ $root.Values.global.logJSON }}
         volumeMounts:
         - name: consul-service
@@ -233,6 +234,7 @@ spec:
       containers:
       - name: ingress-gateway
         image: {{ $root.Values.global.imageConsulDataplane | quote }}
+        {{- include "consul.restrictedSecurityContext" $ | nindent 8 }}
         {{- if (default $defaults.resources .resources) }}
         resources: {{ toYaml (default $defaults.resources .resources) | nindent 10 }}
         {{- end }}
@@ -319,7 +321,7 @@ spec:
         {{- if $root.Values.global.adminPartitions.enabled }}
         - -service-partition={{ $root.Values.global.adminPartitions.name }}
         {{- end }}
-        - -log-level={{ default $root.Values.global.logLevel }}
+        - -log-level={{ default $root.Values.global.logLevel $root.Values.ingressGateways.logLevel }}
         - -log-json={{ $root.Values.global.logJSON }}
         {{- if (and $root.Values.global.metrics.enabled $root.Values.global.metrics.enableGatewayMetrics) }}
         - -telemetry-prom-scrape-path=/metrics

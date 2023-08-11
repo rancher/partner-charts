@@ -57,12 +57,11 @@
           {{- with .Values.resources }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
-        {{- $healthchecksPort := .Values.ports.web.port }}
-        {{- $healthchecksScheme := "HTTP" }}
-        {{- if .Values.ports.traefik }}
-          {{- $healthchecksPort = (default .Values.ports.traefik.port .Values.ports.traefik.healthchecksPort) }}
-          {{- $healthchecksScheme = (default "HTTP" .Values.ports.traefik.healthchecksScheme) }}
+        {{- if (and (empty .Values.ports.traefik) (empty .Values.deployment.healthchecksPort)) }}
+          {{- fail "ERROR: When disabling traefik port, you need to specify `deployment.healthchecksPort`" }}
         {{- end }}
+        {{- $healthchecksPort := (default (.Values.ports.traefik).port .Values.deployment.healthchecksPort) }}
+        {{- $healthchecksScheme := (default "HTTP" .Values.deployment.healthchecksScheme) }}
         readinessProbe:
           httpGet:
             path: /ping
@@ -359,12 +358,10 @@
 
           {{- if .Values.tracing.openTelemetry }}
            {{- if semverCompare "<3.0.0-0" (default $.Chart.AppVersion $.Values.image.tag) }}
-             {{- fail "ERROR: OpenTelemetry features are only available on Traefik v3. Please update `image.tag` to `v3.0`." }}
+             {{- fail "ERROR: OpenTelemetry features are only available on Traefik v3. Please set `image.tag` to `v3.x`." }}
            {{- end }}
           - "--tracing.openTelemetry=true"
-          {{- if .Values.tracing.openTelemetry.address }}
-          - "--tracing.openTelemetry.address={{ .Values.tracing.openTelemetry.address }}"
-          {{- end }}
+          - "--tracing.openTelemetry.address={{ required "ERROR: When enabling openTelemetry on tracing, `tracing.openTelemetry.address` is required." .Values.tracing.openTelemetry.address }}"
           {{- range $key, $value := .Values.tracing.openTelemetry.headers }}
           - "--tracing.openTelemetry.headers.{{ $key }}={{ $value }}"
           {{- end }}
@@ -374,6 +371,7 @@
           {{- if .Values.tracing.openTelemetry.path }}
           - "--tracing.openTelemetry.path={{ .Values.tracing.openTelemetry.path }}"
           {{- end }}
+          {{- if .Values.tracing.openTelemetry.tls }}
           {{- if .Values.tracing.openTelemetry.tls.ca }}
           - "--tracing.openTelemetry.tls.ca={{ .Values.tracing.openTelemetry.tls.ca }}"
           {{- end }}
@@ -385,6 +383,7 @@
           {{- end }}
           {{- if .Values.tracing.openTelemetry.tls.insecureSkipVerify }}
           - "--tracing.openTelemetry.tls.insecureSkipVerify={{ .Values.tracing.openTelemetry.tls.insecureSkipVerify }}"
+          {{- end }}
           {{- end }}
           {{- if .Values.tracing.openTelemetry.grpc }}
           - "--tracing.openTelemetry.grpc=true"
@@ -596,13 +595,12 @@
           - "--experimental.http3=true"
                     {{- end }}
                     {{- if semverCompare ">=2.6.0-0" (default $.Chart.AppVersion $.Values.image.tag)}}
-                      {{- if $config.http3.advertisedPort }}
-          - "--entrypoints.{{ $entrypoint }}.http3.advertisedPort={{ $config.http3.advertisedPort }}"
-                      {{- else }}
           - "--entrypoints.{{ $entrypoint }}.http3"
-                      {{- end }}
                     {{- else }}
           - "--entrypoints.{{ $entrypoint }}.enableHTTP3=true"
+                    {{- end }}
+                    {{- if $config.http3.advertisedPort }}
+          - "--entrypoints.{{ $entrypoint }}.http3.advertisedPort={{ $config.http3.advertisedPort }}"
                     {{- end }}
                   {{- end }}
                 {{- end }}
