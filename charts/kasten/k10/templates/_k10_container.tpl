@@ -381,7 +381,7 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: AWSAssumeRoleDuration
-{{- if (list "dashboardbff" "catalog" "executor" | has $service) }}
+{{- if (list "dashboardbff" "catalog" "executor" "crypto" | has $service) }}
     {{- if .Values.metering.mode }}
           - name: K10REPORTMODE
             value: {{ .Values.metering.mode }}
