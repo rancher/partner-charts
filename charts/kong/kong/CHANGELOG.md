@@ -4,6 +4,19 @@
 
 Nothing yet.
 
+## 2.26.2
+
+### Fixed 
+
+* Add missing CRD KongConsumerGroup and extend status subresource for CRDs
+
+## 2.26.1
+
+### Fixed
+
+* Fix parsing enterprise tags (like e.g. `3.4.0.0`)
+  [#857](https://github.com/Kong/charts/pull/857)
+
 ## 2.26.0
 
 ### Improvements
