@@ -44,19 +44,20 @@ The following table lists the configurable parameters of the rook-operator chart
 |-----------|-------------|---------|
 | `certmanager.enabled` | Enable cert-maanger | `true` |
 | `certmanager.installCRDs` | If cert-manager's CRDs should be installed through Helm. | `true` |
-| `controllerManager.kubeRbacProxy` | RBAC proxy configuration | `{"args":["--secure-listen-address=0.0.0.0:8443","--upstream=http://127.0.0.1:8080/","--logtostderr=true","--v=0"],"containerSecurityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}},"image":{"repository":"gcr.io/kubebuilder/kube-rbac-proxy","tag":"v0.14.1"},"resources":{"limits":{"cpu":"500m","memory":"128Mi"},"requests":{"cpu":"5m","memory":"64Mi"}}}` |
+| `controllerManager.kubeRbacProxy.args` | RBAC proxy args | `["--secure-listen-address=0.0.0.0:8443","--upstream=http://127.0.0.1:8080/","--logtostderr=true","--v=0"]` |
 | `controllerManager.kubeRbacProxy.containerSecurityContext` | RBAC proxy container security context | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` |
 | `controllerManager.kubeRbacProxy.image.repository` | Operator image repository | `"gcr.io/kubebuilder/kube-rbac-proxy"` |
 | `controllerManager.kubeRbacProxy.image.tag` | Operator image tag | `"v0.14.1"` |
 | `controllerManager.kubeRbacProxy.resources` | RBAC proxy container resources | `{"limits":{"cpu":"500m","memory":"128Mi"},"requests":{"cpu":"5m","memory":"64Mi"}}` |
-| `controllerManager.manager` | Operator configuration | `{"args":["--health-probe-bind-address=:8081","--metrics-bind-address=127.0.0.1:8080","--leader-elect"],"containerSecurityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}},"image":{"repository":"docker.io/koorinc/koor-operator","tag":"v0.3.1"},"resources":{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"10m","memory":"128Mi"}}}` |
+| `controllerManager.manager.args` | Operator args | `["--health-probe-bind-address=:8081","--metrics-bind-address=127.0.0.1:8080","--leader-elect"]` |
 | `controllerManager.manager.containerSecurityContext` | Operator container security context | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` |
 | `controllerManager.manager.image.repository` | Operator image repository | `"docker.io/koorinc/koor-operator"` |
-| `controllerManager.manager.image.tag` | Operator image tag | `"v0.3.1"` |
+| `controllerManager.manager.image.tag` | Operator image tag | `"v0.3.4"` |
 | `controllerManager.manager.resources` | Operator container resources | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"10m","memory":"128Mi"}}` |
 | `controllerManager.replicas` |  | `1` |
-| `koorCluster` | Koor Cluster specification | `{"spec":{"dashboardEnabled":true,"monitoringEnabled":true,"toolboxEnabled":true,"upgradeOptions":{"endpoint":"versions.koor.tech","mode":"notify","schedule":"0 0 * * *"},"useAllDevices":true}}` |
 | `koorCluster.spec.dashboardEnabled` | Enable the Ceph MGR dashboard. | `true` |
+| `koorCluster.spec.ksdClusterReleaseName` | The name to use for KSD cluster helm release. | `"ksd-cluster"` |
+| `koorCluster.spec.ksdReleaseName` | The name to use for KSD helm release. | `"ksd"` |
 | `koorCluster.spec.monitoringEnabled` | If monitoring should be enabled, requires the prometheus-operator to be pre-installed. | `true` |
 | `koorCluster.spec.toolboxEnabled` | If the Ceph toolbox, should be deployed as well. | `true` |
 | `koorCluster.spec.upgradeOptions.endpoint` | The api endpoint used to find the ceph latest version | `"versions.koor.tech"` |

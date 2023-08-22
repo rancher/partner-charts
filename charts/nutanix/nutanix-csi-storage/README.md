@@ -21,11 +21,11 @@ If this is your first deployment and your Kubernetes Distribution does not bundl
 Please note that starting with v2.2.0, Nutanix CSI driver has changed format of driver name from com.nutanix.csi to csi.nutanix.com. All deployment yamls uses this new driver name format. However, if you initially installed CSI driver in version < v2.2.0 then you should need to continue to use old driver name com.nutanix.csi by setting `legacy` parameter to `true`. If not existing PVC/PV will not work with the new driver name.
 
 ## Nutanix CSI driver documentation
-https://portal.nutanix.com/page/documents/details?targetId=CSI-Volume-Driver-v2_5:CSI-Volume-Driver-v2_5
+https://portal.nutanix.com/page/documents/details?targetId=CSI-Volume-Driver-v2_6:CSI-Volume-Driver-v2_6
 
 ## Features list
 
-- Nutanix CSI Driver v2.5.0
+- Nutanix CSI Driver v2.6.4
 - Nutanix Volumes support
 - Nutanix Files support
 - Volume clone
@@ -37,13 +37,13 @@ https://portal.nutanix.com/page/documents/details?targetId=CSI-Volume-Driver-v2_
 - iSCSI Auto CHAP Authentication
 - OS independence
 - Volume metrics and CSI operations metrics support
+- Squash type support for Dynamic File mode
 
 ## Prerequisites
 
 - Kubernetes 1.17 or later
 - Kubernetes worker nodes must have the iSCSI package installed (Nutanix Volumes mode) and/or NFS tools (Nutanix Files mode)
-- This chart have been validated on RHEL/CentOS 7/8 and Ubuntu 18.04/20.04/21.04/21.10, but the new architecture enables easy portability to other distributions.
-- This Chart is not made to be installed on the local k3s cluster (by default iscsi prerequisite is missing)
+- This chart have been validated on RHEL/CentOS/Rocky 7/8/9 and Ubuntu 18.04/20.04/21.04/21.10/22.05, but the new architecture enables easy portability to other distributions.
 
 ## Installing the Chart
 
@@ -63,6 +63,8 @@ Upgrades can be done using the normal Helm upgrade mechanism
 helm repo update
 helm upgrade nutanix-csi nutanix/nutanix-csi-storage
 ```
+
+Warning: If you have created StorageClass during the Helm chart install your upgrade will failed because StorageClass is immutable. You can remove your automatically created StorageClass before upgrade and they will be recreated during Helm upgrade. You can also decide to not create StorageClass with Helm chart and do it manually to avoid upgrade complexity.
 
 ### Upgrading from yaml based deployment
 Starting with CSI driver v2.5.0, yaml based deployment is discontinued. So to upgrade from yaml based deployment, you need to patch your existing CSI deployment with helm annotations. Please follow the following procedure.
@@ -117,24 +119,25 @@ The following table lists the configurable parameters of the Nutanix-CSI chart a
 | `fileClass`                   | Activate Nutanix Files Storage Class                                                        | `false`                |
 | `fileClassName`               | Name of the Nutanix Files Storage Class                                                     | `nutanix-file`         |
 | `fileClassRetention`          | Retention policy for the Files Storage Class (Delete, Retain)                               | `Delete`               |
+| `dynamicFileSquashType`       | Squash type for Nutanix Dynamic File Storage (none, root-squash, all-squash)                | `root-squash`          |
 | `dynamicFileClass`            | Activate Nutanix Dynamic Files Storage Class                                                | `false`                |
 | `dynamicFileClassName`        | Name of the Nutanix Dynamic Files Storage Class                                             | `nutanix-dynamicfile`  |
 | `dynamicFileClassDescription` | Description prefix for each created Fileshare                                               | `dynamicFileClassName` |
 | `dynamicFileClassRetention`   | Retention policy for the Dynamic Files Storage Class (Delete, Retain)                       | `Delete`               |
 | `defaultStorageClass`         | Choose your default Storage Class (none, volume, file, dynfile)                             | `none`                 |
-| `prismEndPoint`               | Cluster Virtual IP Address                                                                  | `10.0.0.1`             |
-| `username`                    | Name used for the admin role (if created)                                                   | `admin`                |
-| `password`                    | Password for the admin role (if created)                                                    | `nutanix/4u`           |
-| `secretName`                  | Name of the secret to use for admin role                                                    | `ntnx-secret`          |
+| `prismEndPoint`               | Prism Element (PE) cluster Virtual IP Address or fully qualified domain name (FQDN)         |                        |
+| `username`                    | Username of a Prism Element (PE) cluster admin (if created)                                 |                        |
+| `password`                    | Password for the Prism Element (PE) cluster admin (if created)                              |                        |
+| `secretName`                  | Secret name that stores Prism Element (PE) cluster credentials                              | `ntnx-secret`          |
 | `createSecret`                | Create secret for admin role (if false use existing)                                        | `true`                 |
-| `storageContainer`            | Nutanix storage container name                                                              | `default`              |
-| `fsType`                      | Type of file system you are using (ext4, xfs)                                               | `xfs`                  |
+| `storageContainer`            | Name of the Nutanix storage container                                                       |                        |
+| `fsType`                      | Type of file system used inside Volume PV (ext4, xfs)                                       | `xfs`                  |
 | `networkSegmentation`         | Activate Volumes Network Segmentation support                                               | `false`                |
 | `lvmVolume`                   | Activate LVM to use multiple vdisks by Volume                                               | `false`                |
 | `lvmDisks`                    | Number of vdisks by volume if lvm enabled                                                   | `4`                    |
-| `fileHost`                    | NFS server IP address                                                                       | `10.0.0.3`             |
-| `filePath`                    | Path of the NFS share                                                                       | `share`                |
-| `fileServerName`              | Name of the Nutanix FIle Server                                                             | `file`                 |
+| `fileHost`                    | NFS server fully qualified domain name (FQDN) or IP address                                 |                        |
+| `filePath`                    | Path of the NFS share                                                                       |                        |
+| `fileServerName`              | Name of the Nutanix File Server (As seen in the Prism Interface)                            |                        |
 | `kubeletDir`                  | allows overriding the host location of kubelet's internal state                             | `/var/lib/kubelet`     |
 | `nodeSelector`                | Add nodeSelector to all pods                                                                | `{}`                   |
 | `tolerations`                 | Add tolerations to all pods                                                                 | `[]`                   |
