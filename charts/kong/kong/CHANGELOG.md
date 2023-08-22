@@ -4,6 +4,18 @@
 
 Nothing yet.
 
+## 2.26.4
+
+### Fixed 
+
+* updated `admin_api_uri` to `admin_gui_api_url` as per [kong documentation](https://docs.konghq.com/gateway/3.4.x/reference/configuration/#admin_api_uri). 
+
+## 2.26.3
+
+### Fixed 
+
+* Enabled Service and Ingress in Kong Manager for non enterprise users.
+
 ## 2.26.2
 
 ### Fixed 
@@ -18,6 +30,17 @@ Nothing yet.
   [#857](https://github.com/Kong/charts/pull/857)
 
 ## 2.26.0
+
+### Breaking changes
+
+2.26 changes the default proxy readiness endpoint for newer Kong versions. This
+causes an issue in a narrow edge case. If all of the following are true:
+
+* You use Kong 3.3 or newer.
+* You use controller 2.10 or older.
+* You run the controller and proxy in separate Deployments.
+
+you are affected and should review [the 2.26 upgrade instructions](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#2260).
 
 ### Improvements
 
