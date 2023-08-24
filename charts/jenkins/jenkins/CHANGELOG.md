@@ -12,6 +12,21 @@ Use the following links to reference issues, PRs, and commits prior to v2.6.0.
 The changelog until v1.5.7 was auto-generated based on git commits.
 Those entries include a reference to the git commit to be able to get more details.
 
+## 4.6.1
+
+Update `configuration-as-code` plugin to fix dependency issues with `azure-ad` plugin
+
+## 4.6.0
+
+Added `.Values.controller.httpsKeyStore.jenkinsHttpsJksSecretKey` to allow overriding the default secret key containing the JKS file.
+Added `.Values.controller.httpsKeyStore.jenkinsHttpsJksPasswordSecretName` to allow getting the JKS password from a different secret.
+Added `.Values.controller.httpsKeyStore.jenkinsHttpsJksPasswordSecretKey` to allow overriding the default secret key containing the JKS password.
+
+## 4.5.1
+
+Update Jenkins image and appVersion to jenkins lts release version 2.414.1
+
+
 ## 4.5.0
 
 Added `.Values.persistence.dataSource` to allow cloning home PVC from existing dataSource.
