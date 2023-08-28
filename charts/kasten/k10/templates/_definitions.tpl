@@ -46,6 +46,8 @@ state:
 {{- define "k10.policypresets" -}}policypresets{{- end -}}
 {{- define "k10.transformsets" -}}transformsets{{- end -}}
 {{- define "k10.blueprintbindings" -}}blueprintbindings{{- end -}}
+{{- define "k10.storagesecuritycontexts" -}}storagesecuritycontexts{{- end -}}
+{{- define "k10.storagesecuritycontextbindings" -}}storagesecuritycontextbindings{{- end -}}
 {{- define "k10.reportingAPIs" -}}reporting{{- end -}}
 {{- define "k10.distAPIs" -}}dist{{- end -}}
 {{- define "k10.actionsAPIs" -}}actions{{- end -}}
