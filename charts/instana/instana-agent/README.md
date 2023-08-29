@@ -334,6 +334,8 @@ zones:
 ```
 
 ## Changelog
+### 1.2.62
+* Include k8s-sensor resources in the default static YAML definitions
 
 ### 1.2.61
 * Increase timeout and initialDelay for the Agent container

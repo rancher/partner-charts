@@ -42,8 +42,8 @@ The following table lists the configurable parameters of the rook-operator chart
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `certmanager.enabled` | Enable cert-maanger | `true` |
-| `certmanager.installCRDs` | If cert-manager's CRDs should be installed through Helm. | `true` |
+| `certmanager.enabled` | Install cert-manger. Set to false to use an existing cert-manager | `true` |
+| `certmanager.installCRDs` | If cert-manager's CRDs should be installed through Helm | `true` |
 | `controllerManager.kubeRbacProxy.args` | RBAC proxy args | `["--secure-listen-address=0.0.0.0:8443","--upstream=http://127.0.0.1:8080/","--logtostderr=true","--v=0"]` |
 | `controllerManager.kubeRbacProxy.containerSecurityContext` | RBAC proxy container security context | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` |
 | `controllerManager.kubeRbacProxy.image.repository` | Operator image repository | `"gcr.io/kubebuilder/kube-rbac-proxy"` |
@@ -52,7 +52,7 @@ The following table lists the configurable parameters of the rook-operator chart
 | `controllerManager.manager.args` | Operator args | `["--health-probe-bind-address=:8081","--metrics-bind-address=127.0.0.1:8080","--leader-elect"]` |
 | `controllerManager.manager.containerSecurityContext` | Operator container security context | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` |
 | `controllerManager.manager.image.repository` | Operator image repository | `"docker.io/koorinc/koor-operator"` |
-| `controllerManager.manager.image.tag` | Operator image tag | `"v0.3.4"` |
+| `controllerManager.manager.image.tag` | Operator image tag | `"v0.3.5"` |
 | `controllerManager.manager.resources` | Operator container resources | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"10m","memory":"128Mi"}}` |
 | `controllerManager.replicas` |  | `1` |
 | `koorCluster.spec.dashboardEnabled` | Enable the Ceph MGR dashboard. | `true` |
@@ -60,7 +60,7 @@ The following table lists the configurable parameters of the rook-operator chart
 | `koorCluster.spec.ksdReleaseName` | The name to use for KSD helm release. | `"ksd"` |
 | `koorCluster.spec.monitoringEnabled` | If monitoring should be enabled, requires the prometheus-operator to be pre-installed. | `true` |
 | `koorCluster.spec.toolboxEnabled` | If the Ceph toolbox, should be deployed as well. | `true` |
-| `koorCluster.spec.upgradeOptions.endpoint` | The api endpoint used to find the ceph latest version | `"versions.koor.tech"` |
+| `koorCluster.spec.upgradeOptions.endpoint` | The api endpoint used to find the ceph latest version | `"https://versions.koor.tech"` |
 | `koorCluster.spec.upgradeOptions.mode` | Upgrade mode. Options: disabled, notify, upgrade. | `"notify"` |
 | `koorCluster.spec.upgradeOptions.schedule` | The schedule to check for new versions. Uses CRON format as specified by https://github.com/robfig/cron/tree/v3. Defaults to everyday at midnight in the local timezone. To change the timezone, prefix the schedule with CRON_TZ=<Timezone>. For example: "CRON_TZ=UTC 0 0 * * *" is midnight UTC. | `"0 0 * * *"` |
 | `koorCluster.spec.useAllDevices` | If all empty + unused devices of the cluster should be used. | `true` |
