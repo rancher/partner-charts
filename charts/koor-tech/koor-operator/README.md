@@ -52,7 +52,7 @@ The following table lists the configurable parameters of the rook-operator chart
 | `controllerManager.manager.args` | Operator args | `["--health-probe-bind-address=:8081","--metrics-bind-address=127.0.0.1:8080","--leader-elect"]` |
 | `controllerManager.manager.containerSecurityContext` | Operator container security context | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` |
 | `controllerManager.manager.image.repository` | Operator image repository | `"docker.io/koorinc/koor-operator"` |
-| `controllerManager.manager.image.tag` | Operator image tag | `"v0.3.5"` |
+| `controllerManager.manager.image.tag` | Operator image tag | `"v0.3.6"` |
 | `controllerManager.manager.resources` | Operator container resources | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"10m","memory":"128Mi"}}` |
 | `controllerManager.replicas` |  | `1` |
 | `koorCluster.spec.dashboardEnabled` | Enable the Ceph MGR dashboard. | `true` |
