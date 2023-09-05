@@ -319,9 +319,9 @@ kubecostFrontend:
     requests:
       cpu: "10m"
       memory: "55Mi"
-    #limits:
-    #  cpu: "100m"
-    #  memory: "256Mi"
+    # limits:
+    #   cpu: "100m"
+    #   memory: "256Mi"
   livenessProbe:
     enabled: true
     initialDelaySeconds: 30
@@ -329,6 +329,13 @@ kubecostFrontend:
     failureThreshold: 200
   ipv6:
     enabled: true # disable if the cluster does not support ipv6
+  # allow customizing nginx-conf server block
+  # extraServerConfig: |-
+  #   proxy_busy_buffers_size   512k;
+  #   proxy_buffers   4 512k;
+  #   proxy_buffer_size   256k;
+  #   large_client_header_buffers 4 64k;
+
 #  api:
 #    fqdn: kubecost-api.kubecost.svc.cluster.local:9001
 #  model:
@@ -727,7 +734,7 @@ networkCosts:
   port: 3001
   # this daemonset can use significant resources on large clusters: https://guide.kubecost.com/hc/en-us/articles/4407595973527-Network-Traffic-Cost-Allocation
   resources:
-    limits: # remove the limits by setting limits: {}
+    limits: # remove the limits by setting cpu: null
       cpu: 500m # can be less, will depend on cluster size
       # memory: it is not recommended to set a memory limit
     requests:
@@ -840,8 +847,9 @@ networkCosts:
   additionalSecurityContext: {}
     # readOnlyRootFilesystem: true
 
-# Kubecost Deployment Configuration
-# Used for HA mode in Business & Enterprise tier
+## Kubecost Deployment Configuration
+## Used for HA mode in Business & Enterprise tier
+##
 kubecostDeployment:
   replicas: 1
   leaderFollower:
@@ -851,9 +859,12 @@ kubecostDeployment:
   #     maxSurge: 1
   #     maxUnavailable: 1
   #   type: RollingUpdate
+  labels: {}
+  annotations: {}
 
-  # QueryServiceReplicas
-  # Ref: https://docs.kubecost.com/install-and-configure/advanced-configuration/query-service-replicas
+  ## QueryServiceReplicas
+  ## Ref: https://docs.kubecost.com/install-and-configure/advanced-configuration/query-service-replicas
+  ##
   queryServiceReplicas: 0
   queryService:
     resources:
@@ -861,7 +872,7 @@ kubecostDeployment:
         # You can use the Kubecost savings report for 'Right-size your container requests' to determine the recommended resource requests once the pod has run for 24 hours.
         cpu: 1000m
         memory: 500Mi
-    # default storage class
+    ## default storage class
     storageClass: ""
     databaseVolumeSize: 100Gi
     configVolumeSize: 1Gi
@@ -869,7 +880,7 @@ kubecostDeployment:
 # Kubecost Cluster Controller for Right Sizing and Cluster Turndown
 clusterController:
   enabled: false
-  image: gcr.io/kubecost1/cluster-controller:v0.11.0
+  image: gcr.io/kubecost1/cluster-controller:v0.12.0
   imagePullPolicy: Always
   ## PriorityClassName
   ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
@@ -928,15 +939,20 @@ grafana:
   rbac:
     # Manage the Grafana Pod Security Policy
     pspEnabled: false
-  datasources:
-    datasources.yaml:
-      apiVersion: 1
-      datasources:
-        - name: prometheus-kubecost
-          type: prometheus
-          url: http://kubecost-prometheus-server.kubecost.svc.cluster.local
-          access: proxy
-          isDefault: false
+  # datasources:
+  #   datasources.yaml:
+  #     apiVersion: 1
+  #     datasources:
+  #       - name: prometheus-kubecost
+  #         type: prometheus
+  #         url: http://kubecost-prometheus-server.kubecost.svc.cluster.local
+  #         access: proxy
+  #         isDefault: false
+  #         jsonData:
+  #           httpMethod: POST
+  #           prometheusType: Prometheus
+  #           prometheusVersion: 2.35.0
+  #           timeInterval: 1m
   sidecar:
     dashboards:
       enabled: true
@@ -977,6 +993,10 @@ federatedETL:
     clusters: [] # optional. Whitelist of clusters by cluster id. If not set, the federator will attempt to federated all clusters pushing to the federated storage.
     # primaryClusterID: "cluster_id" # optional. Used when reconciliation is expected to occur on the Primary.
     # federationCutoffDate: "2022-10-18T00:00:00.000Z" # an RFC 3339-formatted string. All ETL files with windows that fall before this time are not processed by the Federator. If this is not set, the Federator will process all files regardless of date.
+    resources: {} # you can use the Kubecost savings report for 'Right-size your container requests' to determine the recommended resource requests once the pod has run for 24 hours.
+      # requests:
+      #   cpu: 100m
+      #   memory: 500Mi
 
 kubecostAdmissionController:
   enabled: false
@@ -1013,7 +1033,7 @@ costEventsAudit:
 #       pass: admin
 #   - name: "Cluster B"
 #     address: http://cluster-b.kubecost.com:9090
-#  defaultModelPricing: # default monthly resource prices, used predominately for on-prem clusters
+#  defaultModelPricing: # default monthly resource prices, used predominately for on-prem clusters. Use quotes if setting "0.00" for any item.
 #    CPU: 28.0
 #    spotCPU: 4.86
 #    RAM: 3.09
