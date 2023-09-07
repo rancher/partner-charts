@@ -1,5 +1,5 @@
 # What's Changed
 
-### Chores
-- **sysdig, node-analyzer** [6b2c2efd](https://github.com/sysdiglabs/charts/commit/6b2c2efd7eccb16ad74df29d75daef664e2df9f7): bump sysdig/vuln-runtime-scanner to v1.5.6 ([#1331](https://github.com/sysdiglabs/charts/issues/1331))
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.20.2...sysdig-1.16.10
+### New Features
+- **agent,sysdig** [8aff7e6a](https://github.com/sysdiglabs/charts/commit/8aff7e6adcccd7ebbebabff7f7d89e5125fb8f46): use `updatecli` for agent version bumps during release ([#1338](https://github.com/sysdiglabs/charts/issues/1338))
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.22.2...sysdig-1.16.11

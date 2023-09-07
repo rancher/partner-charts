@@ -45,7 +45,7 @@ By default this chart installs additional, dependent charts:
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://openebs.github.io/dynamic-localpv-provisioner | localpv-provisioner | 3.4.0   |
+| https://openebs.github.io/dynamic-localpv-provisioner | localpv-provisioner | 3.4.1   |
 
 **Note:** Find detailed Dynamic LocalPV Provisioner Helm chart configuration options [here](https://github.com/openebs/dynamic-localpv-provisioner/blob/develop/deploy/helm/charts/README.md).
 
