@@ -10,6 +10,9 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.16.12
+### New Features
+* [b2146b31](https://github.com/sysdiglabs/charts/commit/b2146b31e56eb00a6dc270bbb9bb530a3ee69f4c): release agent 12.16.1 ([#1353](https://github.com/sysdiglabs/charts/issues/1353))
 # v1.16.11
 ### New Features
 * **agent,sysdig** [8aff7e6a](https://github.com/sysdiglabs/charts/commit/8aff7e6adcccd7ebbebabff7f7d89e5125fb8f46): use `updatecli` for agent version bumps during release ([#1338](https://github.com/sysdiglabs/charts/issues/1338))

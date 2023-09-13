@@ -137,7 +137,7 @@ Parameter | Description | Default
 `auth.oidcAuth.groupClaim` | Name of a custom OpenID Connect claim for specifying user groups | `None`
 `auth.oidcAuth.groupPrefix` | All groups will be prefixed with this value to prevent conflicts | `None`
 `auth.oidcAuth.sessionDuration` | Maximum OIDC session duration | `1h`
-`auth.oidcAuth.refreshTokenSupport` | Enable OIDC Refresh Token support | `true`
+`auth.oidcAuth.refreshTokenSupport` | Enable OIDC Refresh Token support | `false`
 `auth.openshift.enabled` | Enables access to the K10 dashboard by authenticating with the OpenShift OAuth server | `false`
 `auth.openshift.serviceAccount` | Name of the service account that represents an OAuth client | `None`
 `auth.openshift.clientSecret` | The token corresponding to the service account | `None`
@@ -221,6 +221,7 @@ Parameter | Description | Default
 `route.tls.insecureEdgeTerminationPolicy` | Specifies behavior for insecure scheme traffic | `Redirect`
 `route.tls.termination` | Specifies the TLS termination of the route | `edge`
 `apigateway.serviceResolver` | Specifies the resolver used for service discovery in the API gateway (`dns` or `endpoint`) | `dns`
+`limiter.concurrentSnapConversions` | Limit of concurrent snapshots to convert during export | `3`
 `limiter.genericVolumeSnapshots` | Limit of concurrent generic volume snapshot create operations | `10`
 `limiter.genericVolumeCopies` | Limit of concurrent generic volume snapshot copy operations | `10`
 `limiter.genericVolumeRestores` | Limit of concurrent generic volume snapshot restore operations | `10`
