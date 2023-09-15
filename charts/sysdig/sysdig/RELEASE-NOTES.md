@@ -1,5 +1,5 @@
 # What's Changed
 
-### New Features
-- [b2146b31](https://github.com/sysdiglabs/charts/commit/b2146b31e56eb00a6dc270bbb9bb530a3ee69f4c): release agent 12.16.1 ([#1353](https://github.com/sysdiglabs/charts/issues/1353))
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.22.5...sysdig-1.16.12
+### Chores
+- **sysdig, nodel-analyzer** [44e1c6a3](https://github.com/sysdiglabs/charts/commit/44e1c6a385faf3bdcdd0cb8427254338c68254c7): bump sysdig/vuln-runtime-scanner to v1.5.7 ([#1361](https://github.com/sysdiglabs/charts/issues/1361))
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.22.8...sysdig-1.16.13
