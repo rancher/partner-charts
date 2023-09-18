@@ -99,7 +99,7 @@ Options that can be defined globally include `affinity`, `nodeSelector`, `tolera
 | resources | object | `{"limits":{"memory":"80M"},"requests":{"cpu":"100m","memory":"30M"}}` | Resources available for this pod |
 | serviceAccount | object | See `values.yaml` | Settings controlling ServiceAccount creation |
 | serviceAccount.create | bool | `true` | Specifies whether a ServiceAccount should be created |
-| timeoutSeconds | int | `28` | Webhook timeout Ref: https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#timeouts |
+| timeoutSeconds | int | `10` | Webhook timeout Ref: https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#timeouts |
 | tolerations | list | `[]` | Sets pod's tolerations to node taints. Can be configured also with `global.tolerations` |
 
 ## Maintainers

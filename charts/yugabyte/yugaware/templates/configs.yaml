@@ -86,6 +86,8 @@ data:
       kubernetes.storageClass = "{{ .Values.yugaware.storageClass }}"
       kubernetes.pullSecretName = "{{ .Values.image.pullSecret }}"
       url = "https://{{ .Values.tls.hostname }}"
+      # GKE MCS takes 7 to 10 minutes to setup DNS
+      wait_for_server_timeout = 15 minutes
     }
 
     play.filters {
@@ -161,7 +163,7 @@ data:
       listen  {{ eq .Values.ip_version_support "v6_only" | ternary "[::]:8080" "8080" }};
       server_name {{ .Values.tls.hostname }};
       return  301  https://$host$request_uri;
-    }  
+    }
 {{- end }}
 
     server {
@@ -180,7 +182,7 @@ data:
 {{- end }}
       proxy_http_version 1.1;
       proxy_set_header X-Real-IP  $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header Host $host;
 
@@ -199,6 +201,7 @@ data:
       }
     }
 ---
+{{- if not (and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io")) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -224,6 +227,7 @@ data:
       docker-upgrade pg_upgrade | tee -a /pg_upgrade_logs/pg_upgrade_11_to_14.log;
       echo "host all all all scram-sha-256" >> "${PGDATANEW}/pg_hba.conf";
     fi
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -251,6 +255,8 @@ data:
       fastcgi_temp_path /tmp/fastcgi_temp;
       uwsgi_temp_path /tmp/uwsgi_temp;
       scgi_temp_path /tmp/scgi_temp;
+
+      proxy_read_timeout {{ .Values.nginx.proxyReadTimeoutSec }};
 
       include       /etc/nginx/mime.types;
       default_type  application/octet-stream;

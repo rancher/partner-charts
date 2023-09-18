@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.3.0 - 2023-09-15
+
+### ⛓️ Dependencies
+- Updated newrelic/newrelic-prometheus-configurator to v1.6.0 - [Changelog 🔗](https://github.com/newrelic/newrelic-prometheus-configurator/releases/tag/1.6.0)
+
 ## v1.2.3 - 2023-08-22
 
 ### ⛓️ Dependencies

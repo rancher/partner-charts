@@ -84,6 +84,7 @@ Returns Infra-agent rules
     - "nodes/proxy"
     - "pods"
     - "services"
+    - "namespaces"
   verbs: ["get", "list"]
 - nonResourceURLs: ["/metrics"]
   verbs: ["get"]
