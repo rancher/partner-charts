@@ -26,7 +26,7 @@ Generate common labels.
 {{- define "yugabyte.labels" }}
 heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
 release: {{ .Release.Name | quote }}
-chart: {{ .Values.oldNamingStyle | ternary .Chart.Name (include "yugabyte.chart" .) | quote }}
+chart: {{ .Chart.Name | quote }}
 component: {{ .Values.Component | quote }}
 {{- if .Values.commonLabels}}
 {{ toYaml .Values.commonLabels }}
@@ -122,10 +122,18 @@ Generate server FQDN.
 {{- define "yugabyte.server_fqdn" -}}
   {{- if (and .Values.istioCompatibility.enabled .Values.multicluster.createServicePerPod) -}}
     {{- printf "$(HOSTNAME).$(NAMESPACE).svc.%s" .Values.domainName -}}
+  {{- else if (and .Values.oldNamingStyle .Values.multicluster.createServiceExports) -}}
+    {{ $membershipName := required "A valid membership name is required! Please set multicluster.kubernetesClusterId" .Values.multicluster.kubernetesClusterId }}
+    {{- printf "$(HOSTNAME).%s.%s.$(NAMESPACE).svc.clusterset.local" $membershipName .Service.name -}}
   {{- else if .Values.oldNamingStyle -}}
-    {{- printf "$(HOSTNAME).%s.$(NAMESPACE).svc.%s" .Service.name .Values.domainName -}}
+    {{- printf "$(HOSTNAME).%s.$(NAMESPACE).svc.%s" .Service.name .Values.domainName -}}  
   {{- else -}}
-    {{- printf "$(HOSTNAME).%s-%s.$(NAMESPACE).svc.%s" (include "yugabyte.fullname" .) .Service.name .Values.domainName -}}
+    {{- if .Values.multicluster.createServiceExports -}}
+      {{ $membershipName := required "A valid membership name is required! Please set multicluster.kubernetesClusterId" .Values.multicluster.kubernetesClusterId }}
+      {{- printf "$(HOSTNAME).%s.%s-%s.$(NAMESPACE).svc.clusterset.local" $membershipName (include "yugabyte.fullname" .) .Service.name -}}
+    {{- else -}}
+      {{- printf "$(HOSTNAME).%s-%s.$(NAMESPACE).svc.%s" (include "yugabyte.fullname" .) .Service.name .Values.domainName -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 
@@ -138,10 +146,17 @@ Generate server broadcast address.
 
 {{/*
 Generate server RPC bind address.
+
+In case of multi-cluster services (MCS), we set it to $(POD_IP) to
+ensure YCQL uses a resolvable address.
+See https://github.com/yugabyte/yugabyte-db/issues/16155
 */}}
 {{- define "yugabyte.rpc_bind_address" -}}
+  {{- $port := index .Service.ports "tcp-rpc-port" -}}
   {{- if .Values.istioCompatibility.enabled -}}
-    0.0.0.0:{{ index .Service.ports "tcp-rpc-port" -}}
+    0.0.0.0:{{ $port }}
+  {{- else if .Values.multicluster.createServiceExports -}}
+    $(POD_IP):{{ $port }}
   {{- else -}}
     {{- include "yugabyte.server_fqdn" . -}}
   {{- end -}}
@@ -158,7 +173,7 @@ Generate server web interface.
 Generate server CQL proxy bind address.
 */}}
 {{- define "yugabyte.cql_proxy_bind_address" -}}
-  {{- if .Values.istioCompatibility.enabled -}}
+  {{- if or .Values.istioCompatibility.enabled .Values.multicluster.createServiceExports -}}
     0.0.0.0:{{ index .Service.ports "tcp-yql-port" -}}
   {{- else -}}
     {{- include "yugabyte.server_fqdn" . -}}
@@ -203,10 +218,10 @@ Compute the maximum number of unavailable pods based on the number of master rep
 Set consistent issuer name.
 */}}
 {{- define "yugabyte.tls_cm_issuer" -}}
-  {{- if .Values.tls.certManager.useClusterIssuer -}}
-    {{ .Values.tls.certManager.clusterIssuer }}
-  {{- else -}}
+  {{- if .Values.tls.certManager.bootstrapSelfsigned -}}
     {{ .Values.oldNamingStyle | ternary "yugabyte-selfsigned" (printf "%s-selfsigned" (include "yugabyte.fullname" .)) }}
+  {{- else -}}
+    {{ .Values.tls.certManager.useClusterIssuer | ternary .Values.tls.certManager.clusterIssuer .Values.tls.certManager.issuer}}
   {{- end -}}
 {{- end -}}
 
