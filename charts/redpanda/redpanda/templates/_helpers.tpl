@@ -625,7 +625,7 @@ advertised-host returns a json string with the data needed for configuring the a
 {{- end -}}
 
 {{- define "is-licensed" -}}
-{{- toJson (dict "bool" (or (not (empty .Values.license_key)) (not (empty .Values.license_secret_ref)))) -}}
+{{- toJson (dict "bool" (or (not (empty (include "enterprise-license" . ))) (not (empty (include "enterprise-secret" . ))))) -}}
 {{- end -}}
 
 {{/*
@@ -682,7 +682,99 @@ return correct secretName to use based if secretRef exists
 {{- define "cert-secret-name" -}}
   {{- if .tempCert.cert.secretRef -}}
     {{- .tempCert.cert.secretRef.name -}}
-  {{- else }}
+  {{- else -}}
     {{- include "redpanda.fullname" . }}-{{ .tempCert.name }}-cert
+  {{- end -}}
+{{- end -}}
+
+{{/*
+return license checks deprecated values if current values is empty
+*/}}
+{{- define "enterprise-license" -}}
+{{- if dig "license" dict .Values.enterprise -}}
+  {{- .Values.enterprise.license -}}
+{{- else -}}
+  {{- .Values.license_key -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+return licenseSecretRef checks deprecated values entry if current values empty
+*/}}
+{{- define "enterprise-secret" -}}
+{{- if ( dig "licenseSecretRef" dict .Values.enterprise ) -}}
+  {{- .Values.enterprise.licenseSecretRef -}}
+{{- else if not (empty .Values.license_secret_ref ) -}}
+  {{- .Values.license_secret_ref -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+return licenseSecretRef.name checks deprecated values entry if current values empty
+*/}}
+{{- define "enterprise-secret-name" -}}
+{{- if ( dig "licenseSecretRef" dict .Values.enterprise ) -}}
+  {{- dig "name" "" .Values.enterprise.licenseSecretRef -}}
+{{- else if not (empty .Values.license_secret_ref ) -}}
+  {{- dig "secret_name" "" .Values.license_secret_ref -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+return licenseSecretRef.key checks deprecated values entry if current values empty
+*/}}
+{{- define "enterprise-secret-key" -}}
+{{- if ( dig "licenseSecretRef" dict .Values.enterprise ) -}}
+  {{- dig "key" "" .Values.enterprise.licenseSecretRef -}}
+{{- else if not (empty .Values.license_secret_ref ) -}}
+  {{- dig "secret_key" "" .Values.license_secret_ref -}}
+{{- end -}}
+{{- end -}}
+
+{{/* mounts that are common to all containers */}}
+{{- define "common-mounts" -}}
+  {{- if and .Values.auth.sasl.enabled (not (empty .Values.auth.sasl.secretRef )) }}
+- name: users
+  mountPath: /etc/secrets/users
+  readOnly: true
   {{- end }}
+  {{- if (include "tls-enabled" . | fromJson).bool }}
+    {{- range $name, $cert := .Values.tls.certs }}
+- name: redpanda-{{ $name }}-cert
+  mountPath: {{ printf "/etc/tls/certs/%s" $name }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
+
+{{/* mounts that are common to most containers */}}
+{{- define "default-mounts" -}}
+- name: config
+  mountPath: /etc/redpanda
+{{- include "common-mounts" . }}
+{{- end -}}
+
+{{/* volumes that are common to all pods */}}
+{{- define "common-volumes" -}}
+  {{- if (include "tls-enabled" . | fromJson).bool -}}
+    {{- range $name, $cert := .Values.tls.certs }}
+      {{- $r :=  set $ "tempCert" ( dict "name" $name "cert" $cert ) }}
+- name: redpanda-{{ $name }}-cert
+  secret:
+    secretName: {{ template "cert-secret-name" $r }}
+    defaultMode: 0o440
+    {{- end }}
+  {{- end -}}
+  {{- if and .Values.auth.sasl.enabled (not (empty .Values.auth.sasl.secretRef )) }}
+- name: users
+  secret:
+    secretName: {{ .Values.auth.sasl.secretRef }}
+  {{- end }}
+{{- end -}}
+
+{{/* the default set of volumes for most pods, except the sts pod */}}
+{{- define "default-volumes" -}}
+- name: config
+  configMap:
+    name: {{ include "redpanda.fullname" . }}
+{{- include "common-volumes" . }}
 {{- end -}}
