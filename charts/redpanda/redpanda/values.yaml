@@ -74,14 +74,25 @@ image:
 # See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 
-# -- Enterprise license key (optional).
+# -- DEPRECATED Enterprise license key (optional).
 # For details,
 # see the [License documentation](https://docs.redpanda.com/docs/get-started/licenses/?platform=kubernetes#redpanda-enterprise-edition).
 license_key: ""
-# -- Secret name and secret key where the license key is stored.
+# -- DEPRECATED Secret name and secret key where the license key is stored.
 license_secret_ref: {}
   # secret_name: my-secret
   # secret_key: key-where-license-is-stored
+
+# -- Enterprise (optional)
+# For details,
+# see the [License documentation](https://docs.redpanda.com/docs/get-started/licenses/?platform=kubernetes#redpanda-enterprise-edition).
+enterprise:
+  # -- license (optional).
+  license: ""
+  # -- Secret name and key where the license key is stored.
+  licenseSecretRef: {}
+    # name: my-secret
+    # key: key-where-license-is-stored
 
 # -- Rack Awareness settings.
 # For details,
@@ -400,7 +411,7 @@ storage:
     annotations: {}
   #
   # -- Tiered Storage settings
-  # Requires `license_key` or `license_secret_ref`
+  # Requires `enterprise.licenseKey` or `enterprised.licenseSecretRef`
   # For details,
   # see the [Tiered Storage documentation](https://docs.redpanda.com/docs/manage/kubernetes/tiered-storage/).
   tieredConfig:
@@ -640,6 +651,19 @@ statefulset:
   # -- Additional flags to pass to redpanda,
   additionalRedpandaCmdFlags: []
 #    - --unsafe-bypass-fsync
+  # -- Termination grace period in seconds is time required to execute preStop hook
+  # which puts particular Redpanda Pod (process/container) into maintenance mode.
+  # Before settle down on particular value please put Redpanda under load and perform
+  # rolling upgrade or rolling restart. That value needs to accommodate two processes:
+  # * preStop hook needs to put Redpanda into maintenance mode
+  # * after preStop hook Redpanda needs to handle gracefully SIGTERM signal
+  #
+  # Both processes are executed sequentially where preStop hook has hard deadline in the
+  # middle of terminationGracePeriodSeconds.
+  #
+  # REF:
+  # https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution
+  # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination
   terminationGracePeriodSeconds: 90
   ## Additional Volumes that you mount
   extraVolumes: |-
