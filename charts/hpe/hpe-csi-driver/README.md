@@ -4,10 +4,11 @@ The [HPE CSI Driver for Kubernetes](https://scod.hpedev.io/csi_driver/index.html
 
 ## Prerequisites
 
-- Upstream Kubernetes version >= 1.18
-- Most Kubernetes distributions are supported
-- Recent Ubuntu, SLES, CentOS or RHEL compute nodes connected to their respective official package repositories
+- Most recent Kubernetes distributions are supported
+- Recent Ubuntu, SLES or RHEL (and its derives) compute nodes connected to their respective official package repositories
 - Helm 3 (Version >= 3.2.0 required)
+
+Refer to [Compatibility & Support](https://scod.hpedev.io/csi_driver/index.html#compatibility_and_support) on [SCOD](https://scod.hpedev.io/) for currently supported versions of Kubernetes and compute nodes.
 
 Depending on which [Container Storage Provider](https://scod.hpedev.io/container_storage_provider/index.html) (CSP) is being used, other prerequisites and requirements may apply, such as storage platform OS and features.
 
@@ -24,7 +25,8 @@ The following table lists the configurable parameters of the chart and their def
 | disable.primera           | Disable HPE Primera (and 3PAR) CSP `Service`.                          | false            |
 | disable.alletra6000       | Disable HPE Alletra 5000/6000 CSP `Service`.                           | false            |
 | disable.alletra9000       | Disable HPE Alletra 9000 CSP `Service`.                                | false            |
-| disableNodeConformance    | Disable automatic installation of iSCSI/Multipath Packages.            | false            |
+| disableNodeConformance    | Disable automatic installation of iSCSI, multipath and NFS packages.   | false            |
+| disableNodeConfiguration  | Disables node conformance and configuration.`*`                        | false            |
 | disableNodeGetVolumeStats | Disable NodeGetVolumeStats call to CSI driver.                         | false            |
 | imagePullPolicy           | Image pull policy (`Always`, `IfNotPresent`, `Never`).                 | IfNotPresent     |
 | iscsi.chapUser            | Username for iSCSI CHAP authentication.                                | ""               |
@@ -44,6 +46,8 @@ The following table lists the configurable parameters of the chart and their def
 | node.nodeSelector         | Node labels for HPE CSI Driver node Pods assignment.                   | {}               |
 | node.affinity             | Affinity rules for the HPE CSI Driver node Pods.                       | {}               |
 | node.tolerations          | Node taints to tolerate for the HPE CSI Driver node Pods.              | []               |
+
+`*` = Disabling node conformance and configuration may prevent the CSI driver from functioning properly. See the [manual node configuration](https://scod.hpedev.io/csi_driver/operations.html#manual_node_configuration) section on SCOD to understand the consequences.
 
 It's recommended to create a [values.yaml](https://github.com/hpe-storage/co-deployments/blob/master/helm/values/csi-driver) file from the corresponding release of the chart and edit it to fit the environment the chart is being deployed to. Download and edit [a sample file](https://github.com/hpe-storage/co-deployments/blob/master/helm/values/csi-driver).
 
@@ -71,11 +75,10 @@ helm repo update
 Install the latest chart:
 
 ```
-kubectl create ns hpe-storage
-helm install my-hpe-csi-driver hpe-storage/hpe-csi-driver -n hpe-storage -f myvalues.yaml
+helm install --create-namespace -n hpe-storage my-hpe-csi-driver hpe-storage/hpe-csi-driver
 ```
 
-**Note**: `myvalues.yaml` is optional if no parameters are overridden from defaults. Also pay attention to what the latest version of the chart is. If it's labeled with `prerelease` and a "beta" tag, add `--version X.Y.Z` to install a "stable" chart.
+**Note**: By default, the latest stable chart will be installed. If it's labeled with `prerelease` and a "beta" version tag, add `--version X.Y.Z-beta` to the command line to install a "beta" chart.
 
 ### Upgrading the chart
 

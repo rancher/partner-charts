@@ -334,6 +334,9 @@ zones:
 ```
 
 ## Changelog
+### 1.2.63
+* Add RBAC required to allow access to /metrics end-points.
+
 ### 1.2.62
 * Include k8s-sensor resources in the default static YAML definitions
 
