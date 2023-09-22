@@ -1,5 +1,29 @@
 # Datadog changelog
 
+## 3.38.1
+
+* Enable Remote Config by default on the host agent only
+
+## 3.38.0
+
+* Default `Agent` and `Cluster-Agent` to `7.47.1` version.
+
+## 3.37.1
+
+* Temporarily revert enabling Remote Config by default
+
+## 3.37.0
+
+* Rename `datadog.securityAgent.compliance.xccdf.enabled` parameter to `datadog.securityAgent.compliance.host_benchmarks.enabled`.
+
+## 3.36.4
+
+* Disable Remote Config on the cluster checks runner
+
+## 3.36.3
+
+* Mount `/etc/passwd` in process agent only if `datadog.processAgent.processCollection` or `datadog.processAgent.processDiscovery` is enabled.
+
 ## 3.36.2
 
 * Update `fips.image.tag` to `0.5.5` which upgrades HAProxy to 2.4.24 and zlib to 1.3

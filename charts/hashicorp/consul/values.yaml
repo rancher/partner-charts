@@ -66,7 +66,7 @@ global:
   # image: "hashicorp/consul-enterprise:1.10.0-ent"
   # ```
   # @default: hashicorp/consul:<latest version>
-  image: hashicorp/consul:1.16.1
+  image: hashicorp/consul:1.16.2
 
   # Array of objects containing image pull secret names that will be applied to each service account.
   # This can be used to reference image pull secrets if using a custom consul or consul-k8s-control-plane Docker image.
@@ -86,7 +86,7 @@ global:
   # image that is used for functionality such as catalog sync.
   # This can be overridden per component.
   # @default: hashicorp/consul-k8s-control-plane:<latest version>
-  imageK8S: hashicorp/consul-k8s-control-plane:1.2.1
+  imageK8S: hashicorp/consul-k8s-control-plane:1.2.2
 
   # The name of the datacenter that the agents should
   # register as. This can't be changed once the Consul cluster is up and running
@@ -114,6 +114,11 @@ global:
   # secretKey should be in the form of "key".
   secretsBackend:
     vault:
+      # Vault namespace (optional). This sets the Vault namespace for the `vault.hashicorp.com/namespace` 
+      # agent annotation and [Vault Connect CA namespace](https://developer.hashicorp.com/consul/docs/connect/ca/vault#namespace).
+      # To override one of these values individually, see `agentAnnotations` and `connectCA.additionalConfig`.
+      vaultNamespace: ""
+
       # Enabling the Vault secrets backend will replace Kubernetes secrets with referenced Vault secrets.
       enabled: false
 
@@ -230,7 +235,6 @@ global:
         #   {
         #     "connect": [{
         #       "ca_config": [{
-        #            "namespace": "my-vault-ns",
         #            "leaf_cert_ttl": "36h"
         #         }]
         #     }]
@@ -289,7 +293,7 @@ global:
     # The key within the Kubernetes secret or Vault secret key that holds the gossip
     # encryption key.
     secretKey: ""
-    # Override global log verbosity level for gossip-encryption-autogenerate-job pods. One of "trace", "debug", "info", "warn", or "error".
+    # Override global log verbosity level for `gossip-encryption-autogenerate-job` pods. One of "trace", "debug", "info", "warn", or "error".
     # @type: string
     logLevel: ""
 
@@ -387,7 +391,7 @@ global:
       secretKey: null
 
     # This value defines additional annotations for
-    # tls init jobs. This should be formatted as a multi-line string.
+    # tls init jobs. Format this value as a multi-line string.
     #
     # ```yaml
     # annotations: |
@@ -513,7 +517,7 @@ global:
     nodeSelector: null
 
     # This value defines additional annotations for
-    # acl init jobs. This should be formatted as a multi-line string.
+    # acl init jobs. Format this value as a multi-line string.
     #
     # ```yaml
     # annotations: |
@@ -523,6 +527,14 @@ global:
     #
     # @type: string
     annotations: null
+
+  # If argocd.enabled is set to true, following annotations are added to
+  # job - server-acl-init-job
+  # annotations -
+  #   argocd.argoproj.io/hook: Sync
+  #   argocd.argoproj.io/hook-delete-policy: HookSucceeded
+  argocd:
+    enabled: false
 
   # [Enterprise Only] This value refers to a Kubernetes or Vault secret that you have created
   # that contains your enterprise license. It is required if you are using an
@@ -589,7 +601,7 @@ global:
     # @type: string
     k8sAuthMethodHost: null
 
-    # Override global log verbosity level for the create-federation-secret-job pods. One of "trace", "debug", "info", "warn", or "error".
+    # Override global log verbosity level for the `create-federation-secret-job` pods. One of "trace", "debug", "info", "warn", or "error".
     # @type: string
     logLevel: ""
 
@@ -627,7 +639,7 @@ global:
   # The name (and tag) of the consul-dataplane Docker image used for the
   # connect-injected sidecar proxies and mesh, terminating, and ingress gateways.
   # @default: hashicorp/consul-dataplane:<latest supported version>
-  imageConsulDataplane: hashicorp/consul-dataplane:1.2.1
+  imageConsulDataplane: hashicorp/consul-dataplane:1.2.2
 
   # Configuration for running this Helm chart on the Red Hat OpenShift platform.
   # This Helm chart currently supports OpenShift v4.x+.
@@ -2155,6 +2167,11 @@ connectInject:
     # If this setting is false, you will need to install the Gateway API CRDs manually.
     manageExternalCRDs: true
 
+    # Enables Consul on Kubernets to manage only the non-standard CRDs used for Gateway API. If manageExternalCRDs is true 
+    # then all CRDs will be installed; otherwise, if manageNonStandardCRDs is true then only TCPRoute, GatewayClassConfig and MeshService
+    # will be installed.
+    manageNonStandardCRDs: false
+
     # Configuration settings for the GatewayClass installed by Consul on Kubernetes.
     managedGatewayClass:
       # This value defines [`nodeSelector`](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
@@ -2195,6 +2212,17 @@ connectInject:
         # @type: string
         service: null
 
+      # The resource settings for Pods handling traffic for Gateway API.
+      # @recurse: false
+      # @type: map
+      resources:
+        requests:
+          memory: "100Mi"
+          cpu: "100m"
+        limits:
+          memory: "100Mi"
+          cpu: "100m"
+
       # This value defines the number of pods to deploy for each Gateway as well as a min and max number of pods for all Gateways
       deployment:
         defaultInstances: 1
@@ -2206,7 +2234,7 @@ connectInject:
       # @type: string
       openshiftSCCName: "restricted-v2"
 
-      # This value defines the amount we will add to privileged container ports on gateways that use this class.
+      # This value defines the amount Consul will add to privileged container ports on gateways that use this class.
       # This is useful if you don't want to give your containers extra permissions to run privileged ports.
       # Example: The gateway listener is defined on port 80, but the underlying value of the port on the container
       # will be the 80 + the number defined below.
@@ -2225,17 +2253,6 @@ connectInject:
       #
       # @type: string
       annotations: null
-
-    # The resource settings for Pods handling traffic for Gateway API.
-    # @recurse: false
-    # @type: map
-    resources:
-      requests:
-        memory: "100Mi"
-        cpu: "100m"
-      limits:
-        memory: "100Mi"
-        cpu: "100m"
 
   # Configures consul-cni plugin for Consul Service mesh services
   cni:
@@ -2414,7 +2431,7 @@ connectInject:
   # @type: string
   imageConsul: null
 
-  # Override global log verbosity level. One of "debug", "info", "warn", or "error".
+  # Sets the `logLevel` for the `consul-dataplane` sidecar and the `consul-connect-inject-init` container. When set, this value overrides the global log verbosity level. One of "debug", "info", "warn", or "error".
   # @type: string
   logLevel: ""
 
@@ -2677,7 +2694,7 @@ meshGateway:
   # Requirements: consul 1.6.0+ if using `global.acls.manageSystemACLs``.
   enabled: false
 
-  # Override global log verbosity level for mesh-gateway-deployment pods. One of "trace", "debug", "info", "warn", or "error".
+  # Override global log verbosity level for `mesh-gateway-deployment` pods. One of "trace", "debug", "info", "warn", or "error".
   # @type: string
   logLevel: ""
 
@@ -2893,7 +2910,7 @@ ingressGateways:
   # Enable ingress gateway deployment. Requires `connectInject.enabled=true`.
   enabled: false
 
-  # Override global log verbosity level for ingress-gateways-deployment pods. One of "trace", "debug", "info", "warn", or "error".
+  # Override global log verbosity level for `ingress-gateways-deployment` pods. One of "trace", "debug", "info", "warn", or "error".
   # @type: string
   logLevel: ""
 
@@ -3046,8 +3063,9 @@ ingressGateways:
 
   # Gateways is a list of gateway objects. The only required field for
   # each is `name`, though they can also contain any of the fields in
-  # `defaults`. Values defined here override the defaults except in the
-  # case of annotations where both will be applied.
+  # `defaults`. You must provide a unique name for each ingress gateway. These names 
+  # must be unique across different namespaces. 
+  # Values defined here override the defaults, except in the case of annotations where both will be applied.
   # @type: array<map>
   gateways:
     - name: ingress-gateway

@@ -49,6 +49,10 @@ spec:
         {{- if .Values.global.acls.annotations }}
           {{- tpl .Values.global.acls.annotations . | nindent 8 }}
         {{- end }}
+        {{- if .Values.global.argocd.enabled }}
+        "argocd.argoproj.io/hook": "Sync"
+        "argocd.argoproj.io/hook-delete-policy": "HookSucceeded"
+        {{- end }}
         {{- if .Values.global.secretsBackend.vault.enabled }}
 
         {{- /* Run the Vault agent as both an init container and sidecar.
@@ -92,6 +96,9 @@ spec:
         {{- end }}
         {{- if .Values.global.secretsBackend.vault.agentAnnotations }}
         {{ tpl .Values.global.secretsBackend.vault.agentAnnotations . | nindent 8 | trim }}
+        {{- end }}
+       {{- if (and (.Values.global.secretsBackend.vault.vaultNamespace) (not (hasKey (default "" .Values.global.secretsBackend.vault.agentAnnotations | fromYaml) "vault.hashicorp.com/namespace")))}}
+        "vault.hashicorp.com/namespace": "{{ .Values.global.secretsBackend.vault.vaultNamespace }}"
         {{- end }}
         {{- end }}
     spec:
@@ -143,9 +150,12 @@ spec:
               fieldPath: metadata.name
         # Extract the Vault namespace from the Vault agent annotations.
         {{- if .Values.global.secretsBackend.vault.enabled }}
-        {{- if .Values.global.secretsBackend.vault.agentAnnotations }}
+        {{- if and (.Values.global.secretsBackend.vault.agentAnnotations) (hasKey (default "" .Values.global.secretsBackend.vault.agentAnnotations | fromYaml) "vault.hashicorp.com/namespace") }}
         - name: VAULT_NAMESPACE
           value: {{ get (tpl .Values.global.secretsBackend.vault.agentAnnotations . | fromYaml) "vault.hashicorp.com/namespace" }}
+        {{- else if .Values.global.secretsBackend.vault.vaultNamespace }}
+        - name: VAULT_NAMESPACE
+          value: {{ .Values.global.secretsBackend.vault.vaultNamespace }}
         {{- end }}
         {{- end }}
         {{- include "consul.consulK8sConsulServerEnvVars" . | nindent 8 }}

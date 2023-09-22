@@ -35,11 +35,11 @@ spec:
       containers:
         - name: csi-node-driver-registrar
           {{- if and (.Values.registry) (eq .Values.registry "quay.io") }}
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.1
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
           {{- else if .Values.registry }}
-          image: {{ .Values.registry }}/sig-storage/csi-node-driver-registrar:v2.6.1
+          image: {{ .Values.registry }}/sig-storage/csi-node-driver-registrar:v2.8.0
           {{- else }}
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.1
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
           {{- end}}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -69,9 +69,9 @@ spec:
               mountPath: /registration
         - name: hpe-csi-driver
           {{- if .Values.registry }}
-          image: {{ .Values.registry }}/hpestorage/csi-driver:v2.3.0
+          image: {{ .Values.registry }}/hpestorage/csi-driver:v2.4.0
           {{- else }}
-          image: quay.io/hpestorage/csi-driver:v2.3.0
+          image: quay.io/hpestorage/csi-driver:v2.4.0
           {{- end}}
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
@@ -94,6 +94,10 @@ spec:
             {{- end }}
             {{ if .Values.disableNodeConformance -}}
             - name: DISABLE_NODE_CONFORMANCE
+              value: "true"
+            {{- end }}
+            {{ if .Values.disableNodeConfiguration -}}
+            - name: DISABLE_NODE_CONFIGURATION
               value: "true"
             {{- end }}
             {{- if .Values.kubeletRootDir }}
@@ -197,8 +201,11 @@ spec:
       nodeSelector:
 {{ toYaml .Values.node.nodeSelector | indent 8 }}
       {{- end }}
-      {{- if .Values.node.tolerations }}
       tolerations:
+        - effect: NoSchedule
+          key: csi.hpe.com/hpe-nfs
+          operator: Exists
+      {{- if .Values.node.tolerations }}
 {{ toYaml .Values.node.tolerations | indent 8 }}
       {{- end }}
       {{- if .Values.node.affinity }}
