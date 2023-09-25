@@ -520,15 +520,6 @@ Check if Google Project ID is specified
 {{- end -}}
 
 {{/*
-Check if IBM SL api key is specified
-*/}}
-{{- define "check.ibmslcreds" -}}
-{{- if or .Values.secrets.ibmSoftLayerApiKey .Values.secrets.ibmSoftLayerApiUsername -}}
-{{- print true -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Check if Azure creds are specified
 */}}
 {{- define "check.azurecreds" -}}
@@ -726,27 +717,15 @@ Lookup and return only enabled colocated services
 {{- $statefulRestSvcsInPod | join " " }}
 {{- end -}}
 
-{{- define "k10.ingressPath" -}}
-    {{- if and .Values.global.ingress.create .Values.global.route.enabled -}}
-        {{  fail "Either enable ingress or route"}}
-    {{- end -}}
-    {{- if .Values.global.ingress.create -}}
-        {{ if .Values.global.ingress.urlPath }}
-            {{- print .Values.global.ingress.urlPath -}}
-        {{ else }}
-            {{- print .Release.Name -}}
-        {{- end -}}
-    {{- else if .Values.global.route.enabled -}}
-        {{ if .Values.global.route.path }}
-            {{- print .Values.global.route.path -}}
-         {{ else }}
-            {{- print .Release.Name -}}
-        {{- end -}}
-     {{ else }}
-            {{- print .Release.Name -}}
-    {{- end -}}
+{{- define "k10.prefixPath" -}}
+  {{- if .Values.route.enabled -}}
+    /{{ .Values.route.path | default .Release.Name | trimPrefix "/" | trimSuffix "/" }}
+  {{- else if .Values.ingress.create -}}
+    /{{ .Values.ingress.urlPath | default .Release.Name | trimPrefix "/" | trimSuffix "/" }}
+  {{- else -}}
+    /{{ .Release.Name }}
+  {{- end -}}
 {{- end -}}
-
 
 {{/*
 Check if encryption keys are specified
@@ -754,27 +733,6 @@ Check if encryption keys are specified
 {{- define "check.primaryKey" -}}
 {{- if (or .Values.encryption.primaryKey.awsCmkKeyId .Values.encryption.primaryKey.vaultTransitKeyName) -}}
 {{- print true -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "check.validateMonitoringProperties" -}}
-{{- include "check.monitoringPrefix" . -}}
-{{- include "check.monitoringFullNameOverride" . -}}
-{{- end -}}
-
-{{- define "check.monitoringPrefix" -}}
-{{- if eq .Values.prometheus.server.enabled .Values.grafana.enabled -}}
-{{- if not (eq .Values.prometheus.server.prefixURL .Values.grafana.prometheusPrefixURL) -}}
-{{ fail "Prometheus and Grafana prefixURL should match. Please check values of prometheus.server.prefixURL and grafana.prometheusPrefixURL" }}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "check.monitoringFullNameOverride" -}}
-{{- if eq .Values.prometheus.server.enabled .Values.grafana.enabled -}}
-{{- if not (eq .Values.prometheus.server.fullnameOverride .Values.grafana.prometheusName) -}}
-{{ fail "The Prometheus name overrides must match. Please check values of prometheus.server.fullnameOverride and grafana.prometheusName" }}
-{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -921,4 +879,36 @@ running in the same cluster.
 
 {{- define "init.ImageName" -}}
   {{- printf "init" }}
+{{- end -}}
+
+{{- define "k10.splitImage" -}}
+  {{- $split_repo_tag_and_hash := .image | splitList "@" -}}
+  {{- $split_repo_and_tag := $split_repo_tag_and_hash | first | splitList ":" -}}
+  {{- $repo := $split_repo_and_tag | first -}}
+
+  {{- /* Error if there are extra pieces we don't understand in the image */ -}}
+  {{- $split_repo_tag_and_hash_len := $split_repo_tag_and_hash | len -}}
+  {{- $split_repo_and_tag_len := $split_repo_and_tag | len -}}
+  {{- if or (gt $split_repo_tag_and_hash_len 2) (gt $split_repo_and_tag_len 2) -}}
+    {{- fail (printf "Unsupported image format: %q (%s)" .image .path) -}}
+  {{- end -}}
+
+  {{- $hash := $split_repo_tag_and_hash | rest | first -}}
+  {{- $tag := $split_repo_and_tag | rest | first -}}
+
+  {{- $sha := "" -}}
+  {{- if $hash -}}
+    {{- if not ($hash | hasPrefix "sha256:") -}}
+      {{- fail (printf "Unsupported image ...@hash type: %q (%s)" .image .path) -}}
+    {{- end -}}
+    {{- $sha = $hash | trimPrefix "sha256:" }}
+  {{- end -}}
+
+  {{-
+    (dict
+      "repository" $repo
+      "tag" ($tag | default "")
+      "sha" ($sha | default "")
+    ) | toJson
+  -}}
 {{- end -}}

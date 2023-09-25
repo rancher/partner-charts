@@ -31,9 +31,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
-- bloblifecyclemanager
 - events
 - garbagecollector
+- bloblifecyclemanager
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -110,11 +110,6 @@ state:
 {{- define "k10.defaultKanisterEFSPostRestoreTimeout" -}}45{{- end -}}
 {{- define "k10.cloudProviders" -}}aws google azure{{- end -}}
 {{- define "k10.serviceResources" -}}
-admin-svc:
-  admin-svc:
-    requests:
-      cpu: 2m
-      memory: 160Mi
 aggregatedapis-svc:
   aggregatedapis-svc:
     requests:
@@ -125,11 +120,6 @@ auth-svc:
     requests:
       cpu: 2m
       memory: 30Mi
-bloblifecyclemanager-svc:
-  bloblifecyclemanager-svc:
-    requests:
-      cpu: 10m
-      memory: 40Mi
 catalog-svc:
   catalog-svc:
     requests:
@@ -148,20 +138,27 @@ controllermanager-svc:
       cpu: 5m
       memory: 30Mi
 crypto-svc:
+  bloblifecyclemanager-svc:
+    requests:
+      cpu: 10m
+      memory: 40Mi
   crypto-svc:
     requests:
       cpu: 1m
       memory: 30Mi
+  events-svc:
+    requests:
+      cpu: 3m
+      memory: 500Mi
+  garbagecollector-svc:
+    requests:
+      cpu: 3m
+      memory: 100Mi
 dashboardbff-svc:
   dashboardbff-svc:
     requests:
       cpu: 8m
       memory: 40Mi
-events-svc:
-  events-svc:
-    requests:
-      cpu: 3m
-      memory: 500Mi
 executor-svc:
   executor-svc:
     requests:
@@ -176,11 +173,6 @@ frontend-svc:
     requests:
       cpu: 1m
       memory: 40Mi
-garbagecollector-svc:
-  garbagecollector-svc:
-    requests:
-      cpu: 3m
-      memory: 100Mi
 jobs-svc:
   jobs-svc:
     requests:
@@ -202,6 +194,10 @@ metering-svc:
       cpu: 2m
       memory: 30Mi
 state-svc:
+  admin-svc:
+    requests:
+      cpu: 2m
+      memory: 160Mi
   state-svc:
     requests:
       cpu: 2m
@@ -210,5 +206,5 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.95.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.96.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}

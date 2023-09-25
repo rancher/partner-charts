@@ -74,31 +74,14 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- with .Values.extraLabels }}
 {{ toYaml . }}
 {{- end }}
-app.kubernetes.io/name: {{ include "grafana.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Selector labels
-
-K10 NOTE:
-
-  The selector labels here (`app` and `release`) are divergent from the
-  selector labels set by the upstream chart. This is intentional since a
-  Deployment's `spec.selector` is immutable and K10 has already been shipped
-  with these values.
-
-  A change to these selector labels will mean that all customers must manually
-  delete the Grafana Deployment before upgrading, which is a situation we don't
-  want for our customers.
-
-  Instead, the `app.kubernetes.io/name` and `app.kubernetes.io/instance` labels
-  are included in the `grafana.labels` block above.
-
 */}}
 {{- define "grafana.selectorLabels" -}}
-app: {{ include "grafana.name" . }}
-release: {{ .Release.Name }}
+app.kubernetes.io/name: {{ include "grafana.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
@@ -218,27 +201,3 @@ Formats imagePullSecrets. Input is (dict "root" . "imagePullSecrets" .{specific 
 {{- end }}
 {{- end }}
 {{- end }}
-
-{{- define "get.grafanaImage" }}
-  {{- (get .Values.global.images (include "grafana.ImageName" .)) | default (include "grafana.Image" .)  }}
-{{- end }}
-
-{{- define "grafana.Image" -}}
-  {{- printf "%s:%s" (include "grafana.ImageRepo" .) (include "grafana.ImageTag" .) }}
-{{- end -}}
-
-{{- define "grafana.ImageRepo" -}}
-  {{- if .Values.global.airgapped.repository }}
-    {{- printf "%s/%s" .Values.global.airgapped.repository (include "grafana.ImageName" .) }}
-  {{- else }}
-    {{- printf "%s/%s" .Values.global.image.registry (include "grafana.ImageName" .) }}
-  {{- end }}
-{{- end -}}
-
-{{- define "grafana.ImageName" -}}
-  {{- printf "grafana" }}
-{{- end -}}
-
-{{- define "grafana.ImageTag" -}}
-  {{- include "get.k10ImageTag" . }}
-{{- end -}}

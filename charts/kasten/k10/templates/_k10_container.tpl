@@ -37,7 +37,7 @@ stating that types are not same for the equality check
           - "--port={{ $externalPort }}"
           - "--host=0.0.0.0"
 {{- end }}{{/* eq $service "aggregatedapis" */}}
-{{- $podName := (printf "%s-svc" $service) }}
+{{- $podName := (printf "%s-svc" $pod) }}
 {{- $containerName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" $containerName  | include "k10.resource.request" | indent 8}}
         ports:
@@ -89,18 +89,6 @@ stating that types are not same for the equality check
               secretKeyRef:
                 name: google-secret
                 key: kasten-gke-project
-{{- end }}
-{{- if eq (include "check.ibmslcreds" .) "true" }}
-          - name: IBM_SL_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: ibmsl-secret
-                key: ibm_sl_key
-          - name: IBM_SL_API_USERNAME
-            valueFrom:
-              secretKeyRef:
-                name: ibmsl-secret
-                key: ibm_sl_username
 {{- end }}
 {{- if eq (include "check.azurecreds" .) "true" }}
 {{- if or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureClientSecretCreds" .) "true") }}
