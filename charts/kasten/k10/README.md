@@ -102,7 +102,8 @@ Parameter | Description | Default
 `secrets.vsphereEndpoint` | vSphere endpoint for login | `None`
 `secrets.vsphereUsername` | vSphere username for login | `None`
 `secrets.vspherePassword` | vSphere password for login | `None`
-`secrets.dockerConfigPath` | Use --set-file secrets.dockerConfigPath=path_to_docker_config.yaml to specify docker config for image pull | `None`
+`secrets.dockerConfig` | Set base64 encoded docker config to use for image pull operations. Alternative to the ``secrets.dockerConfigPath`` | `None`
+`secrets.dockerConfigPath` | Use ``--set-file secrets.dockerConfigPath=path_to_docker_config.yaml`` to specify docker config for image pull. Will be overwritten if ``secrets.dockerConfig`` is set | `None`
 `cacertconfigmap.name` | Name of the ConfigMap that contains a certificate for a trusted root certificate authority | `None`
 `clusterName` | Cluster name for better logs visibility | `None`
 `metering.awsRegion` | Sets AWS_REGION for metering service | `None`
@@ -210,7 +211,6 @@ Parameter | Description | Default
 `prometheus.server.prefixURL` | (optional) K10 Prometheus prefix slug at which the server can be accessed | `/k10/prometheus/`
 `prometheus.server.serviceAccounts.server.create` | DEPRECATED: (optional) Set true to create ServiceAccount for Prometheus server service | `true`
 `grafana.enabled` | (optional) If false Grafana will not be available | `true`
-`grafana.prometheusPrefixURL` | (optional) URL for Prometheus datasource in Grafana (must match `prometheus.server.prefixURL`) | `/k10/prometheus/`
 `resources.<podName>.<containerName>.[requests\|limits].[cpu\|memory]` | Overwrite default K10 [container resource requests and limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) | varies by container
 `route.enabled` | Specifies whether the K10 dashboard should be exposed via route | `false`
 `route.host` | FQDN (e.g., `.k10.example.com`) for name-based virtual host | `""`

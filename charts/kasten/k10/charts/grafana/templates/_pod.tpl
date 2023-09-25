@@ -17,12 +17,16 @@ hostAliases:
 {{- with .Values.priorityClassName }}
 priorityClassName: {{ . }}
 {{- end }}
-{{- if ( or .Values.global.persistence.enabled .Values.dashboards .Values.extraInitContainers (and .Values.sidecar.datasources.enabled .Values.sidecar.datasources.initDatasources) (and .Values.sidecar.notifiers.enabled .Values.sidecar.notifiers.initNotifiers)) }}
+{{- if ( or .Values.persistence.enabled .Values.dashboards .Values.extraInitContainers (and .Values.sidecar.datasources.enabled .Values.sidecar.datasources.initDatasources) (and .Values.sidecar.notifiers.enabled .Values.sidecar.notifiers.initNotifiers)) }}
 initContainers:
 {{- end }}
-{{- if ( and .Values.global.persistence.enabled .Values.initChownData.enabled ) }}
+{{- if ( and .Values.persistence.enabled .Values.initChownData.enabled ) }}
   - name: init-chown-data
-    image: "{{ include "get.initImage" . }}"
+    {{- if .Values.initChownData.image.sha }}
+    image: "{{ .Values.initChownData.image.repository }}{{ if .Values.initChownData.image.tag }}:{{ .Values.initChownData.image.tag }}{{ end }}@sha256:{{ .Values.initChownData.image.sha }}"
+    {{- else }}
+    image: "{{ .Values.initChownData.image.repository }}{{ if .Values.initChownData.image.tag }}:{{ .Values.initChownData.image.tag }}{{ end }}"
+    {{- end }}
     imagePullPolicy: {{ .Values.initChownData.image.pullPolicy }}
     {{- with .Values.initChownData.securityContext }}
     securityContext:
@@ -46,7 +50,11 @@ initContainers:
 {{- end }}
 {{- if .Values.dashboards }}
   - name: download-dashboards
-    image: "{{ include "get.initImage" . }}"
+    {{- if .Values.downloadDashboardsImage.sha }}
+    image: "{{ .Values.downloadDashboardsImage.repository }}{{ if .Values.downloadDashboardsImage.tag }}:{{ .Values.downloadDashboardsImage.tag }}{{ end }}@sha256:{{ .Values.downloadDashboardsImage.sha }}"
+    {{- else }}
+    image: "{{ .Values.downloadDashboardsImage.repository }}{{ if .Values.downloadDashboardsImage.tag }}:{{ .Values.downloadDashboardsImage.tag }}{{ end }}"
+    {{- end }}
     imagePullPolicy: {{ .Values.downloadDashboardsImage.pullPolicy }}
     command: ["/bin/sh"]
     args: [ "-c", "mkdir -p /var/lib/grafana/dashboards/default && /bin/sh -x /etc/grafana/download_dashboards.sh" ]
@@ -213,14 +221,9 @@ initContainers:
 {{- with .Values.extraInitContainers }}
   {{- tpl (toYaml .) $root | nindent 2 }}
 {{- end }}
-{{- if (or .Values.global.imagePullSecret .Values.image.pullSecrets) }}
+{{- if or .Values.image.pullSecrets .Values.global.imagePullSecrets }}
 imagePullSecrets:
-  {{- if .Values.global.imagePullSecret }}
-  - name: {{ .Values.global.imagePullSecret }}
-  {{- end }}
-  {{- range .Values.image.pullSecrets }}
-  - name: {{ tpl . $root }}
-  {{- end}}
+  {{- include "grafana.imagePullSecrets" (dict "root" $root "imagePullSecrets" .Values.image.pullSecrets) | nindent 2 }}
 {{- end }}
 {{- if not .Values.enableKubeBackwardCompatibility }}
 enableServiceLinks: {{ .Values.enableServiceLinks }}
@@ -752,7 +755,11 @@ containers:
         mountPath: "/etc/grafana/provisioning/plugins"
 {{- end}}
   - name: {{ .Chart.Name }}
-    image: "{{ include "get.grafanaImage" . }}"
+    {{- if .Values.image.sha }}
+    image: "{{ .Values.image.repository }}{{ if .Values.image.tag }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ end }}@sha256:{{ .Values.image.sha }}"
+    {{- else }}
+    image: "{{ .Values.image.repository }}{{ if .Values.image.tag }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ end }}"
+    {{- end }}
     imagePullPolicy: {{ .Values.image.pullPolicy }}
     {{- if .Values.command }}
     command:
@@ -807,10 +814,13 @@ containers:
         mountPath: "/var/lib/grafana/dashboards/{{ . }}"
       {{- end }}
       {{- end }}
-      {{/* Mounting default datasources in pod as yaml */}}
+      {{- with .Values.datasources }}
+      {{- range (keys . | sortAlpha) }}
       - name: config
-        mountPath: "/etc/grafana/provisioning/datasources/datasources.yaml"
-        subPath: "datasources.yaml"
+        mountPath: "/etc/grafana/provisioning/datasources/{{ . }}"
+        subPath: {{ . | quote }}
+      {{- end }}
+      {{- end }}
       {{- with .Values.notifiers }}
       {{- range (keys . | sortAlpha) }}
       - name: config
@@ -1039,11 +1049,11 @@ volumes:
         - key: ldap-toml
           path: ldap.toml
   {{- end }}
-  {{- if and .Values.global.persistence.enabled (eq .Values.persistence.type "pvc") }}
+  {{- if and .Values.persistence.enabled (eq .Values.persistence.type "pvc") }}
   - name: storage
     persistentVolumeClaim:
       claimName: {{ tpl (.Values.persistence.existingClaim | default (include "grafana.fullname" .)) . }}
-  {{- else if and .Values.global.persistence.enabled (has .Values.persistence.type $sts) }}
+  {{- else if and .Values.persistence.enabled (has .Values.persistence.type $sts) }}
   {{/* nothing */}}
   {{- else }}
   - name: storage
