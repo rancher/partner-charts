@@ -33,8 +33,8 @@ You may also run `helm show values` on this chart's dependencies for additional 
 
 |parameter| value |
 |---------|-----------|
-| `hub` | `intel` |
-| `tag` | `` |
+| `image.hub` | `intel` |
+| `image.tag` | `` |
 | `enclaveLimit` | `110` |
 | `provisionLimit` | `110` |
 | `logLevel` | `4` |
