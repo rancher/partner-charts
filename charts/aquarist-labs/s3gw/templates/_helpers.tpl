@@ -120,7 +120,7 @@ Default Access Credentials
 Backend service name
 */}}
 {{- define "s3gw.serviceName" -}}
-{{- $dsn := printf "%s-%s" .Release.Name .Release.Namespace }}
+{{- $dsn := printf "%s-%s-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := default $dsn .Values.serviceName }}
 {{- $name }}
 {{- end }}
@@ -129,7 +129,7 @@ Backend service name
 Frontend service name
 */}}
 {{- define "s3gw.uiServiceName" -}}
-{{- $dsn := printf "%s-%s-ui" .Release.Name .Release.Namespace }}
+{{- $dsn := printf "%s-%s-ui-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := default $dsn .Values.ui.serviceName }}
 {{- $name }}
 {{- end }}
@@ -138,7 +138,7 @@ Frontend service name
 User credentials secret for S3 backend service
 */}}
 {{- define "s3gw.defaultUserCredentialsSecret" -}}
-{{- $dsn := printf "%s-%s-creds" .Release.Name .Release.Namespace }}
+{{- $dsn := printf "%s-%s-creds-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := default $dsn .Values.defaultUserCredentialsSecret }}
 {{- $name }}
 {{- end }}
@@ -147,7 +147,7 @@ User credentials secret for S3 backend service
 Config map name
 */}}
 {{- define "s3gw.configMap" -}}
-{{- $dcmn := printf "%s-%s-config" .Release.Name .Release.Namespace }}
+{{- $dcmn := printf "%s-%s-config-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := $dcmn }}
 {{- $name }}
 {{- end }}
@@ -156,7 +156,7 @@ Config map name
 Traefik Middleware CORS name
 */}}
 {{- define "s3gw.CORSMiddlewareName" -}}
-{{- $dmcn := printf "%s-%s-cors-header" .Release.Name .Release.Namespace }}
+{{- $dmcn := printf "%s-%s-cors-header-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := $dmcn }}
 {{- $name }}
 {{- end }}
@@ -198,7 +198,7 @@ COSI driver name
 COSI service account name
 */}}
 {{- define "s3gw-cosi.ServiceAccountName" -}}
-{{- $dcsan := printf "%s-%s-objectstorage-provisioner-sa" .Release.Name .Release.Namespace }}
+{{- $dcsan := printf "%s-%s-objectstorage-provisioner-sa-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := $dcsan }}
 {{- $name }}
 {{- end }}
@@ -207,7 +207,7 @@ COSI service account name
 COSI driver secret name
 */}}
 {{- define "s3gw-cosi.driverSecretName" -}}
-{{- $ddsn := printf "%s-%s-objectstorage-provisioner" .Release.Name .Release.Namespace }}
+{{- $ddsn := printf "%s-%s-objectstorage-provisioner-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := $ddsn }}
 {{- $name }}
 {{- end }}
@@ -216,7 +216,7 @@ COSI driver secret name
 COSI cluster role name
 */}}
 {{- define "s3gw-cosi.ClusterRoleName" -}}
-{{- $dcrn := printf "%s-%s-objectstorage-provisioner-role" .Release.Name .Release.Namespace }}
+{{- $dcrn := printf "%s-%s-objectstorage-provisioner-role-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := $dcrn }}
 {{- $name }}
 {{- end }}
@@ -225,7 +225,7 @@ COSI cluster role name
 COSI cluster role binding name
 */}}
 {{- define "s3gw-cosi.ClusterRoleBindingName" -}}
-{{- $dcrn := printf "%s-%s-objectstorage-provisioner-role-binding" .Release.Name .Release.Namespace }}
+{{- $dcrn := printf "%s-%s-objectstorage-provisioner-role-binding-s3gw" .Release.Name .Release.Namespace }}
 {{- $name := $dcrn }}
 {{- $name }}
 {{- end }}
