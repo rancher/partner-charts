@@ -1,6 +1,6 @@
 # Datadog
 
-![Version: 3.38.4](https://img.shields.io/badge/Version-3.38.4-informational?style=flat-square) ![AppVersion: 7](https://img.shields.io/badge/AppVersion-7-informational?style=flat-square)
+![Version: 3.39.2](https://img.shields.io/badge/Version-3.39.2-informational?style=flat-square) ![AppVersion: 7](https://img.shields.io/badge/AppVersion-7-informational?style=flat-square)
 
 [Datadog](https://www.datadoghq.com/) is a hosted infrastructure monitoring platform. This chart adds the Datadog Agent to all nodes in your cluster via a DaemonSet. It also optionally depends on the [kube-state-metrics chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics). For more information about monitoring Kubernetes with Datadog, please refer to the [Datadog documentation website](https://docs.datadoghq.com/agent/basic_agent_usage/kubernetes/).
 
@@ -639,6 +639,7 @@ helm install <RELEASE_NAME> \
 | datadog.ignoreAutoConfig | list | `[]` | List of integration to ignore auto_conf.yaml. |
 | datadog.kubeStateMetricsCore.annotationsAsTags | object | `{}` | Extra annotations to collect from resources and to turn into datadog tag. |
 | datadog.kubeStateMetricsCore.collectApiServicesMetrics | bool | `false` | Enable watching apiservices objects and collecting their corresponding metrics kubernetes_state.apiservice.* (Requires Cluster Agent 7.45.0+) |
+| datadog.kubeStateMetricsCore.collectConfigMaps | bool | `true` | Enable watching configmap objects and collecting their corresponding metrics kubernetes_state.configmap.* |
 | datadog.kubeStateMetricsCore.collectCrdMetrics | bool | `false` | Enable watching CRD objects and collecting their corresponding metrics kubernetes_state.crd.* |
 | datadog.kubeStateMetricsCore.collectSecretMetrics | bool | `true` | Enable watching secret objects and collecting their corresponding metrics kubernetes_state.secret.* |
 | datadog.kubeStateMetricsCore.collectVpaMetrics | bool | `false` | Enable watching VPA objects and collecting their corresponding metrics kubernetes_state.vpa.* |
@@ -657,6 +658,7 @@ helm install <RELEASE_NAME> \
 | datadog.kubernetesEvents.collectedEventTypes | list | `[{"kind":"Pod","reasons":["Failed","BackOff","Unhealthy","FailedScheduling","FailedMount","FailedAttachVolume"]},{"kind":"Node","reasons":["TerminatingEvictedPod","NodeNotReady","Rebooted","HostPortConflict"]},{"kind":"CronJob","reasons":["SawCompletedJob"]}]` | Event types to be collected. This requires datadog.kubernetesEvents.unbundleEvents to be set to true. |
 | datadog.kubernetesEvents.unbundleEvents | bool | `false` | Allow unbundling kubernetes events, 1:1 mapping between Kubernetes and Datadog events. (Requires Cluster Agent 7.42.0+). |
 | datadog.leaderElection | bool | `true` | Enables leader election mechanism for event collection |
+| datadog.leaderElectionResource | string | `"configmap"` | Selects the default resource to use for leader election. Can be: * "lease" / "leases". Only supported in agent 7.47+ * "configmap" / "confimaps". "" to automatically detect which one to use. |
 | datadog.leaderLeaseDuration | string | `nil` | Set the lease time for leader election in second |
 | datadog.logLevel | string | `"INFO"` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, off |
 | datadog.logs.autoMultiLineDetection | bool | `false` | Allows the Agent to detect common multi-line patterns automatically. |
@@ -670,6 +672,7 @@ helm install <RELEASE_NAME> \
 | datadog.networkPolicy.flavor | string | `"kubernetes"` | Flavor of the network policy to use. Can be: * kubernetes for networking.k8s.io/v1/NetworkPolicy * cilium     for cilium.io/v2/CiliumNetworkPolicy |
 | datadog.nodeLabelsAsTags | object | `{}` | Provide a mapping of Kubernetes Node Labels to Datadog Tags |
 | datadog.orchestratorExplorer.container_scrubbing | object | `{"enabled":true}` | Enable the scrubbing of containers in the kubernetes resource YAML for sensitive information |
+| datadog.orchestratorExplorer.customResources | list | `[]` | Defines custom resources for the orchestrator explorer to collect |
 | datadog.orchestratorExplorer.enabled | bool | `true` | Set this to false to disable the orchestrator explorer |
 | datadog.osReleasePath | string | `"/etc/os-release"` | Specify the path to your os-release file |
 | datadog.otlp.receiver.protocols.grpc.enabled | bool | `false` | Enable the OTLP/gRPC endpoint |
