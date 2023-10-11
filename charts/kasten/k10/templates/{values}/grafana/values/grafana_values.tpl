@@ -63,14 +63,15 @@
       )
       "auth.anonymous" (dict
         "enabled" true
-        "org_name" "Main Org."
-        "org_role" "Admin"
       )
       "server" (dict
         "root_url" $grafana_prefix
       )
     )
 -}}
+{{- $authAnonymous := index .Values.grafana "grafana.ini" "auth.anonymous" -}}
+{{- $_ := set $authAnonymous "org_name" ($authAnonymous.org_name | default "Main Org.") -}}
+{{- $_ := set $authAnonymous "org_role" ($authAnonymous.org_role | default "Admin") -}}
 
 {{- /*** GRAFANA DEPLOYMENT STRATEGY ***/ -}}
 {{- $_ := set .Values.grafana.deploymentStrategy "type" "Recreate" -}}

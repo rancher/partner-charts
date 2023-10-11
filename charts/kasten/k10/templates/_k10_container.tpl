@@ -176,7 +176,7 @@ stating that types are not same for the equality check
                 key: role
 {{- end }}
 {{- end }}
-{{- if or (eq $service "crypto") (eq $service "executor") (eq $service "dashboardbff") }}
+{{- if or (eq $service "crypto") (eq $service "executor") (eq $service "dashboardbff") (eq $service "repositories") }}
 {{- if eq (include "check.vaultcreds" .) "true" }}
           - name: VAULT_ADDR
             value: {{ .Values.vault.address }}
@@ -234,6 +234,15 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: kubeVirtVMsUnFreezeTimeout
+{{- if   or  .Values.global.imagePullSecret (or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath)  }}
+          - name: IMAGE_PULL_SECRET_NAMES
+            value: {{  (trimSuffix " " (include "k10.imagePullSecretNames" .)) | toJson }}
+          - name: COPY_IMAGE_PULL_SECRETS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: copyImagePullSecretsWhileRestore
+{{- end }}
 {{- end }}
           - name: MODEL_STORE_DIR
 {{- if or (eq $service "state") (not .Values.global.persistence.enabled) }}
@@ -386,6 +395,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: K10GCKeepMaxActions
+          - name: K10_GC_BACKUP_RUN_ACTIONS_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10GCBackupRunActionsEnabled
           - name: K10_GC_IMPORT_RUN_ACTIONS_ENABLED
             valueFrom:
               configMapKeyRef:
@@ -453,6 +467,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterEFSPostRestoreTimeout
+          - name: KANISTER_MANAGED_DATA_SERVICES_BLUEPRINTS_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterManagedDataServicesBlueprintsEnabled
 {{- if .Values.maxJobWaitDuration }}
           - name: K10_JOB_MAX_WAIT_DURATION
             valueFrom:
@@ -515,7 +534,7 @@ stating that types are not same for the equality check
           - name: K10_AIRGAPPED_INSTALL
             value: "true"
           - name: K10_IMAGE_PULL_SECRET
-            value: {{ .Values.global.imagePullSecret }}  
+            value: {{ .Values.global.imagePullSecret }}
 {{- end }}
 {{- if and (eq $service "controllermanager") (.Values.injectKanisterSidecar.enabled) }}
           - name: K10_MUTATING_WEBHOOK_ENABLED
