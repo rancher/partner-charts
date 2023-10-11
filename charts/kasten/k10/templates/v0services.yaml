@@ -21,7 +21,8 @@ metadata:
 {{ include "helm.labels" $ | indent 4 }}
     component: {{ . }}
     run: {{ . }}-svc
-{{ if or $exposed_service (eq . "frontend") $mc_exposed_service }}
+{{- if not $.Values.gateway.next_gen }}
+{{- if or $exposed_service (eq . "frontend") $mc_exposed_service }}
   annotations:
     getambassador.io/config: |
   {{- if or $exposed_service (eq . "frontend") }}
@@ -51,7 +52,7 @@ metadata:
   {{- $colocatedList := include "get.enabledColocatedSvcList" $main_context | fromYaml }}
   {{- range $skip, $secondary := index $colocatedList . }}
     {{- $colocConfig := index (include "get.enabledColocatedServices" $main_context | fromYaml) $secondary }}
-    {{- if $colocConfig.isExposed }}
+    {{- if (has $secondary $exposed_services) }}
       ---
       apiVersion: getambassador.io/v3alpha1
       kind:  Mapping
@@ -80,6 +81,7 @@ metadata:
       hostname: "*"
       ambassador_id: [ {{ include "k10.ambassadorId" . }} ]
   {{- end }}
+{{- end }}
 {{- end }}
 spec:
   ports:
@@ -161,6 +163,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+{{- if not $.Values.gateway.next_gen }}
   annotations:
     getambassador.io/config: |
       ---
@@ -177,6 +180,7 @@ metadata:
       timeout_ms: 30000
       hostname: "*"
       ambassador_id: [ {{ include "k10.ambassadorId" . }} ]
+{{- end }}
   name: dex
   namespace: {{ $.Release.Namespace }}
   labels:

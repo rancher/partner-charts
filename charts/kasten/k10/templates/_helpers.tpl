@@ -9,6 +9,10 @@
     {{- end -}}
   {{- end -}}
 
+  {{- if not .Values.gateway.next_gen -}}
+    {{- $disabledServices = append $disabledServices "gateway" -}}
+  {{- end -}}
+
   {{- $disabledServices | join " " -}}
 {{- end -}}
 
@@ -541,7 +545,7 @@ Check if Vsphere creds are specified
 Check if Vault token secret creds are specified
 */}}
 {{- define "check.vaulttokenauth" -}}
-{{- if .Values.vault.secretName -}} 
+{{- if .Values.vault.secretName -}}
 {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -762,6 +766,20 @@ imagePullSecrets:
   - name: {{ . }}
   {{- end }}
 {{- end }}
+{{- end }}
+
+{{/*
+k10.imagePullSecretNames gets us just the secret names that are going be used
+as imagePullSecrets in the k10 services.
+*/}}
+{{- define "k10.imagePullSecretNames" }}
+{{- $pullSecretsSpec := (include "k10.imagePullSecrets" . ) | fromYaml }}
+{{- if $pullSecretsSpec }}
+  {{- range $pullSecretsSpec.imagePullSecrets }}
+    {{- $secretName := . }}
+    {{- printf "%s " ( $secretName.name) }}
+  {{- end}}
+{{- end}}
 {{- end }}
 
 {{/*

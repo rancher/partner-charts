@@ -55,6 +55,8 @@ spec:
       containers:
         {{- if and (.Values.configmapReload.enabled) (.Values.config) }}
         - name: {{ .Chart.Name }}-{{ .Values.configmapReload.name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}"
           imagePullPolicy: "{{ .Values.configmapReload.image.pullPolicy }}"
           args:
@@ -83,7 +85,7 @@ spec:
 {{- end }}
           args:
             - --storage.path=/alertmanager
-            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --config.file={{ .Values.configFileLocation }}
             {{- if or (gt .Values.replicaCount 1.0) (.Values.additionalPeers) }}
             - --cluster.advertise-address=$(POD_IP):9094
             - --cluster.listen-address=0.0.0.0:9094
@@ -121,10 +123,28 @@ spec:
               mountPath: /etc/alertmanager
             - name: storage
               mountPath: /alertmanager
+            {{- if and .Values.separateTemplateConfig (.Values.templates) }}
+            - name: template-config
+              mountPath: /etc/alertmanager-templates
+            {{- end }}
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ include "alertmanager.configName" .}}
+        {{- if and .Values.separateTemplateConfig (.Values.templates) }}
+        - name: template-config
+          configMap:
+            name: {{ include "alertmanager.configName" .}}-template
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
+        {{- end }}
       {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

@@ -3,41 +3,40 @@
 Therefore, fetching of a list or yaml with service names should be done with the get.enabled* helper functions.
 For example, the k10.restServices list can be fetched with get.enabledRestServices */}}
 {{- define "k10.additionalServices" -}}frontend kanister{{- end -}}
-{{- define "k10.restServices" -}}admin auth bloblifecyclemanager catalog controllermanager crypto dashboardbff events executor garbagecollector jobs logging metering state vbrintegrationapi{{- end -}}
+{{- define "k10.restServices" -}}admin auth bloblifecyclemanager catalog controllermanager crypto dashboardbff events executor garbagecollector jobs logging metering repositories state vbrintegrationapi{{- end -}}
 {{- define "k10.services" -}}aggregatedapis{{- end -}}
 {{- define "k10.exposedServices" -}}auth dashboardbff vbrintegrationapi{{- end -}}
-{{- define "k10.statelessServices" -}}admin aggregatedapis auth bloblifecyclemanager controllermanager crypto dashboardbff events executor garbagecollector state vbrintegrationapi{{- end -}}
+{{- define "k10.statelessServices" -}}admin aggregatedapis auth bloblifecyclemanager controllermanager crypto dashboardbff events executor garbagecollector repositories gateway state vbrintegrationapi{{- end -}}
 {{- define "k10.colocatedServices" -}}
 admin:
-  isExposed: false
   port: 8001
   primary: state
 bloblifecyclemanager:
-  isExposed: true
   port: 8001
   primary: crypto
 events:
-  isExposed: true
+  port: 8002
+  primary: state
+garbagecollector:
   port: 8002
   primary: crypto
-garbagecollector:
-  isExposed: true
+repositories:
   port: 8003
   primary: crypto
 vbrintegrationapi:
-  isExposed: true
   port: 8001
   primary: dashboardbff
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
-- events
-- garbagecollector
+- repositories
 - bloblifecyclemanager
+- garbagecollector
 dashboardbff:
 - vbrintegrationapi
 state:
 - admin
+- events
 {{- end -}}
 {{- define "k10.aggregatedAPIs" -}}actions apps repositories vault{{- end -}}
 {{- define "k10.configAPIs" -}}config{{- end -}}
@@ -94,6 +93,7 @@ state:
 {{- define "k10.defaultK10LimiterProviderSnapshots" -}}10{{- end -}}
 {{- define "k10.defaultK10GCDaemonPeriod" -}}21600{{- end -}}
 {{- define "k10.defaultK10GCKeepMaxActions" -}}1000{{- end -}}
+{{- define "k10.defaultK10GCBackupRunActionsEnabled" -}}false{{- end -}}
 {{- define "k10.defaultK10GCImportRunActionsEnabled" -}}false{{- end -}}
 {{- define "k10.defaultK10GCRetireActionsEnabled" -}}false{{- end -}}
 {{- define "k10.defaultK10ExecutorWorkerCount" -}}8{{- end -}}
@@ -159,6 +159,10 @@ dashboardbff-svc:
     requests:
       cpu: 8m
       memory: 40Mi
+  repositories-svc:
+    requests:
+      cpu: 10m
+      memory: 40Mi
 executor-svc:
   executor-svc:
     requests:
@@ -206,5 +210,5 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.96.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.97.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}
