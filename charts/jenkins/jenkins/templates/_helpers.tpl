@@ -88,9 +88,9 @@ Returns the Jenkins URL
 {{- else }}
   {{- if .Values.controller.ingress.hostName }}
     {{- if .Values.controller.ingress.tls }}
-      {{- default "https" .Values.controller.jenkinsUrlProtocol }}://{{ .Values.controller.ingress.hostName }}{{ default "" .Values.controller.jenkinsUriPrefix }}
+      {{- default "https" .Values.controller.jenkinsUrlProtocol }}://{{ tpl .Values.controller.ingress.hostName $ }}{{ default "" .Values.controller.jenkinsUriPrefix }}
     {{- else }}
-      {{- default "http" .Values.controller.jenkinsUrlProtocol }}://{{ .Values.controller.ingress.hostName }}{{ default "" .Values.controller.jenkinsUriPrefix }}
+      {{- default "http" .Values.controller.jenkinsUrlProtocol }}://{{ tpl .Values.controller.ingress.hostName $ }}{{ default "" .Values.controller.jenkinsUriPrefix }}
     {{- end }}
   {{- else }}
       {{- default "http" .Values.controller.jenkinsUrlProtocol }}://{{ template "jenkins.fullname" . }}:{{.Values.controller.servicePort}}{{ default "" .Values.controller.jenkinsUriPrefix }}
@@ -479,60 +479,4 @@ Create the HTTP port for interacting with the controller
 {{- else -}}
     {{- .Values.controller.targetPort -}}
 {{- end -}}
-{{- end -}}
-
-{{- define "jenkins.configReloadContainer" -}}
-{{- $root := index . 0 -}}
-{{- $containerName := index . 1 -}}
-{{- $method := index . 2 -}}
-- name: {{ $containerName }}
-  image: "{{ $root.Values.controller.sidecars.configAutoReload.image }}"
-  imagePullPolicy: {{ $root.Values.controller.sidecars.configAutoReload.imagePullPolicy }}
-  {{- if $root.Values.controller.sidecars.configAutoReload.containerSecurityContext }}
-  securityContext: {{- toYaml $root.Values.controller.sidecars.configAutoReload.containerSecurityContext | nindent 4 }}
-  {{- end }}
-  {{- if $root.Values.controller.sidecars.configAutoReload.envFrom }}
-  envFrom:
-{{ (tpl (toYaml $root.Values.controller.sidecars.configAutoReload.envFrom) $root) | indent 4 }}
-  {{- end }}
-  env:
-    - name: POD_NAME
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.name
-    - name: LABEL
-      value: "{{ template "jenkins.fullname" $root }}-jenkins-config"
-    - name: FOLDER
-      value: "{{ $root.Values.controller.sidecars.configAutoReload.folder }}"
-    - name: NAMESPACE
-      value: '{{ $root.Values.controller.sidecars.configAutoReload.searchNamespace | default (include "jenkins.namespace" $root) }}'
-{{- if $method }}
-    - name: METHOD
-      value: "{{ $method }}"
-{{- else if $root.Values.controller.sidecars.configAutoReload.sleepTime }}
-    - name: METHOD
-      value: "SLEEP"
-    - name: SLEEP_TIME
-      value: "{{ $root.Values.controller.sidecars.configAutoReload.sleepTime }}"
-{{- end }}
-    - name: REQ_URL
-      value: "http://localhost:{{- include "controller.httpPort" $root -}}{{- $root.Values.controller.jenkinsUriPrefix -}}/reload-configuration-as-code/?casc-reload-token=$(POD_NAME)"
-    - name: REQ_METHOD
-      value: "POST"
-    - name: REQ_RETRY_CONNECT
-      value: "{{ $root.Values.controller.sidecars.configAutoReload.reqRetryConnect }}"
-    {{- if $root.Values.controller.sidecars.configAutoReload.env }}
-{{ (tpl (toYaml $root.Values.controller.sidecars.configAutoReload.env) $root) | indent 4 }}
-    {{- end }}
-  resources:
-{{ toYaml $root.Values.controller.sidecars.configAutoReload.resources | indent 4 }}
-  volumeMounts:
-    - name: sc-config-volume
-      mountPath: {{ $root.Values.controller.sidecars.configAutoReload.folder | quote }}
-    - name: jenkins-home
-      mountPath: {{ $root.Values.controller.jenkinsHome }}
-      {{- if $root.Values.persistence.subPath }}
-      subPath: {{ $root.Values.persistence.subPath }}
-      {{- end }}
-
 {{- end -}}

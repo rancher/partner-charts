@@ -1,8 +1,8 @@
 # casa
 
-![Version: 5.0.22](https://img.shields.io/badge/Version-5.0.22-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
-Gluu Casa ("Casa") is a self-service web portal for end-users to manage authentication and authorization preferences for their account in a Gluu Server.
+Jans Casa ("Casa") is a self-service web portal for end-users to manage authentication and authorization preferences for their account in a Jans Server.
 
 **Homepage:** <https://gluu.org/docs/casa/>
 
@@ -10,13 +10,12 @@ Gluu Casa ("Casa") is a self-service web portal for end-users to manage authenti
 
 | Name | Email | Url |
 | ---- | ------ | --- |
-| Mohammad Abudayyeh | <support@gluu.org> | <https://github.com/moabu> |
+| Mohammad Abudayyeh | <support@jans.io> | <https://github.com/moabu> |
 
 ## Source Code
 
-* <https://gluu.org/docs/casa/>
-* <https://github.com/GluuFederation/docker-casa>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/casa>
+* <https://gluu.org/casa/>
+* <https://github.com/JanssenProject/jans/docker-jans-casa>
 
 ## Requirements
 
@@ -36,8 +35,8 @@ Kubernetes: `>=v1.21.0-0`
 | hpa.metrics | list | `[]` | metrics if targetCPUUtilizationPercentage is not set |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
-| image.repository | string | `"gluufederation/casa"` | Image  to use for deploying. |
-| image.tag | string | `"5.0.0-12"` | Image  tag to use for deploying. |
+| image.repository | string | `"janssenproject/casa"` | Image  to use for deploying. |
+| image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
 | lifecycle | object | `{}` |  |
 | livenessProbe | object | `{"httpGet":{"path":"/casa/health-check","port":"http-casa"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5}` | Configure the liveness healthcheck for casa if needed. |
 | livenessProbe.httpGet.path | string | `"/casa/health-check"` | http liveness probe endpoint |

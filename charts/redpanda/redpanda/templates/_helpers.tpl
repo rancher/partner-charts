@@ -640,7 +640,7 @@ return licenseSecretRef.key checks deprecated values entry if current values emp
   mountPath: {{ printf "/etc/tls/certs/%s" $name }}
     {{- end }}
 - name: mtls-client
-  mountPath: /etc/ls/certs/{{ template "redpanda.fullname" $ }}-client
+  mountPath: /etc/tls/certs/{{ template "redpanda.fullname" $ }}-client
   {{- end }}
 {{- end -}}
 
@@ -683,28 +683,36 @@ return licenseSecretRef.key checks deprecated values entry if current values emp
 
 {{/* support legacy tiered storage type selection */}}
 {{- define "storage-tiered-mountType" -}}
-{{- if dig "tieredStoragePersistentVolume" "enabled" false .Values.storage -}}
-persistentVolume
-{{- else if dig "tieredStorageHostPath" false .Values.storage -}}
-hostPath
-{{- else -}}
-{{- .Values.storage.tiered.mountType -}}
-{{- end -}}
+  {{- $mountType := .Values.storage.tiered.mountType -}}
+  {{- if dig "tieredStoragePersistentVolume" "enabled" false .Values.storage -}}
+    {{- $mountType = "persistentVolume" -}}
+  {{- else if dig "tieredStorageHostPath" false .Values.storage -}}
+    {{- $mountType = "hostPath" -}}
+  {{- end -}}
+  {{- $mountType -}}
 {{- end -}}
 
 {{/* support legacy storage.tieredStoragePersistentVolume */}}
 {{- define "storage-tiered-persistentvolume" -}}
-{{- dig "tieredStoragePersistentVolume" .Values.storage.tiered.persistentVolume .Values.storage | toJson -}}
+  {{- $pv := dig "tieredStoragePersistentVolume" .Values.storage.tiered.persistentVolume .Values.storage | toJson -}}
+  {{- if empty $pv -}}
+    {{- fail "storage.tiered.mountType is \"persistentVolume\" but storage.tiered.persistentVolume is not configured" -}}
+  {{- end -}}
+  {{- $pv -}}
 {{- end -}}
 
 {{/* support legacy storage.tieredStorageHostPath */}}
 {{- define "storage-tiered-hostpath" -}}
-{{- dig "tieredStorageHostPath" .Values.storage.tiered.hostPath .Values.storage -}}
+  {{- $hp := dig "tieredStorageHostPath" .Values.storage.tiered.hostPath .Values.storage -}}
+  {{- if empty $hp -}}
+    {{- fail "storage.tiered.mountType is \"hostPath\" but storage.tiered.hostPath is empty" -}}
+  {{- end -}}
+  {{- $hp -}}
 {{- end -}}
 
 {{/* support legacy storage.tieredConfig */}}
 {{- define "storage-tiered-config" -}}
-{{- dig "tieredConfig" .Values.storage.tiered.config .Values.storage | toJson -}}
+  {{- dig "tieredConfig" .Values.storage.tiered.config .Values.storage | toJson -}}
 {{- end -}}
 
 {{/*
@@ -719,4 +727,16 @@ RPK_USER RPK_PASS RPK_SASL_MECHANISM
 {{- else -}}
 REDPANDA_SASL_USERNAME REDPANDA_SASL_PASSWORD REDPANDA_SASL_MECHANISM
 {{- end -}}
+{{- end -}}
+
+{{- define "curl-options" -}}
+{{- print " -svm3 --fail --retry \"120\" --retry-max-time \"120\" --retry-all-errors -o - -w \"\\nstatus=%{http_code} %{redirect_url} size=%{size_download} time=%{time_total} content-type=\\\"%{content_type}\\\"\\n\" "}}
+{{- end -}}
+
+{{- define "advertised-address-template" -}}
+  {{- $prefixTemplate := dig "prefixTemplate" "" .externalListener -}}
+  {{- if empty $prefixTemplate -}}
+    {{- $prefixTemplate = dig "prefixTemplate" "" .externalVals -}}
+  {{- end -}}
+  {{ quote $prefixTemplate }}
 {{- end -}}
