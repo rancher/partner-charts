@@ -18,6 +18,25 @@ rules:
   apiGroups: []
   resources: []
 {{- end }}
+- apiGroups: [""]
+  resources:
+    - "nodes"
+    - "nodes/stats"
+    - "nodes/metrics"
+    - "pods"
+{{- if and $.Values.kubernetes.deployment.enabled (not $.Values.k8s_sensor.deployment.enabled) }}
+    - "namespaces"
+    - "events"
+    - "services"
+    - "endpoints"
+    - "replicationcontrollers"
+    - "componentstatuses"
+    - "resourcequotas"
+    - "persistentvolumes"
+    - "persistentvolumeclaims"
+{{- end }}
+  verbs: ["get", "list", "watch"]
+{{- if and $.Values.kubernetes.deployment.enabled (not $.Values.k8s_sensor.deployment.enabled) }}
 - apiGroups: ["batch"]
   resources:
     - "jobs"
@@ -38,22 +57,6 @@ rules:
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources:
-    - "namespaces"
-    - "events"
-    - "services"
-    - "endpoints"
-    - "nodes"
-    - "nodes/stats"
-    - "nodes/metrics"
-    - "pods"
-    - "replicationcontrollers"
-    - "componentstatuses"
-    - "resourcequotas"
-    - "persistentvolumes"
-    - "persistentvolumeclaims"
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources:
     - "endpoints"
   verbs: ["create", "update", "patch"]
 - apiGroups: ["networking.k8s.io"]
@@ -65,11 +68,14 @@ rules:
   resources:
     - "deploymentconfigs"
   verbs: ["get", "list", "watch"]
+{{- end -}}
+{{- end }}
+{{- if or .Values.openshift (.Capabilities.APIVersions.Has "apps.openshift.io/v1") }}
 - apiGroups: ["security.openshift.io"]
   resourceNames: ["privileged"]
   resources: ["securitycontextconstraints"]
   verbs: ["use"]
-{{- end -}}
+{{- end }}
 {{- if .Values.podSecurityPolicy.enable}}
 {{- if semverCompare "< 1.25.x" (include "kubeVersion" .) }}
 - apiGroups: ["policy"]

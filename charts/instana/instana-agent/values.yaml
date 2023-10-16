@@ -255,6 +255,23 @@ k8s_sensor:
         memory: 1536Mi
         # k8s_sensor.deployment.pod.limits.cpu sets the CPU units allocation limits for the agent pods.
         cpu: 500m
+      affinity:
+        podAntiAffinity:
+          # Soft anti-affinity policy: try not to schedule multiple kubernetes-sensor pods on the same node.
+          # If the policy is set to "requiredDuringSchedulingIgnoredDuringExecution", if the cluster has
+          # fewer nodes than the amount of desired replicas, `helm install/upgrade --wait` will not return.
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: instana/agent-mode
+                  operator: In
+                  values: [ KUBERNETES ]
+              topologyKey: "kubernetes.io/hostname"
+  podDisruptionBudget:
+    # Specifies whether or not to setup a pod disruption budget for the k8sensor deployment
+    enabled: false
 
 kubernetes:
   # Configures use of a Deployment for the Kubernetes sensor rather than as a potential member of the DaemonSet. Is only accepted if k8s_sensor.deployment.enabled=false
