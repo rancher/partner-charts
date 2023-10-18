@@ -222,7 +222,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeAnalyzer.pullSecrets`                                   | The image pull secrets for the Node Analyzer containers.     | `nil`                                                        |
 | `nodeAnalyzer.imageAnalyzer.deploy`                          | Deploys the Image Analyzer.                                  | `true    `                                                   |
 | `nodeAnalyzer.imageAnalyzer.image.repository`                | The image repository to pull the Node Image Analyzer from.   | `sysdig/node-image-analyzer`                                 |
-| `nodeAnalyzer.imageAnalyzer.image.tag`                       | The image tag to pull the Node Image Analyzer.               | `0.1.28`                                                     |
+| `nodeAnalyzer.imageAnalyzer.image.tag`                       | The image tag to pull the Node Image Analyzer.               | `0.1.29`                                                     |
 | `nodeAnalyzer.imageAnalyzer.image.digest`                    | The image digest to pull.                                    | ` `                                                          |
 | `nodeAnalyzer.imageAnalyzer.image.pullPolicy`                | The Image pull policy for the Node Image Analyzer.           | `IfNotPresent`                                               |
 | `nodeAnalyzer.imageAnalyzer.dockerSocketPath`                | The Docker socket path.                                      |                                                              |
@@ -237,7 +237,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeAnalyzer.imageAnalyzer.env`                             | The extra environment variables that will be passed onto pods. | `{}`                                                         |
 | `nodeAnalyzer.hostAnalyzer.deploy`                           | Deploys the Host Analyzer.                                   | `true    `                                                   |
 | `nodeAnalyzer.hostAnalyzer.image.repository`                 | The image repository to pull the Host Analyzer from.         | `sysdig/host-analyzer`                                       |
-| `nodeAnalyzer.hostAnalyzer.image.tag`                        | The image tag to pull the Host Analyzer.                     | `0.1.16`                                                     |
+| `nodeAnalyzer.hostAnalyzer.image.tag`                        | The image tag to pull the Host Analyzer.                     | `0.1.17`                                                     |
 | `nodeAnalyzer.hostAnalyzer.image.digest`                     | The image digest to pull.                                    | ` `                                                          |
 | `nodeAnalyzer.hostAnalyzer.image.pullPolicy`                 | The Image pull policy for the Host Analyzer.                 | `IfNotPresent`                                               |
 | `nodeAnalyzer.hostAnalyzer.schedule`                         | The scanning schedule specification for the host analyzer expressed as a crontab. | `@dailydefault`                                              |
@@ -323,7 +323,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeImageAnalyzer.settings.httpsProxy`           | The secure proxy configuration variables.                    |                               |
 | `nodeImageAnalyzer.settings.noProxy`              | The no proxy configuration variables.                        |                               |
 | `nodeImageAnalyzer.image.repository`              | The image repository to pull the Node Image Analyzer from.   | `sysdig/node-image-analyzer`  |
-| `nodeImageAnalyzer.image.tag`                     | The image tag to pull the Node Image Analyzer.               | `0.1.28`                      |
+| `nodeImageAnalyzer.image.tag`                     | The image tag to pull the Node Image Analyzer.               | `0.1.29`                      |
 | `nodeImageAnalyzer.imagedigest`                   | The image digest to pull.                                    | ` `                           |
 | `nodeImageAnalyzer.image.pullPolicy`              | The Image pull policy for the Node Image Analyzer.           | `IfNotPresent`                |
 | `nodeImageAnalyzer.image.pullSecrets`             | Image pull secrets for the Node Image Analyzer.              | `nil`                         |
