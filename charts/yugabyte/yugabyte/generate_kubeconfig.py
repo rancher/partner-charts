@@ -87,6 +87,27 @@ def get_secret_data(secret, namespace):
     return secret_data
 
 
+def get_secrets_for_sa(sa_name, namespace):
+    """Returns a list of all service account token secrets associated
+    with the given sa_name in the namespace.
+
+    """
+    secrets = run_command(
+        [
+            "get",
+            "secret",
+            "--field-selector",
+            "type=kubernetes.io/service-account-token",
+            "-o",
+            'jsonpath="{.items[?(@.metadata.annotations.kubernetes\.io/service-account\.name == "'
+            + sa_name
+            + '")].metadata.name}"',
+        ],
+        as_json=False,
+    )
+    return secrets.strip('"').split()
+
+
 parser = argparse.ArgumentParser(description="Generate KubeConfig with Token")
 parser.add_argument("-s", "--service_account", help="Service Account name", required=True)
 parser.add_argument("-n", "--namespace", help="Kubernetes namespace", default="kube-system")
@@ -120,23 +141,34 @@ tmpdir = tempfile.TemporaryDirectory()
 
 # Get the token and ca.crt from service account secret.
 sa_secrets = list()
-# Kubernetes 1.22 onwards doesn't create a token secret, so we create
-# it ourselves.
-if "secrets" not in service_account_info:
-    token_secret = create_sa_token_secret(tmpdir.name, args["service_account"], args["namespace"])
-    sa_secrets.append(token_secret)
-else:
-    # some ServiceAccounts have multiple secrets, and not all them have a
-    # ca.crt and a token.
+
+# Get secrets specified in the service account, there can be multiple
+# of them, and not all are service account token secrets.
+if "secrets" in service_account_info:
     sa_secrets = [secret["name"] for secret in service_account_info["secrets"]]
+
+# Find the existing additional service account token secrets
+sa_secrets.extend(get_secrets_for_sa(args["service_account"], args["namespace"]))
 
 secret_data = None
 for secret in sa_secrets:
     secret_data = get_secret_data(secret, args["namespace"])
     if secret_data is not None:
         break
+
+# Kubernetes 1.22+ doesn't create the service account token secret by
+# default, we have to create one.
 if secret_data is None:
-    exit("No usable secret found for '{}'.".format(args["service_account"]))
+    print("No usable secret found for '{}', creating one.".format(args["service_account"]))
+    token_secret = create_sa_token_secret(tmpdir.name, args["service_account"], args["namespace"])
+    secret_data = get_secret_data(token_secret, args["namespace"])
+    if secret_data is None:
+        exit(
+            "Failed to generate kubeconfig: No usable credentials found for '{}'.".format(
+                args["service_account"]
+            )
+        )
+
 
 context_name = "{}-{}".format(args["service_account"], cluster_name)
 kube_config = args["output_file"]
