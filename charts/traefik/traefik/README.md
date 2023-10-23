@@ -24,7 +24,7 @@ Accordingly, the encouraged approach to fulfill your needs:
 1. Override the default Traefik configuration values ([yaml file or cli](https://helm.sh/docs/chart_template_guide/values_files/))
 2. Append your own configurations (`kubectl apply -f myconf.yaml`)
 
-If needed, one may use [extraObjects](./traefik/tests/values/extra.yaml) or extend this HelmChart [as a Subchart](https://helm.sh/docs/chart_template_guide/subcharts_and_globals/)
+If needed, one may use [extraObjects](./traefik/tests/values/extra.yaml) or extend this HelmChart [as a Subchart](https://helm.sh/docs/chart_template_guide/subcharts_and_globals/). In the [examples](EXAMPLES.md), one can see how to use this Chart as a dependency.
 
 ## Installing
 
@@ -42,6 +42,15 @@ Due to changes in CRD version support, the following versions of the chart are u
 | Chart v9.20.2 and below | [x]                         | [x]                    |                            |
 | Chart v10.0.0 and above |                             | [x]                    | [x]                        |
 | Chart v22.0.0 and above |                             |                        | [x]                        |
+
+### CRDs Support of Traefik Proxy
+
+Due to changes in API Group of Traefik CRDs from `containo.us` to `traefik.io`, this Chart install the two CRDs API Group on the following versions:
+
+|                         |  `containo.us`              | `traefik.io`           |
+|-------------------------|-----------------------------|------------------------|
+| Chart v22.0.0 and below |  [x]                        |                        |
+| Chart v23.0.0 and above |  [x]                        | [x]                    |
 
 ### Deploying Traefik
 

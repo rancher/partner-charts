@@ -5,7 +5,7 @@
       {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- if .Values.metrics }}
-      {{- if .Values.metrics.prometheus }}
+      {{- if and (.Values.metrics.prometheus) (not .Values.metrics.prometheus.serviceMonitor) }}
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
         prometheus.io/port: {{ quote (index .Values.ports .Values.metrics.prometheus.entryPoint).port }}
@@ -142,7 +142,7 @@
           {{- if $config }}
           - "--entrypoints.{{$name}}.address=:{{ $config.port }}/{{ default "tcp" $config.protocol | lower }}"
           {{- with $config.asDefault }}
-          {{- if semverCompare "<3.0.0-0" (default $.Chart.AppVersion $.Values.image.tag) }}
+          {{- if semverCompare "<3.0.0-0" (include "imageVersion" $) }}
             {{- fail "ERROR: Default entrypoints are only available on Traefik v3. Please set `image.tag` to `v3.x`." }}
           {{- end }}
           - "--entrypoints.{{$name}}.asDefault={{ . }}"
@@ -298,7 +298,7 @@
           {{- end }}
 
           {{- with .Values.metrics.openTelemetry }}
-           {{- if semverCompare "<3.0.0-0" (default $.Chart.AppVersion $.Values.image.tag) }}
+           {{- if semverCompare "<3.0.0-0" (include "imageVersion" $) }}
              {{- fail "ERROR: OpenTelemetry features are only available on Traefik v3. Please set `image.tag` to `v3.x`." }}
            {{- end }}
           - "--metrics.openTelemetry=true"
@@ -357,7 +357,7 @@
           {{- if .Values.tracing }}
 
           {{- if .Values.tracing.openTelemetry }}
-           {{- if semverCompare "<3.0.0-0" (default $.Chart.AppVersion $.Values.image.tag) }}
+           {{- if semverCompare "<3.0.0-0" (include "imageVersion" $) }}
              {{- fail "ERROR: OpenTelemetry features are only available on Traefik v3. Please set `image.tag` to `v3.x`." }}
            {{- end }}
           - "--tracing.openTelemetry=true"
@@ -563,9 +563,15 @@
           {{- range $entrypoint, $config := $.Values.ports }}
           {{- if $config }}
             {{- if $config.redirectTo }}
-            {{- $toPort := index $.Values.ports $config.redirectTo }}
+             {{- if eq (typeOf $config.redirectTo) "string" }}
+               {{- fail "ERROR: Syntax of `ports.web.redirectTo` has changed to `ports.web.redirectTo.port`. Details in PR #934." }}
+             {{- end }}
+             {{- $toPort := index $.Values.ports $config.redirectTo.port }}
           - "--entrypoints.{{ $entrypoint }}.http.redirections.entryPoint.to=:{{ $toPort.exposedPort }}"
           - "--entrypoints.{{ $entrypoint }}.http.redirections.entryPoint.scheme=https"
+             {{- if $config.redirectTo.priority }}
+          - "--entrypoints.{{ $entrypoint }}.http.redirections.entryPoint.priority={{ $config.redirectTo.priority }}"
+             {{- end }}
             {{- end }}
             {{- if $config.middlewares }}
           - "--entrypoints.{{ $entrypoint }}.http.middlewares={{ join "," $config.middlewares }}"
@@ -591,10 +597,10 @@
                 {{- end }}
                 {{- if $config.http3 }}
                   {{- if $config.http3.enabled }}
-                    {{- if semverCompare "<3.0.0-0" (default $.Chart.AppVersion $.Values.image.tag)}}
+                    {{- if semverCompare "<3.0.0-0" (include "imageVersion" $)}}
           - "--experimental.http3=true"
                     {{- end }}
-                    {{- if semverCompare ">=2.6.0-0" (default $.Chart.AppVersion $.Values.image.tag)}}
+                    {{- if semverCompare ">=2.6.0-0" (include "imageVersion" $)}}
           - "--entrypoints.{{ $entrypoint }}.http3"
                     {{- else }}
           - "--entrypoints.{{ $entrypoint }}.enableHTTP3=true"
