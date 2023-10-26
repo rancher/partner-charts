@@ -3,7 +3,6 @@ Helper to get k10 service image
 The details on how these image are being generated
 is in below issue
 https://kasten.atlassian.net/browse/K10-4036
-Using substr to remove repo from ambassadorImage
 */}}
 {{- define "serviceImage" -}}
 {{/*
@@ -20,13 +19,14 @@ value that is specified.
 {{- $serviceImage = (include "get.k10ImageTag" .main) | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
 {{- else }}
 {{- $serviceImage = (include "get.k10ImageTag" .main)  | print .main.Values.global.image.registry "/" .k10_service ":" }}
+{{- if eq .k10_service "cephtool"}}
+{{- $serviceImage = include "k10.cephtool.getImage" .main }}
+{{- end }}
 {{- end }}{{/* if .main.Values.global.airgapped.repository */}}
 {{- $serviceImageKey := print (replace "-" "" .k10_service) "Image" }}
-{{- if eq $serviceImageKey "ambassadorImage" }}
-{{- $tagFromDefs = (include "k10.ambassadorImageTag" .) }}
-{{- else if eq $serviceImageKey "dexImage" }}
+{{- if eq $serviceImageKey "dexImage" }}
 {{- $tagFromDefs = (include "dex.dexImageTag" .) }}
-{{- end }}{{/* if eq $serviceImageKey "ambassadorImage" */}}
+{{- end }}{{/* if eq $serviceImageKey "dexImage" */}}
 {{- if index .main.Values $serviceImageKey }}
 {{- $service_values := index .main.Values $serviceImageKey }}
 {{- if .main.Values.global.airgapped.repository }}

@@ -243,11 +243,17 @@ spec:
       {{ toYaml $root.Values.nodeSelector | indent 8 }}
       {{- end }}
       {{- if eq .name "yb-masters" }} # yb-masters
+      {{- with $root.Values.master.serviceAccount }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       {{- if $root.Values.master.tolerations }}
       tolerations:
       {{- with $root.Values.master.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
       {{- end }}
       {{- else }} # yb-tservers
+      {{- with $root.Values.tserver.serviceAccount }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       {{- if $root.Values.tserver.tolerations }}
       tolerations:
       {{- with $root.Values.tserver.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
@@ -319,6 +325,12 @@ spec:
         {{- $_ := set $root.Values.tserver.affinity "podAntiAffinity" $podAntiAffinityData -}}
         {{ toYaml $root.Values.tserver.affinity | nindent 8 }}
         {{ end }}
+      {{- with $root.Values.dnsConfig }}
+      dnsConfig: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.dnsPolicy }}
+      dnsPolicy: {{ . | quote }}
+      {{- end }}
       containers:
       - name: "{{ .label }}"
         image: "{{ $root.Values.Image.repository }}:{{ $root.Values.Image.tag }}"
@@ -342,8 +354,13 @@ spec:
           exec:
             command:
             - bash
+            - -v
             - -c
-            - touch {{ template "yugabyte.fs_data_dirs_probe_files" $storageInfo }}
+            - |
+              {{- include "yugabyte.fs_data_dirs_probe" $storageInfo | nindent 14 }};
+              exit_code="$?";
+              echo "disk check exited with: ${exit_code}";
+              exit "${exit_code}"
           failureThreshold: 3
           periodSeconds: 10
           successThreshold: 1
@@ -401,7 +418,7 @@ spec:
             fi && \
           {{- end }}
           {{- if (and (not $root.Values.storage.ephemeral) (not $root.Values.preflight.skipAll)) }}
-            touch {{ template "yugabyte.fs_data_dirs_probe_files" $storageInfo }} && \
+          {{- include "yugabyte.fs_data_dirs_probe" $storageInfo | nindent 12 }} && \
           {{- end }}
           {{- $rpcAddr := include "yugabyte.rpc_bind_address" $serviceValues -}}
           {{- $rpcPort := index $service.ports "tcp-rpc-port" -}}

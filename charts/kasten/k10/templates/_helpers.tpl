@@ -110,6 +110,20 @@
   {{- end -}}
 {{- end -}}
 
+{{- define "k10.capabilities" -}}
+  {{- /* Internal capabilities enabled by other Helm values are added here */ -}}
+  {{- $internal_capabilities := list -}}
+
+  {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
+{{- end -}}
+
+{{- define "k10.capabilities_mask" -}}
+  {{- /* Internal capabilities masked by other Helm values are added here */ -}}
+  {{- $internal_capabilities_mask := list -}}
+
+  {{- concat $internal_capabilities_mask (.Values.capabilitiesMask | default list) | join " " -}}
+{{- end -}}
+
 {{/* Check if basic auth is needed */}}
 {{- define "basicauth.check" -}}
   {{- if .Values.auth.basicAuth.enabled }}
@@ -431,16 +445,6 @@ Check if AWS creds are specified
 {{- end -}}
 
 {{/*
-Check if kanister-tools image has k10- in name
-this means we need to overwrite kanister image in the system
-*/}}
-{{- define "overwite.kanisterToolsImage" -}}
-{{- if or .Values.global.airgapped.repository .Values.global.rhMarketPlace -}}
-{{- print true -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Check if Azure MSI with Default ID is specified
 */}}
 {{- define "check.azureMSIWithDefaultID" -}}
@@ -480,24 +484,31 @@ Checks and enforces only 1 set of azure creds is specified
 {{- end -}}
 
 {{/*
-Figure out the kanisterToolsImage.image based on
-the value of airgapped.repository value
-The details on how these image are being generated
-is in below issue
-https://kasten.atlassian.net/browse/K10-4036
-Using substr to remove repo from kanisterToolsImage
+Get the kanister-tools image.
 */}}
-{{- define "get.kanisterToolsImage" }}
-{{- if not .Values.global.rhMarketPlace }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/%s:k10-%s" (.Values.global.airgapped.repository) (.Values.kanisterToolsImage.image) (include "k10.kanisterToolsImageTag" .) -}}
-{{- else }}
-{{- printf "%s/%s/%s:%s" (.Values.kanisterToolsImage.registry) (.Values.kanisterToolsImage.repository) (.Values.kanisterToolsImage.image) (include "k10.kanisterToolsImageTag" .) -}}
+{{- define "get.kanisterToolsImage" -}}
+  {{- (get .Values.global.images (include "kan.kanisterToolsImageName" .)) | default (include "kan.kanisterToolsImage" .)  }}
 {{- end }}
-{{- else }}
-{{- printf "%s" (get .Values.global.images "kanister-tools") -}}
-{{- end }}
-{{- end }}
+
+{{- define "kan.kanisterToolsImage" -}}
+  {{- printf "%s:%s" (include "kan.kanisterToolsImageRepo" .) (include "kan.kanisterToolsImageTag" .) }}
+{{- end -}}
+
+{{- define "kan.kanisterToolsImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "kan.kanisterToolsImageName" .) }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "kan.kanisterToolsImageName" .) }}
+  {{- end }}
+{{- end -}}
+
+{{- define "kan.kanisterToolsImageName" -}}
+  {{- printf "kanister-tools" }}
+{{- end -}}
+
+{{- define "kan.kanisterToolsImageTag" -}}
+  {{- include "get.k10ImageTag" . }}
+{{- end -}}
 
 {{/*
 Check if Google creds are specified
@@ -869,6 +880,13 @@ running in the same cluster.
   {{- end }}
 {{- end -}}
 
+{{/* Used to verify if Ironbank is enabled */}}
+{{- define "ironbank.enabled" -}}
+  {{- if (.Values.global.ironbank | default dict).enabled -}}
+    {{- print true -}}
+  {{- end -}}
+{{- end -}}
+
 {{/* Get the K10 image tag. Fails if not set correctly */}}
 {{- define "get.k10ImageTag" -}}
   {{- $imageTag := coalesce .Values.global.image.tag (include "k10.imageTag" .) }}
@@ -897,6 +915,26 @@ running in the same cluster.
 
 {{- define "init.ImageName" -}}
   {{- printf "init" }}
+{{- end -}}
+
+{{- define "k10.cephtool.getImage" -}}
+  {{- (get .Values.global.images (include "k10.cephtool.ImageName" .)) | default (include "k10.cephtool.Image" .)  }}
+{{- end -}}
+
+{{- define "k10.cephtool.Image" -}}
+  {{- printf "%s:%s" (include "k10.cephtool.ImageRepo" .) (include "get.k10ImageTag" .) }}
+{{- end -}}
+
+{{- define "k10.cephtool.ImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "k10.cephtool.ImageName" .) }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "k10.cephtool.ImageName" .) }}
+  {{- end }}
+{{- end -}}
+
+{{- define "k10.cephtool.ImageName" -}}
+  {{- printf "cephtool" }}
 {{- end -}}
 
 {{- define "k10.splitImage" -}}
@@ -929,4 +967,52 @@ running in the same cluster.
       "sha" ($sha | default "")
     ) | toJson
   -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
+{{- define "k10.fail.ironbankRHMarketplace" -}}
+  {{- if and (include "ironbank.enabled" .) (.Values.global.rhMarketPlace) -}}
+    {{- fail "global.ironbank.enabled and global.rhMarketPlace cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
+{{- define "k10.fail.ironbankGrafana" -}}
+  {{- if (include "ironbank.enabled" .) -}}
+    {{- range $key, $value := .Values.grafana.sidecar -}}
+      {{/* 
+        https://go.dev/doc/go1.18: the "and" used to evaluate all conditions and not terminate early
+        if a predicate was met, so we must have the below as their own conditional for any customers
+        used go version < 1.18.
+       */}}
+      {{- if kindIs "map" $value -}}
+        {{- if hasKey $value "enabled" -}}
+          {{- if $value.enabled -}}
+            {{- fail (printf "Ironbank deployment does not support grafana sidecar %s" $key) -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
+{{- define "k10.fail.ironbankPrometheus" -}}
+  {{- if (include "ironbank.enabled" .) -}}
+    {{- $prometheusDict := pick .Values.prometheus "alertmanager" "kube-state-metrics" "prometheus-node-exporter" "prometheus-pushgateway" -}}
+    {{- range $key, $value := $prometheusDict -}}
+      {{/* 
+        https://go.dev/doc/go1.18: the "and" used to evaluate all conditions and not terminate early
+        if a predicate was met, so we must have the below as their own conditional for any customers
+        used go version < 1.18.
+       */}}
+      {{- if kindIs "map" $value -}}
+        {{- if hasKey $value "enabled" -}}
+          {{- if $value.enabled -}}
+            {{- fail (printf "Ironbank deployment does not support prometheus %s" $key) -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}

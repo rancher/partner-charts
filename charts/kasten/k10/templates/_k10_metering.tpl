@@ -170,6 +170,11 @@ spec:
               configMapKeyRef:
                 name: k10-config
                 key: version
+          - name: KANISTER_TOOLS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterToolsImage
 {{- if .Values.clusterName }}
           - name: CLUSTER_NAME
             valueFrom:
@@ -177,6 +182,14 @@ spec:
                 name: k10-config
                 key: clustername
 {{- end }}
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
           - name: LOG_LEVEL
             valueFrom:
               configMapKeyRef:
@@ -206,13 +219,6 @@ spec:
             value: /tmp/reports/clustergraceperiod
           - name: NODE_USAGE_STORE
             value: /tmp/reports/node_usage_history
-{{- end }}
-{{- if eq "true" (include "overwite.kanisterToolsImage" .) }}
-          - name: KANISTER_TOOLS
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: overwriteKanisterTools
 {{- end }}
 {{- if .Values.metering.awsRegion }}
           - name: AWS_REGION
