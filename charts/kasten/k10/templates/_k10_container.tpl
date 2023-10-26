@@ -224,6 +224,14 @@ stating that types are not same for the equality check
                 name: k10-config
                 key: clustername
 {{- end }}
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
 {{- if eq $service "controllermanager" }}
           - name: K10_STATEFUL
             value: "{{ .Values.global.persistence.enabled }}"
@@ -512,13 +520,11 @@ stating that types are not same for the equality check
                 name: k10-token-auth
                 key: auth
 {{- end }}
-{{- if eq "true" (include "overwite.kanisterToolsImage" .) }}
           - name: KANISTER_TOOLS
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: overwriteKanisterTools
-{{- end }}
+                key: KanisterToolsImage
 {{- if eq (include "check.cacertconfigmap" .) "true" }}
           - name: CACERT_CONFIGMAP_NAME
             value: {{ .Values.cacertconfigmap.name }}
@@ -658,8 +664,9 @@ stating that types are not same for the equality check
 {{- if .Values.toolsImage.enabled }}
 {{- if eq $service "executor" }}
       - name: tools
-        {{- dict "main" . "k10_service" "cephtool" | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ .Values.toolsImage.pullPolicy }}
+        {{- dict "main" . "k10_service" "cephtool" | include "serviceImage" | indent 8 }}
+        command: ["tail", "-f", "/dev/null"]
 {{- $podName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "tools"  | include "k10.resource.request" | indent 8}}
 {{- end }}

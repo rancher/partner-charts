@@ -203,6 +203,16 @@ Get files from fs data directories for readiness / liveness probes.
 
 
 {{/*
+Command to do a disk write and sync for liveness probes.
+*/}}
+{{- define "yugabyte.fs_data_dirs_probe" -}}
+echo "disk check at: $(date)" \
+  | tee {{ template "yugabyte.fs_data_dirs_probe_files" . }} \
+  && sync {{ template "yugabyte.fs_data_dirs_probe_files" . }}
+{{- end -}}
+
+
+{{/*
 Generate server FQDN.
 */}}
 {{- define "yugabyte.server_fqdn" -}}

@@ -1,5 +1,17 @@
 # Datadog changelog
 
+## 3.42.0
+
+* Allow enabling SBOM collection for host and container images.
+
+## 3.41.0
+
+* Enable container lifecycle events collection by default.
+
+## 3.40.4
+
+* Add the option `clusterAgent.metricsProvider.registerAPIService` to allow user to disable registering external-metrics server as an `APIService`
+
 ## 3.40.3
 
 * Default `Agent` and `Cluster-Agent` to `7.48.1` version.
