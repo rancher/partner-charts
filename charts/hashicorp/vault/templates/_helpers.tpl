@@ -37,6 +37,13 @@ Expand the name of the chart.
 {{- end -}}
 
 {{/*
+Allow the release namespace to be overridden
+*/}}
+{{- define "vault.namespace" -}}
+{{- default .Release.Namespace .Values.global.namespace -}}
+{{- end -}}
+
+{{/*
 Compute if the csi driver is enabled.
 */}}
 {{- define "vault.csiEnabled" -}}
@@ -74,6 +81,17 @@ Compute if the server serviceaccount is enabled.
       (eq (.Values.server.enabled | toString) "true")
       (eq (.Values.global.enabled | toString) "true"))) -}}
 {{- end -}}
+
+{{/*
+Compute if the server serviceaccount should have a token created and mounted to the serviceaccount.
+*/}}
+{{- define "vault.serverServiceAccountSecretCreationEnabled" -}}
+{{- $_ := set . "serverServiceAccountSecretCreationEnabled"
+  (and
+    (eq (.Values.server.serviceAccount.create | toString) "true")
+    (eq (.Values.server.serviceAccount.createSecret | toString) "true")) -}}
+{{- end -}}
+
 
 {{/*
 Compute if the server auth delegator serviceaccount is enabled.
@@ -149,7 +167,11 @@ Set's the replica count based on the different modes configured by user
   {{ if eq .mode "standalone" }}
     {{- default 1 -}}
   {{ else if eq .mode "ha" }}
-    {{- .Values.server.ha.replicas | default 3 -}}
+    {{- if or (kindIs "int64" .Values.server.ha.replicas) (kindIs "float64" .Values.server.ha.replicas) -}}
+      {{- .Values.server.ha.replicas -}}
+    {{ else }}
+      {{- 3 -}}
+    {{- end -}}
   {{ else }}
     {{- default 1 -}}
   {{ end }}
@@ -684,6 +706,33 @@ Sets extra vault server Service annotations
       {{- tpl .Values.server.service.annotations . | nindent 4 }}
     {{- else }}
       {{- toYaml .Values.server.service.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
+
+{{/*
+Sets extra vault server Service (active) annotations
+*/}}
+{{- define "vault.service.active.annotations" -}}
+  {{- if .Values.server.service.active.annotations }}
+    {{- $tp := typeOf .Values.server.service.active.annotations }}
+    {{- if eq $tp "string" }}
+      {{- tpl .Values.server.service.active.annotations . | nindent 4 }}
+    {{- else }}
+      {{- toYaml .Values.server.service.active.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
+{{/*
+Sets extra vault server Service annotations
+*/}}
+{{- define "vault.service.standby.annotations" -}}
+  {{- if .Values.server.service.standby.annotations }}
+    {{- $tp := typeOf .Values.server.service.standby.annotations }}
+    {{- if eq $tp "string" }}
+      {{- tpl .Values.server.service.standby.annotations . | nindent 4 }}
+    {{- else }}
+      {{- toYaml .Values.server.service.standby.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
 {{- end -}}
