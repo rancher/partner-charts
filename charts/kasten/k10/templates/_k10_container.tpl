@@ -232,6 +232,8 @@ stating that types are not same for the equality check
           - name: K10_CAPABILITIES_MASK
             value: {{ $capabilities_mask | quote }}
           {{- end }}
+          - name: K10_HOST_SVC
+            value: {{ $pod }}
 {{- if eq $service "controllermanager" }}
           - name: K10_STATEFUL
             value: "{{ .Values.global.persistence.enabled }}"
@@ -245,11 +247,6 @@ stating that types are not same for the equality check
 {{- if   or  .Values.global.imagePullSecret (or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath)  }}
           - name: IMAGE_PULL_SECRET_NAMES
             value: {{  (trimSuffix " " (include "k10.imagePullSecretNames" .)) | toJson }}
-          - name: COPY_IMAGE_PULL_SECRETS
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: copyImagePullSecretsWhileRestore
 {{- end }}
 {{- end }}
           - name: MODEL_STORE_DIR
@@ -403,21 +400,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: K10GCKeepMaxActions
-          - name: K10_GC_BACKUP_RUN_ACTIONS_ENABLED
+          - name: K10_GC_ACTIONS_ENABLED
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: K10GCBackupRunActionsEnabled
-          - name: K10_GC_IMPORT_RUN_ACTIONS_ENABLED
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: K10GCImportRunActionsEnabled
-          - name: K10_GC_RETIRE_ACTIONS_ENABLED
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: K10GCRetireActionsEnabled
+                key: K10GCActionsEnabled
 {{- end }}
 {{- if (eq $service "executor") }}
           - name: K10_EXECUTOR_WORKER_COUNT

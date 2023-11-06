@@ -10,6 +10,9 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.16.20
+### Bug Fixes
+* **agent,kspm-collector,node-analyzer,sysdig** [f378d192](https://github.com/sysdiglabs/charts/commit/f378d1922d0f21f5936c6ed872e6538536ccf1f2): whitespace errors ([#1436](https://github.com/sysdiglabs/charts/issues/1436))
 # v1.16.19
 ### New Features
 * [629c5f06](https://github.com/sysdiglabs/charts/commit/629c5f06ccab168b9460ec1fa6564aed1a54c015): release agent 12.17.1 ([#1430](https://github.com/sysdiglabs/charts/issues/1430))

@@ -34,6 +34,7 @@
   selected to ensure that it is rendered before other templates!
 */}}
 
+{{- if .Values.grafana.enabled }}
 {{- $grafana_prefix := printf "%s/grafana/" (include "k10.prefixPath" $) -}}
 {{- $grafana_scoped_values := (dict "Chart" (dict "Name" "grafana") "Release" .Release "Values" .Values.grafana) -}}
 
@@ -243,3 +244,4 @@
     )
   | toYaml)
 -}}
+{{- end }}

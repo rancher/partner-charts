@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.31.0
+
+### Improvements
+
+* Added controller's RBAC rules for `KongUpstreamPolicy` CRD.
+  [#917](https://github.com/Kong/charts/pull/917)
+* Added services resource to admission webhook config for KIC >= 3.0.0.
+  [#919](https://github.com/Kong/charts/pull/919)
+* Update default ingress controller version to v3.0
+  [#929](https://github.com/Kong/charts/pull/929)
+  [#930](https://github.com/Kong/charts/pull/930)
+
+### Fixed
+
+* The target port for cmetrics should only be applied if the ingress controller is enabled.
+  [#926](https://github.com/Kong/charts/pull/926)
+* Fix RBAC for Gateway API v1.
+  [#928](https://github.com/Kong/charts/pull/928)
+* Enable Admission webhook for Gateway API v1 resources.
+  [#928](https://github.com/Kong/charts/pull/928)
+
 ## 2.30.0
 
 ### Improvements
@@ -16,7 +37,7 @@
   world-accessible and runtime-created files are created in temporary
   directories created for the run as user.
   [#911](https://github.com/Kong/charts/pull/911)
-* Allow using templates (via `tpl`) when specifying `controller.proxy.nameOverride`.
+* Allow using templates (via `tpl`) when specifying `proxy.nameOverride`.
   [#914](https://github.com/Kong/charts/pull/914)
 
 ## 2.29.0
