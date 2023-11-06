@@ -1,5 +1,33 @@
 ## Unreleased
 
+## 0.26.1 (October 30, 2023)
+
+Bugs:
+* Fix templating of `server.ha.replicas` when set via override file. The `0.26.0` chart would ignore `server.ha.replicas` and always deploy 3 server replicas when `server.ha.enabled=true` unless overridden by command line when issuing the helm command: `--set server.ha.replicas=<some_number>`. Fixed in [GH-961](https://github.com/hashicorp/vault-helm/pull/961)
+
+## 0.26.0 (October 27, 2023)
+
+Changes:
+* Default `vault` version updated to 1.15.1
+* Default `vault-k8s` version updated to 1.3.1
+* Default `vault-csi-provider` version updated to 1.4.1
+* Tested with Kubernetes versions 1.24-1.28
+* server: OpenShift default readiness probe returns 204 when uninitialized [GH-966](https://github.com/hashicorp/vault-helm/pull/966)
+
+Features:
+* server: Add support for dual stack clusters [GH-833](https://github.com/hashicorp/vault-helm/pull/833)
+* server: Support `hostAliases` for the StatefulSet pods [GH-955](https://github.com/hashicorp/vault-helm/pull/955)
+* server: Add `server.service.active.annotations` and `server.service.standby.annotations` [GH-896](https://github.com/hashicorp/vault-helm/pull/896)
+* server: Add long-lived service account token option [GH-923](https://github.com/hashicorp/vault-helm/pull/923)
+
+Bugs:
+* csi: Add namespace field to `csi-role` and `csi-rolebindings`. [GH-909](https://github.com/hashicorp/vault-helm/pull/909)
+
+Improvements:
+* global: Add `global.namespace` to override the helm installation namespace. [GH-909](https://github.com/hashicorp/vault-helm/pull/909)
+* server: use vault.fullname in Helm test [GH-912](https://github.com/hashicorp/vault-helm/pull/912)
+* server: Allow scaling HA replicas to zero [GH-943](https://github.com/hashicorp/vault-helm/pull/943)
+
 ## 0.25.0 (June 26, 2023)
 
 Changes:
