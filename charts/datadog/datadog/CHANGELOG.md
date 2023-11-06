@@ -1,5 +1,13 @@
 # Datadog changelog
 
+## 3.43.1
+
+* Fix docstring typos and remove unneeded lines.
+
+## 3.43.0
+
+* Default `Agent` and `Cluster-Agent` to `7.49.0` version.
+
 ## 3.42.1
 
 * Bump FIPS proxy OpenSSL version to 3.0.12 

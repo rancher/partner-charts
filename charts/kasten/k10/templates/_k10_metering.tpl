@@ -190,6 +190,8 @@ spec:
           - name: K10_CAPABILITIES_MASK
             value: {{ $capabilities_mask | quote }}
           {{- end }}
+          - name: K10_HOST_SVC
+            value: {{ $service }}
           - name: LOG_LEVEL
             valueFrom:
               configMapKeyRef:

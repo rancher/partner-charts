@@ -93,9 +93,7 @@ state:
 {{- define "k10.defaultK10LimiterProviderSnapshots" -}}10{{- end -}}
 {{- define "k10.defaultK10GCDaemonPeriod" -}}21600{{- end -}}
 {{- define "k10.defaultK10GCKeepMaxActions" -}}1000{{- end -}}
-{{- define "k10.defaultK10GCBackupRunActionsEnabled" -}}false{{- end -}}
-{{- define "k10.defaultK10GCImportRunActionsEnabled" -}}false{{- end -}}
-{{- define "k10.defaultK10GCRetireActionsEnabled" -}}false{{- end -}}
+{{- define "k10.defaultK10GCActionsEnabled" -}}false{{- end -}}
 {{- define "k10.defaultK10ExecutorWorkerCount" -}}8{{- end -}}
 {{- define "k10.defaultK10ExecutorMaxConcurrentRestoreCsiSnapshots" -}}3{{- end -}}
 {{- define "k10.defaultK10ExecutorMaxConcurrentRestoreGenericVolumeSnapshots" -}}3{{- end -}}
@@ -210,5 +208,5 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.98.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.99.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}

@@ -220,7 +220,6 @@ Parameter | Description | Default
 `route.tls.enabled` | Configures a TLS use for `route.host` | `false`
 `route.tls.insecureEdgeTerminationPolicy` | Specifies behavior for insecure scheme traffic | `Redirect`
 `route.tls.termination` | Specifies the TLS termination of the route | `edge`
-`restore.copyImagePullSecrets` | Configures if `imagePullSecret` should be copied to application namespace during restore process | `true`
 `apigateway.serviceResolver` | Specifies the resolver used for service discovery in the API gateway (`dns` or `endpoint`) | `dns`
 `limiter.concurrentSnapConversions` | Limit of concurrent snapshots to convert during export | `3`
 `limiter.genericVolumeSnapshots` | Limit of concurrent generic volume snapshot create operations | `10`
@@ -243,8 +242,7 @@ Parameter | Description | Default
 `encryption.primaryKey.awsCmkKeyId` | Specifies the AWS CMK key ID for encrypting K10 Primary Key | `None`
 `garbagecollector.daemonPeriod` | Sets garbage collection period (in seconds) | `21600`
 `garbagecollector.keepMaxActions` | Sets maximum actions to keep | `1000`
-`garbagecollector.importRunActions.enabled` | Enables ``importRunActions`` collector | `false`
-`garbagecollector.retireActions.enabled` | Enables ``retireActions`` collector | `false`
+`garbagecollector.actions.enabled` | Enables action collectors | `false`
 `kubeVirtVMs.snapshot.unfreezeTimeout` | Defines the time duration within which the VMs must be unfrozen while backing them up. To know more about format [go doc](https://pkg.go.dev/time#ParseDuration) can be followed | `5m`
 `excludedApps` | Specifies a list of applications to be excluded from the dashboard & compliance considerations. Format should be a :ref:`YAML array<k10_compliance>` | `["kube-system", "kube-ingress", "kube-node-lease", "kube-public", "kube-rook-ceph"]`
 `kanisterPodMetricSidecar.enabled` | Enable the sidecar container to gather metrics from ephemeral pods | `true`

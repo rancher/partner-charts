@@ -6,7 +6,7 @@ metadata:
   name: {{ template "query-service.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{ include "query-service.commonLabels" . | nindent 4 }}
+    {{- include "query-service.commonLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.kubecostDeployment.queryServiceReplicas }}
   serviceName: "query-service"
@@ -44,7 +44,13 @@ spec:
       {{- end }}
     spec:
       restartPolicy: Always
-
+      {{- if .Values.kubecostDeployment.queryService.securityContext }}
+      securityContext:
+        {{- toYaml .Values.kubecostDeployment.queryService.securityContext | nindent 8 }}
+      {{- else if .Values.global.securityContext }}
+      securityContext:
+        {{- toYaml .Values.global.securityContext | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ template "query-service.serviceAccountName" . }}
       volumes:
         {{- $etlBackupBucketSecret := "" }}
@@ -68,7 +74,8 @@ spec:
         {{- end }}
       initContainers:
         - name: config-db-perms-fix
-          image: busybox
+          image: {{ .Values.kubecostDeployment.queryService.initImage.repository | default "busybox"}}:{{ .Values.kubecostDeployment.queryService.initImage.tag | default "stable"}}
+          imagePullPolicy: {{ .Values.kubecostDeployment.queryService.initImage.pullPolicy | default "IfNotPresent"}}
           command: ["sh", "-c", "/bin/chmod -R 777 /var/configs && /bin/chmod -R 777 /var/db"]
           volumeMounts:
             - name: persistent-configs
@@ -100,6 +107,12 @@ spec:
             periodSeconds: 10
             failureThreshold: 200
           imagePullPolicy: Always
+          securityContext:
+          {{- if .Values.kubecostDeployment.queryService.containerSecurityContext }}
+            {{- toYaml .Values.kubecostDeployment.queryService.containerSecurityContext | nindent 12 -}}
+          {{- else if .Values.global.containerSecurityContext }}
+            {{- toYaml .Values.global.containerSecurityContext | nindent 12 -}}
+          {{- end }}
           args: ["query-service"]
           ports:
             - name: tcp-model

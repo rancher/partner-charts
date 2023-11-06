@@ -1,19 +1,17 @@
 <!-- Release notes generated using configuration in .github/release.yaml at main -->
 
 ## What's Changed
-### New features
-* feat(CSI-159): add weka driver monitoring for readiness probe by @sergeyberezansky in https://github.com/weka/csi-wekafs/pull/58
+
+### Features
+* feat(CSI-166): update CSI spec to 1.9.0 by @sergeyberezansky in https://github.com/weka/csi-wekafs/pull/178
+
+### Bug Fixes
+* fix(CSI-163): missing ca-certificates package in wekafs container image by @sergeyberezansky  in https://github.com/weka/csi-wekafs/pull/179
+
 ### Miscellaneous
-* chore(deps): update actions/checkout action to v4 by @renovate in https://github.com/weka/csi-wekafs/pull/152
-* fix(deps): update kubernetes packages to v0.28.1 by @renovate in https://github.com/weka/csi-wekafs/pull/139
-* fix(deps): update module github.com/google/uuid to v1.3.1 by @renovate in https://github.com/weka/csi-wekafs/pull/148
-* fix(deps): update module github.com/rs/zerolog to v1.30.0 by @renovate in https://github.com/weka/csi-wekafs/pull/146
-* fix(deps): update module google.golang.org/grpc to v1.58.0 by @renovate in https://github.com/weka/csi-wekafs/pull/145
-* fix(deps): update module github.com/kubernetes-csi/csi-lib-utils to v0.15.0 by @renovate in https://github.com/weka/csi-wekafs/pull/149
-* fix(deps): update opentelemetry-go monorepo to v1.17.0 by @renovate in https://github.com/weka/csi-wekafs/pull/151
-* fix(deps): update golang.org/x/exp digest to 9212866 by @renovate in https://github.com/weka/csi-wekafs/pull/144
-* chore(deps): update docker/build-push-action action to v5 by @renovate in https://github.com/weka/csi-wekafs/pull/154
-* chore(deps): update docker/login-action action to v3 by @renovate in https://github.com/weka/csi-wekafs/pull/155
-* chore(deps): update docker/setup-buildx-action action to v3 by @renovate in https://github.com/weka/csi-wekafs/pull/156
+* chore(deps): update actions/checkout digest to b4ffde6 by @renovate in https://github.com/weka/csi-wekafs/pull/161
+* chore(deps): update stefanzweifel/git-auto-commit-action action to v5 by @renovate in https://github.com/weka/csi-wekafs/pull/167
+* chore(deps): update helm/chart-testing-action action to v2.6.0 by @renovate in https://github.com/weka/csi-wekafs/pull/181
+* chore(deps): bump dependencies  by @sergeyberezansky  in https://github.com/weka/csi-wekafs/pull/177
 
 

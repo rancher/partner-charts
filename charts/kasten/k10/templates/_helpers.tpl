@@ -969,6 +969,13 @@ running in the same cluster.
   -}}
 {{- end -}}
 
+{{/* Fail if Ironbank is enabled and the admin image is turned on  */}}
+{{- define "k10.fail.ironbankPdfReports" -}}
+  {{- if and (include "ironbank.enabled" .) (.Values.reporting.pdfReports) -}}
+    {{- fail "global.ironbank.enabled and reporting.pdfReports cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
 {{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
 {{- define "k10.fail.ironbankRHMarketplace" -}}
   {{- if and (include "ironbank.enabled" .) (.Values.global.rhMarketPlace) -}}

@@ -62,6 +62,9 @@ spec:
       {{- else if lt $nginxPort 1025 }}
       securityContext:
         runAsUser: 0
+      {{- else if .Values.global.securityContext }}
+      securityContext:
+        {{- toYaml .Values.global.securityContext | nindent 8 }}
       {{- else }}
       securityContext:
         runAsUser: 1001
@@ -71,25 +74,27 @@ spec:
       restartPolicy: Always
       serviceAccountName: {{ template "cost-analyzer.serviceAccountName" . }}
       volumes:
-      {{- if .Values.global.gcpstore.enabled }}
+        {{- if .Values.global.gcpstore.enabled }}
         - name: ubbagent-config
           configMap:
             name: ubbagent-config
-      {{- end }}
-      {{- if .Values.hosted }}
+        {{- end }}
+        {{- if .Values.hosted }}
         - name: config-store
           secret:
             defaultMode: 420
             secretName: kubecost-thanos
-      {{- end }}
+        {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.kubecostFrontend.enabled }}
         - name: nginx-conf
           configMap:
             name: nginx-conf
             items:
               - key: nginx.conf
                 path: default.conf
+        {{- end }}
         {{- if .Values.global.containerSecuritycontext }}
         - name: var-run
           emptyDir: { }
@@ -135,7 +140,7 @@ spec:
           secret:
             secretName: {{ .Values.kubecostProductConfigs.gcpSecretName }}
             items:
-            - key: compute-viewer-kubecost-key.json
+            - key: {{ .Values.kubecostProductConfigs.gcpSecretKeyName | default "compute-viewer-kubecost-key.json" }}
               path: service-key.json
         {{- end }}
         {{- end -}}
@@ -243,10 +248,15 @@ spec:
         - name: oidc-config
           configMap:
             name: {{ template "cost-analyzer.fullname" . }}-oidc
-        {{- if .Values.oidc.secretName }}
+        {{- if and (not .Values.oidc.existingCustomSecret.enabled) .Values.oidc.secretName }}
         - name: oidc-client-secret
           secret:
             secretName: {{ .Values.oidc.secretName }}
+        {{- end }}
+        {{- if .Values.oidc.existingCustomSecret.enabled }}
+        - name: oidc-client-secret
+          secret:
+            secretName: {{ .Values.oidc.existingCustomSecret.name }}
         {{- end }}
         {{- end }}
         {{- end }}
@@ -325,6 +335,21 @@ spec:
           args:
           - "--web.listen-address=:{{ .Values.global.gmp.gmpProxy.port }}"
           - "--query.project-id={{ .Values.global.gmp.gmpProxy.projectId }}"
+          {{- if .Values.systemProxy.enabled }}
+          env:
+          - name: HTTP_PROXY
+            value: {{ .Values.systemProxy.httpProxyUrl }}
+          - name: http_proxy
+            value: {{ .Values.systemProxy.httpProxyUrl }}
+          - name: HTTPS_PROXY
+            value:  {{ .Values.systemProxy.httpsProxyUrl }}
+          - name: https_proxy
+            value:  {{ .Values.systemProxy.httpsProxyUrl }}
+          - name: NO_PROXY
+            value:  {{ .Values.systemProxy.noProxy }}
+          - name: no_proxy
+            value:  {{ .Values.systemProxy.noProxy }}
+          {{- end }}
           ports:
           - name: web
             containerPort: {{ .Values.global.gmp.gmpProxy.port | int }}
@@ -345,6 +370,10 @@ spec:
           {{- else }}
           imagePullPolicy: Always
           {{- end }}
+        {{- if .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml .Values.global.containerSecurityContext | nindent 12 -}}
+        {{- end }}
           args:
           - --name
           - {{ .Values.sigV4Proxy.name }}
@@ -361,8 +390,24 @@ spec:
           ports:
           - name: aws-sigv4-proxy
             containerPort: {{ .Values.sigV4Proxy.port | int }}
-          {{- if .Values.sigV4Proxy.extraEnv }}
           env:
+          - name: AGENT_LOCAL_PORT
+            value: "{{ .Values.sigV4Proxy.port | int }}"
+          {{- if .Values.systemProxy.enabled }}
+          - name: HTTP_PROXY
+            value: {{ .Values.systemProxy.httpProxyUrl }}
+          - name: http_proxy
+            value: {{ .Values.systemProxy.httpProxyUrl }}
+          - name: HTTPS_PROXY
+            value:  {{ .Values.systemProxy.httpsProxyUrl }}
+          - name: https_proxy
+            value:  {{ .Values.systemProxy.httpsProxyUrl }}
+          - name: NO_PROXY
+            value:  {{ .Values.systemProxy.noProxy }}
+          - name: no_proxy
+            value:  {{ .Values.systemProxy.noProxy }}
+          {{- end }}
+          {{- if .Values.sigV4Proxy.extraEnv }}
           {{- toYaml .Values.sigV4Proxy.extraEnv | nindent 10 }}
           {{- end }}
         {{- end }}
@@ -370,6 +415,20 @@ spec:
         - name: ubbagent
           image: gcr.io/kubecost1/gcp-mp/ent/cost-model/ubbagent:1.0
           env:
+          {{- if .Values.systemProxy.enabled }}
+          - name: HTTP_PROXY
+            value: {{ .Values.systemProxy.httpProxyUrl }}
+          - name: http_proxy
+            value: {{ .Values.systemProxy.httpProxyUrl }}
+          - name: HTTPS_PROXY
+            value:  {{ .Values.systemProxy.httpsProxyUrl }}
+          - name: https_proxy
+            value:  {{ .Values.systemProxy.httpsProxyUrl }}
+          - name: NO_PROXY
+            value:  {{ .Values.systemProxy.noProxy }}
+          - name: no_proxy
+            value:  {{ .Values.systemProxy.noProxy }}
+          {{- end }}
           - name: AGENT_CONFIG_FILE
             value: "/etc/ubbagent/config.yaml"
           - name: AGENT_LOCAL_PORT
@@ -406,10 +465,12 @@ spec:
           args:
           {{- toYaml .Values.kubecostModel.extraArgs | nindent 12 }}
         {{- end }}
-        {{- if .Values.kubecostModel.securityContext }}
           securityContext:
+        {{- if .Values.kubecostModel.securityContext }}
             {{- toYaml .Values.kubecostModel.securityContext | nindent 12 -}}
-        {{ end }}
+        {{- else if .Values.global.containerSecurityContext }}
+            {{- toYaml .Values.global.containerSecurityContext | nindent 12 -}}
+        {{- end }}
         {{- if .Values.kubecostModel.imagePullPolicy }}
           imagePullPolicy: {{ .Values.kubecostModel.imagePullPolicy }}
         {{- else }}
@@ -643,11 +704,11 @@ spec:
               value: {{ (quote .Values.kubecostProductConfigs.regionOverrides) }}
             {{- end }}
             {{- end }}
-            - name: REMOTE_WRITE_PASSWORD
-              value: {{ .Values.remoteWrite.postgres.auth.password }}
             {{- if .Values.remoteWrite.postgres.enabled }}
             - name: REMOTE_WRITE_ENABLED
               value: "true"
+            - name: REMOTE_WRITE_PASSWORD
+              value: {{ .Values.remoteWrite.postgres.auth.password }}
             {{- end }}
             {{- if .Values.global.thanos.queryServiceBasicAuthSecretName}}
             - name: MC_BASIC_AUTH_USERNAME
@@ -1042,11 +1103,18 @@ spec:
                 configMapKeyRef:
                   name: {{ template "cost-analyzer.fullname" . }}
                   key: kubecost-token
+            {{- if .Values.kubecostAggregator.enabled }}
+            - name: WATERFOWL_ENABLED
+              value: "true"
+            {{- end }}
+        {{- if .Values.kubecostFrontend.enabled }}
         {{- if .Values.kubecostFrontend }}
         {{- if .Values.kubecostFrontend.fullImageName }}
         - image: {{ .Values.kubecostFrontend.fullImageName }}
         {{- else if .Values.imageVersion }}
         - image: {{ .Values.kubecostFrontend.image }}:{{ .Values.imageVersion }}
+        {{- else if .Values.kubecostAggregator.enabled }}
+        - image: {{ .Values.kubecostFrontend.image }}:prod-aggregator-{{ $.Chart.AppVersion }}
         {{- else }}
         - image: {{ .Values.kubecostFrontend.image }}:prod-{{ $.Chart.AppVersion }}
         {{ end }}
@@ -1070,7 +1138,10 @@ spec:
         {{- if .Values.kubecostFrontend.securityContext }}
           securityContext:
             {{- toYaml .Values.kubecostFrontend.securityContext | nindent 12 }}
-        {{ end }}
+          {{- else if .Values.global.containerSecurityContext }}
+          securityContext:
+            {{- toYaml .Values.global.containerSecurityContext | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -1115,6 +1186,7 @@ spec:
           securityContext:
           {{- toYaml .Values.global.containerSecuritycontext | nindent 12 }}
           {{- end }}
+        {{ end }}
     {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
       {{ toYaml .Values.imagePullSecrets | indent 2 }}
