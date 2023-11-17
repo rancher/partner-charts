@@ -1,5 +1,5 @@
 # What's Changed
 
-### Bug Fixes
-- **agent,kspm-collector,node-analyzer,sysdig** [f378d192](https://github.com/sysdiglabs/charts/commit/f378d1922d0f21f5936c6ed872e6538536ccf1f2): whitespace errors ([#1436](https://github.com/sysdiglabs/charts/issues/1436))
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.29.1...sysdig-1.16.20
+### Chores
+- **sysdig, node-analyzer** [6c7c27bf](https://github.com/sysdiglabs/charts/commit/6c7c27bf845b30af0eb5a4cb8f5fe330923d564f): bump sysdig/vuln-runtime-scanner to v1.6.4 [SSPROD-3285] ([#1477](https://github.com/sysdiglabs/charts/issues/1477))
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.29.8...sysdig-1.16.21

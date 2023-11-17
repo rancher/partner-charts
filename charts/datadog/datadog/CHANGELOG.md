@@ -1,5 +1,29 @@
 # Datadog changelog
 
+## 3.49.0
+
+* Beta: Add `datadog.apm.instrumentation` section to configure APM Single Step Instrumentation
+
+## 3.48.0
+
+* Set default `Agent` and `Cluster-Agent` version to `7.49.1`.
+
+## 3.47.2
+
+* Fix CI following enabling container image collection by default.
+
+## 3.47.1
+
+* Fix `registry` being ignored even if set.
+
+## 3.47.0
+
+* `registry` is now set automatically adapted based on `datadog.site` value. Still default to `gcr.io/datadoghq` if not set.
+
+## 3.46.0
+
+* Enable container image collection by default.
+
 ## 3.45.0
 
 * Separate values for `DD_CONTAINER_INCLUDE` and `DD_CONTAINER_EXCLUDE` in `Agent` and `Cluster-Agent`
