@@ -76,7 +76,7 @@ injector:
   # required.
   agentImage:
     repository: "hashicorp/vault"
-    tag: "1.15.1"
+    tag: "1.15.2"
 
   # The default values for the injected Vault Agent containers.
   agentDefaults:
@@ -377,7 +377,7 @@ server:
 
   image:
     repository: "hashicorp/vault"
-    tag: "1.15.1"
+    tag: "1.15.2"
     # Overrides the default Image Pull Policy
     pullPolicy: IfNotPresent
 
@@ -531,8 +531,14 @@ server:
   # Used to enable a livenessProbe for the pods
   livenessProbe:
     enabled: false
+    # Used to define a liveness exec command. If provided, exec is preferred to httpGet (path) as the livenessProbe handler.
+    execCommand: []
+    # - /bin/sh
+    # - -c
+    # - /vault/userconfig/mylivenessscript/run.sh
+    # Path for the livenessProbe to use httpGet as the livenessProbe handler
     path: "/v1/sys/health?standbyok=true"
-    # Port number on which livenessProbe will be checked.
+    # Port number on which livenessProbe will be checked if httpGet is used as the livenessProbe handler
     port: 8200
     # When a probe fails, Kubernetes will try failureThreshold times before giving up
     failureThreshold: 2
@@ -641,6 +647,14 @@ server:
     #   ports:
     #   - protocol: TCP
     #     port: 443
+    ingress:
+      - from:
+        - namespaceSelector: {}
+        ports:
+        - port: 8200
+          protocol: TCP
+        - port: 8201
+          protocol: TCP
 
   # Priority class for server pods
   priorityClassName: ""
@@ -755,6 +769,16 @@ server:
     accessMode: ReadWriteOnce
     # Annotations to apply to the PVC
     annotations: {}
+    # Labels to apply to the PVC
+    labels: {}
+
+  # Persistent Volume Claim (PVC) retention policy
+  # ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+  # Example:
+  # persistentVolumeClaimRetentionPolicy:
+  #   whenDeleted: Retain
+  #   whenScaled: Retain
+  persistentVolumeClaimRetentionPolicy: {}
 
   # This configures the Vault Statefulset to create a PVC for audit
   # logs.  Once Vault is deployed, initialized, and unsealed, Vault must
@@ -774,6 +798,8 @@ server:
     accessMode: ReadWriteOnce
     # Annotations to apply to the PVC
     annotations: {}
+    # Labels to apply to the PVC
+    labels: {}
 
   # Run Vault in "dev" mode. This requires no further setup, no state management,
   # and no initialization. This is useful for experimenting with Vault without
@@ -1139,7 +1165,7 @@ csi:
 
     image:
       repository: "hashicorp/vault"
-      tag: "1.15.1"
+      tag: "1.15.2"
       pullPolicy: IfNotPresent
 
     logFormat: standard

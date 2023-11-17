@@ -451,6 +451,11 @@ documentation on Service
 DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
 for more detail.
 
+If you use multiple Helm releases to manage different data plane configurations
+attached to the same control plane, setting the `deployment.hostname` field
+will help you keep track of which is which in the `/clustering/data-plane`
+endpoint.
+
 ### Cert Manager Integration
 
 By default, Kong will create self-signed certificates on start for its TLS
@@ -508,9 +513,9 @@ event you need to recover from unintended CRD deletion.
 
 ### InitContainers
 
-The chart is able to deploy initcontainers along with Kong. This can be very
+The chart is able to deploy initContainers along with Kong. This can be very
 useful when there's a requirement for custom initialization. The
-`deployment.initcontainers` field in values.yaml takes an array of objects that
+`deployment.initContainers` field in values.yaml takes an array of objects that
 get appended as-is to the existing `spec.template.initContainers` array in the
 kong deployment resource.
 
@@ -853,6 +858,7 @@ On the Gateway release side, set either `admin.tls.client.secretName` to the nam
 | deployment.minReadySeconds         | Minimum number of seconds for which newly created pods should be ready without any of its container crashing, for it to be considered available. |                     |
 | deployment.initContainers          | Create initContainers. Please go to Kubernetes doc for the spec of the initContainers |                     |
 | deployment.daemonset               | Use a DaemonSet instead of a Deployment                                               | `false`             |
+| deployment.hostname                | Set the Deployment's `.spec.template.hostname`. Kong reports this as its hostname.    |                     |
 | deployment.hostNetwork             | Enable hostNetwork, which binds to the ports to the host                              | `false`             |
 | deployment.userDefinedVolumes      | Create volumes. Please go to Kubernetes doc for the spec of the volumes               |                     |
 | deployment.userDefinedVolumeMounts | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts     |                     |

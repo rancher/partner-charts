@@ -1,5 +1,21 @@
 ## Unreleased
 
+## 0.27.0 (November 16, 2023)
+
+Changes:
+
+* Default `vault` version updated to 1.15.2
+
+Features:
+
+* server: Support setting `persistentVolumeClaimRetentionPolicy` on the StatefulSet [GH-965](https://github.com/hashicorp/vault-helm/pull/965)
+* server: Support setting labels on PVCs [GH-969](https://github.com/hashicorp/vault-helm/pull/969)
+* server: Support setting ingress rules for networkPolicy [GH-877](https://github.com/hashicorp/vault-helm/pull/877)
+
+Improvements:
+
+* Support exec in the server liveness probe [GH-971](https://github.com/hashicorp/vault-helm/pull/971)
+
 ## 0.26.1 (October 30, 2023)
 
 Bugs:
