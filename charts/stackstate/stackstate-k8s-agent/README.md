@@ -2,7 +2,7 @@
 
 Helm chart for the StackState Agent.
 
-Current chart version is `1.0.51`
+Current chart version is `1.0.53`
 
 **Homepage:** <https://github.com/StackVista/stackstate-agent>
 
@@ -226,8 +226,11 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":100},"type":"RollingUpdate"}` | The update strategy for the DaemonSet object. |
 | openShiftLogging.installSecret | bool | `false` | Install a secret for logging on openshift |
 | processAgent.checkIntervals.connections | int | `30` | Override the default value of the connections check interval in seconds. |
-| processAgent.checkIntervals.container | int | `30` | Override the default value of the container check interval in seconds. |
-| processAgent.checkIntervals.process | int | `30` | Override the default value of the process check interval in seconds. |
+| processAgent.checkIntervals.container | int | `28` | Override the default value of the container check interval in seconds. |
+| processAgent.checkIntervals.process | int | `32` | Override the default value of the process check interval in seconds. |
+| processAgent.softMemoryLimit.goMemLimit | string | `"340MiB"` | Soft-limit for golang heap allocation, for sanity, must be around 85% of nodeAgent.containers.processAgent.resources.limits.cpu. |
+| processAgent.softMemoryLimit.httpObservationsBufferSize | int | `40000` | Sets a maximum for the number of http observations to keep in memory between check runs, to use 40k requires around ~400Mib of memory. |
+| processAgent.softMemoryLimit.httpStatsBufferSize | int | `40000` | Sets a maximum for the number of http stats to keep in memory between check runs, to use 40k requires around ~400Mib of memory. |
 | stackstate.apiKey | string | `nil` | **PROVIDE YOUR API KEY HERE** API key to be used by the StackState agent. |
 | stackstate.cluster.authToken | string | `""` | Provide a token to enable secure communication between the agent and the cluster agent. |
 | stackstate.cluster.name | string | `nil` | **PROVIDE KUBERNETES CLUSTER NAME HERE** Name of the Kubernetes cluster where the agent will be installed. |
