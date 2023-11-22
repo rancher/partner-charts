@@ -1,5 +1,21 @@
 # Datadog changelog
 
+## 3.49.4
+
+* Exclude a namespace with Datadog resources from APM Single Step Instrumentation
+
+## 3.49.3
+
+* Fix NOTES warning for APM Instrumentation when apm.intrumentation.disabledNamespaces is set
+
+## 3.49.2
+
+* Fix check for APM Instrumentation when apm.intrumentation.disabledNamespaces is set 
+
+## 3.49.1
+
+* Update `fips.image.tag` to `1.0.0`
+
 ## 3.49.0
 
 * Beta: Add `datadog.apm.instrumentation` section to configure APM Single Step Instrumentation

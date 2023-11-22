@@ -2,7 +2,7 @@
 
 Helm chart for the StackState Agent.
 
-Current chart version is `1.0.53`
+Current chart version is `1.0.54`
 
 **Homepage:** <https://github.com/StackVista/stackstate-agent>
 
@@ -202,7 +202,7 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.processAgent.image.pullPolicy | string | `"IfNotPresent"` | Process-agent container image pull policy. |
 | nodeAgent.containers.processAgent.image.registry | string | `nil` |  |
 | nodeAgent.containers.processAgent.image.repository | string | `"stackstate/stackstate-k8s-process-agent"` | Process-agent container image repository. |
-| nodeAgent.containers.processAgent.image.tag | string | `"c9dbfd73"` | Default process-agent container image tag. |
+| nodeAgent.containers.processAgent.image.tag | string | `"160f79ee"` | Default process-agent container image tag. |
 | nodeAgent.containers.processAgent.logLevel | string | `nil` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off # If not set, fall back to the value of agent.logLevel. |
 | nodeAgent.containers.processAgent.resources.limits.cpu | string | `"125m"` | Memory resource limits. |
 | nodeAgent.containers.processAgent.resources.limits.memory | string | `"400Mi"` |  |
