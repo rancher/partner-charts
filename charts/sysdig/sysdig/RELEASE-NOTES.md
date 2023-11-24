@@ -1,5 +1,5 @@
 # What's Changed
 
-### Chores
-- **sysdig, node-analyzer** [6c7c27bf](https://github.com/sysdiglabs/charts/commit/6c7c27bf845b30af0eb5a4cb8f5fe330923d564f): bump sysdig/vuln-runtime-scanner to v1.6.4 [SSPROD-3285] ([#1477](https://github.com/sysdiglabs/charts/issues/1477))
-#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.29.8...sysdig-1.16.21
+### New Features
+- **sysdig** [048837fc](https://github.com/sysdiglabs/charts/commit/048837fcb04b48c5dc584d13f5a005fdb75fd230): Update legacy engine NIA component with security updates ([#1489](https://github.com/sysdiglabs/charts/issues/1489))
+#### Full diff: https://github.com/sysdiglabs/charts/compare/sysdig-deploy-1.29.12...sysdig-1.16.23

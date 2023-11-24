@@ -10,6 +10,12 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.16.23
+### New Features
+* **sysdig** [048837fc](https://github.com/sysdiglabs/charts/commit/048837fcb04b48c5dc584d13f5a005fdb75fd230): Update legacy engine NIA component with security updates ([#1489](https://github.com/sysdiglabs/charts/issues/1489))
+# v1.16.22
+### Chores
+* **sysdig** [d9d16526](https://github.com/sysdiglabs/charts/commit/d9d165266542cc04e9aaccfdbf5242bd8562b49f): Update HostAnalyzer to 0.1.18 components with security updates ([#1486](https://github.com/sysdiglabs/charts/issues/1486))
 # v1.16.21
 ### Chores
 * **sysdig, node-analyzer** [6c7c27bf](https://github.com/sysdiglabs/charts/commit/6c7c27bf845b30af0eb5a4cb8f5fe330923d564f): bump sysdig/vuln-runtime-scanner to v1.6.4 [SSPROD-3285] ([#1477](https://github.com/sysdiglabs/charts/issues/1477))
