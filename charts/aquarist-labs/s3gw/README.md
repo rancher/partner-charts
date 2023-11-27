@@ -37,6 +37,56 @@ follows:
 - Apps -> Charts -> Install `s3gw`. Select the `s3gw` namespace previously
   created. A `pvc` for `s3gw` will be created automatically during installation.
 
+## Develop and test charts on the local machine
+
+We have defined a set of common tasks frequently used during the
+development and the testing process of the s3gw's charts.
+
+### Requirements
+
+- make
+- Python 3, pip
+- Docker, Docker compose
+- Helm
+- k3d
+- Kubectl
+- [ct][ct-url]
+
+### Setup the test environment
+
+It creates a Python venv and downloads the required pip packages used
+during the charts testing.
+
+```shell
+make setup-test-environment
+```
+
+### Start a k3d cluster and deploy charts
+
+This task spawns a k3d cluster and deploys the local charts version on it.
+
+```shell
+make cluster-start
+```
+
+### Delete the k3d cluster
+
+It deletes the cluster created with `make cluster-start`.
+
+```shell
+make cluster-delete
+```
+
+### Lint and unittest the charts
+
+It lints and runs the all the unittest using the ct tool.
+This task requires you previously created the k3d cluster with
+`make cluster-start`
+
+```shell
+make lint-test-all
+```
+
 ## Documentation
 
 You can access our documentation [here][docs-url].
@@ -59,3 +109,4 @@ limitations under the License.
 
 [s3gw-url]: https://s3gw.io
 [docs-url]: https://s3gw-docs.readthedocs.io/en/latest/helm-charts/
+[ct-url]: https://github.com/helm/chart-testing

@@ -27,26 +27,22 @@ spec:
           image: {{ include "s3gw.image" . | quote }}
           imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
           args:
-            - "--rgw-dns-name"
+            - "--dns-name"
 {{- if .Values.ingress.enabled }}
             - {{ include "s3gw.serviceName" . }}.{{ .Values.publicDomain }},
               {{ include "s3gw.serviceName" . }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
 {{- else}}
             - {{ include "s3gw.serviceName" . }}.{{ .Release.Namespace }}.{{ .Values.privateDomain }}
 {{- end }}
-            - "--rgw-backend-store"
-            - sfs
-            - "--debug-rgw"
+            - "--debug"
             - '{{ .Values.logLevel }}'
-            - "--rgw_frontends"
 {{- if or .Values.useCertManager .Values.tls.publicDomain.crt }}
-            - "beast port=7480 ssl_port=7481
-                ssl_certificate=/s3gw-cluster-ip-tls/tls.crt
-                ssl_private_key=/s3gw-cluster-ip-tls/tls.key"
-{{ else }}
-            - "beast port=7480"
+            - "--cert"
+            - "/s3gw-cluster-ip-tls/tls.crt"
+            - "/s3gw-cluster-ip-tls/tls.key"
 {{ end }}
 {{- range $.Values.rgwCustomArgs }}
+            - "--"
             - {{ . | quote}}
 {{- end }}
           env:

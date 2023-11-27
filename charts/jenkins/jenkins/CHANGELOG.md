@@ -12,6 +12,25 @@ Use the following links to reference issues, PRs, and commits prior to v2.6.0.
 The changelog until v1.5.7 was auto-generated based on git commits.
 Those entries include a reference to the git commit to be able to get more details.
 
+Notes about [Artifact Hub](https://artifacthub.io/packages/helm/jenkinsci/jenkins?modal=changelog) changelog processing:
+- Remove empty lines
+- Keep only ASCII characters (no emojis)
+- One change per line
+- Remove table(s) (lines starting by "|")
+- Backticks aren't rendered on artifacthub.io changelog
+
+## 4.9.1
+
+Restore artifact hub notes location in CHANGELOG.md
+
+## 4.9.0
+
+Update base images from JDK 11 to JDK 17.
+
+## 4.8.6
+
+Proper `artifacthub.io/changes` changelog annotation preprocessing.
+
 ## 4.8.5
 
 Fix `artifacthub.io/changes` changelog annotation added to the released chart.
