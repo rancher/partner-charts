@@ -109,6 +109,10 @@ spec:
     {{- $needsVolumesHeader = true }}
   {{- else if eq $service "frontend" }}
     {{- $needsVolumesHeader = true }}
+  {{- else if and (list "controllermanager" "executor" "catalog" | has $pod) (eq (include "check.projectSAToken" $main_context) "true")}}
+    {{- $needsVolumesHeader = true }}
+  {{- else if and (eq $service "aggregatedapis") (include "k10.siemEnabled" $main_context) }}
+    {{- $needsVolumesHeader = true }}
   {{- end }}{{/* volumes header needed check */}}
 {{- end }}{{/* range $skip, $service := $containerList */}}
 {{- if $needsVolumesHeader }}
@@ -158,6 +162,17 @@ spec:
         secret:
           secretName: google-secret
 {{- end }}
+{{- if and (list "controllermanager" "executor" "catalog" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
+      - name: bound-sa-token
+        projected:
+            sources:
+            - serviceAccountToken:
+{{- if eq (include "check.gwifidpaud" .) "true" }}
+                audience:  {{ .Values.google.workloadIdentityFederation.idp.aud }}
+{{- end }}
+                expirationSeconds: 3600
+                path: token
+{{- end }}
 {{- if eq (include "check.cacertconfigmap" .) "true" }}
       - name: {{ .Values.cacertconfigmap.name }}
         configMap:
@@ -167,6 +182,11 @@ spec:
       - name: frontend-config
         configMap:
           name: frontend-config
+{{- end }}
+{{- if and (eq $pod "aggregatedapis") (include "k10.siemEnabled" .) }}
+      - name: aggauditpolicy-config
+        configMap:
+          name: aggauditpolicy-config
 {{- end }}
 {{- $containersInThisPod := (dict "main" . "k10_service_pod" $pod | include "get.serviceContainersInPod" | splitList " ") }}
 {{- if has "logging" $containersInThisPod }}

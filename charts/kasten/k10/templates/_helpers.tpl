@@ -114,12 +114,22 @@
   {{- /* Internal capabilities enabled by other Helm values are added here */ -}}
   {{- $internal_capabilities := list -}}
 
+  {{- /* Multi-cluster */ -}}
+  {{- if eq .Values.multicluster.enabled true -}}
+    {{- $internal_capabilities = append $internal_capabilities "mc" -}}
+  {{- end -}}
+
   {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
 {{- end -}}
 
 {{- define "k10.capabilities_mask" -}}
   {{- /* Internal capabilities masked by other Helm values are added here */ -}}
   {{- $internal_capabilities_mask := list -}}
+
+  {{- /* Multi-cluster */ -}}
+  {{- if eq .Values.multicluster.enabled false -}}
+    {{- $internal_capabilities_mask = append $internal_capabilities_mask "mc" -}}
+  {{- end -}}
 
   {{- concat $internal_capabilities_mask (.Values.capabilitiesMask | default list) | join " " -}}
 {{- end -}}
@@ -511,6 +521,63 @@ Get the kanister-tools image.
 {{- end -}}
 
 {{/*
+Check if Google Workload Identity Federation is enabled
+*/}}
+{{- define "check.gwifenabled" -}}
+{{- if .Values.google.workloadIdentityFederation.enabled -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/*
+Check if Google Workload Identity Federation Identity Provider is set
+*/}}
+{{- define "check.gwifidptype" -}}
+{{- if .Values.google.workloadIdentityFederation.idp.type -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Fail if Google Workload Identity Federation is enabled but no Identity Provider is set
+*/}}
+{{- define "validate.gwif.idp.type" -}}
+{{- if and (eq (include "check.gwifenabled" .) "true") (ne (include "check.gwifidptype" .) "true") -}}
+  {{- fail "Google Workload Federation is enabled but helm flag for idp type is missing. Please set helm value google.workloadIdentityFederation.idp.type" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if K8S Bound Service Account Token (aka Projected Service Account Token) is needed,
+which is when GWIF is enabled and the IdP is kubernetes
+*/}}
+{{- define "check.projectSAToken" -}}
+{{- if and (eq (include "check.gwifenabled" .) "true") (eq .Values.google.workloadIdentityFederation.idp.type "kubernetes") -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if the audience that the bound service account token is intended for is set
+*/}}
+{{- define "check.gwifidpaud" -}}
+{{- if .Values.google.workloadIdentityFederation.idp.aud -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Fail if Service Account token projection is expected but no indented Audience is set
+*/}}
+{{- define "validate.gwif.idp.aud" -}}
+{{- if and (eq (include "check.projectSAToken" .) "true") (ne (include "check.gwifidpaud" .) "true") -}}
+  {{- fail "Kubernetes is set as the Identity Provider but an intended Audience is missing. Please set helm value google.workloadIdentityFederation.idp.aud" -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/*
 Check if Google creds are specified
 */}}
 {{- define "check.googlecreds" -}}
@@ -676,6 +743,12 @@ KanisterToolsCPULimits: {{ .Values.genericVolumeSnapshot.resources.limits.cpu | 
 {{- define "get.kanisterPodCustomLabels" -}}
 {{- if .Values.kanisterPodCustomLabels }}
 KanisterPodCustomLabels: {{ .Values.kanisterPodCustomLabels | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "get.gvsActivationToken" }}
+{{- if .Values.genericStorageBackup.token }}
+GVSActivationToken: {{ .Values.genericStorageBackup.token | quote }}
 {{- end }}
 {{- end }}
 
@@ -960,8 +1033,18 @@ running in the same cluster.
     {{- $sha = $hash | trimPrefix "sha256:" }}
   {{- end -}}
 
+  {{- /* Split out the registry if the first component of the repo contains a "." */ -}}
+  {{- $registry := "" }}
+  {{- $split_repo := $repo | splitList "/" -}}
+  {{- if first $split_repo | contains "." -}}
+    {{- $registry = first $split_repo -}}
+    {{- $split_repo = rest $split_repo -}}
+  {{- end -}}
+  {{- $repo = $split_repo | join "/" -}}
+
   {{-
     (dict
+      "registry" $registry
       "repository" $repo
       "tag" ($tag | default "")
       "sha" ($sha | default "")
@@ -1020,6 +1103,31 @@ running in the same cluster.
           {{- end -}}
         {{- end -}}
       {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Check to see whether SIEM logging is enabled */}}
+{{- define "k10.siemEnabled" -}}
+  {{- if or .Values.siem.logging.cluster.enabled .Values.siem.logging.cloud.awsS3.enabled -}}
+    {{- true -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Determine if logging should go to filepath instead of stdout */}}
+{{- define "k10.siemLoggingClusterFile" -}}
+  {{- if .Values.siem.logging.cluster.enabled -}}
+    {{- if (.Values.siem.logging.cluster.file | default dict).enabled -}}
+      {{- .Values.siem.logging.cluster.file.path | default "" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Determine if a max file size should be used */}}
+{{- define "k10.siemLoggingClusterFileSize" -}}
+  {{- if .Values.siem.logging.cluster.enabled -}}
+    {{- if (.Values.siem.logging.cluster.file | default dict).enabled -}}
+      {{- .Values.siem.logging.cluster.file.size | default "" -}}
     {{- end -}}
   {{- end -}}
 {{- end -}}

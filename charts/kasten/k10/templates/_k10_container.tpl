@@ -25,6 +25,16 @@
         args:
         - "--secure-port={{ .Values.service.aggregatedApiPort }}"
         - "--cert-dir=/tmp/apiserver.local.config/certificates/"
+        {{- if include "k10.siemEnabled" . }}
+        - "--audit-policy-file=/etc/kubernetes/{{ include "k10.aggAuditPolicyFile" .}}"
+        {{/* SIEM cloud logging */}}
+        - "--enable-k10-audit-cloud-aws-s3={{ .Values.siem.logging.cloud.awsS3.enabled }}"
+        - "--audit-cloud-path={{ .Values.siem.logging.cloud.path }}"
+        {{/* SIEM cluster logging */}}
+        - "--enable-k10-audit-cluster={{ .Values.siem.logging.cluster.enabled }}"
+        - "--audit-log-file={{ include "k10.siemLoggingClusterFile" . | default (include "k10.siemAuditLogFilePath" .) }}"
+        - "--audit-log-file-size={{ include "k10.siemLoggingClusterFileSize" . | default (include "k10.siemAuditLogFileSize" .) }}"
+        {{- end }}
 {{- if .Values.useNamespacedAPI }}
         - "--k10-api-domain={{  template "apiDomain" . }}"
 {{- end }}{{/* .Values.useNamespacedAPI */}}
@@ -176,6 +186,20 @@ stating that types are not same for the equality check
                 key: role
 {{- end }}
 {{- end }}
+{{- if list "controllermanager" "executor" "catalog" | has $service}}
+{{- if eq (include "check.gwifenabled" .) "true"}}
+          - name: GOOGLE_WORKLOAD_IDENTITY_FEDERATION_ENABLED
+            value: "true"
+{{- if eq (include "check.gwifidptype" .) "true"}}
+          - name: GOOGLE_WORKLOAD_IDENTITY_FEDERATION_IDP
+            value: {{ .Values.google.workloadIdentityFederation.idp.type }}
+{{- end }}
+{{- if eq (include "check.gwifidpaud" .) "true"}}
+          - name: GOOGLE_WORKLOAD_IDENTITY_FEDERATION_AUD
+            value: {{ .Values.google.workloadIdentityFederation.idp.aud }}
+{{- end }}
+{{- end }} {{/* if eq (include "check.gwifenabled" .) "true" */}}
+{{- end }} {{/* list "controllermanager" "executor" "catalog" | has $service */}}
 {{- if or (eq $service "crypto") (eq $service "executor") (eq $service "dashboardbff") (eq $service "repositories") }}
 {{- if eq (include "check.vaultcreds" .) "true" }}
           - name: VAULT_ADDR
@@ -244,7 +268,9 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: kubeVirtVMsUnFreezeTimeout
-{{- if   or  .Values.global.imagePullSecret (or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath)  }}
+{{- end }}
+{{- if or (eq $service "executor") (eq $service "controllermanager") }}
+{{- if or  .Values.global.imagePullSecret (or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath)  }}
           - name: IMAGE_PULL_SECRET_NAMES
             value: {{  (trimSuffix " " (include "k10.imagePullSecretNames" .)) | toJson }}
 {{- end }}
@@ -482,6 +508,20 @@ stating that types are not same for the equality check
                 name: k10-config
                 key: efsBackupVaultName
 {{- end }}
+{{- if and (eq $service "executor") (.Values.genericStorageBackup.token) }}
+          - name: K10_GVS_ACTIVATION_TOKEN
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: GVSActivationToken
+{{- end }}
+{{- if and (eq $service "executor") (.Values.genericStorageBackup.overridepubkey) }}
+          - name: OVERRIDE_GVS_TOKEN_VERIFICATION_KEY
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: overridePublicKeyForGVS
+{{- end }}
 {{- if and (eq $service "executor") (.Values.vmWare.taskTimeoutMin) }}
           - name: VMWARE_GOM_TIMEOUT_MIN
             valueFrom:
@@ -523,12 +563,6 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: kanisterFunctionVersion
-{{- if and (eq $service "controllermanager") (.Values.global.airgapped.repository) }}
-          - name: K10_AIRGAPPED_INSTALL
-            value: "true"
-          - name: K10_IMAGE_PULL_SECRET
-            value: {{ .Values.global.imagePullSecret }}
-{{- end }}
 {{- if and (eq $service "controllermanager") (.Values.injectKanisterSidecar.enabled) }}
           - name: K10_MUTATING_WEBHOOK_ENABLED
             value: "true"
@@ -601,6 +635,10 @@ stating that types are not same for the equality check
         volumeMounts:
 {{- else if eq $service "frontend" }}
         volumeMounts:
+{{- else if and (list "controllermanager" "executor" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
+        volumeMounts:
+{{- else if and (eq $service "aggregatedapis") (include "k10.siemEnabled" .) }}
+        volumeMounts:
 {{- end }}
 {{- if $.stateful }}
         - name: {{ $service }}-persistent-storage
@@ -633,6 +671,11 @@ stating that types are not same for the equality check
         - name: service-account
           mountPath: "/var/run/secrets/kasten.io"
 {{- end }}
+{{- if and (list "controllermanager" "executor" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
+        - name: bound-sa-token
+          mountPath: "/var/run/secrets/kasten.io/serviceaccount/GWIF"
+          readOnly: true
+{{- end }}
 {{- if eq (include "check.cacertconfigmap" .) "true" }}
         - name: {{ .Values.cacertconfigmap.name }}
           mountPath: "/etc/ssl/certs/custom-ca-bundle.pem"
@@ -646,6 +689,12 @@ stating that types are not same for the equality check
         - name: frontend-config
           mountPath: /etc/nginx/conf.d/frontend.conf
           subPath: frontend.conf
+          readOnly: true
+{{- end}}
+{{- if and (eq $service "aggregatedapis") (include "k10.siemEnabled" .) }}
+        - name: aggauditpolicy-config
+          mountPath: /etc/kubernetes/{{ include "k10.aggAuditPolicyFile" .}}
+          subPath: {{ include "k10.aggAuditPolicyFile" .}}
           readOnly: true
 {{- end}}
 {{- if .Values.toolsImage.enabled }}
@@ -671,6 +720,11 @@ stating that types are not same for the equality check
         - name: {{ .Values.cacertconfigmap.name }}
           mountPath: "/etc/ssl/certs/custom-ca-bundle.pem"
           subPath: custom-ca-bundle.pem
+{{- end }}
+{{- if eq (include "check.projectSAToken" .) "true" }}
+        - name: bound-sa-token
+          mountPath: "/var/run/secrets/kasten.io/serviceaccount/GWIF"
+          readOnly: true
 {{- end }}
 {{- end }} {{/* and (eq $service "catalog") $.stateful */}}
 {{- if and ( eq $service "auth" ) ( or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true")) }}
