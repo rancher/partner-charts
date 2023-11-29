@@ -11,7 +11,11 @@ data:
   clustername: {{ quote .Values.clusterName }}
   {{- end }}
   version: {{ .Chart.AppVersion }}
+  {{- $capabilities := include "k10.capabilities" . | splitList " " }}
+  {{- $capabilities_mask := include "k10.capabilities_mask" . | splitList " " }}
+  {{- if and ( has "mc" $capabilities ) ( not ( has "mc" $capabilities_mask ) ) }}
   multiClusterVersion: {{ include "k10.multiClusterVersion" . | quote }}
+  {{- end }}
   modelstoredirname: "//mnt/k10state/kasten-io/"
   apiDomain: {{ include "apiDomain" . }}
   concurrentSnapConversions: {{ default (include "k10.defaultConcurrentSnapshotConversions" .) .Values.limiter.concurrentSnapConversions | quote }}
@@ -77,6 +81,11 @@ data:
   kanisterFunctionVersion: {{ quote "v1.0.0-alpha" }}
   {{- end }}
 {{- include "kanisterToolsResources" . | indent 2 }}
+{{- include "get.gvsActivationToken" . | indent 2 }}
+
+  {{- if .Values.genericStorageBackup.overridepubkey }}
+  overridePublicKeyForGVS: {{ .Values.genericStorageBackup.overridepubkey | quote }}
+  {{- end }}
 
 {{ if .Values.features }}
 ---

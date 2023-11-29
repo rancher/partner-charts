@@ -193,7 +193,8 @@
     - global.images.grafana
 */ -}}
 {{- $grafana_image := (dict
-    "repository" (printf "%s/grafana" (.Values.global.airgapped.repository | default .Values.global.image.registry))
+    "registry" (.Values.global.airgapped.repository | default .Values.global.image.registry)
+    "repository" "grafana"
     "tag" (include "get.k10ImageTag" $)
 ) -}}
 {{- if .Values.global.images.grafana -}}
@@ -201,6 +202,7 @@
   {{- $grafana_image = (include "k10.splitImage" $grafana_image_args) | fromJson -}}
 {{- end -}}
 
+{{- $_ := set .Values.grafana.image "registry" $grafana_image.registry -}}
 {{- $_ := set .Values.grafana.image "repository" $grafana_image.repository -}}
 {{- $_ := set .Values.grafana.image "tag" $grafana_image.tag -}}
 {{- $_ := set .Values.grafana.image "sha" $grafana_image.sha -}}
@@ -212,7 +214,8 @@
     - global.images.init
 */ -}}
 {{- $init_image := (dict
-  "repository" (printf "%s/init" (.Values.global.airgapped.repository | default .Values.global.image.registry))
+  "registry" (.Values.global.airgapped.repository | default .Values.global.image.registry)
+  "repository" "init"
   "tag" (include "get.k10ImageTag" $)
 ) -}}
 {{- if .Values.global.images.init -}}
@@ -220,10 +223,12 @@
   {{- $init_image = (include "k10.splitImage" $init_image_args) | fromJson -}}
 {{- end -}}
 
+{{- $_ := set .Values.grafana.downloadDashboardsImage "registry" $init_image.registry -}}
 {{- $_ := set .Values.grafana.downloadDashboardsImage "repository" $init_image.repository -}}
 {{- $_ := set .Values.grafana.downloadDashboardsImage "tag" $init_image.tag -}}
 {{- $_ := set .Values.grafana.downloadDashboardsImage "sha" $init_image.sha -}}
 
+{{- $_ := set .Values.grafana.initChownData.image "registry" $init_image.registry -}}
 {{- $_ := set .Values.grafana.initChownData.image "repository" $init_image.repository -}}
 {{- $_ := set .Values.grafana.initChownData.image "tag" $init_image.tag -}}
 {{- $_ := set .Values.grafana.initChownData.image "sha" $init_image.sha -}}

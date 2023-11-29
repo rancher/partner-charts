@@ -8,6 +8,9 @@ container-based applications.
 ```console
 $ helm install kasten/k10 --name=k10 --namespace=kasten-io
 ```
+Additionally, K10 images are available in Platform One's **Iron Bank** hardened container registry.
+To install using these images, follow the instructions found
+[here](https://docs.kasten.io/latest/install/ironbank.html).
 
 ## Introduction
 
@@ -85,6 +88,9 @@ Parameter | Description | Default
 `global.prometheus.external.port` | Provide external prometheus port number | `''`
 `global.prometheus.external.baseURL` | Provide Base URL of external prometheus | `''`
 `global.network.enable_ipv6` | Enable `IPv6` support for K10 | `false`
+`google.workloadIdentityFederation.enabled` | Enable Google Workload Identity Federation for K10 | `false`
+`google.workloadIdentityFederation.idp.type` | Identity Provider type for Google Workload Identity Federation for K10 | `''`
+`google.workloadIdentityFederation.idp.aud` | Audience for whom the ID Token from Identity Provider is intended | `''`
 `secrets.awsAccessKeyId` | AWS access key ID (required for AWS deployment) | `None`
 `secrets.awsSecretAccessKey` | AWS access key secret | `None`
 `secrets.awsIamRole` | ARN of the AWS IAM role assumed by K10 to perform any AWS operation. | `None`
@@ -174,6 +180,9 @@ Parameter | Description | Default
 `services.securityContext.runAsUser` | User ID K10 service containers run as| `1000`
 `services.securityContext.runAsGroup` | Group ID K10 service containers run as| `1000`
 `services.securityContext.fsGroup` | FSGroup that owns K10 service container volumes | `1000`
+`siem.logging.cluster.enabled` | Whether to enable writing K10 audit event logs to stdout (standard output) | `true`
+`siem.logging.cloud.path` | Directory path for saving audit logs in a cloud object store | `k10audit/`
+`siem.logging.cloud.awsS3.enabled` | Whether to enable sending K10 audit event logs to AWS S3 | `true`
 `injectKanisterSidecar.enabled` | Enable Kanister sidecar injection for workload pods | `false`
 `injectKanisterSidecar.namespaceSelector.matchLabels` | Set of labels to select namespaces in which sidecar injection is enabled for workloads | `{}`
 `injectKanisterSidecar.objectSelector.matchLabels` | Set of labels to filter workload objects in which the sidecar is injected | `{}`

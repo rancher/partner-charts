@@ -29,9 +29,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
-- repositories
 - bloblifecyclemanager
 - garbagecollector
+- repositories
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -45,6 +45,7 @@ state:
 {{- define "k10.policypresets" -}}policypresets{{- end -}}
 {{- define "k10.transformsets" -}}transformsets{{- end -}}
 {{- define "k10.blueprintbindings" -}}blueprintbindings{{- end -}}
+{{- define "k10.auditconfigs" -}}auditconfigs{{- end -}}
 {{- define "k10.storagesecuritycontexts" -}}storagesecuritycontexts{{- end -}}
 {{- define "k10.storagesecuritycontextbindings" -}}storagesecuritycontextbindings{{- end -}}
 {{- define "k10.reportingAPIs" -}}reporting{{- end -}}
@@ -208,5 +209,8 @@ state-svc:
 {{- define "k10.multiClusterVersion" -}}2{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.99.0{{- end -}}
+{{- define "k10.aggAuditPolicyFile" -}}agg-audit-policy.yaml{{- end -}}
+{{- define "k10.siemAuditLogFilePath" -}}-{{- end -}}
+{{- define "k10.siemAuditLogFileSize" -}}100{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.100.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}
