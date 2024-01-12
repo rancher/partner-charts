@@ -1,10 +1,10 @@
 # auth-server-key-rotation
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Responsible for regenerating auth-keys per x hours
 
-**Homepage:** <https://gluu.org/docs/gluu-server>
+**Homepage:** <https://docs.gluu.org>
 
 ## Maintainers
 
@@ -15,7 +15,7 @@ Responsible for regenerating auth-keys per x hours
 ## Source Code
 
 * <https://github.com/JanssenProject/docker-jans-certmanager>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/auth-server-key-rotation>
+* <https://github.com/GluuFederation/flex/tree/main/charts/gluu/charts/auth-server-key-rotation>
 
 ## Requirements
 
@@ -28,12 +28,13 @@ Kubernetes: `>=v1.21.0-0`
 | additionalAnnotations | object | `{}` | Additional annotations that will be added across all resources  in the format of {cert-manager.io/issuer: "letsencrypt-prod"}. key app is taken |
 | additionalLabels | object | `{}` | Additional labels that will be added across all resources definitions in the format of {mylabel: "myapp"} |
 | affinity | object | `{}` |  |
+| customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. |
 | dnsConfig | object | `{}` | Add custom dns config |
 | dnsPolicy | string | `""` | Add custom dns policy |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
 | image.repository | string | `"janssenproject/certmanager"` | Image  to use for deploying. |
-| image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | keysLife | int | `48` | Auth server key rotation keys life in hours |
 | lifecycle | object | `{}` |  |
 | nodeSelector | object | `{}` |  |

@@ -20,6 +20,10 @@ spec:
         app.kubernetes.io/name: cloud-cost
         app.kubernetes.io/instance: {{ .Release.Name }}
         app: cloud-cost
+      {{- with .Values.global.podAnnotations}}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       restartPolicy: Always
       serviceAccountName: {{ template "cloudCost.serviceAccountName" . }}
@@ -106,12 +110,31 @@ spec:
             - name: FEDERATED_CLUSTER
               value: "true"
             {{- end}}
+            - name: CLOUD_COST_REFRESH_RATE_HOURS
+              value: {{ .Values.kubecostAggregator.cloudCost.refreshRateHours | default  6 | quote }}
+            - name: CLOUD_COST_QUERY_WINDOW_DAYS
+              value: {{ .Values.kubecostAggregator.cloudCost.queryWindowDays  | default  7 | quote }}
+            - name: CLOUD_COST_RUN_WINDOW_DAYS
+              value: {{ .Values.kubecostAggregator.cloudCost.runWindowDays | default 3 | quote }}
+
             {{- range $key, $value := .Values.kubecostAggregator.cloudCost.env }}
             - name: {{ $key | quote }}
               value: {{ $value | quote }}
             {{- end }}
-
-
+            {{- if .Values.systemProxy.enabled }}
+            - name: HTTP_PROXY
+              value: {{ .Values.systemProxy.httpProxyUrl }}
+            - name: http_proxy
+              value: {{ .Values.systemProxy.httpProxyUrl }}
+            - name: HTTPS_PROXY
+              value: {{ .Values.systemProxy.httpsProxyUrl }}
+            - name: https_proxy
+              value: {{ .Values.systemProxy.httpsProxyUrl }}
+            - name: NO_PROXY
+              value: {{ .Values.systemProxy.noProxy }}
+            - name: no_proxy
+              value: {{ .Values.systemProxy.noProxy }}
+            {{- end }}
     {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
       {{ toYaml .Values.imagePullSecrets | indent 2 }}

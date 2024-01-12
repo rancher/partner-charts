@@ -45,7 +45,7 @@ data:
   {{- end }}
   {{ if or (eq .Values.global.configSecretAdapter "aws") (eq .Values.global.configAdapterName "aws") }}
   # [aws_envs] Envs related to using AWS
-  {{- if .Values.configmap.cnAwsSecretsEndpointUrl }}  
+  {{- if .Values.configmap.cnAwsSecretsEndpointUrl }}
   CN_AWS_SECRETS_ENDPOINT_URL: {{ .Values.configmap.cnAwsSecretsEndpointUrl }}
   {{- end }}
   CN_AWS_SECRETS_PREFIX: {{ .Values.configmap.cnAwsSecretsNamePrefix }}
@@ -146,10 +146,6 @@ data:
   CN_HYBRID_MAPPING: {{ .Values.configmap.cnPersistenceHybridMapping | quote }}
   {{- end }}
   # Auto enable installation of some services
-  CN_PASSPORT_ENABLED: {{ .Values.global.oxpassport.enabled | quote }}
-  {{- if .Values.global.oxshibboleth.enabled }}
-  CN_SAML_ENABLED: {{ .Values.global.oxshibboleth.enabled | quote }}
-  {{- end }}
   {{ if eq .Values.configmap.cnCacheType "REDIS" }}
   CN_REDIS_URL: {{ .Values.configmap.cnRedisUrl | quote }}
   CN_REDIS_TYPE: {{ .Values.configmap.cnRedisType | quote }}
@@ -211,7 +207,7 @@ data:
   {{- end }}
   {{- if .Values.global.casa.enabled }}
   # CASA
-  GLUU_CASA_APP_LOGGERS: {{ .Values.global.casa
+  CN_CASA_APP_LOGGERS: {{ .Values.global.casa
   | toJson
   | replace "casaLogTarget" "casa_log_target"
   | replace "casaLogLevel" "casa_log_level"
@@ -223,6 +219,15 @@ data:
   {{- end }}
   # delete Duo script (https://github.com/GluuFederation/flex/issues/1120) by disabling the feature
   CN_DUO_ENABLED: "false"
+  CN_SQL_PASSWORD_FILE: {{ .Values.global.cnSqlPasswordFile }}
+  CN_COUCHBASE_PASSWORD_FILE: {{ .Values.global.cnCouchbasePasswordFile }}
+  CN_COUCHBASE_SUPERUSER_PASSWORD_FILE: {{ .Values.global.cnCouchbaseSuperuserPasswordFile }}
+  CN_LDAP_PASSWORD_FILE: {{ .Values.global.cnLdapPasswordFile }}
+  CN_LDAP_TRUSTSTORE_PASSWORD_FILE: {{ .Values.global.cnLdapTruststorePasswordFile }}
+  CN_LDAP_CERT_FILE: {{ .Values.global.cnLdapCertFile }}
+  CN_LDAP_KEY_FILE: {{ .Values.global.cnLdapKeyFile }}
+  CN_LDAP_CACERT_FILE: {{ .Values.global.cnLdapCacertFile }}
+  CN_LDAP_TRUSTSTORE_FILE: {{ .Values.global.cnLdapTruststoreFile }}
 ---
 
 apiVersion: v1
@@ -230,6 +235,9 @@ data:
   tls_generator.py: |-
     from kubernetes import config, client
     import logging
+    import base64
+
+    from jans.pycloudlib import get_manager
 
     log_format = '%(asctime)s - %(name)8s - %(levelname)5s - %(message)s'
     logging.basicConfig(format=log_format, level=logging.INFO)
@@ -286,12 +294,20 @@ data:
         :param namespace:
         :return:  ssl cert and key from gluu secrets
         """
-        ssl_cert = None
-        ssl_key = None
-        if core_cli.read_namespaced_secret(secret_name, namespace):
-            ssl_cert = core_cli.read_namespaced_secret(secret_name, namespace).data['ssl_cert']
-            ssl_key = core_cli.read_namespaced_secret(secret_name, namespace).data['ssl_key']
+        def b64encode(value):
+            return base64.b64encode(value.encode()).decode()
 
+        manager = get_manager()
+
+        # returns empty string if not found
+        ssl_cert = manager.secret.get("ssl_cert")
+        if ssl_cert:
+            ssl_cert = b64encode(ssl_cert)
+
+        # returns empty string if not found
+        ssl_key = manager.secret.get("ssl_key")
+        if ssl_key:
+            ssl_key = b64encode(ssl_key)
         return ssl_cert, ssl_key
 
 
@@ -307,7 +323,7 @@ data:
         namespace = {{.Values.global.istio.namespace | quote}}
         {{- end}}
 
-        if cert and key:
+        if cert or key:
             patch_or_create_namespaced_secret(name=name,
                                               namespace=namespace,
                                               literal="tls.crt",
@@ -316,7 +332,11 @@ data:
                                               second_literal="tls.key",
                                               value_of_second_literal=key)
         else:
-            logger.error("No certificate or key was found in secrets.")
+            logger.error(
+                "No certificate or key was found in secrets."
+                "This can happen when the ssl certificate for the domain is able to be pulled."
+                "In that scenario the ssl_cert will be pulled from the domain provided"
+            )
 
     if __name__ == "__main__":
         main()

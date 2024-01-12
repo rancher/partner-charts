@@ -231,3 +231,19 @@ Check export of nss_wrapper environment variables required
       {{- end -}}
   {{- end -}}
 {{- end -}}
+
+{{/*
+Make list of custom http headers
+*/}}
+{{- define "customHeaders" -}}
+[
+{{- $headers := .Values.yugaware.custom_headers -}}
+{{- range $index, $element := $headers -}}
+  {{- if ne $index (sub (len $headers) 1) -}}
+    {{- . | quote }},
+  {{- else -}}
+    {{- . | quote }}
+  {{- end -}}
+{{- end -}}
+]
+{{- end -}}

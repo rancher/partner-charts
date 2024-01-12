@@ -1,5 +1,4 @@
 {{- if and (not .Values.agent) (not .Values.cloudAgent) }}
-{{- $nginxPort := int .Values.service.port | default 9090 -}}
 apiVersion: apps/v1
 {{- if and .Values.kubecostDeployment.statefulSet.enabled .Values.kubecostDeployment.leaderFollower.enabled }}
 kind: StatefulSet
@@ -56,22 +55,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- if .Values.kubecostFrontend.tls }}
-      {{- if .Values.kubecostFrontend.tls.enabled }}
+      {{- if .Values.global.platforms.openshift.enabled }}
       securityContext:
-        runAsUser: 0
-      {{- else }}
-      securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-      {{- end }}
-      {{- else if lt $nginxPort 1025 }}
-      securityContext:
-        runAsUser: 0
+      {{- toYaml .Values.global.platforms.openshift.securityContext | nindent 8 }}
       {{- else if .Values.global.securityContext }}
       securityContext:
-        {{- toYaml .Values.global.securityContext | nindent 8 }}
+      {{- toYaml .Values.global.securityContext | nindent 8 }}
       {{- else }}
       securityContext:
         runAsUser: 1001
@@ -307,16 +296,18 @@ spec:
             claimName: {{ template "cost-analyzer.fullname" . }}-db
 {{- end }}
 {{- end }}
-      initContainers:
 {{- if .Values.supportNFS }}
+      initContainers:
         - name: config-db-perms-fix
         {{- if .Values.initChownDataImage }}
           image: {{ .Values.initChownDataImage }}
         {{- else }}
           image: busybox
         {{- end }}
+          {{- with .Values.initChownData.resources }}
           resources:
-{{ toYaml .Values.initChownData.resources | indent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if and (.Values.kubecostModel.etlToDisk | default true) .Values.persistentVolume.dbPVEnabled }}
           command: ["sh", "-c", "/bin/chmod -R 777 /var/configs && /bin/chmod -R 777 /var/db"]
           {{- else }}
@@ -379,10 +370,14 @@ spec:
           {{- else }}
           imagePullPolicy: Always
           {{- end }}
-        {{- if .Values.global.containerSecurityContext }}
+          {{- if .Values.global.containerSecurityContext }}
           securityContext:
             {{- toYaml .Values.global.containerSecurityContext | nindent 12 -}}
-        {{- end }}
+          {{- end }}
+          {{- with .Values.sigV4Proxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           args:
           - --name
           - {{ .Values.sigV4Proxy.name }}
@@ -465,10 +460,10 @@ spec:
         - image: {{ .Values.kubecostModel.image }}:{{ .Values.imageVersion }}
         {{- else }}
         - image: {{ .Values.kubecostModel.image }}:prod-{{ $.Chart.AppVersion }}
-        {{ end }}
+        {{- end }}
         {{- else }}
         - image: gcr.io/kubecost1/cost-model:prod-{{ $.Chart.AppVersion }}
-        {{ end }}
+        {{- end }}
           name: cost-model
         {{- if .Values.kubecostModel.extraArgs }}
           args:
@@ -492,23 +487,28 @@ spec:
           - name: tcp-frontend
             containerPort: 9090
             protocol: TCP
+        {{- with .Values.kubecostModel.extraPorts }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
           resources:
 {{ toYaml .Values.kubecostModel.resources | indent 12 }}
+          {{- if .Values.kubecostModel.readinessProbe.enabled }}
           readinessProbe:
             httpGet:
               path: /healthz
               port: 9003
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 200
-          {{- if .Values.kubecostFrontend.livenessProbe.enabled }}
+            initialDelaySeconds: {{ .Values.kubecostModel.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.kubecostModel.readinessProbe.periodSeconds}}
+            failureThreshold: {{ .Values.kubecostModel.readinessProbe.failureThreshold}}
+          {{- end }}
+          {{- if .Values.kubecostModel.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: /healthz
               port: 9003
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 200
+            initialDelaySeconds: {{ .Values.kubecostModel.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.kubecostModel.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.kubecostModel.livenessProbe.failureThreshold }}
           {{- end }}
           {{- if .Values.global.containerSecuritycontext }}
           securityContext:
@@ -863,12 +863,6 @@ spec:
             {{- end }}
             - name: CLOUD_ASSETS_EXCLUDE_PROVIDER_ID
               value: {{ (quote .Values.kubecostModel.cloudAssetsExcludeProviderID) | default (quote false) }}
-            - name: ETL_CLOUD_REFRESH_RATE_HOURS
-              value: {{ (quote .Values.kubecostModel.etlCloudRefreshRateHours) | default (quote 6) }}
-            - name: ETL_CLOUD_QUERY_WINDOW_DAYS
-              value: {{ (quote .Values.kubecostModel.etlCloudQueryWindowDays) | default (quote 7) }}
-            - name: ETL_CLOUD_RUN_WINDOW_DAYS
-              value: {{ (quote .Values.kubecostModel.etlCloudRunWindowDays) | default (quote 3) }}
             {{- if .Values.persistentVolume.dbPVEnabled }}
             - name: ETL_PATH_PREFIX
               value: "/var/db"
@@ -913,6 +907,12 @@ spec:
             - name: CLOUD_COST_TOP_N
               value: {{ (quote .topNItems) | default (quote 1000) }}
             {{- end }}
+            - name: CLOUD_COST_REFRESH_RATE_HOURS
+              value: {{ .Values.kubecostModel.cloudCost.refreshRateHours | default .Values.kubecostModel.etlCloudRefreshRateHours | default  6 | quote }}
+            - name: CLOUD_COST_QUERY_WINDOW_DAYS
+              value: {{ .Values.kubecostModel.cloudCost.queryWindowDays | default .Values.kubecostModel.etlCloudQueryWindowDays | default  7 | quote }}
+            - name: CLOUD_COST_RUN_WINDOW_DAYS
+              value: {{ .Values.kubecostModel.cloudCost.runWindowDays | default .Values.kubecostModel.etlCloudRunWindowDays | default 3 | quote }}
             - name: CONTAINER_STATS_ENABLED
               value: {{ (quote .Values.kubecostModel.containerStatsEnabled) | default (quote false) }}
             - name: RECONCILE_NETWORK
@@ -947,6 +947,19 @@ spec:
             {{- if .Values.networkCosts.enabled }}
             - name: NETWORK_COSTS_PORT
               value: {{ quote .Values.networkCosts.port | default (quote 3001) }}
+            # ADVANCED_NETWORK_STATS is a feature offered by Kubecost that gives you network
+            # insights of your Kubernetes resources with cloud services. The feature is
+            # enabled when network cost is enabled and one of the service tagging is enabled
+            {{- if .Values.networkCosts.config.services }}
+            {{- $services := .Values.networkCosts.config.services -}}
+            {{- if or (index $services "google-cloud-services") (index $services "amazon-web-services") (index $services "azure-cloud-services")}}
+            - name: ADVANCED_NETWORK_STATS
+              value: "true"
+            {{- else}}
+            - name: ADVANCED_NETWORK_STATS
+              value: "false"
+            {{- end}}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- /*
@@ -1122,21 +1135,12 @@ spec:
         - image: {{ .Values.kubecostFrontend.fullImageName }}
         {{- else if .Values.imageVersion }}
         - image: {{ .Values.kubecostFrontend.image }}:{{ .Values.imageVersion }}
-        {{- else if .Values.kubecostAggregator.enabled }}
-        - image: {{ .Values.kubecostFrontend.image }}:prod-aggregator-{{ $.Chart.AppVersion }}
         {{- else }}
         - image: {{ .Values.kubecostFrontend.image }}:prod-{{ $.Chart.AppVersion }}
-        {{ end }}
+        {{- end }}
         {{- else }}
         - image: gcr.io/kubecost1/frontend:prod-{{ $.Chart.AppVersion }}
-        {{ end }}
-          {{- if .Values.kubecostFrontend.tls }}
-          {{- if .Values.kubecostFrontend.tls.enabled }}
-          command: ["nginx", "-g", "daemon off;"]
-          ports:
-            - containerPort: 443
-          {{- end }}
-          {{- end }}
+        {{- end }}
           env:
             - name: GET_HOSTS_FROM
               value: dns
@@ -1147,7 +1151,7 @@ spec:
         {{- if .Values.kubecostFrontend.securityContext }}
           securityContext:
             {{- toYaml .Values.kubecostFrontend.securityContext | nindent 12 }}
-          {{- else if and .Values.global.containerSecurityContext (gt $nginxPort 1025) }}
+          {{- else  }}
           securityContext:
             {{- toYaml .Values.global.containerSecurityContext | nindent 12 }}
           {{- end }}
@@ -1175,13 +1179,15 @@ spec:
         {{- else }}
           imagePullPolicy: Always
         {{- end }}
+          {{- if .Values.kubecostFrontend.readinessProbe.enabled }}
           readinessProbe:
             httpGet:
               path: /healthz
               port: 9003
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 200
+            initialDelaySeconds: {{ .Values.kubecostFrontend.readinessProbe.initialDelaySeconds  }}
+            periodSeconds: {{ .Values.kubecostFrontend.readinessProbe.periodSeconds  }}
+            failureThreshold: {{ .Values.kubecostFrontend.readinessProbe.failureThreshold  }}
+            {{- end }}
           {{- if .Values.kubecostFrontend.livenessProbe.enabled }}
           livenessProbe:
             httpGet:

@@ -1,10 +1,10 @@
 # nginx-ingress
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Nginx ingress definitions chart
 
-**Homepage:** <https://gluu.org/docs/gluu-server>
+**Homepage:** <https://docs.gluu.org>
 
 ## Maintainers
 
@@ -16,7 +16,7 @@ Nginx ingress definitions chart
 
 * <https://github.com/kubernetes/ingress-nginx>
 * <https://kubernetes.io/docs/concepts/services-networking/ingress/>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/nginx-ingress>
+* <https://github.com/GluuFederation/flex/tree/main/charts/gluu/charts/nginx-ingress>
 
 ## Requirements
 

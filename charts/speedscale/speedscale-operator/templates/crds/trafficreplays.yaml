@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.13.0
   creationTimestamp: null
   name: trafficreplays.speedscale.com
 spec:
@@ -66,15 +66,16 @@ spec:
                   workload. Defaults to true.
                 type: boolean
               configChecksum:
-                description: ConfigChecksum is the SHA1 checksum of the configuration.
+                description: ConfigChecksum, managed my the operator, is the SHA1
+                  checksum of the configuration.
                 type: string
               customURL:
-                description: CustomURL allows to specify custom URL to SUT.
+                description: CustomURL allows to specify custom URL to the SUT.
                 type: string
               generatorLowData:
-                description: Setting GeneratorLowData to 'true' forces the generator
-                  into a high efficiency/low data output mode. This is ideal for high
-                  volume performance tests. Defaults to false.
+                description: GeneratorLowData forces the generator into a high efficiency/low
+                  data output mode. This is ideal for high volume performance tests.
+                  Defaults to false. DEPRECATED
                 type: boolean
               mode:
                 description: Mode is the name of replay mode used for this TrafficReplay.
@@ -85,12 +86,12 @@ spec:
                 type: string
               proxyMode:
                 description: ProxyMode defines proxy operational mode used with injected
-                  sidecar. (deprecated)
+                  sidecar. DEPRECATED
                 type: string
               responderLowData:
-                description: Setting ResponderLowData to 'true' forces the responder
-                  into a high efficiency/low data output mode. This is ideal for high
-                  volume performance tests. Defaults to false.
+                description: ResponderLowData forces the responder into a high efficiency/low
+                  data output mode. This is ideal for high volume performance tests.
+                  Defaults to false. DEPRECATED
                 type: boolean
               secretRefs:
                 description: SecretRefs hold the references to the secrets which contain
@@ -108,11 +109,12 @@ spec:
                   type: object
                 type: array
               sidecar:
-                description: Sidecar defines sidecar specific configuration.
+                description: 'Sidecar defines sidecar specific configuration. DEPRECATED:
+                  use Workloads'
                 properties:
                   inject:
                     description: Inject enables or disables sidecar injection during
-                      the replay. Defaults to false. (deprecated)
+                      the replay. Defaults to false.
                     type: boolean
                   tls:
                     properties:
@@ -173,9 +175,9 @@ spec:
                   the execution and reached its final state (either complete or failed).
                 type: string
               workloadRef:
-                description: The reference to the target workload (SUT - system under
-                  test) for TrafficReplay. The operations will be performed in the
-                  namespace of the target object.
+                description: 'WorkloadRef is the reference to the target workload
+                  (SUT) for TrafficReplay. The operations will be performed in the
+                  namespace of the target object. DEPRECATED: use Workloads'
                 properties:
                   apiVersion:
                     description: API version of the referent
@@ -194,8 +196,99 @@ spec:
                 - kind
                 - name
                 type: object
+              workloads:
+                description: Workloads define target workloads (SUT) for a TrafficReplay.
+                  Many workloads may be provided, or none.  Workloads may be modified
+                  and restarted during replay to configure communication with a responder.
+                items:
+                  description: Workload represents a Kubernetes workload to be targeted
+                    during replay and associated settings.
+                  properties:
+                    inTrafficKey:
+                      description: InTrafficKey is used to identify the slice of inbound
+                        snapshot traffic this workload is targeting and maps directly
+                        to a snapshot's `InTraffic` field. Snapshot traffic can be
+                        split across multiple slices where each slice contains part
+                        of the traffic.  A slice may only have one workload, but a
+                        workload may be targeted by multiple slices.
+                      type: string
+                    ref:
+                      description: Ref is a reference to a cluster workload, like
+                        a deployment or a statefulset.
+                      properties:
+                        apiVersion:
+                          description: API version of the referent
+                          type: string
+                        kind:
+                          description: Kind of the referent
+                          type: string
+                        name:
+                          description: Name of the referent
+                          type: string
+                        namespace:
+                          description: Namespace of the referent, defaults to the
+                            TrafficReplay namespace
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      type: object
+                    sidecar:
+                      description: 'TODO: this is not implemented, come back and replace
+                        deprecated Sidecar with workload specific settings Sidecar
+                        defines sidecar specific configuration.'
+                      properties:
+                        inject:
+                          description: Inject enables or disables sidecar injection
+                            during the replay. Defaults to false.
+                          type: boolean
+                        tls:
+                          properties:
+                            in:
+                              description: In provides configuration for sidecar inbound
+                                TLS.
+                              properties:
+                                private:
+                                  description: Private is the filename of the TLS
+                                    inbound private key.
+                                  type: string
+                                public:
+                                  description: Public is the filename of the TLS inbound
+                                    public key.
+                                  type: string
+                                secret:
+                                  description: Secret is a secret with the TLS keys
+                                    to use for inbound traffic.
+                                  type: string
+                              type: object
+                            mutual:
+                              description: Mutual provides configuration for sidecar
+                                mutual TLS.
+                              properties:
+                                private:
+                                  description: Private is the filename of the mutual
+                                    TLS private key.
+                                  type: string
+                                public:
+                                  description: Public is the filename of the mutual
+                                    TLS public key.
+                                  type: string
+                                secret:
+                                  description: Secret is a secret with the mutual
+                                    TLS keys.
+                                  type: string
+                              type: object
+                            out:
+                              description: Out enables or disables TLS out on the
+                                sidecar during replay.
+                              type: boolean
+                          type: object
+                      type: object
+                  type: object
+                type: array
             required:
-            - workloadRef
+            - snapshotID
+            - testConfigID
             type: object
           status:
             default:
@@ -302,10 +395,6 @@ spec:
                 description: Information when the traffic replay has started.
                 format: date-time
                 type: string
-              workloadHost:
-                description: WorkloadHost is the host address which is targeted during
-                  the traffic replay.
-                type: string
             type: object
         type: object
     served: true
@@ -316,5 +405,5 @@ status:
   acceptedNames:
     kind: ""
     plural: ""
-  conditions: []
-  storedVersions: []
+  conditions: null
+  storedVersions: null

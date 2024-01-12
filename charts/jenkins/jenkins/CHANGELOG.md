@@ -12,6 +12,27 @@ Use the following links to reference issues, PRs, and commits prior to v2.6.0.
 The changelog until v1.5.7 was auto-generated based on git commits.
 Those entries include a reference to the git commit to be able to get more details.
 
+## 4.11.2
+
+Fixed documentation for controller.initScripts.
+
+## 4.11.1
+
+Updated helm-unittest and made unittests compatible.
+
+## 4.11.0
+
+Add multi-cloud support.
+
+## 4.10.0
+
+Bumped Jenkins inbound agent from 3107.v665000b_51092-15 to 3192.v713e3b_039fb_e-5.
+
+## 4.9.2
+
+Update Jenkins image and appVersion to jenkins lts release version 2.426.2
+
+
 Notes about [Artifact Hub](https://artifacthub.io/packages/helm/jenkinsci/jenkins?modal=changelog) changelog processing:
 - Remove empty lines
 - Keep only ASCII characters (no emojis)

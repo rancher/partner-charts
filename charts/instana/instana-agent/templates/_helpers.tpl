@@ -125,7 +125,7 @@ Generates the dockerconfig for the credentials to pull from containers.instana.i
 Output limits or defaults
 */}}
 {{- define "instana-agent.resources" -}}
-{{- $memory := default "512Mi" .memory -}}
+{{- $memory := default "768Mi" .memory -}}
 {{- $cpu := default 0.5 .cpu -}}
 memory: "{{ dict "memory" $memory | include "ensureMemoryMeasurement" }}"
 cpu: {{ $cpu }}

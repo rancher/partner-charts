@@ -38,8 +38,8 @@ spec:
         {{- include "base_init_containers" . }}
       containers:
       {{- if .Values.base.metrics.enabled }}
-      - name: metrics-exporter-pool
-        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-metrics-exporter-pool:{{ default .Values.image.tag .Values.image.repoTags.extensions }}"
+      - name: metrics-exporter-io-engine
+        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}/{{ .Chart.Name }}-metrics-exporter-io-engine:{{ default .Values.image.tag .Values.image.repoTags.extensions }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: MY_NODE_NAME
@@ -53,8 +53,6 @@ spec:
         args:
         - "-p{{ .Values.base.metrics.pollingInterval }}"
         - "--api-versions={{ .Values.io_engine.api }}"
-        command:
-        - metrics-exporter-pool
         ports:
           - containerPort: 9502
             protocol: TCP
@@ -66,10 +64,14 @@ spec:
         env:
         - name: RUST_LOG
           value: {{ .Values.io_engine.logLevel }}
-        - name: NVME_QPAIR_CONNECT_ASYNC
-          value: "true"
         - name: NVMF_TCP_MAX_QUEUE_DEPTH
-          value: "32"
+          value: "{{ .Values.io_engine.nvme.tcp.maxQueueDepth }}"
+        - name: NVME_TIMEOUT
+          value: "{{ .Values.io_engine.nvme.ioTimeout }}"
+        - name: NVME_TIMEOUT_ADMIN
+          value: "{{ .Values.io_engine.nvme.adminTimeout }}"
+        - name: NVME_KATO
+          value: "{{ .Values.io_engine.nvme.keepAliveTimeout }}"
         - name: MY_NODE_NAME
           valueFrom:
             fieldRef:
@@ -90,15 +92,16 @@ spec:
         - "-g$(MY_POD_IP)"
         - "-N$(MY_NODE_NAME)"
         - "-Rhttps://{{ .Release.Name }}-agent-core:50051"
-        - "-y/var/local/io-engine/config.yaml"
+        - "-y/var/local/{{ .Release.Name }}/io-engine/config.yaml"
         - "-l{{ include "cpuFlag" . }}"
         - "-p={{ .Release.Name }}-etcd:{{ .Values.etcd.service.port }}"{{ if .Values.io_engine.target.nvmf.ptpl }}
-        - "--ptpl-dir=/var/local/io-engine/ptpl/"{{ end }}
+        - "--ptpl-dir=/var/local/{{ .Release.Name }}/io-engine/ptpl/"{{ end }}
         - "--api-versions={{ .Values.io_engine.api }}"{{ if .Values.io_engine.target.nvmf.iface }}
         - "-T={{ .Values.io_engine.target.nvmf.iface }}"{{ end }}{{ if .Values.io_engine.envcontext }}
         - "--env-context=--{{ .Values.io_engine.envcontext }}"{{ end }}{{ if .Values.io_engine.reactorFreezeDetection.enabled }}
         - "--reactor-freeze-detection"{{ end }}
-        - "--tgt-crdt={{ .Values.io_engine.target.nvmf.hostCmdRetryDelay.crdt1 }}"
+        - "--tgt-crdt={{ .Values.io_engine.target.nvmf.hostCmdRetryDelay.crdt1 }}"{{ if .Values.eventing.enabled }}
+        - "--events-url=nats://{{ .Release.Name }}-nats:4222"{{ end }}
         command:
         - io-engine
         securityContext:
@@ -111,7 +114,7 @@ spec:
         - name: dshm
           mountPath: /dev/shm
         - name: configlocation
-          mountPath: /var/local/io-engine/
+          mountPath: /var/local/{{ .Release.Name }}/io-engine/
         - name: hugepage
           mountPath: /dev/hugepages
         resources:
@@ -145,5 +148,5 @@ spec:
           medium: HugePages
       - name: configlocation
         hostPath:
-          path: /var/local/io-engine/
+          path: /var/local/{{ .Release.Name }}/io-engine/
           type: DirectoryOrCreate
