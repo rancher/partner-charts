@@ -1,10 +1,10 @@
 # config
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Configuration parameters for setup and initial configuration secret and config layers used by Gluu services.
 
-**Homepage:** <https://gluu.org/docs/gluu-server/reference/container-configs/>
+**Homepage:** <https://docs.gluu.org>
 
 ## Maintainers
 
@@ -16,7 +16,7 @@ Configuration parameters for setup and initial configuration secret and config l
 
 * <https://gluu.org/docs/gluu-server/reference/container-configs/>
 * <https://github.com/JanssenProject/jans/docker-jans-configurator>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/config>
+* <https://github.com/GluuFederation/flex/tree/main/charts/gluu/charts/config>
 
 ## Requirements
 
@@ -54,6 +54,8 @@ Kubernetes: `>=v1.21.0-0`
 | configmap.cnGoogleSpannerDatabaseId | string | `""` | Google Spanner Database ID. Used only when global.cnPersistenceType is spanner. |
 | configmap.cnGoogleSpannerInstanceId | string | `""` | Google Spanner ID. Used only when global.cnPersistenceType is spanner. |
 | configmap.cnJettyRequestHeaderSize | int | `8192` | Jetty header size in bytes in the auth server |
+| configmap.cnLdapCrt | string | `"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo="` | OpenDJ certificate string. This must be encoded using base64. |
+| configmap.cnLdapKey | string | `"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo="` | OpenDJ key string. This must be encoded using base64. |
 | configmap.cnLdapUrl | string | `"opendj:1636"` | OpenDJ internal address. Leave as default. Used when `global.cnPersistenceType` is set to `ldap`. |
 | configmap.cnMaxRamPercent | string | `"75.0"` | Value passed to Java option -XX:MaxRAMPercentage |
 | configmap.cnPersistenceHybridMapping | string | `"{}"` | Specify data that should be saved in each persistence (one of default, user, cache, site, token, or session; default to default). Note this environment only takes effect when `global.cnPersistenceType`  is set to `hybrid`. {  "default": "<couchbase|ldap|spanner|sql>",  "user": "<couchbase|ldap|spanner|sql>",  "site": "<couchbase|ldap|spanner|sql>",  "cache": "<couchbase|ldap|spanner|sql>",  "token": "<couchbase|ldap|spanner|sql>",  "session": "<couchbase|ldap|spanner|sql>", } |
@@ -73,14 +75,16 @@ Kubernetes: `>=v1.21.0-0`
 | configmap.containerMetadataName | string | `"kubernetes"` |  |
 | configmap.lbAddr | string | `""` | Loadbalancer address for AWS if the FQDN is not registered. |
 | countryCode | string | `"US"` | Country code. Used for certificate creation. |
+| customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | dnsConfig | object | `{}` | Add custom dns config |
 | dnsPolicy | string | `""` | Add custom dns policy |
 | email | string | `"support@gluu.org"` | Email address of the administrator usually. Used for certificate creation. |
 | fullNameOverride | string | `""` |  |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
 | image.repository | string | `"janssenproject/configurator"` | Image  to use for deploying. |
-| image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | ldapPassword | string | `"P@ssw0rds"` | LDAP admin password if OpennDJ is used for persistence. |
+| ldapTruststorePassword | string | `"changeit"` | LDAP truststore password if OpenDJ is used for persistence |
 | lifecycle | object | `{}` |  |
 | migration | object | `{"enabled":false,"migrationDataFormat":"ldif","migrationDir":"/ce-migration"}` | CE to CN Migration section |
 | migration.enabled | bool | `false` | Boolean flag to enable migration from CE |

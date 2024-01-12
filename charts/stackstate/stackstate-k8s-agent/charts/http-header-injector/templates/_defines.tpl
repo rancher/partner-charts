@@ -80,3 +80,34 @@ imagePullSecrets:
     {{- end }}
   {{- end -}}
 {{- end -}}
+
+{{- define "http-header-injector.cert-setup.container.main" }}
+{{- $containerConfig := dict "ContainerConfig" .Values.certificatePrehook -}}
+name: webhook-cert-setup
+image: "{{ include "http-header-injector.image.registry" (merge $containerConfig .) }}/{{ .Values.certificatePrehook.image.repository }}:{{ .Values.certificatePrehook.image.tag }}"
+imagePullPolicy: {{ .Values.certificatePrehook.image.pullPolicy }}
+{{- with .Values.certificatePrehook.resources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+  - name: "{{ include "http-header-injector.cert-config.name" . }}"
+    mountPath: /scripts
+    readOnly: true
+command: ["/scripts/generate-cert.sh"]
+{{- end }}
+
+{{- define "http-header-injector.cert-delete.container.main" }}
+{{- $containerConfig := dict "ContainerConfig" .Values.certificatePrehook -}}
+name: webhook-cert-delete
+image: "{{ include "http-header-injector.image.registry" (merge $containerConfig .) }}/{{ .Values.certificatePrehook.image.repository }}:{{ .Values.certificatePrehook.image.tag }}"
+imagePullPolicy: {{ .Values.certificatePrehook.image.pullPolicy }}
+{{- with .Values.certificatePrehook.resources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+  - name: "{{ include "http-header-injector.cert-config.name" . }}"
+    mountPath: /scripts
+command: [ "/scripts/delete-cert.sh" ]
+{{- end }}

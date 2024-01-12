@@ -1,5 +1,4 @@
 {{- if eq .Values.webhook.tls.mode "generated" }}
-{{- $containerConfig := dict "ContainerConfig" .Values.certificatePrehook -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -30,14 +29,7 @@ spec:
             name: "{{ include "http-header-injector.cert-config.name" . }}"
             defaultMode: 0777
       containers:
-        - name: webhook-cert-setup
-          image: "{{ include "http-header-injector.image.registry" (merge $containerConfig .) }}/{{ .Values.certificatePrehook.image.repository }}:{{ .Values.certificatePrehook.image.tag }}"
-          imagePullPolicy: {{ .Values.certificatePrehook.image.pullPolicy }}
-          volumeMounts:
-            - name: "{{ include "http-header-injector.cert-config.name" . }}"
-              mountPath: /scripts
-              readOnly: true
-          command: ["/scripts/generate-cert.sh"]
+      - {{ include "http-header-injector.cert-setup.container.main" . | nindent 8 }}
       restartPolicy: Never
   backoffLimit: 0
 {{- end }}

@@ -1,10 +1,10 @@
 # fido2
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 FIDO 2.0 (FIDO2) is an open authentication standard that enables leveraging common devices to authenticate to online services in both mobile and desktop environments.
 
-**Homepage:** <https://gluu.org/docs/gluu-server/>
+**Homepage:** <https://docs.gluu.org/>
 
 ## Maintainers
 
@@ -17,7 +17,7 @@ FIDO 2.0 (FIDO2) is an open authentication standard that enables leveraging comm
 * <https://gluu.org/docs/gluu-server/>
 * <https://github.com/JanssenProject/jans/jans-fido2>
 * <https://github.com/JanssenProject/jans/docker-jans-fido2>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/fido2>
+* <https://github.com/GluuFederation/flex/tree/main/charts/gluu/charts/fido2>
 
 ## Requirements
 
@@ -29,6 +29,7 @@ Kubernetes: `>=v1.21.0-0`
 |-----|------|---------|-------------|
 | additionalAnnotations | object | `{}` | Additional annotations that will be added across all resources  in the format of {cert-manager.io/issuer: "letsencrypt-prod"}. key app is taken |
 | additionalLabels | object | `{}` | Additional labels that will be added across all resources definitions in the format of {mylabel: "myapp"} |
+| customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | dnsConfig | object | `{}` | Add custom dns config |
 | dnsPolicy | string | `""` | Add custom dns policy |
 | hpa | object | `{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50}` | Configure the HorizontalPodAutoscaler |
@@ -37,7 +38,7 @@ Kubernetes: `>=v1.21.0-0`
 | image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | image.pullSecrets | list | `[]` | Image Pull Secrets |
 | image.repository | string | `"janssenproject/fido2"` | Image  to use for deploying. |
-| image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | lifecycle | object | `{}` |  |
 | livenessProbe | object | `{"httpGet":{"path":"/jans-fido2/sys/health-check","port":"http-fido2"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5}` | Configure the liveness healthcheck for the fido2 if needed. |
 | livenessProbe.httpGet | object | `{"path":"/jans-fido2/sys/health-check","port":"http-fido2"}` | http liveness probe endpoint |

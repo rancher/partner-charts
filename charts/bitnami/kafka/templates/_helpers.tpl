@@ -301,7 +301,7 @@ Create the name of the service account to use for the Kafka Provisioning client
 */}}
 {{- define "kafka.provisioning.serviceAccountName" -}}
 {{- if .Values.provisioning.serviceAccount.create -}}
-    {{ default (include "common.names.fullname" .) .Values.provisioning.serviceAccount.name }}
+    {{ default (printf "%s-provisioning" (include "common.names.fullname" .)) .Values.provisioning.serviceAccount.name }}
 {{- else -}}
     {{ default "default" .Values.provisioning.serviceAccount.name }}
 {{- end -}}
@@ -598,7 +598,6 @@ Returns the controller quorum voters based on the number of controller-eligible 
 Section of the server.properties configmap shared by both controller-eligible and broker nodes
 */}}
 {{- define "kafka.commonConfig" -}}
-log.dir={{ printf "%s/data" .Values.controller.persistence.mountPath }}
 {{- if or (include "kafka.saslEnabled" .) }}
 sasl.enabled.mechanisms={{ upper .Values.sasl.enabledMechanisms }}
 {{- end }}
@@ -965,6 +964,9 @@ Init container definition for waiting for Kubernetes autodiscovery
           fieldPath: metadata.name
     - name: AUTODISCOVERY_SERVICE_TYPE
       value: {{ $externalAccessService.service.type | quote }}
+  {{- if .context.Values.externalAccess.autoDiscovery.containerSecurityContext.enabled }}
+  securityContext: {{- omit .context.Values.externalAccess.autoDiscovery.containerSecurityContext "enabled" | toYaml | nindent 4 }}
+  {{- end }}
   {{- if .context.Values.externalAccess.autoDiscovery.resources }}
   resources: {{- toYaml .context.Values.externalAccess.autoDiscovery.resources | nindent 12 }}
   {{- end }}

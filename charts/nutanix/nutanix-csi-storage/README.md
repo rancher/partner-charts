@@ -25,7 +25,7 @@ https://portal.nutanix.com/page/documents/details?targetId=CSI-Volume-Driver-v2_
 
 ## Features list
 
-- Nutanix CSI Driver v2.6.4
+- Nutanix CSI Driver v2.6.6
 - Nutanix Volumes support
 - Nutanix Files support
 - Volume clone
@@ -41,7 +41,7 @@ https://portal.nutanix.com/page/documents/details?targetId=CSI-Volume-Driver-v2_
 
 ## Prerequisites
 
-- Kubernetes 1.17 or later
+- Kubernetes 1.20 or later
 - Kubernetes worker nodes must have the iSCSI package installed (Nutanix Volumes mode) and/or NFS tools (Nutanix Files mode)
 - This chart have been validated on RHEL/CentOS/Rocky 7/8/9 and Ubuntu 18.04/20.04/21.04/21.10/22.05, but the new architecture enables easy portability to other distributions.
 

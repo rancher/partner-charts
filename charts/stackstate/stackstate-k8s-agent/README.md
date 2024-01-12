@@ -2,7 +2,7 @@
 
 Helm chart for the StackState Agent.
 
-Current chart version is `1.0.58`
+Current chart version is `1.0.66`
 
 **Homepage:** <https://github.com/StackVista/stackstate-agent>
 
@@ -10,7 +10,7 @@ Current chart version is `1.0.58`
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://helm.stackstate.io | httpHeaderInjectorWebhook(http-header-injector) | 0.0.6 |
+| https://helm.stackstate.io | httpHeaderInjectorWebhook(http-header-injector) | 0.0.8 |
 
 ## Required Values
 
@@ -61,7 +61,7 @@ stackstate/stackstate-k8s-agent
 | checksAgent.enabled | bool | `true` | Enable / disable runnning cluster checks in a separately deployed pod |
 | checksAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | checksAgent.image.repository | string | `"stackstate/stackstate-k8s-agent"` | Base container image repository. |
-| checksAgent.image.tag | string | `"9af1b63f"` | Default container image tag. |
+| checksAgent.image.tag | string | `"edf7fca5"` | Default container image tag. |
 | checksAgent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | checksAgent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | checksAgent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -121,7 +121,7 @@ stackstate/stackstate-k8s-agent
 | clusterAgent.enabled | bool | `true` | Enable / disable the cluster agent. |
 | clusterAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | clusterAgent.image.repository | string | `"stackstate/stackstate-k8s-cluster-agent"` | Base container image repository. |
-| clusterAgent.image.tag | string | `"9af1b63f"` | Default container image tag. |
+| clusterAgent.image.tag | string | `"edf7fca5"` | Default container image tag. |
 | clusterAgent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | clusterAgent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | clusterAgent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -157,7 +157,7 @@ stackstate/stackstate-k8s-agent
 | logsAgent.enabled | bool | `true` | Enable / disable k8s pod log collection |
 | logsAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | logsAgent.image.repository | string | `"stackstate/promtail"` | Base container image repository. |
-| logsAgent.image.tag | string | `"2.7.1"` | Default container image tag. |
+| logsAgent.image.tag | string | `"2.7.1-4b6ae2af"` | Default container image tag. |
 | logsAgent.nodeSelector | object | `{}` | Node labels for pod assignment. |
 | logsAgent.priorityClassName | string | `""` | Priority class for logsAgent pods. |
 | logsAgent.resources.limits.cpu | string | `"1300m"` | Memory resource limits. |
@@ -179,7 +179,7 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.agent.env | object | `{}` | Additional environment variables for the agent container |
 | nodeAgent.containers.agent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | nodeAgent.containers.agent.image.repository | string | `"stackstate/stackstate-k8s-agent"` | Base container image repository. |
-| nodeAgent.containers.agent.image.tag | string | `"9af1b63f"` | Default container image tag. |
+| nodeAgent.containers.agent.image.tag | string | `"edf7fca5"` | Default container image tag. |
 | nodeAgent.containers.agent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | nodeAgent.containers.agent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | nodeAgent.containers.agent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -203,8 +203,9 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.processAgent.image.pullPolicy | string | `"IfNotPresent"` | Process-agent container image pull policy. |
 | nodeAgent.containers.processAgent.image.registry | string | `nil` |  |
 | nodeAgent.containers.processAgent.image.repository | string | `"stackstate/stackstate-k8s-process-agent"` | Process-agent container image repository. |
-| nodeAgent.containers.processAgent.image.tag | string | `"160f79ee"` | Default process-agent container image tag. |
+| nodeAgent.containers.processAgent.image.tag | string | `"76e11e86"` | Default process-agent container image tag. |
 | nodeAgent.containers.processAgent.logLevel | string | `nil` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off # If not set, fall back to the value of agent.logLevel. |
+| nodeAgent.containers.processAgent.procVolumeReadOnly | bool | `true` | Configure whether /host/proc is read only for the process agent container |
 | nodeAgent.containers.processAgent.resources.limits.cpu | string | `"125m"` | Memory resource limits. |
 | nodeAgent.containers.processAgent.resources.limits.memory | string | `"400Mi"` |  |
 | nodeAgent.containers.processAgent.resources.requests.cpu | string | `"25m"` | Memory resource requests. |
@@ -215,12 +216,12 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.nodeSelector | object | `{}` | Node labels for pod assignment. |
 | nodeAgent.priorityClassName | string | `""` | Priority class for nodeAgent pods. |
 | nodeAgent.protocolInspection.enabled | bool | `true` | Enable / disable the nodeAgent protocol inspection. |
-| nodeAgent.scaling.autoscalerLimits.agent.maximum.cpu | string | `"500m"` | Maximum CPU resource limits for main agent. |
-| nodeAgent.scaling.autoscalerLimits.agent.maximum.memory | string | `"750Mi"` | Maximum memory resource limits for main agent. |
+| nodeAgent.scaling.autoscalerLimits.agent.maximum.cpu | string | `"200m"` | Maximum CPU resource limits for main agent. |
+| nodeAgent.scaling.autoscalerLimits.agent.maximum.memory | string | `"450Mi"` | Maximum memory resource limits for main agent. |
 | nodeAgent.scaling.autoscalerLimits.agent.minimum.cpu | string | `"20m"` | Minimum CPU resource limits for main agent. |
 | nodeAgent.scaling.autoscalerLimits.agent.minimum.memory | string | `"180Mi"` | Minimum memory resource limits for main agent. |
-| nodeAgent.scaling.autoscalerLimits.processAgent.maximum.cpu | string | `"1000m"` | Maximum CPU resource limits for process agent. |
-| nodeAgent.scaling.autoscalerLimits.processAgent.maximum.memory | string | `"1500Mi"` | Maximum memory resource limits for process agent. |
+| nodeAgent.scaling.autoscalerLimits.processAgent.maximum.cpu | string | `"200m"` | Maximum CPU resource limits for process agent. |
+| nodeAgent.scaling.autoscalerLimits.processAgent.maximum.memory | string | `"500Mi"` | Maximum memory resource limits for process agent. |
 | nodeAgent.scaling.autoscalerLimits.processAgent.minimum.cpu | string | `"25m"` | Minimum CPU resource limits for process agent. |
 | nodeAgent.scaling.autoscalerLimits.processAgent.minimum.memory | string | `"100Mi"` | Minimum memory resource limits for process agent. |
 | nodeAgent.scc.enabled | bool | `false` | Enable / disable the installation of the SecurityContextConfiguration needed for installation on OpenShift. |

@@ -252,7 +252,9 @@ spec:
   externalTrafficPolicy: {{ .externalTrafficPolicy }}
   {{- end }}
   {{- if .clusterIP }}
+  {{- if (or (not (eq .clusterIP "None")) (and (eq .type "ClusterIP") (eq .clusterIP "None"))) }}
   clusterIP: {{ .clusterIP }}
+  {{- end }}
   {{- end }}
   selector:
     {{- .selectorLabels | nindent 4 }}
@@ -1253,7 +1255,6 @@ Kubernetes namespace-scoped resources it uses to build Kong configuration.
 
 Collectively, these are built from:
 kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac?ref=main
-kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac/knative?ref=main
 kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac/gateway?ref=main
 
 However, there is no way to generate the split between cluster and namespaced
@@ -1261,6 +1262,25 @@ role sets used in the charts. Updating these requires separating out cluster
 resource roles into their separate templates.
 */}}
 {{- define "kong.kubernetesRBACRules" -}}
+{{- if and (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image))
+           (contains (print .Values.ingressController.env.feature_gates) "KongServiceFacade=true") }}
+- apiGroups:
+  - incubator.ingress-controller.konghq.com
+  resources:
+  - kongservicefacades
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - incubator.ingress-controller.konghq.com
+  resources:
+  - kongservicefacades/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 {{- if (semverCompare ">= 3.0.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
 - apiGroups:
   - configuration.konghq.com
@@ -1654,6 +1674,14 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   verbs:
   - get
   - update
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 - apiGroups:
   - networking.k8s.io

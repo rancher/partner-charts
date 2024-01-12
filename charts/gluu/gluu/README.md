@@ -1,6 +1,6 @@
 # gluu
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Gluu Access and Identity Management
 
@@ -14,8 +14,7 @@ Gluu Access and Identity Management
 
 ## Source Code
 
-* <https://gluu.org/docs/gluu-server>
-* <https://github.com/GluuFederation/flex/flex-cn-setup>
+* <https://docs.gluu.org>
 
 ## Requirements
 
@@ -23,26 +22,24 @@ Kubernetes: `>=v1.21.0-0`
 
 | Repository | Name | Version |
 |------------|------|---------|
-|  | admin-ui | 5.0.23 |
-|  | auth-server | 5.0.23 |
-|  | auth-server-key-rotation | 5.0.23 |
-|  | casa | 5.0.23 |
-|  | cn-istio-ingress | 5.0.23 |
-|  | config | 5.0.23 |
-|  | config-api | 5.0.23 |
-|  | fido2 | 5.0.23 |
-|  | nginx-ingress | 5.0.23 |
-|  | opendj | 5.0.23 |
-|  | oxpassport | 5.0.23 |
-|  | oxshibboleth | 5.0.23 |
-|  | persistence | 5.0.23 |
-|  | scim | 5.0.23 |
+|  | admin-ui | 5.0.24 |
+|  | auth-server | 5.0.24 |
+|  | auth-server-key-rotation | 5.0.24 |
+|  | casa | 5.0.24 |
+|  | cn-istio-ingress | 5.0.24 |
+|  | config | 5.0.24 |
+|  | config-api | 5.0.24 |
+|  | fido2 | 5.0.24 |
+|  | nginx-ingress | 5.0.24 |
+|  | opendj | 5.0.24 |
+|  | persistence | 5.0.24 |
+|  | scim | 5.0.24 |
 
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| admin-ui | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/gluufederation/flex/admin-ui","tag":"1.0.19-1"},"lifecycle":{},"livenessProbe":{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"2000m","memory":"2000Mi"},"requests":{"cpu":"2000m","memory":"2000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Admin GUI for configuration of the auth-server |
+| admin-ui | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/gluufederation/flex/admin-ui","tag":"1.0.21-1"},"lifecycle":{},"livenessProbe":{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"2000m","memory":"2000Mi"},"requests":{"cpu":"2000m","memory":"2000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Admin GUI for configuration of the auth-server |
 | admin-ui.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | admin-ui.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
 | admin-ui.dnsConfig | object | `{}` | Add custom dns config |
@@ -53,7 +50,7 @@ Kubernetes: `>=v1.21.0-0`
 | admin-ui.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | admin-ui.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | admin-ui.image.repository | string | `"ghcr.io/gluufederation/flex/admin-ui"` | Image  to use for deploying. |
-| admin-ui.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| admin-ui.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | admin-ui.livenessProbe | object | `{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5}` | Configure the liveness healthcheck for the admin ui if needed. |
 | admin-ui.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |
 | admin-ui.readinessProbe | object | `{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":8080},"timeoutSeconds":5}` | Configure the readiness healthcheck for the admin ui if needed. |
@@ -69,16 +66,17 @@ Kubernetes: `>=v1.21.0-0`
 | admin-ui.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
 | admin-ui.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | admin-ui.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| auth-server | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/auth-server","tag":"1.0.19-1"},"lifecycle":{},"livenessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"2500m","memory":"2500Mi"},"requests":{"cpu":"2500m","memory":"2500Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | OAuth Authorization Server, the OpenID Connect Provider, the UMA Authorization Server--this is the main Internet facing component of Gluu. It's the service that returns tokens, JWT's and identity assertions. This service must be Internet facing. |
-| auth-server-key-rotation | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/certmanager","tag":"1.0.19-1"},"keysLife":48,"lifecycle":{},"resources":{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Responsible for regenerating auth-keys per x hours |
+| auth-server | object | `{"additionalAnnotations":{},"additionalLabels":{},"customScripts":[],"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/auth-server","tag":"1.0.21-1"},"lifecycle":{},"livenessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"2500m","memory":"2500Mi"},"requests":{"cpu":"2500m","memory":"2500Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | OAuth Authorization Server, the OpenID Connect Provider, the UMA Authorization Server--this is the main Internet facing component of Gluu. It's the service that returns tokens, JWT's and identity assertions. This service must be Internet facing. |
+| auth-server-key-rotation | object | `{"additionalAnnotations":{},"additionalLabels":{},"customScripts":[],"dnsConfig":{},"dnsPolicy":"","image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/certmanager","tag":"1.0.21-1"},"keysLife":48,"lifecycle":{},"resources":{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Responsible for regenerating auth-keys per x hours |
 | auth-server-key-rotation.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | auth-server-key-rotation.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
+| auth-server-key-rotation.customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | auth-server-key-rotation.dnsConfig | object | `{}` | Add custom dns config |
 | auth-server-key-rotation.dnsPolicy | string | `""` | Add custom dns policy |
 | auth-server-key-rotation.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | auth-server-key-rotation.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | auth-server-key-rotation.image.repository | string | `"ghcr.io/janssenproject/jans/certmanager"` | Image  to use for deploying. |
-| auth-server-key-rotation.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| auth-server-key-rotation.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | auth-server-key-rotation.keysLife | int | `48` | Auth server key rotation keys life in hours |
 | auth-server-key-rotation.resources | object | `{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}}` | Resource specs. |
 | auth-server-key-rotation.resources.limits.cpu | string | `"300m"` | CPU limit. |
@@ -92,6 +90,7 @@ Kubernetes: `>=v1.21.0-0`
 | auth-server-key-rotation.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
 | auth-server.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | auth-server.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
+| auth-server.customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | auth-server.dnsConfig | object | `{}` | Add custom dns config |
 | auth-server.dnsPolicy | string | `""` | Add custom dns policy |
 | auth-server.hpa | object | `{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50}` | Configure the HorizontalPodAutoscaler |
@@ -100,7 +99,7 @@ Kubernetes: `>=v1.21.0-0`
 | auth-server.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | auth-server.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | auth-server.image.repository | string | `"ghcr.io/janssenproject/jans/auth-server"` | Image  to use for deploying. |
-| auth-server.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| auth-server.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | auth-server.livenessProbe | object | `{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the liveness healthcheck for the auth server if needed. |
 | auth-server.livenessProbe.exec | object | `{"command":["python3","/app/scripts/healthcheck.py"]}` | Executes the python3 healthcheck. https://github.com/JanssenProject/docker-jans-auth-server/blob/master/scripts/healthcheck.py |
 | auth-server.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |
@@ -117,7 +116,7 @@ Kubernetes: `>=v1.21.0-0`
 | auth-server.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
 | auth-server.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | auth-server.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| casa | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/gluufederation/flex/casa","tag":"5.0.0-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/casa/health-check","port":"http-casa"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"/casa/health-check","port":"http-casa"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"500m","memory":"500Mi"},"requests":{"cpu":"500m","memory":"500Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Gluu Casa ("Casa") is a self-service web portal for end-users to manage authentication and authorization preferences for their account in a Gluu Server. |
+| casa | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/casa","tag":"1.0.21-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-casa/health-check","port":"http-casa"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"/jans-casa/health-check","port":"http-casa"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"500m","memory":"500Mi"},"requests":{"cpu":"500m","memory":"500Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Gluu Casa ("Casa") is a self-service web portal for end-users to manage authentication and authorization preferences for their account in a Gluu Server. |
 | casa.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | casa.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
 | casa.dnsConfig | object | `{}` | Add custom dns config |
@@ -127,13 +126,13 @@ Kubernetes: `>=v1.21.0-0`
 | casa.hpa.metrics | list | `[]` | metrics if targetCPUUtilizationPercentage is not set |
 | casa.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | casa.image.pullSecrets | list | `[]` | Image Pull Secrets |
-| casa.image.repository | string | `"ghcr.io/gluufederation/flex/casa"` | Image  to use for deploying. |
-| casa.image.tag | string | `"5.0.0-1"` | Image  tag to use for deploying. |
-| casa.livenessProbe | object | `{"httpGet":{"path":"/casa/health-check","port":"http-casa"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5}` | Configure the liveness healthcheck for casa if needed. |
-| casa.livenessProbe.httpGet.path | string | `"/casa/health-check"` | http liveness probe endpoint |
+| casa.image.repository | string | `"ghcr.io/janssenproject/jans/casa"` | Image  to use for deploying. |
+| casa.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
+| casa.livenessProbe | object | `{"httpGet":{"path":"/jans-casa/health-check","port":"http-casa"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5}` | Configure the liveness healthcheck for casa if needed. |
+| casa.livenessProbe.httpGet.path | string | `"/jans-casa/health-check"` | http liveness probe endpoint |
 | casa.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |
-| casa.readinessProbe | object | `{"httpGet":{"path":"/casa/health-check","port":"http-casa"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the readiness healthcheck for the casa if needed. |
-| casa.readinessProbe.httpGet.path | string | `"/casa/health-check"` | http readiness probe endpoint |
+| casa.readinessProbe | object | `{"httpGet":{"path":"/jans-casa/health-check","port":"http-casa"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the readiness healthcheck for the casa if needed. |
+| casa.readinessProbe.httpGet.path | string | `"/jans-casa/health-check"` | http readiness probe endpoint |
 | casa.replicas | int | `1` | Service replica number. |
 | casa.resources | object | `{"limits":{"cpu":"500m","memory":"500Mi"},"requests":{"cpu":"500m","memory":"500Mi"}}` | Resource specs. |
 | casa.resources.limits.cpu | string | `"500m"` | CPU limit. |
@@ -146,8 +145,8 @@ Kubernetes: `>=v1.21.0-0`
 | casa.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
 | casa.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | casa.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| config | object | `{"additionalAnnotations":{},"additionalLabels":{},"adminPassword":"Test1234#","city":"Austin","configmap":{"cnAwsAccessKeyId":"","cnAwsDefaultRegion":"us-west-1","cnAwsProfile":"gluu","cnAwsSecretAccessKey":"","cnAwsSecretsEndpointUrl":"","cnAwsSecretsNamePrefix":"gluu","cnAwsSecretsReplicaRegions":[],"cnCacheType":"NATIVE_PERSISTENCE","cnConfigKubernetesConfigMap":"cn","cnCouchbaseBucketPrefix":"jans","cnCouchbaseCrt":"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo=","cnCouchbaseIndexNumReplica":0,"cnCouchbasePassword":"P@ssw0rd","cnCouchbaseSuperUser":"admin","cnCouchbaseSuperUserPassword":"Test1234#","cnCouchbaseUrl":"cbgluu.default.svc.cluster.local","cnCouchbaseUser":"gluu","cnGoogleProjectId":"google-project-to-save-config-and-secrets-to","cnGoogleSecretManagerServiceAccount":"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo=","cnGoogleSecretNamePrefix":"gluu","cnGoogleSecretVersionId":"latest","cnGoogleSpannerDatabaseId":"","cnGoogleSpannerInstanceId":"","cnJettyRequestHeaderSize":8192,"cnLdapUrl":"opendj:1636","cnMaxRamPercent":"75.0","cnPersistenceHybridMapping":"{}","cnRedisSentinelGroup":"","cnRedisSslTruststore":"","cnRedisType":"STANDALONE","cnRedisUrl":"redis.redis.svc.cluster.local:6379","cnRedisUseSsl":false,"cnScimProtectionMode":"OAUTH","cnSecretKubernetesSecret":"cn","cnSqlDbDialect":"mysql","cnSqlDbHost":"my-release-mysql.default.svc.cluster.local","cnSqlDbName":"gluu","cnSqlDbPort":3306,"cnSqlDbSchema":"","cnSqlDbTimezone":"UTC","cnSqlDbUser":"gluu","cnSqldbUserPassword":"Test1234#","lbAddr":""},"countryCode":"US","dnsConfig":{},"dnsPolicy":"","email":"support@gluu.org","image":{"pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/configurator","tag":"1.0.19-1"},"ldapPassword":"P@ssw0rds","lifecycle":{},"migration":{"enabled":false,"migrationDataFormat":"ldif","migrationDir":"/ce-migration"},"orgName":"Gluu","redisPassword":"P@assw0rd","resources":{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}},"state":"TX","usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Configuration parameters for setup and initial configuration secret and config layers used by Gluu services. |
-| config-api | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/config-api","tag":"1.0.19-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-config-api/api/v1/health/live","port":8074},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"jans-config-api/api/v1/health/ready","port":8074},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1000Mi"},"requests":{"cpu":"1000m","memory":"1000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Config Api endpoints can be used to configure the auth-server, which is an open-source OpenID Connect Provider (OP) and UMA Authorization Server (AS). |
+| config | object | `{"additionalAnnotations":{},"additionalLabels":{},"adminPassword":"Test1234#","city":"Austin","configmap":{"cnAwsAccessKeyId":"","cnAwsDefaultRegion":"us-west-1","cnAwsProfile":"gluu","cnAwsSecretAccessKey":"","cnAwsSecretsEndpointUrl":"","cnAwsSecretsNamePrefix":"gluu","cnAwsSecretsReplicaRegions":[],"cnCacheType":"NATIVE_PERSISTENCE","cnConfigKubernetesConfigMap":"cn","cnCouchbaseBucketPrefix":"jans","cnCouchbaseCrt":"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo=","cnCouchbaseIndexNumReplica":0,"cnCouchbasePassword":"P@ssw0rd","cnCouchbaseSuperUser":"admin","cnCouchbaseSuperUserPassword":"Test1234#","cnCouchbaseUrl":"cbgluu.default.svc.cluster.local","cnCouchbaseUser":"gluu","cnGoogleProjectId":"google-project-to-save-config-and-secrets-to","cnGoogleSecretManagerServiceAccount":"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo=","cnGoogleSecretNamePrefix":"gluu","cnGoogleSecretVersionId":"latest","cnGoogleSpannerDatabaseId":"","cnGoogleSpannerInstanceId":"","cnJettyRequestHeaderSize":8192,"cnLdapCrt":"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo=","cnLdapKey":"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo=","cnLdapUrl":"opendj:1636","cnMaxRamPercent":"75.0","cnPersistenceHybridMapping":"{}","cnRedisSentinelGroup":"","cnRedisSslTruststore":"","cnRedisType":"STANDALONE","cnRedisUrl":"redis.redis.svc.cluster.local:6379","cnRedisUseSsl":false,"cnScimProtectionMode":"OAUTH","cnSecretKubernetesSecret":"cn","cnSqlDbDialect":"mysql","cnSqlDbHost":"my-release-mysql.default.svc.cluster.local","cnSqlDbName":"gluu","cnSqlDbPort":3306,"cnSqlDbSchema":"","cnSqlDbTimezone":"UTC","cnSqlDbUser":"gluu","cnSqldbUserPassword":"Test1234#","lbAddr":""},"countryCode":"US","dnsConfig":{},"dnsPolicy":"","email":"support@gluu.org","image":{"pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/configurator","tag":"1.0.21-1"},"ldapPassword":"P@ssw0rds","ldapTruststorePassword":"changeit","lifecycle":{},"migration":{"enabled":false,"migrationDataFormat":"ldif","migrationDir":"/ce-migration"},"orgName":"Gluu","redisPassword":"P@assw0rd","resources":{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}},"state":"TX","usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Configuration parameters for setup and initial configuration secret and config layers used by Gluu services. |
+| config-api | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/config-api","tag":"1.0.21-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-config-api/api/v1/health/live","port":8074},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"jans-config-api/api/v1/health/ready","port":8074},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1000Mi"},"requests":{"cpu":"1000m","memory":"1000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Config Api endpoints can be used to configure the auth-server, which is an open-source OpenID Connect Provider (OP) and UMA Authorization Server (AS). |
 | config-api.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | config-api.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
 | config-api.dnsConfig | object | `{}` | Add custom dns config |
@@ -158,7 +157,7 @@ Kubernetes: `>=v1.21.0-0`
 | config-api.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | config-api.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | config-api.image.repository | string | `"ghcr.io/janssenproject/jans/config-api"` | Image  to use for deploying. |
-| config-api.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| config-api.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | config-api.livenessProbe | object | `{"httpGet":{"path":"/jans-config-api/api/v1/health/live","port":8074},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the liveness healthcheck for the auth server if needed. |
 | config-api.livenessProbe.httpGet | object | `{"path":"/jans-config-api/api/v1/health/live","port":8074}` | http liveness probe endpoint |
 | config-api.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |
@@ -196,6 +195,8 @@ Kubernetes: `>=v1.21.0-0`
 | config.configmap.cnGoogleSpannerDatabaseId | string | `""` | Google Spanner Database ID. Used only when global.cnPersistenceType is spanner. |
 | config.configmap.cnGoogleSpannerInstanceId | string | `""` | Google Spanner ID. Used only when global.cnPersistenceType is spanner. |
 | config.configmap.cnJettyRequestHeaderSize | int | `8192` | Jetty header size in bytes in the auth server |
+| config.configmap.cnLdapCrt | string | `"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo="` | OpenDJ certificate string. This must be encoded using base64. |
+| config.configmap.cnLdapKey | string | `"SWFtTm90YVNlcnZpY2VBY2NvdW50Q2hhbmdlTWV0b09uZQo="` | OpenDJ key string. This must be encoded using base64. |
 | config.configmap.cnLdapUrl | string | `"opendj:1636"` | OpenDJ internal address. Leave as default. Used when `global.cnPersistenceType` is set to `ldap`. |
 | config.configmap.cnMaxRamPercent | string | `"75.0"` | Value passed to Java option -XX:MaxRAMPercentage |
 | config.configmap.cnPersistenceHybridMapping | string | `"{}"` | Specify data that should be saved in LDAP (one of default, user, cache, site, token, or session; default to default). Note this environment only takes effect when `global.cnPersistenceType`  is set to `hybrid`. {  "default": "<couchbase|ldap|spanner|sql>",  "user": "<couchbase|ldap|spanner|sql>",  "site": "<couchbase|ldap|spanner|sql>",  "cache": "<couchbase|ldap|spanner|sql>",  "token": "<couchbase|ldap|spanner|sql>",  "session": "<couchbase|ldap|spanner|sql>", } |
@@ -221,8 +222,9 @@ Kubernetes: `>=v1.21.0-0`
 | config.email | string | `"support@gluu.org"` | Email address of the administrator usually. Used for certificate creation. |
 | config.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | config.image.repository | string | `"ghcr.io/janssenproject/jans/configurator"` | Image  to use for deploying. |
-| config.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| config.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | config.ldapPassword | string | `"P@ssw0rds"` | LDAP admin password if OpenDJ is used for persistence. |
+| config.ldapTruststorePassword | string | `"changeit"` | LDAP truststore password if OpenDJ is used for persistence |
 | config.migration | object | `{"enabled":false,"migrationDataFormat":"ldif","migrationDir":"/ce-migration"}` | CE to CN Migration section |
 | config.migration.enabled | bool | `false` | Boolean flag to enable migration from CE |
 | config.migration.migrationDataFormat | string | `"ldif"` | migration data-format depending on persistence backend. Supported data formats are ldif, couchbase+json, spanner+avro, postgresql+json, and mysql+json. |
@@ -240,7 +242,7 @@ Kubernetes: `>=v1.21.0-0`
 | config.usrEnvs.secret | object | `{}` | Add custom secret envs to the service. variable1: value1 |
 | config.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | config.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| fido2 | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/fido2","tag":"1.0.19-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-fido2/sys/health-check","port":"http-fido2"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"/jans-fido2/sys/health-check","port":"http-fido2"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"500m","memory":"500Mi"},"requests":{"cpu":"500m","memory":"500Mi"}},"service":{"name":"http-fido2","port":8080},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | FIDO 2.0 (FIDO2) is an open authentication standard that enables leveraging common devices to authenticate to online services in both mobile and desktop environments. |
+| fido2 | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/fido2","tag":"1.0.21-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-fido2/sys/health-check","port":"http-fido2"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"/jans-fido2/sys/health-check","port":"http-fido2"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"500m","memory":"500Mi"},"requests":{"cpu":"500m","memory":"500Mi"}},"service":{"name":"http-fido2","port":8080},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | FIDO 2.0 (FIDO2) is an open authentication standard that enables leveraging common devices to authenticate to online services in both mobile and desktop environments. |
 | fido2.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | fido2.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
 | fido2.dnsConfig | object | `{}` | Add custom dns config |
@@ -251,7 +253,7 @@ Kubernetes: `>=v1.21.0-0`
 | fido2.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | fido2.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | fido2.image.repository | string | `"ghcr.io/janssenproject/jans/fido2"` | Image  to use for deploying. |
-| fido2.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| fido2.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | fido2.livenessProbe | object | `{"httpGet":{"path":"/jans-fido2/sys/health-check","port":"http-fido2"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5}` | Configure the liveness healthcheck for the fido2 if needed. |
 | fido2.livenessProbe.httpGet | object | `{"path":"/jans-fido2/sys/health-check","port":"http-fido2"}` | http liveness probe endpoint |
 | fido2.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |
@@ -270,12 +272,12 @@ Kubernetes: `>=v1.21.0-0`
 | fido2.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
 | fido2.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | fido2.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| global | object | `{"admin-ui":{"adminUiServiceName":"admin-ui","enabled":true,"ingress":{"adminUiEnabled":false}},"alb":{"ingress":false},"auth-server":{"appLoggers":{"auditStatsLogLevel":"INFO","auditStatsLogTarget":"FILE","authLogLevel":"INFO","authLogTarget":"STDOUT","enableStdoutLogPrefix":"true","httpLogLevel":"INFO","httpLogTarget":"FILE","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"authEncKeys":"RSA1_5 RSA-OAEP","authServerServiceName":"auth-server","authSigKeys":"RS256 RS384 RS512 ES256 ES384 ES512 PS256 PS384 PS512","enabled":true,"ingress":{"authServerEnabled":true,"authServerProtectedRegister":false,"authServerProtectedToken":false,"deviceCodeEnabled":true,"firebaseMessagingEnabled":true,"openidConfigEnabled":true,"u2fConfigEnabled":true,"uma2ConfigEnabled":true,"webdiscoveryEnabled":true,"webfingerEnabled":true}},"auth-server-key-rotation":{"enabled":false},"awsStorageType":"io1","azureStorageAccountType":"Standard_LRS","azureStorageKind":"Managed","casa":{"appLoggers":{"casaLogLevel":"INFO","casaLogTarget":"STDOUT","enableStdoutLogPrefix":"true","timerLogLevel":"INFO","timerLogTarget":"FILE"},"casaServiceName":"casa","enabled":true,"ingress":{"casaEnabled":false}},"cloud":{"testEnviroment":false},"cnAwsConfigFile":"/etc/jans/conf/aws_config_file","cnAwsSecretsReplicaRegionsFile":"/etc/jans/conf/aws_secrets_replica_regions","cnAwsSharedCredentialsFile":"/etc/jans/conf/aws_shared_credential_file","cnDocumentStoreType":"LOCAL","cnGoogleApplicationCredentials":"/etc/jans/conf/google-credentials.json","cnObExtSigningAlias":"","cnObExtSigningJwksCrt":"","cnObExtSigningJwksKey":"","cnObExtSigningJwksKeyPassPhrase":"","cnObExtSigningJwksUri":"","cnObStaticSigningKeyKid":"","cnObTransportAlias":"","cnObTransportCrt":"","cnObTransportKey":"","cnObTransportKeyPassPhrase":"","cnObTransportTrustStore":"","cnPersistenceType":"sql","cnPrometheusPort":"","config":{"enabled":true},"config-api":{"adminUiAppLoggers":{"adminUiAuditLogLevel":"INFO","adminUiAuditLogTarget":"FILE","adminUiLogLevel":"INFO","adminUiLogTarget":"FILE","enableStdoutLogPrefix":"true"},"appLoggers":{"configApiLogLevel":"INFO","configApiLogTarget":"STDOUT","enableStdoutLogPrefix":"true","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"configApiServerServiceName":"config-api","enabled":true,"ingress":{"configApiEnabled":true}},"configAdapterName":"kubernetes","configSecretAdapter":"kubernetes","distribution":"default","fido2":{"appLoggers":{"enableStdoutLogPrefix":"true","fido2LogLevel":"INFO","fido2LogTarget":"STDOUT","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"enabled":true,"fido2ServiceName":"fido2","ingress":{"fido2ConfigEnabled":false}},"fqdn":"demoexample.gluu.org","gcePdStorageType":"pd-standard","isFqdnRegistered":false,"istio":{"additionalAnnotations":{},"additionalLabels":{},"enabled":false,"gateways":[],"ingress":false,"namespace":"istio-system"},"jobTtlSecondsAfterFinished":300,"lbIp":"22.22.22.22","licenseSsa":"","nginx-ingress":{"enabled":true},"opendj":{"enabled":false,"ldapServiceName":"opendj"},"oxpassport":{"enabled":false,"oxPassportServiceName":"oxpassport"},"oxshibboleth":{"appLoggers":{"auditStatsLogLevel":"INFO","auditStatsLogTarget":"FILE","consentAuditLogLevel":"INFO","consentAuditLogTarget":"FILE","containerLogLevel":"","encryptionLogLevel":"","httpclientLogLevel":"","idpLogLevel":"INFO","idpLogTarget":"STDOUT","ldapLogLevel":"","messagesLogLevel":"","opensamlLogLevel":"","propsLogLevel":"","scriptLogLevel":"INFO","scriptLogTarget":"FILE","springLogLevel":"","xmlsecLogLevel":""},"enabled":false,"oxShibbolethServiceName":"oxshibboleth"},"persistence":{"enabled":true},"scim":{"appLoggers":{"enableStdoutLogPrefix":"true","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scimLogLevel":"INFO","scimLogTarget":"STDOUT","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"enabled":true,"ingress":{"scimConfigEnabled":false,"scimEnabled":false},"scimServiceName":"scim"},"storageClass":{"allowVolumeExpansion":true,"allowedTopologies":[],"mountOptions":["debug"],"parameters":{},"provisioner":"microk8s.io/hostpath","reclaimPolicy":"Retain","volumeBindingMode":"WaitForFirstConsumer"},"usrEnvs":{"normal":{},"secret":{}}}` | Parameters used globally across all services helm charts. |
+| global | object | `{"admin-ui":{"adminUiServiceName":"admin-ui","enabled":true,"ingress":{"adminUiEnabled":false}},"alb":{"ingress":false},"auth-server":{"appLoggers":{"auditStatsLogLevel":"INFO","auditStatsLogTarget":"FILE","authLogLevel":"INFO","authLogTarget":"STDOUT","enableStdoutLogPrefix":"true","httpLogLevel":"INFO","httpLogTarget":"FILE","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"authEncKeys":"RSA1_5 RSA-OAEP","authServerServiceName":"auth-server","authSigKeys":"RS256 RS384 RS512 ES256 ES384 ES512 PS256 PS384 PS512","enabled":true,"ingress":{"authServerEnabled":true,"authServerProtectedRegister":false,"authServerProtectedToken":false,"deviceCodeEnabled":true,"firebaseMessagingEnabled":true,"openidConfigEnabled":true,"u2fConfigEnabled":true,"uma2ConfigEnabled":true,"webdiscoveryEnabled":true,"webfingerEnabled":true}},"auth-server-key-rotation":{"enabled":true},"awsStorageType":"io1","azureStorageAccountType":"Standard_LRS","azureStorageKind":"Managed","casa":{"appLoggers":{"casaLogLevel":"INFO","casaLogTarget":"STDOUT","enableStdoutLogPrefix":"true","timerLogLevel":"INFO","timerLogTarget":"FILE"},"casaServiceName":"casa","enabled":true,"ingress":{"casaEnabled":false}},"cloud":{"testEnviroment":false},"cnAwsConfigFile":"/etc/jans/conf/aws_config_file","cnAwsSecretsReplicaRegionsFile":"/etc/jans/conf/aws_secrets_replica_regions","cnAwsSharedCredentialsFile":"/etc/jans/conf/aws_shared_credential_file","cnCouchbasePasswordFile":"/etc/jans/conf/couchbase_password","cnCouchbaseSuperuserPasswordFile":"/etc/jans/conf/couchbase_superuser_password","cnDocumentStoreType":"LOCAL","cnGoogleApplicationCredentials":"/etc/jans/conf/google-credentials.json","cnLdapCacertFile":"/etc/certs/opendj.pem","cnLdapCertFile":"/etc/certs/opendj.crt","cnLdapKeyFile":"/etc/certs/opendj.key","cnLdapPasswordFile":"/etc/jans/conf/ldap_password","cnLdapTruststoreFile":"/etc/certs/opendj.pkcs12","cnLdapTruststorePasswordFile":"/etc/jans/conf/ldap_truststore_password","cnObExtSigningAlias":"","cnObExtSigningJwksCrt":"","cnObExtSigningJwksKey":"","cnObExtSigningJwksKeyPassPhrase":"","cnObExtSigningJwksUri":"","cnObStaticSigningKeyKid":"","cnObTransportAlias":"","cnObTransportCrt":"","cnObTransportKey":"","cnObTransportKeyPassPhrase":"","cnObTransportTrustStore":"","cnPersistenceType":"sql","cnPrometheusPort":"","cnSqlPasswordFile":"/etc/jans/conf/sql_password","config":{"enabled":true},"config-api":{"adminUiAppLoggers":{"adminUiAuditLogLevel":"INFO","adminUiAuditLogTarget":"FILE","adminUiLogLevel":"INFO","adminUiLogTarget":"FILE","enableStdoutLogPrefix":"true"},"appLoggers":{"configApiLogLevel":"INFO","configApiLogTarget":"STDOUT","enableStdoutLogPrefix":"true","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"configApiServerServiceName":"config-api","enabled":true,"ingress":{"configApiEnabled":true}},"configAdapterName":"kubernetes","configSecretAdapter":"kubernetes","distribution":"default","fido2":{"appLoggers":{"enableStdoutLogPrefix":"true","fido2LogLevel":"INFO","fido2LogTarget":"STDOUT","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"enabled":true,"fido2ServiceName":"fido2","ingress":{"fido2ConfigEnabled":false}},"fqdn":"demoexample.gluu.org","gcePdStorageType":"pd-standard","isFqdnRegistered":false,"istio":{"additionalAnnotations":{},"additionalLabels":{},"enabled":false,"gateways":[],"ingress":false,"namespace":"istio-system"},"jobTtlSecondsAfterFinished":300,"lbIp":"22.22.22.22","licenseSsa":"","nginx-ingress":{"enabled":true},"opendj":{"enabled":false,"ldapServiceName":"opendj"},"persistence":{"enabled":true},"scim":{"appLoggers":{"enableStdoutLogPrefix":"true","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scimLogLevel":"INFO","scimLogTarget":"STDOUT","scriptLogLevel":"INFO","scriptLogTarget":"FILE"},"enabled":true,"ingress":{"scimConfigEnabled":false,"scimEnabled":false},"scimServiceName":"scim"},"storageClass":{"allowVolumeExpansion":true,"allowedTopologies":[],"mountOptions":["debug"],"parameters":{},"provisioner":"microk8s.io/hostpath","reclaimPolicy":"Retain","volumeBindingMode":"WaitForFirstConsumer"},"usrEnvs":{"normal":{},"secret":{}}}` | Parameters used globally across all services helm charts. |
 | global.admin-ui.adminUiServiceName | string | `"admin-ui"` | Name of the admin-ui service. Please keep it as default. |
 | global.admin-ui.enabled | bool | `true` | Boolean flag to enable/disable the admin-ui chart and admin ui config api plugin. |
 | global.admin-ui.ingress.adminUiEnabled | bool | `false` | Enable Admin UI endpoints in either istio or nginx ingress depending on users choice |
 | global.alb.ingress | bool | `false` | Activates ALB ingress |
-| global.auth-server-key-rotation.enabled | bool | `false` | Boolean flag to enable/disable the auth-server-key rotation cronjob chart. |
+| global.auth-server-key-rotation.enabled | bool | `true` | Boolean flag to enable/disable the auth-server-key rotation cronjob chart. |
 | global.auth-server.appLoggers | object | `{"auditStatsLogLevel":"INFO","auditStatsLogTarget":"FILE","authLogLevel":"INFO","authLogTarget":"STDOUT","enableStdoutLogPrefix":"true","httpLogLevel":"INFO","httpLogTarget":"FILE","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scriptLogLevel":"INFO","scriptLogTarget":"FILE"}` | App loggers can be configured to define where the logs will be redirected to and the level of each in which it should be displayed. |
 | global.auth-server.appLoggers.auditStatsLogLevel | string | `"INFO"` | jans-auth_audit.log level |
 | global.auth-server.appLoggers.auditStatsLogTarget | string | `"FILE"` | jans-auth_script.log target |
@@ -321,8 +323,16 @@ Kubernetes: `>=v1.21.0-0`
 | global.casa.ingress | object | `{"casaEnabled":false}` | Enable endpoints in either istio or nginx ingress depending on users choice |
 | global.casa.ingress.casaEnabled | bool | `false` | Enable casa endpoints /casa |
 | global.cloud.testEnviroment | bool | `false` | Boolean flag if enabled will strip resources requests and limits from all services. |
+| global.cnCouchbasePasswordFile | string | `"/etc/jans/conf/couchbase_password"` | Path to Couchbase password file |
+| global.cnCouchbaseSuperuserPasswordFile | string | `"/etc/jans/conf/couchbase_superuser_password"` | Path to Couchbase superuser password file |
 | global.cnDocumentStoreType | string | `"LOCAL"` | Document store type to use for shibboleth files LOCAL. |
 | global.cnGoogleApplicationCredentials | string | `"/etc/jans/conf/google-credentials.json"` | Base64 encoded service account. The sa must have roles/secretmanager.admin to use Google secrets and roles/spanner.databaseUser to use Spanner. Leave as this is a sensible default. |
+| global.cnLdapCacertFile | string | `"/etc/certs/opendj.pem"` | Path to OpenDJ CA cert file |
+| global.cnLdapCertFile | string | `"/etc/certs/opendj.crt"` | Path to OpenDJ cert file |
+| global.cnLdapKeyFile | string | `"/etc/certs/opendj.key"` | Path to OpenDJ key file |
+| global.cnLdapPasswordFile | string | `"/etc/jans/conf/ldap_password"` | Path to LDAP password file |
+| global.cnLdapTruststoreFile | string | `"/etc/certs/opendj.pkcs12"` | Path to OpenDJ truststore file |
+| global.cnLdapTruststorePasswordFile | string | `"/etc/jans/conf/ldap_truststore_password"` | Path to LDAP truststore password file |
 | global.cnObExtSigningAlias | string | `""` | Open banking external signing AS Alias. This is a kid value.Used in SSA Validation, kid used while encoding a JWT sent to token URL i.e. XkwIzWy44xWSlcWnMiEc8iq9s2G |
 | global.cnObExtSigningJwksCrt | string | `""` | Open banking external signing jwks AS certificate authority string. Used in SSA Validation. This must be encoded using base64.. Used when `.global.cnObExtSigningJwksUri` is set. |
 | global.cnObExtSigningJwksKey | string | `""` | Open banking external signing jwks AS key string. Used in SSA Validation. This must be encoded using base64. Used when `.global.cnObExtSigningJwksUri` is set. |
@@ -336,6 +346,7 @@ Kubernetes: `>=v1.21.0-0`
 | global.cnObTransportTrustStore | string | `""` | Open banking AS transport truststore crt. This is normally generated from the OB issuing CA, OB Root CA and Signing CA. Used when .global.cnObExtSigningJwksUri is set. Used in SSA Validation. This must be encoded using base64. |
 | global.cnPersistenceType | string | `"sql"` | Persistence backend to run Gluu with ldap|couchbase|hybrid|sql|spanner. |
 | global.cnPrometheusPort | string | `""` | Port used by Prometheus JMX agent (default to empty string). To enable Prometheus JMX agent, set the value to a number. |
+| global.cnSqlPasswordFile | string | `"/etc/jans/conf/sql_password"` | Path to SQL password file |
 | global.config-api.adminUiAppLoggers.adminUiAuditLogLevel | string | `"INFO"` | config-api admin-ui plugin audit log level |
 | global.config-api.adminUiAppLoggers.adminUiAuditLogTarget | string | `"FILE"` | config-api admin-ui plugin audit log target |
 | global.config-api.adminUiAppLoggers.adminUiLogLevel | string | `"INFO"` | config-api admin-ui plugin log target |
@@ -389,20 +400,6 @@ Kubernetes: `>=v1.21.0-0`
 | global.nginx-ingress.enabled | bool | `true` | Boolean flag to enable/disable the nginx-ingress definitions chart. |
 | global.opendj.enabled | bool | `false` | Boolean flag to enable/disable the OpenDJ  chart. |
 | global.opendj.ldapServiceName | string | `"opendj"` | Name of the OpenDJ service. Please keep it as default. |
-| global.oxpassport.enabled | bool | `false` | Boolean flag to enable/disable passport chart |
-| global.oxpassport.oxPassportServiceName | string | `"oxpassport"` | Name of the oxPassport service. Please keep it as default. |
-| global.oxshibboleth.appLoggers | object | `{"auditStatsLogLevel":"INFO","auditStatsLogTarget":"FILE","consentAuditLogLevel":"INFO","consentAuditLogTarget":"FILE","containerLogLevel":"","encryptionLogLevel":"","httpclientLogLevel":"","idpLogLevel":"INFO","idpLogTarget":"STDOUT","ldapLogLevel":"","messagesLogLevel":"","opensamlLogLevel":"","propsLogLevel":"","scriptLogLevel":"INFO","scriptLogTarget":"FILE","springLogLevel":"","xmlsecLogLevel":""}` | App loggers can be configured to define where the logs will be redirected to and the level of each in which it should be displayed. log levels are "OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE" Targets are "STDOUT" and "FILE" |
-| global.oxshibboleth.appLoggers.auditStatsLogLevel | string | `"INFO"` | idp-audit.log level |
-| global.oxshibboleth.appLoggers.auditStatsLogTarget | string | `"FILE"` | idp-audit.log target |
-| global.oxshibboleth.appLoggers.consentAuditLogLevel | string | `"INFO"` | idp-consent-audit.log level |
-| global.oxshibboleth.appLoggers.consentAuditLogTarget | string | `"FILE"` | idp-consent-audit.log target |
-| global.oxshibboleth.appLoggers.idpLogLevel | string | `"INFO"` | idp-process.log level |
-| global.oxshibboleth.appLoggers.idpLogTarget | string | `"STDOUT"` | idp-process.log target |
-| global.oxshibboleth.appLoggers.ldapLogLevel | string | `""` | https://github.com/GluuFederation/docker-oxshibboleth#additional-logger-configuration The below are very noisy logs and are better left untouched |
-| global.oxshibboleth.appLoggers.scriptLogLevel | string | `"INFO"` | idp-script.log level |
-| global.oxshibboleth.appLoggers.scriptLogTarget | string | `"FILE"` | idp-script.log target |
-| global.oxshibboleth.enabled | bool | `false` | Boolean flag to enable/disable the oxShibbboleth chart. |
-| global.oxshibboleth.oxShibbolethServiceName | string | `"oxshibboleth"` | Name of the oxShibboleth service. Please keep it as default. |
 | global.persistence.enabled | bool | `true` | Boolean flag to enable/disable the persistence chart. |
 | global.scim.appLoggers | object | `{"enableStdoutLogPrefix":"true","ldapStatsLogLevel":"INFO","ldapStatsLogTarget":"FILE","persistenceDurationLogLevel":"INFO","persistenceDurationLogTarget":"FILE","persistenceLogLevel":"INFO","persistenceLogTarget":"FILE","scimLogLevel":"INFO","scimLogTarget":"STDOUT","scriptLogLevel":"INFO","scriptLogTarget":"FILE"}` | App loggers can be configured to define where the logs will be redirected to and the level of each in which it should be displayed. |
 | global.scim.appLoggers.enableStdoutLogPrefix | string | `"true"` | Enable log prefixing which enables prepending the STDOUT logs with the file name. i.e jans-scim ===> 2022-12-20 17:49:55,744 INFO |
@@ -463,10 +460,11 @@ Kubernetes: `>=v1.21.0-0`
 | nginx-ingress.ingress.webdiscoveryLabels | object | `{}` | webdiscovery ingress resource labels. key app is taken |
 | nginx-ingress.ingress.webfingerAdditionalAnnotations | object | `{}` | webfinger ingress resource additional annotations. |
 | nginx-ingress.ingress.webfingerLabels | object | `{}` | webfinger ingress resource labels. key app is taken |
-| opendj | object | `{"additionalAnnotations":{},"additionalLabels":{},"backup":{"cronJobSchedule":"*/59 * * * *","enabled":true},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"gluufederation/opendj","tag":"5.0.0-1"},"lifecycle":{"preStop":{"exec":{"command":["/bin/sh","-c","python3 /app/scripts/deregister_peer.py 1>&/proc/1/fd/1"]}}},"livenessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"failureThreshold":20,"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":1},"persistence":{"size":"5Gi"},"ports":{"tcp-admin":{"nodePort":"","port":4444,"protocol":"TCP","targetPort":4444},"tcp-ldap":{"nodePort":"","port":1389,"protocol":"TCP","targetPort":1389},"tcp-ldaps":{"nodePort":"","port":1636,"protocol":"TCP","targetPort":1636},"tcp-repl":{"nodePort":"","port":8989,"protocol":"TCP","targetPort":8989},"tcp-serf":{"nodePort":"","port":7946,"protocol":"TCP","targetPort":7946},"udp-serf":{"nodePort":"","port":7946,"protocol":"UDP","targetPort":7946}},"readinessProbe":{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":1636},"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1500m","memory":"2000Mi"},"requests":{"cpu":"1500m","memory":"2000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | OpenDJ is a directory server which implements a wide range of Lightweight Directory Access Protocol and related standards, including full compliance with LDAPv3 but also support for Directory Service Markup Language (DSMLv2).Written in Java, OpenDJ offers multi-master replication, access control, and many extensions. |
+| opendj | object | `{"additionalAnnotations":{},"additionalLabels":{},"backup":{"cronJobSchedule":"*/59 * * * *","enabled":true},"customScripts":[],"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"gluufederation/opendj","tag":"5.0.0-1"},"lifecycle":{"preStop":{"exec":{"command":["/bin/sh","-c","python3 /app/scripts/deregister_peer.py 1>&/proc/1/fd/1"]}}},"livenessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"failureThreshold":20,"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":1},"persistence":{"size":"5Gi"},"ports":{"tcp-admin":{"nodePort":"","port":4444,"protocol":"TCP","targetPort":4444},"tcp-ldap":{"nodePort":"","port":1389,"protocol":"TCP","targetPort":1389},"tcp-ldaps":{"nodePort":"","port":1636,"protocol":"TCP","targetPort":1636},"tcp-repl":{"nodePort":"","port":8989,"protocol":"TCP","targetPort":8989},"tcp-serf":{"nodePort":"","port":7946,"protocol":"TCP","targetPort":7946},"udp-serf":{"nodePort":"","port":7946,"protocol":"UDP","targetPort":7946}},"readinessProbe":{"failureThreshold":20,"initialDelaySeconds":60,"periodSeconds":25,"tcpSocket":{"port":1636},"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1500m","memory":"2000Mi"},"requests":{"cpu":"1500m","memory":"2000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | OpenDJ is a directory server which implements a wide range of Lightweight Directory Access Protocol and related standards, including full compliance with LDAPv3 but also support for Directory Service Markup Language (DSMLv2).Written in Java, OpenDJ offers multi-master replication, access control, and many extensions. |
 | opendj.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | opendj.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
 | opendj.backup | object | `{"cronJobSchedule":"*/59 * * * *","enabled":true}` | Configure ldap backup cronjob |
+| opendj.customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | opendj.dnsConfig | object | `{}` | Add custom dns config |
 | opendj.dnsPolicy | string | `""` | Add custom dns policy |
 | opendj.hpa | object | `{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50}` | Configure the HorizontalPodAutoscaler |
@@ -493,73 +491,16 @@ Kubernetes: `>=v1.21.0-0`
 | opendj.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
 | opendj.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | opendj.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| oxpassport | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"gluufederation/oxpassport","tag":"5.0.0-12"},"lifecycle":{},"livenessProbe":{"failureThreshold":20,"httpGet":{"path":"/passport/health-check","port":"http-passport"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"failureThreshold":20,"httpGet":{"path":"/passport/health-check","port":"http-passport"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"700m","memory":"900Mi"},"requests":{"cpu":"700m","memory":"900Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Gluu interface to Passport.js to support social login and inbound identity. |
-| oxpassport.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
-| oxpassport.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
-| oxpassport.dnsConfig | object | `{}` | Add custom dns config |
-| oxpassport.dnsPolicy | string | `""` | Add custom dns policy |
-| oxpassport.hpa | object | `{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50}` | Configure the HorizontalPodAutoscaler |
-| oxpassport.hpa.behavior | object | `{}` | Scaling Policies |
-| oxpassport.hpa.metrics | list | `[]` | metrics if targetCPUUtilizationPercentage is not set |
-| oxpassport.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
-| oxpassport.image.pullSecrets | list | `[]` | Image Pull Secrets |
-| oxpassport.image.repository | string | `"gluufederation/oxpassport"` | Image  to use for deploying. |
-| oxpassport.image.tag | string | `"5.0.0-12"` | Image  tag to use for deploying. |
-| oxpassport.livenessProbe | object | `{"failureThreshold":20,"httpGet":{"path":"/passport/health-check","port":"http-passport"},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the liveness healthcheck for oxPassport if needed. |
-| oxpassport.livenessProbe.httpGet.path | string | `"/passport/health-check"` | http liveness probe endpoint |
-| oxpassport.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |
-| oxpassport.readinessProbe | object | `{"failureThreshold":20,"httpGet":{"path":"/passport/health-check","port":"http-passport"},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5}` | Configure the readiness healthcheck for the oxPassport if needed. |
-| oxpassport.readinessProbe.httpGet.path | string | `"/passport/health-check"` | http readiness probe endpoint |
-| oxpassport.replicas | int | `1` | Service replica number |
-| oxpassport.resources | object | `{"limits":{"cpu":"700m","memory":"900Mi"},"requests":{"cpu":"700m","memory":"900Mi"}}` | Resource specs. |
-| oxpassport.resources.limits.cpu | string | `"700m"` | CPU limit. |
-| oxpassport.resources.limits.memory | string | `"900Mi"` | Memory limit. |
-| oxpassport.resources.requests.cpu | string | `"700m"` | CPU request. |
-| oxpassport.resources.requests.memory | string | `"900Mi"` | Memory request. |
-| oxpassport.topologySpreadConstraints | object | `{}` | Configure the topology spread constraints. Notice this is a map NOT a list as in the upstream API https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/ |
-| oxpassport.usrEnvs | object | `{"normal":{},"secret":{}}` | Add custom normal and secret envs to the service |
-| oxpassport.usrEnvs.normal | object | `{}` | Add custom normal envs to the service variable1: value1 |
-| oxpassport.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
-| oxpassport.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
-| oxpassport.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| oxshibboleth | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"gluufederation/oxshibboleth","tag":"5.0.0-12"},"lifecycle":{},"livenessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"failureThreshold":20,"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":1},"readinessProbe":{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"failureThreshold":20,"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1000Mi"},"requests":{"cpu":"1000m","memory":"1000Mi"}},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Shibboleth project for the Gluu Server's SAML IDP functionality. |
-| oxshibboleth.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
-| oxshibboleth.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
-| oxshibboleth.dnsConfig | object | `{}` | Add custom dns config |
-| oxshibboleth.dnsPolicy | string | `""` | Add custom dns policy |
-| oxshibboleth.hpa | object | `{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50}` | Configure the HorizontalPodAutoscaler |
-| oxshibboleth.hpa.behavior | object | `{}` | Scaling Policies |
-| oxshibboleth.hpa.metrics | list | `[]` | metrics if targetCPUUtilizationPercentage is not set |
-| oxshibboleth.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
-| oxshibboleth.image.pullSecrets | list | `[]` | Image Pull Secrets |
-| oxshibboleth.image.repository | string | `"gluufederation/oxshibboleth"` | Image  to use for deploying. |
-| oxshibboleth.image.tag | string | `"5.0.0-12"` | Image  tag to use for deploying. |
-| oxshibboleth.livenessProbe | object | `{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"failureThreshold":20,"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the liveness healthcheck for oxshibboleth if needed. https://github.com/GluuFederation/docker-oxshibboleth/blob/master/scripts/healthcheck.py |
-| oxshibboleth.livenessProbe.exec | object | `{"command":["python3","/app/scripts/healthcheck.py"]}` | Executes the python3 healthcheck. |
-| oxshibboleth.pdb | object | `{"enabled":true,"maxUnavailable":1}` | Configure the PodDisruptionBudget |
-| oxshibboleth.readinessProbe | object | `{"exec":{"command":["python3","/app/scripts/healthcheck.py"]},"failureThreshold":20,"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the readiness healthcheck for the casa if needed. |
-| oxshibboleth.readinessProbe.exec | object | `{"command":["python3","/app/scripts/healthcheck.py"]}` | Executes the python3 healthcheck. |
-| oxshibboleth.replicas | int | `1` | Service replica number. |
-| oxshibboleth.resources | object | `{"limits":{"cpu":"1000m","memory":"1000Mi"},"requests":{"cpu":"1000m","memory":"1000Mi"}}` | Resource specs. |
-| oxshibboleth.resources.limits.cpu | string | `"1000m"` | CPU limit. |
-| oxshibboleth.resources.limits.memory | string | `"1000Mi"` | Memory limit. |
-| oxshibboleth.resources.requests.cpu | string | `"1000m"` | CPU request. |
-| oxshibboleth.resources.requests.memory | string | `"1000Mi"` | Memory request. |
-| oxshibboleth.topologySpreadConstraints | object | `{}` | Configure the topology spread constraints. Notice this is a map NOT a list as in the upstream API https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/ |
-| oxshibboleth.usrEnvs | object | `{"normal":{},"secret":{}}` | Add custom normal and secret envs to the service |
-| oxshibboleth.usrEnvs.normal | object | `{}` | Add custom normal envs to the service variable1: value1 |
-| oxshibboleth.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
-| oxshibboleth.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
-| oxshibboleth.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| persistence | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/persistence-loader","tag":"1.0.19-1"},"lifecycle":{},"resources":{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Job to generate data and initial config for Gluu Server persistence layer. |
+| persistence | object | `{"additionalAnnotations":{},"additionalLabels":{},"customScripts":[],"dnsConfig":{},"dnsPolicy":"","image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/persistence-loader","tag":"1.0.21-1"},"lifecycle":{},"resources":{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | Job to generate data and initial config for Gluu Server persistence layer. |
 | persistence.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | persistence.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
+| persistence.customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | persistence.dnsConfig | object | `{}` | Add custom dns config |
 | persistence.dnsPolicy | string | `""` | Add custom dns policy |
 | persistence.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | persistence.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | persistence.image.repository | string | `"ghcr.io/janssenproject/jans/persistence-loader"` | Image  to use for deploying. |
-| persistence.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| persistence.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | persistence.resources | object | `{"limits":{"cpu":"300m","memory":"300Mi"},"requests":{"cpu":"300m","memory":"300Mi"}}` | Resource specs. |
 | persistence.resources.limits.cpu | string | `"300m"` | CPU limit |
 | persistence.resources.limits.memory | string | `"300Mi"` | Memory limit. |
@@ -570,9 +511,10 @@ Kubernetes: `>=v1.21.0-0`
 | persistence.usrEnvs.secret | object | `{}` | Add custom secret envs to the service variable1: value1 |
 | persistence.volumeMounts | list | `[]` | Configure any additional volumesMounts that need to be attached to the containers |
 | persistence.volumes | list | `[]` | Configure any additional volumes that need to be attached to the pod |
-| scim | object | `{"additionalAnnotations":{},"additionalLabels":{},"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/scim","tag":"1.0.19-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-scim/sys/health-check","port":8080},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"/jans-scim/sys/health-check","port":8080},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1000Mi"},"requests":{"cpu":"1000m","memory":"1000Mi"}},"service":{"name":"http-scim","port":8080},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | System for Cross-domain Identity Management (SCIM) version 2.0 |
+| scim | object | `{"additionalAnnotations":{},"additionalLabels":{},"customScripts":[],"dnsConfig":{},"dnsPolicy":"","hpa":{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50},"image":{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/janssenproject/jans/scim","tag":"1.0.21-1"},"lifecycle":{},"livenessProbe":{"httpGet":{"path":"/jans-scim/sys/health-check","port":8080},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5},"pdb":{"enabled":true,"maxUnavailable":"90%"},"readinessProbe":{"httpGet":{"path":"/jans-scim/sys/health-check","port":8080},"initialDelaySeconds":25,"periodSeconds":25,"timeoutSeconds":5},"replicas":1,"resources":{"limits":{"cpu":"1000m","memory":"1000Mi"},"requests":{"cpu":"1000m","memory":"1000Mi"}},"service":{"name":"http-scim","port":8080},"topologySpreadConstraints":{},"usrEnvs":{"normal":{},"secret":{}},"volumeMounts":[],"volumes":[]}` | System for Cross-domain Identity Management (SCIM) version 2.0 |
 | scim.additionalAnnotations | object | `{}` | Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"} |
 | scim.additionalLabels | object | `{}` | Additional labels that will be added across the gateway in the format of {mylabel: "myapp"} |
+| scim.customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | scim.dnsConfig | object | `{}` | Add custom dns config |
 | scim.dnsPolicy | string | `""` | Add custom dns policy |
 | scim.hpa | object | `{"behavior":{},"enabled":true,"maxReplicas":10,"metrics":[],"minReplicas":1,"targetCPUUtilizationPercentage":50}` | Configure the HorizontalPodAutoscaler |
@@ -581,7 +523,7 @@ Kubernetes: `>=v1.21.0-0`
 | scim.image.pullPolicy | string | `"IfNotPresent"` | Image pullPolicy to use for deploying. |
 | scim.image.pullSecrets | list | `[]` | Image Pull Secrets |
 | scim.image.repository | string | `"ghcr.io/janssenproject/jans/scim"` | Image  to use for deploying. |
-| scim.image.tag | string | `"1.0.19-1"` | Image  tag to use for deploying. |
+| scim.image.tag | string | `"1.0.21-1"` | Image  tag to use for deploying. |
 | scim.livenessProbe | object | `{"httpGet":{"path":"/jans-scim/sys/health-check","port":8080},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5}` | Configure the liveness healthcheck for SCIM if needed. |
 | scim.livenessProbe.httpGet.path | string | `"/jans-scim/sys/health-check"` | http liveness probe endpoint |
 | scim.pdb | object | `{"enabled":true,"maxUnavailable":"90%"}` | Configure the PodDisruptionBudget |

@@ -171,6 +171,8 @@ spec:
     metadata:
       labels:
         name: {{ .Release.Name }}-controller
+      annotations:
+        kubectl.kubernetes.io/default-container: driver
     spec:
       {{ if .Values.controller.nodeSelector }}
       nodeSelector:
@@ -195,7 +197,7 @@ spec:
         {{- if hasKey .Values "podmon" }}
         {{- if eq .Values.podmon.enabled true }}
         - name: podmon
-          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          image: {{ required "Must provide the podmon container image." .Values.images.podmon }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             {{- toYaml .Values.podmon.controller.args | nindent 12 }}
@@ -223,7 +225,7 @@ spec:
         {{ if .Values.dev.enableTracing }}{{- include "pstore.tracing" . | nindent 8 }}{{ end }}
         {{- end }}
         - name: attacher
-          image: {{ required "Must provide the CSI attacher container image." ( include "csi-powerstore.attacherImage" . ) }}
+          image: {{ required "Must provide the CSI attacher container image." .Values.images.attacher }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -241,7 +243,7 @@ spec:
         {{- if hasKey .Values.controller "resizer" }}
         {{- if eq .Values.controller.resizer.enabled true }}
         - name: resizer
-          image: {{ required "Must provide the CSI resizer container image."  ( include "csi-powerstore.resizerImage" . ) }}
+          image: {{ required "Must provide the CSI resizer container image." .Values.images.resizer }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -256,7 +258,7 @@ spec:
         {{end}}
         {{end}}
         - name: provisioner
-          image: {{ required "Must provide the CSI provisioner container image." ( include "csi-powerstore.provisionerImage" . ) }}
+          image: {{ required "Must provide the CSI provisioner container image." .Values.images.provisioner }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -287,7 +289,7 @@ spec:
         {{- if hasKey .Values.controller "snapshot" }}
         {{- if eq .Values.controller.snapshot.enabled true }}
         - name: snapshotter
-          image: {{ required "Must provide the CSI snapshotter container image." ( include "csi-powerstore.snapshotterImage" . ) }}
+          image: {{ required "Must provide the CSI snapshotter container image." .Values.images.snapshotter }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -305,7 +307,7 @@ spec:
         {{- if hasKey .Values.controller "vgsnapshot" }}
         {{- if eq .Values.controller.vgsnapshot.enabled true }}
         - name: vg-snapshotter
-          image: {{ required "Must provide the vgsnapshotter container image." .Values.controller.vgsnapshot.image }}
+          image: {{ required "Must provide the vgsnapshotter container image." .Values.images.vgsnapshotter }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: ADDRESS
@@ -318,7 +320,7 @@ spec:
         {{- if hasKey .Values.controller "replication" }}
         {{- if eq .Values.controller.replication.enabled true}}
         - name: dell-csi-replicator
-          image: {{ required "Must provide the Dell CSI Replicator image." .Values.controller.replication.image}}
+          image: {{ required "Must provide the Dell CSI Replicator image." .Values.images.replication }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -346,7 +348,7 @@ spec:
         {{- if hasKey .Values.controller "healthMonitor" }}
         {{- if eq .Values.controller.healthMonitor.enabled true}}
         - name: csi-external-health-monitor-controller
-          image: {{ required "Must provide the CSI external health monitor controller image." ( include "csi-powerstore.healthmonitorImage" . ) }}
+          image: {{ required "Must provide the CSI external health monitor controller image." .Values.images.healthmonitor }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--v=5"
@@ -365,7 +367,7 @@ spec:
         {{- end }}
         {{- end }}
         - name: csi-metadata-retriever
-          image: {{ required "Must provide the CSI Metadata retriever container image." .Values.controller.metadataretriever }}
+          image: {{ required "Must provide the CSI Metadata retriever container image." .Values.images.metadataretriever }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: [ "/csi-metadata-retriever" ]
           env:
@@ -380,7 +382,7 @@ spec:
             - name: socket-dir
               mountPath: /var/run/csi
         - name: driver
-          image: {{ required "Must provide the PowerStore driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}
+          image: {{ required "Must provide the PowerStore driver image repository." .Values.images.driver }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: [ "/csi-powerstore" ]
           env:

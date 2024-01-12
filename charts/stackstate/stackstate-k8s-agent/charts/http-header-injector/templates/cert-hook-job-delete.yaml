@@ -1,5 +1,4 @@
 {{- if eq .Values.webhook.tls.mode "generated" }}
-{{- $containerConfig := dict "ContainerConfig" .Values.certificatePrehook -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -30,13 +29,7 @@ spec:
             name: "{{ include "http-header-injector.cert-config.name" . }}"
             defaultMode: 0777
       containers:
-        - name: webhook-cert-delete
-          image: "{{ include "http-header-injector.image.registry" (merge $containerConfig .) }}/{{ .Values.certificatePrehook.image.repository }}:{{ .Values.certificatePrehook.image.tag }}"
-          imagePullPolicy: {{ .Values.certificatePrehook.image.pullPolicy }}
-          volumeMounts:
-            - name: "{{ include "http-header-injector.cert-config.name" . }}"
-              mountPath: /scripts
-          command: [ "/scripts/delete-cert.sh" ]
+      - {{ include "http-header-injector.cert-delete.container.main" . | nindent 8 }}
       restartPolicy: Never
   backoffLimit: 0
 {{- end }}

@@ -1,49 +1,7 @@
-mode: {{ .Values.mode }}
+mode: "StandAlone"
 port: {{ .Values.port }}
 logLevel: {{ .Values.global.logLevel | default "debug" }}
 logFormat: {{ .Values.global.logFormat | default "TEXT" }}
-  {{- if eq .Values.mode "Linked" }}
-linkConfig:
-  primary:
-    {{- $primary := first .Values.global.managementServers }}
-    url: {{ required "Must provide a primary Unisphere HTTPS endpoint." $primary.endpoint }}
-    {{- if $primary.certSecret }}
-    {{- $check := toString $primary.skipCertificateValidation }}
-    skipCertificateValidation: {{ ternary $primary.skipCertificateValidation true (or (eq $check "true") (eq $check "false")) }}
-    {{- else }}
-    skipCertificateValidation: true
-    {{- end }}
-    certSecret: {{ $primary.certSecret | default "" }}
-    {{- if $primary.limits }}
-    {{- $limits := $primary.limits }}
-    limits:
-      maxActiveRead: {{ $limits.maxActiveRead | default 0 }}
-      maxActiveWrite: {{ $limits.maxActiveWrite | default 0 }}
-      maxOutStandingRead: {{ $limits.maxOutStandingRead | default 0 }}
-      maxOutStandingWrite: {{ $limits.maxOutStandingWrite | default 0 }}
-    {{- end }}
-  {{- if first (rest .Values.global.managementServers) }}
-  {{- $backup := first (rest .Values.global.managementServers) }}
-  backup:
-    url: {{ required "Must provide a primary Unisphere HTTPS endpoint." $backup.endpoint }}
-    {{- if $backup.certSecret }}
-    {{- $check := toString $backup.skipCertificateValidation }}
-    skipCertificateValidation: {{ ternary $backup.skipCertificateValidation true (or (eq $check "true") (eq $check "false")) }}
-    {{- else }}
-    skipCertificateValidation: true
-    {{- end }}
-    certSecret: {{ $backup.certSecret | default "" }}
-    {{- if $backup.limits }}
-    {{- $limits := $backup.limits }}
-    limits:
-      maxActiveRead: {{ $limits.maxActiveRead | default 0 }}
-      maxActiveWrite: {{ $limits.maxActiveWrite | default 0 }}
-      maxOutStandingRead: {{ $limits.maxOutStandingRead | default 0 }}
-      maxOutStandingWrite: {{ $limits.maxOutStandingWrite | default 0 }}
-    {{- end }}
-  {{- end }}
-  {{- end }}
-{{- if eq .Values.mode "StandAlone" }}
 standAloneConfig:
   {{- $defaultProxyCreds := .Values.global.defaultCredentialsSecret }}
   storageArrays:
@@ -79,4 +37,3 @@ standAloneConfig:
         maxOutStandingWrite: {{ $value.limits.maxOutStandingWrite | default 0 }}
       {{- end }}
     {{- end }}
-{{- end }}

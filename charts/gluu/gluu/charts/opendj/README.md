@@ -1,10 +1,10 @@
 # opendj
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 OpenDJ is a directory server which implements a wide range of Lightweight Directory Access Protocol and related standards, including full compliance with LDAPv3 but also support for Directory Service Markup Language (DSMLv2).Written in Java, OpenDJ offers multi-master replication, access control, and many extensions.
 
-**Homepage:** <https://gluu.org/docs/gluu-server>
+**Homepage:** <https://docs.gluu.org>
 
 ## Maintainers
 
@@ -15,7 +15,7 @@ OpenDJ is a directory server which implements a wide range of Lightweight Direct
 ## Source Code
 
 * <https://github.com/GluuFederation/docker-opendj>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/opendj>
+* <https://github.com/GluuFederation/flex/tree/main/charts/gluu/charts/opendj>
 
 ## Requirements
 
@@ -27,6 +27,7 @@ Kubernetes: `>=v1.21.0-0`
 |-----|------|---------|-------------|
 | additionalAnnotations | object | `{}` | Additional annotations that will be added across all resources  in the format of {cert-manager.io/issuer: "letsencrypt-prod"}. key app is taken |
 | additionalLabels | object | `{}` | Additional labels that will be added across all resources definitions in the format of {mylabel: "myapp"} |
+| customScripts | list | `[]` | Add custom scripts that have been mounted to run before the entrypoint. - /tmp/custom.sh - /tmp/custom2.sh |
 | dnsConfig | object | `{}` | Add custom dns config |
 | dnsPolicy | string | `""` | Add custom dns policy |
 | fullnameOverride | string | `""` |  |

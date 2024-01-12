@@ -80,6 +80,8 @@ spec:
 {{- if eq .Values.podmon.enabled true }}
         driver.dellemc.com: dell-storage
 {{- end }}
+      annotations:
+        kubectl.kubernetes.io/default-container: "driver"
     spec:
       {{- if .Values.node.nodeSelector }}
       nodeSelector:
@@ -106,7 +108,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          image: {{ required "Must provide the podmon container image." .Values.images.podmon }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             {{- toYaml .Values.podmon.node.args | nindent 12 }}
@@ -148,7 +150,7 @@ spec:
 {{- if hasKey .Values "authorization" }}
 {{- if eq .Values.authorization.enabled true }}
         - name: karavi-authorization-proxy
-          image: {{ required "Must provide the authorization sidecar container image." .Values.authorization.sidecarProxyImage }}
+          image: {{ required "Must provide the authorization sidecar container image." .Values.images.authorization }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: PROXY_HOST
@@ -182,7 +184,7 @@ spec:
             allowPrivilegeEscalation: true
             capabilities:
               add: ["SYS_ADMIN"]
-          image: "{{ required "Must provide the driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}"
+          image: "{{ required "Must provide the driver image repository." .Values.images.driver }}"
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: [ "/csi-vxflexos.sh" ]
           args:
@@ -197,6 +199,8 @@ spec:
               value: "{{ .Values.kubeletConfigDir }}/plugins/vxflexos.emc.dell.com/disks"
             - name: X_CSI_ALLOW_RWO_MULTI_POD_ACCESS
               value: "{{ required "Must provide a true/false string to allow RWO multi pod access." .Values.allowRWOMultiPodAccess }}"
+            - name: X_CSI_MAX_VOLUMES_PER_NODE
+              value: "{{ .Values.maxVxflexosVolumesPerNode }}"
             - name: SSL_CERT_DIR
               value: /certs
             {{- if hasKey .Values.node "healthMonitor" }}
@@ -224,6 +228,8 @@ spec:
             - name: pods-path
               mountPath: {{ .Values.kubeletConfigDir }}/pods
               mountPropagation: "Bidirectional"
+            - name: noderoot
+              mountPath: /noderoot
             - name: dev
               mountPath: /dev
             - name: vxflexos-config
@@ -236,7 +242,7 @@ spec:
               readOnly: true
 {{- end}}
         - name: registrar
-          image: {{ required "Must provide the CSI registrar container image." ( include "csi-vxflexos.registrarImage" . ) }}
+          image: {{ required "Must provide the CSI registrar container image." .Values.images.registrar }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--v=5"
@@ -339,6 +345,10 @@ spec:
         - name: pods-path
           hostPath:
             path: {{ .Values.kubeletConfigDir }}/pods
+            type: Directory
+        - name: noderoot
+          hostPath:
+            path: /
             type: Directory
         - name: dev
           hostPath:

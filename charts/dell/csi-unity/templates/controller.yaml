@@ -83,6 +83,18 @@ rules:
   - apiGroups: [""]
     resources: ["persistentvolumeclaims/status"]
     verbs: ["update", "patch"]
+  # Permissions for CSIStorageCapacity
+  {{- if eq (include "csi-unity.isStorageCapacitySupported" .) "true" }}
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csistoragecapacities"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get"]
+  {{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -140,7 +152,7 @@ spec:
 {{- if .Values.podmon.enabled }}
         - name: podmon
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          image: {{ required "Must provide the podmon container image." .Values.images.podmon }}
           args:
             {{- toYaml .Values.podmon.controller.args | nindent 12 }}
           env:
@@ -163,7 +175,7 @@ spec:
               mountPath: /unity-config
 {{- end }}
         - name: attacher
-          image: {{ required "Must provide the CSI attacher container image." ( include "csi-unity.attacherImage" . ) }}
+          image: {{ required "Must provide the CSI attacher container image." .Values.images.attacher }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v=5"
@@ -175,7 +187,7 @@ spec:
             - name: socket-dir
               mountPath: /var/run/csi
         - name: provisioner
-          image: {{ required "Must provide the CSI provisioner container image." ( include "csi-unity.provisionerImage" . ) }}
+          image: {{ required "Must provide the CSI provisioner container image." .Values.images.provisioner }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--volume-name-prefix={{ required "Must provide a Volume Name Prefix." .Values.controller.volumeNamePrefix }}"
@@ -188,16 +200,27 @@ spec:
             - "--leader-election"
             - "--leader-election-namespace={{ .Release.Namespace }}"
             - "--default-fstype={{ .Values.defaultFsType | default "ext4" }}"
+            - "--enable-capacity={{ (include "csi-unity.isStorageCapacitySupported" .) | default false }}"
+            - "--capacity-ownerref-level=2"
+            - "--capacity-poll-interval={{ .Values.storageCapacity.pollInterval | default "5m" }}"
           env:
             - name: ADDRESS
               value: /var/run/csi/csi.sock
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           volumeMounts:
             - name: socket-dir
               mountPath: /var/run/csi
         {{- if hasKey .Values.controller "snapshot" }}
         {{- if eq .Values.controller.snapshot.enabled true }}
         - name: snapshotter
-          image: {{ required "Must provide the CSI snapshotter container image. " ( include "csi-unity.snapshotterImage" . ) }}
+          image: {{ required "Must provide the CSI snapshotter container image. " .Values.images.snapshotter }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--snapshot-name-prefix={{ required "Must privided a Snapshot Name Prefix" .Values.controller.snapshot.snapNamePrefix }}"
@@ -216,7 +239,7 @@ spec:
         {{- if hasKey .Values.controller "resizer" }}
         {{- if eq .Values.controller.resizer.enabled true }}
         - name: resizer
-          image: {{ required "Must provide the CSI resizer container image." ( include "csi-unity.resizerImage" . ) }}
+          image: {{ required "Must provide the CSI resizer container image." .Values.images.resizer }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v=5"
@@ -232,7 +255,7 @@ spec:
         {{- if hasKey .Values.controller "healthMonitor" }}
         {{- if eq .Values.controller.healthMonitor.enabled true }}
         - name: csi-external-health-monitor-controller
-          image: {{ required "Must provide the CSI external health monitor image." ( include "csi-unity.healthmonitorImage" . ) }}
+          image: {{ required "Must provide the CSI external health monitor image." .Values.images.healthmonitor }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--v=5"
@@ -251,7 +274,7 @@ spec:
         {{- end }}
         {{- end }}
         - name: driver
-          image: "{{ required "Must provide the driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}"
+          image: "{{ required "Must provide the driver image repository." .Values.images.driver }}"
           args:
             - "--driver-name=csi-unity.dellemc.com"
             - "--driver-config=/unity-config/driver-config-params.yaml"

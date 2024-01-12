@@ -1,10 +1,10 @@
 # cn-istio-ingress
 
-![Version: 5.0.23](https://img.shields.io/badge/Version-5.0.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
 
 Istio Gateway
 
-**Homepage:** <https://gluu.org/docs/gluu-server/>
+**Homepage:** <https://docs.gluu.org/>
 
 ## Maintainers
 
@@ -15,7 +15,7 @@ Istio Gateway
 ## Source Code
 
 * <https://gluu.org/docs/gluu-server/>
-* <https://github.com/GluuFederation/flex/tree/main/flex-cn-setup/pygluu/kubernetes/templates/helm/gluu/charts/cn-istio-ingress>
+* <https://github.com/GluuFederation/flex/tree/main/charts/gluu/charts/cn-istio-ingress>
 
 ## Requirements
 

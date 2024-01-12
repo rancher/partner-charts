@@ -188,12 +188,12 @@ The command removes all the Kubernetes components associated with the chart and 
 
 ### RBAC parameters
 
-| Name                                          | Description                                                | Value  |
-| --------------------------------------------- | ---------------------------------------------------------- | ------ |
-| `serviceAccount.create`                       | Enable the creation of a ServiceAccount for Cassandra pods | `true` |
-| `serviceAccount.name`                         | The name of the ServiceAccount to use.                     | `""`   |
-| `serviceAccount.annotations`                  | Annotations for Cassandra Service Account                  | `{}`   |
-| `serviceAccount.automountServiceAccountToken` | Automount API credentials for a service account.           | `true` |
+| Name                                          | Description                                                | Value   |
+| --------------------------------------------- | ---------------------------------------------------------- | ------- |
+| `serviceAccount.create`                       | Enable the creation of a ServiceAccount for Cassandra pods | `true`  |
+| `serviceAccount.name`                         | The name of the ServiceAccount to use.                     | `""`    |
+| `serviceAccount.annotations`                  | Annotations for Cassandra Service Account                  | `{}`    |
+| `serviceAccount.automountServiceAccountToken` | Automount API credentials for a service account.           | `false` |
 
 ### Traffic Exposure Parameters
 
@@ -319,7 +319,7 @@ helm install my-release -f values.yaml oci://REGISTRY_NAME/REPOSITORY_NAME/cassa
 
 ## Configuration and installation details
 
-### [Rolling vs Immutable tags](https://docs.bitnami.com/containers/how-to/understand-rolling-tags-containers/)
+### [Rolling vs Immutable tags](https://docs.bitnami.com/tutorials/understand-rolling-tags-containers)
 
 It is strongly recommended to use immutable tags in a production environment. This ensures your deployment does not change automatically if the same tag is updated with a different image.
 
@@ -463,7 +463,7 @@ This release make it possible to specify custom initialization scripts in both c
 
 ## License
 
-Copyright &copy; 2023 VMware, Inc.
+Copyright &copy; 2024 Broadcom. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

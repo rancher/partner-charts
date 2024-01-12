@@ -45,6 +45,10 @@ The following table lists the configuration parameter of the upstream operator o
 | `preflight.volumeSnapshotClass`                                    | Name of volume snapshot class to use for preflight checks (Optional)                              | ""         |                         |
 | `preflight.logLevel`                                               | Log Level for the preflight run (Default: "INFO")                                                 | ""         |                         |
 | `preflight.imageTag`                                               | Image tag to use for the preflight image (Default: latest)                                        | ""         |                         |
+| `nodeSelector`                                                     | Node selection constraints for scheduling Pods of this application.                               | {}         |                         |
+| `affinity`                                                         | Affinity rules for scheduling the Pod of this application.                                        | {}         |                         |
+| `tolerations`                                                      | Taints to be tolerated by Pods of this application.                                               | []         |                         | 
+
 
 Check the TVM CR configuration by running following command:
 
