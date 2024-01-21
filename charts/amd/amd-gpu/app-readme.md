@@ -10,8 +10,8 @@ More information about [RadeonOpenCompute (ROCm)][rocm]
 
 [dp]: https://kubernetes.io/docs/concepts/cluster-administration/device-plugins/
 [k8s]: https://kubernetes.io
-[rocm]: https://docs.amd.com/en/latest/rocm.html
-[rock]: https://github.com/RadeonOpenCompute/ROCK-Kernel-Driver
-[rocminstall]: https://docs.amd.com/en/latest/deploy/linux/quick_start.html
+[rocm]: https://docs.amd.com/en/latest/what-is-rocm.html
+[rock]: https://github.com/ROCm/ROCK-Kernel-Driver
+[rocminstall]: https://rocm.docs.amd.com/projects/install-on-linux/en/latest/tutorial/quick-start.html
 [amdgpuinstall]: https://amdgpu-install.readthedocs.io/en/latest/
-[sysreq]: https://docs.amd.com/en/latest/release/gpu_os_support.html
+[sysreq]: https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html
