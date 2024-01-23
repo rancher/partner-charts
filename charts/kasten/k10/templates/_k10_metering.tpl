@@ -151,11 +151,9 @@ spec:
       - name: {{ $service }}-svc
         {{- dict "main" . "k10_service" $service | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
-{{- if eq .Release.Namespace "default" }}
 {{- $podName := (printf "%s-svc" $service) }}
 {{- $containerName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" $containerName  | include "k10.resource.request" | indent 8}}
-{{- end }}
         ports:
         - containerPort: {{ .Values.service.externalPort }}
         livenessProbe:

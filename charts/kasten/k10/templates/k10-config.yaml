@@ -60,6 +60,8 @@ data:
 
   k10JobMaxWaitDuration: {{ .Values.maxJobWaitDuration | quote }}
 
+  k10ForceRootInKanisterHooks: {{ .Values.forceRootInKanisterHooks | quote }}
+
   {{- if .Values.awsConfig.efsBackupVaultName }}
   efsBackupVaultName: {{ quote .Values.awsConfig.efsBackupVaultName }}
   {{- end }}
@@ -252,5 +254,23 @@ binaryData:
   {{- range tuple "files/favicon.png" "files/kasten-logo.svg" "files/styles.css" }}
   {{ trimPrefix "files/" . }}: |-
     {{ $files.Get . | b64enc }}
+  {{- end }}
+{{ end }}
+{{ if .Values.gateway.next_gen }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k10-gateway
+  namespace: {{ .Release.Namespace }}
+data:
+  {{ include "k10.gatewayPrefixVarName" . }}: {{ include "k10.prefixPath" . }}
+
+  {{- if .Values.gateway.requestHeaders }}
+  {{ include "k10.gatewayRequestHeadersVarName" .}}: {{ (.Values.gateway.requestHeaders | default list) | join " " }}
+  {{- end }}
+
+  {{- if .Values.gateway.authHeaders }}
+  {{ include "k10.gatewayAuthHeadersVarName" .}}: {{ (.Values.gateway.authHeaders | default list) | join " " }}
   {{- end }}
 {{ end }}

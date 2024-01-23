@@ -500,6 +500,11 @@ stating that types are not same for the equality check
                 name: k10-config
                 key: k10JobMaxWaitDuration
 {{- end }}
+          - name: K10_FORCE_ROOT_IN_KANISTER_HOOKS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: k10ForceRootInKanisterHooks
 {{- end }}
 {{- if and (eq $service "executor") (.Values.awsConfig.efsBackupVaultName) }}
           - name: EFS_BACKUP_VAULT_NAME
@@ -625,6 +630,12 @@ stating that types are not same for the equality check
           - name: K10_GRAFANA_ENABLED
             value: {{ .Values.grafana.enabled | quote }}
 {{- end }}
+{{- if eq $service "gateway" }}
+        envFrom:
+        - configMapRef:
+            name: k10-gateway
+{{- end -}}
+
 {{- if or $.stateful (or (eq (include "check.googlecreds" .) "true") (eq $service "auth" "logging")) }}
         volumeMounts:
 {{- else if  or (or (eq (include "basicauth.check" .) "true") (or .Values.auth.oidcAuth.enabled (eq (include "check.dexAuth" .) "true"))) .Values.features }}
@@ -697,16 +708,6 @@ stating that types are not same for the equality check
           subPath: {{ include "k10.aggAuditPolicyFile" .}}
           readOnly: true
 {{- end}}
-{{- if .Values.toolsImage.enabled }}
-{{- if eq $service "executor" }}
-      - name: tools
-        imagePullPolicy: {{ .Values.toolsImage.pullPolicy }}
-        {{- dict "main" . "k10_service" "cephtool" | include "serviceImage" | indent 8 }}
-        command: ["tail", "-f", "/dev/null"]
-{{- $podName := (printf "%s-svc" $service) }}
-{{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "tools"  | include "k10.resource.request" | indent 8}}
-{{- end }}
-{{- end }} {{/* .Values.toolsImage.enabled */}}
 {{- if and (eq $service "catalog") $.stateful }}
       - name: kanister-sidecar
         image: {{ include "get.kanisterToolsImage" .}}

@@ -990,26 +990,6 @@ running in the same cluster.
   {{- printf "init" }}
 {{- end -}}
 
-{{- define "k10.cephtool.getImage" -}}
-  {{- (get .Values.global.images (include "k10.cephtool.ImageName" .)) | default (include "k10.cephtool.Image" .)  }}
-{{- end -}}
-
-{{- define "k10.cephtool.Image" -}}
-  {{- printf "%s:%s" (include "k10.cephtool.ImageRepo" .) (include "get.k10ImageTag" .) }}
-{{- end -}}
-
-{{- define "k10.cephtool.ImageRepo" -}}
-  {{- if .Values.global.airgapped.repository }}
-    {{- printf "%s/%s" .Values.global.airgapped.repository (include "k10.cephtool.ImageName" .) }}
-  {{- else }}
-    {{- printf "%s/%s" .Values.global.image.registry (include "k10.cephtool.ImageName" .) }}
-  {{- end }}
-{{- end -}}
-
-{{- define "k10.cephtool.ImageName" -}}
-  {{- printf "cephtool" }}
-{{- end -}}
-
 {{- define "k10.splitImage" -}}
   {{- $split_repo_tag_and_hash := .image | splitList "@" -}}
   {{- $split_repo_and_tag := $split_repo_tag_and_hash | first | splitList ":" -}}

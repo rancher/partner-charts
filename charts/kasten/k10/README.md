@@ -220,7 +220,7 @@ Parameter | Description | Default
 `prometheus.server.prefixURL` | (optional) K10 Prometheus prefix slug at which the server can be accessed | `/k10/prometheus/`
 `prometheus.server.serviceAccounts.server.create` | DEPRECATED: (optional) Set true to create ServiceAccount for Prometheus server service | `true`
 `grafana.enabled` | (optional) If false Grafana will not be available | `true`
-`resources.<podName>.<containerName>.[requests\|limits].[cpu\|memory]` | Overwrite default K10 [container resource requests and limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) | varies by container
+`resources.<deploymentName>.<containerName>.[requests\|limits].[cpu\|memory]` | Overwriting the default K10 [container resource requests and limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) | varies depending on the container
 `route.enabled` | Specifies whether the K10 dashboard should be exposed via route | `false`
 `route.host` | FQDN (e.g., `.k10.example.com`) for name-based virtual host | `""`
 `route.path` | URL path for K10 Dashboard (e.g., `/k10`) | `/`
@@ -258,6 +258,7 @@ Parameter | Description | Default
 `kanisterPodMetricSidecar.metricLifetime` | Check periodically for metrics that should be removed | `2m`
 `kanisterPodMetricSidecar.pushGatewayInterval` | Set the interval for sending metrics into the Prometheus | `30s`
 `maxJobWaitDuration` | Set a maximum duration of waiting for child jobs. If the execution of the subordinate jobs exceeds this value, the parent job will be canceled. If no value is set, a default of 10 hours will be used | `None`
+`forceRootInKanisterHooks` | Forces Kanister Execution Hooks to run with root privileges | `true`
 
 ## Helm tips and tricks
 

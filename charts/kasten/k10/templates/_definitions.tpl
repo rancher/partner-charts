@@ -4,7 +4,7 @@ Therefore, fetching of a list or yaml with service names should be done with the
 For example, the k10.restServices list can be fetched with get.enabledRestServices */}}
 {{- define "k10.additionalServices" -}}frontend kanister{{- end -}}
 {{- define "k10.restServices" -}}admin auth bloblifecyclemanager catalog controllermanager crypto dashboardbff events executor garbagecollector jobs logging metering repositories state vbrintegrationapi{{- end -}}
-{{- define "k10.services" -}}aggregatedapis{{- end -}}
+{{- define "k10.services" -}}aggregatedapis gateway{{- end -}}
 {{- define "k10.exposedServices" -}}auth dashboardbff vbrintegrationapi{{- end -}}
 {{- define "k10.statelessServices" -}}admin aggregatedapis auth bloblifecyclemanager controllermanager crypto dashboardbff events executor garbagecollector repositories gateway state vbrintegrationapi{{- end -}}
 {{- define "k10.colocatedServices" -}}
@@ -212,5 +212,8 @@ state-svc:
 {{- define "k10.aggAuditPolicyFile" -}}agg-audit-policy.yaml{{- end -}}
 {{- define "k10.siemAuditLogFilePath" -}}-{{- end -}}
 {{- define "k10.siemAuditLogFileSize" -}}100{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.100.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.104.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}
+{{- define "k10.gatewayPrefixVarName" -}}GATEWAY_PREFIX{{- end -}}
+{{- define "k10.gatewayRequestHeadersVarName" -}}GATEWAY_REQUEST_HEADERS{{- end -}}
+{{- define "k10.gatewayAuthHeadersVarName" -}}GATEWAY_AUTH_HEADERS{{- end -}}

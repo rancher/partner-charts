@@ -161,7 +161,6 @@ configs:
     url: ""
 
     # -- The name of tracking label used by Argo CD for resource pruning
-    # @default -- Defaults to app.kubernetes.io/instance
     application.instanceLabelKey: argocd.argoproj.io/instance
 
     # -- Enable logs RBAC enforcement
@@ -291,7 +290,7 @@ configs:
     #  p, subject, resource, action, object, effect
     # Role definitions and bindings are in the form:
     #  g, subject, inherited-subject
-    # policy.csv |
+    # policy.csv: |
     #   p, role:org-admin, applications, *, */*, allow
     #   p, role:org-admin, clusters, get, *, allow
     #   p, role:org-admin, repositories, *, *, allow
@@ -302,6 +301,9 @@ configs:
     # -- OIDC scopes to examine during rbac enforcement (in addition to `sub` scope).
     # The scope value can be a string, or a list of strings.
     scopes: "[groups]"
+
+    # -- Matcher function for Casbin, `glob` for glob matcher and `regex` for regex matcher.
+    policy.matchMode: "glob"
 
   # GnuPG public keys for commit verification
   ## Ref: https://argo-cd.readthedocs.io/en/stable/user-guide/gpg-verification/
@@ -516,6 +518,12 @@ configs:
     bitbucketUUID: ""
     # -- Shared secret for authenticating Gogs webhook events
     gogsSecret: ""
+    ## Azure DevOps
+    azureDevops:
+      # -- Shared secret username for authenticating Azure DevOps webhook events
+      username: ""
+      # -- Shared secret password for authenticating Azure DevOps webhook events
+      password: ""
 
     # -- add additional secrets to be added to argocd-secret
     ## Custom secrets. Useful for injecting SSO secrets into environment variables.
@@ -1395,7 +1403,7 @@ redis-ha:
   ## Redis image
   image:
     # -- Redis repository
-    repository: redis
+    repository: public.ecr.aws/docker/library/redis
     # -- Redis tag
     tag: 7.0.13-alpine
   ## Prometheus redis-exporter sidecar
@@ -1577,6 +1585,8 @@ server:
   ## Argo CD extensions
   ## This function in tech preview stage, do expect instability or breaking changes in newer versions.
   ## Ref: https://github.com/argoproj-labs/argocd-extension-installer
+  ## When you enable extensions, you need to configure RBAC of logged in Argo CD user.
+  ## Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/rbac/#the-extensions-resource
   extensions:
     # -- Enable support for Argo CD extensions
     enabled: false
@@ -2216,6 +2226,24 @@ repoServer:
   #      name: argocd-cmp-cm
   #  - name: cmp-tmp
   #    emptyDir: {}
+
+  # -- Volumes to be used in replacement of emptydir on default volumes
+  existingVolumes: {}
+  #  gpgKeyring:
+  #    persistentVolumeClaim:
+  #      claimName: pvc-argocd-repo-server-keyring
+  #  helmWorkingDir:
+  #    persistentVolumeClaim:
+  #      claimName: pvc-argocd-repo-server-workdir
+  #  tmp:
+  #    persistentVolumeClaim:
+  #      claimName: pvc-argocd-repo-server-tmp
+  #  varFiles:
+  #    persistentVolumeClaim:
+  #      claimName: pvc-argocd-repo-server-varfiles
+  #  plugins:
+  #    persistentVolumeClaim:
+  #      claimName: pvc-argocd-repo-server-plugins
 
   # -- Toggle the usage of a ephemeral Helm working directory
   useEphemeralHelmWorkingDir: true

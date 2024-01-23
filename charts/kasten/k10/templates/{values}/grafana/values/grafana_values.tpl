@@ -97,7 +97,7 @@
         "isDefault" true
         "name" "Prometheus"
         "type" "prometheus"
-        "url" (printf "http://prometheus-server-exp%s/prometheus" (include "k10.prefixPath" $))
+        "url" (printf "http://%s-exp%s" (include "k10.prometheus.service.name" $) .Values.prometheus.server.baseURL)
         "jsonData" (dict
           "timeInterval" "1m"
         )

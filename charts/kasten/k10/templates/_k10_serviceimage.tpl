@@ -19,9 +19,6 @@ value that is specified.
 {{- $serviceImage = (include "get.k10ImageTag" .main) | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
 {{- else }}
 {{- $serviceImage = (include "get.k10ImageTag" .main)  | print .main.Values.global.image.registry "/" .k10_service ":" }}
-{{- if eq .k10_service "cephtool"}}
-{{- $serviceImage = include "k10.cephtool.getImage" .main }}
-{{- end }}
 {{- end }}{{/* if .main.Values.global.airgapped.repository */}}
 {{- $serviceImageKey := print (replace "-" "" .k10_service) "Image" }}
 {{- if eq $serviceImageKey "dexImage" }}
