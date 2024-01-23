@@ -1,5 +1,21 @@
 # Datadog changelog
 
+## 3.52.0
+
+* Allow configuring CWS security profile features and enable drift events by default
+
+## 3.51.2
+
+* Use correct kpi-telemetry-configmap in Cluster Agent and Trace Agent.
+
+## 3.51.1
+
+* Parametrize the name of kpi-telemetry-configmap.
+
+## 3.51.0
+
+* Add `DD_INSTRUMENTATION_INSTALL_TIME`, `DD_INSTRUMENTATION_INSTALL_ID`, `DD_INSTRUMENTATION_INSTALL_TYPE` env variables to the Trace and Cluster agents to support APM Telemetry KPIs.
+
 ## 3.50.5
 
 * Add option to use containerd snapshotter to generate SBOMs.

@@ -12,6 +12,10 @@ enabled: false
 
 replicaCount: 1
 
+# Number of old history to retain to allow rollback
+# Default Kubernetes value is set to 10
+revisionHistoryLimit: 10
+
 image:
   repository: quay.io/prometheus/alertmanager
   pullPolicy: IfNotPresent
@@ -109,6 +113,7 @@ readinessProbe:
 
 service:
   annotations: {}
+  labels: {}
   type: ClusterIP
   port: 9093
   clusterPort: 9094
@@ -116,6 +121,27 @@ service:
   loadBalancerSourceRanges: []  # Only allow access to loadBalancerIP from these IPs
   # if you want to force a specific nodePort. Must be use with service.type=NodePort
   # nodePort:
+
+  # Optionally specify extra list of additional ports exposed on both services
+  extraPorts: []
+
+# Configuration for creating a separate Service for each statefulset Alertmanager replica
+#
+servicePerReplica:
+  enabled: false
+  annotations: {}
+
+  # Loadbalancer source IP ranges
+  # Only used if servicePerReplica.type is "LoadBalancer"
+  loadBalancerSourceRanges: []
+
+  # Denotes if this Service desires to route external traffic to node-local or cluster-wide endpoints
+  #
+  externalTrafficPolicy: Cluster
+
+  # Service type
+  #
+  type: ClusterIP
 
 ingress:
   enabled: false
@@ -132,6 +158,50 @@ ingress:
   #  - secretName: chart-example-tls
   #    hosts:
   #      - alertmanager.domain.com
+
+# Configuration for creating an Ingress that will map to each Alertmanager replica service
+# alertmanager.servicePerReplica must be enabled
+#
+ingressPerReplica:
+  enabled: false
+
+  # className for the ingresses
+  #
+  className: ""
+
+  annotations: {}
+  labels: {}
+
+  # Final form of the hostname for each per replica ingress is
+  # {{ ingressPerReplica.hostPrefix }}-{{ $replicaNumber }}.{{ ingressPerReplica.hostDomain }}
+  #
+  # Prefix for the per replica ingress that will have `-$replicaNumber`
+  # appended to the end
+  hostPrefix: "alertmanager"
+  # Domain that will be used for the per replica ingress
+  hostDomain: "domain.com"
+
+  # Paths to use for ingress rules
+  #
+  paths:
+    - /
+
+  # PathType for ingress rules
+  #
+  pathType: ImplementationSpecific
+
+  # Secret name containing the TLS certificate for alertmanager per replica ingress
+  # Secret must be manually created in the namespace
+  tlsSecretName: ""
+
+  # Separated secret for each per replica Ingress. Can be used together with cert-manager
+  #
+  tlsSecretPerReplica:
+    enabled: false
+    # Final form of the secret for each per replica ingress is
+    # {{ tlsSecretPerReplica.prefix }}-{{ $replicaNumber }}
+    #
+    prefix: "alertmanager"
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -211,6 +281,7 @@ configAnnotations: {}
   # slack_api_url: '${vault:secret/data/slack-hook-alerts#URL}'
 
 config:
+  enabled: true
   global: {}
     # slack_api_url: ''
 
@@ -230,7 +301,7 @@ config:
     repeat_interval: 3h
 
 ## Monitors ConfigMap changes and POSTs to a URL
-## Ref: https://github.com/jimmidyson/configmap-reload
+## Ref: https://github.com/prometheus-operator/prometheus-operator/tree/main/cmd/prometheus-config-reloader
 ##
 configmapReload:
   ## If false, the configmap-reload container will not be deployed
@@ -244,8 +315,8 @@ configmapReload:
   ## configmap-reload container image
   ##
   image:
-    repository: jimmidyson/configmap-reload
-    tag: v0.8.0
+    repository: quay.io/prometheus-operator/prometheus-config-reloader
+    tag: v0.66.0
     pullPolicy: IfNotPresent
 
   # containerPort: 9533
@@ -254,6 +325,28 @@ configmapReload:
   ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
   ##
   resources: {}
+
+  extraArgs: {}
+
+  ## Optionally specify extra list of additional volumeMounts
+  extraVolumeMounts: []
+    # - name: extras
+    #   mountPath: /usr/share/extras
+    #   readOnly: true
+
+  ## Optionally specify extra environment variables to add to alertmanager container
+  extraEnv: []
+    # - name: FOO
+    #   value: BAR
+
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsUser: 65534
+    # runAsNonRoot: true
+    # runAsGroup: 65534
 
 templates: {}
 #   alertmanager.tmpl: |-

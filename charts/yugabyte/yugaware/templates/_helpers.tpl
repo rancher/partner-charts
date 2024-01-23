@@ -70,18 +70,6 @@ In both cases, image.tag can be used to customize the tag of the yugaware image.
 {{- end -}}
 
 {{/*
-Validate Nginx SSL protocols
-*/}}
-{{- define "validate_nginx_ssl_protocols" -}}
-  {{- $sslProtocolsRegex := `^((TLSv(1|1\.[1-3]))(?: ){0,1}){1,4}$` -}}
-  {{- if not (regexMatch $sslProtocolsRegex .Values.tls.sslProtocols) -}}
-    {{- fail (cat "Please specify valid tls.sslProtocols, must match regex:" $sslProtocolsRegex) -}}
-  {{- else -}}
-    {{- .Values.tls.sslProtocols -}}
-  {{- end -}}
-{{- end -}}
-
-{{/*
 Get or generate PG password
 Source - https://github.com/helm/charts/issues/5167#issuecomment-843962731
 */}}
@@ -179,57 +167,6 @@ server.pem: {{ $serverPemContent }}
 server.pem: {{ $serverPemContent }}
   {{- end -}}
 {{- end -}}
-{{- end -}}
-
-{{/*
-Check export of nss_wrapper environment variables required
-*/}}
-{{- define "checkNssWrapperExportRequired" -}}
-  {{- if .Values.securityContext.enabled -}}
-    {{- if and (ne (int .Values.securityContext.runAsUser) 0) (ne (int .Values.securityContext.runAsUser) 10001) -}}
-      {{- printf "true" -}}
-    {{- end -}}
-  {{- else -}}
-      {{- printf "false" -}}
-  {{- end -}}
-{{- end -}}
-
-
-{{/*
-  Verify the extraVolumes and extraVolumeMounts mappings.
-  Every extraVolumes should have extraVolumeMounts
-*/}}
-{{- define "yugaware.isExtraVolumesMappingExists" -}}
-  {{- $lenExtraVolumes := len .extraVolumes -}}
-  {{- $lenExtraVolumeMounts := len .extraVolumeMounts -}}
-
-  {{- if and (eq $lenExtraVolumeMounts 0) (gt $lenExtraVolumes 0) -}}
-    {{- fail "You have not provided the extraVolumeMounts for extraVolumes." -}}
-  {{- else if and (eq $lenExtraVolumes 0) (gt $lenExtraVolumeMounts 0) -}}
-    {{- fail "You have not provided the extraVolumes for extraVolumeMounts." -}}
-  {{- else if and (gt $lenExtraVolumes 0) (gt $lenExtraVolumeMounts 0) -}}
-      {{- $volumeMountsList := list -}}
-      {{- range .extraVolumeMounts -}}
-        {{- $volumeMountsList = append $volumeMountsList .name -}}
-      {{- end -}}
-
-      {{- $volumesList := list -}}
-      {{- range .extraVolumes -}}
-        {{- $volumesList = append $volumesList .name -}}
-      {{- end -}}
-
-      {{- range $volumesList -}}
-        {{- if not (has . $volumeMountsList) -}}
-          {{- fail (printf "You have not provided the extraVolumeMounts for extraVolume %s" .) -}}
-        {{- end -}}
-      {{- end -}}
-
-      {{- range $volumeMountsList -}}
-        {{- if not (has . $volumesList) -}}
-          {{- fail (printf "You have not provided the extraVolumes for extraVolumeMounts %s" .) -}}
-        {{- end -}}
-      {{- end -}}
-  {{- end -}}
 {{- end -}}
 
 {{/*
