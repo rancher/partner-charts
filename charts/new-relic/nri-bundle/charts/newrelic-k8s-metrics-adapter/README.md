@@ -135,4 +135,5 @@ resources:
 ## Maintainers
 
 * [juanjjaramillo](https://github.com/juanjjaramillo)
-* [svetlanabrennan](https://github.com/svetlanabrennan)
+* [csongnr](https://github.com/csongnr)
+* [dbudziwojskiNR](https://github.com/dbudziwojskiNR)

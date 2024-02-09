@@ -1,6 +1,6 @@
 # nri-kube-events
 
-![Version: 3.7.3](https://img.shields.io/badge/Version-3.7.3-informational?style=flat-square) ![AppVersion: 2.7.3](https://img.shields.io/badge/AppVersion-2.7.3-informational?style=flat-square)
+![Version: 3.8.0](https://img.shields.io/badge/Version-3.8.0-informational?style=flat-square) ![AppVersion: 2.8.0](https://img.shields.io/badge/AppVersion-2.8.0-informational?style=flat-square)
 
 A Helm chart to deploy the New Relic Kube Events router
 
@@ -74,12 +74,6 @@ Options that can be defined globally include `affinity`, `nodeSelector`, `tolera
 
 ## Maintainers
 
-* [nserrino](https://github.com/nserrino)
-* [philkuz](https://github.com/philkuz)
-* [htroisi](https://github.com/htroisi)
 * [juanjjaramillo](https://github.com/juanjjaramillo)
-* [svetlanabrennan](https://github.com/svetlanabrennan)
-* [nrepai](https://github.com/nrepai)
 * [csongnr](https://github.com/csongnr)
-* [vuqtran88](https://github.com/vuqtran88)
-* [xqi-nr](https://github.com/xqi-nr)
+* [dbudziwojskiNR](https://github.com/dbudziwojskiNR)

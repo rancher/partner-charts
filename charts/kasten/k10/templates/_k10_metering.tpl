@@ -4,6 +4,7 @@ we have to start using .Values.reportingSecret instead
 of correct version .Values.metering.reportingSecret */}}
 {{- define "k10-metering" }}
 {{ $service := .k10_service }}
+{{- $podName := (printf "%s-svc" $service) }}
 {{ $main := .main }}
 {{- with .main }}
 {{- $servicePort := .Values.service.externalPort -}}
@@ -140,6 +141,7 @@ spec:
             allowPrivilegeEscalation: false
         {{- dict "main" . "k10_service" "upgrade" | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "upgrade-init" | include "k10.resource.request" | indent 8}}
         env:
           - name: MODEL_STORE_DIR
             value: /var/reports/
@@ -151,7 +153,6 @@ spec:
       - name: {{ $service }}-svc
         {{- dict "main" . "k10_service" $service | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
-{{- $podName := (printf "%s-svc" $service) }}
 {{- $containerName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" $containerName  | include "k10.resource.request" | indent 8}}
         ports:

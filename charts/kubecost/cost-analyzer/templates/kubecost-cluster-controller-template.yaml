@@ -97,20 +97,6 @@ rules:
       - create
       - update
   - apiGroups:
-      - extensions
-    resources:
-      - daemonsets
-      - deployments
-      - replicasets
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - patch
-      - update
-      - delete
-  - apiGroups:
       - apps
     resources:
       - statefulsets
@@ -197,29 +183,13 @@ subjects:
     name: {{ template "kubecost.clusterControllerName" . }}
     namespace: {{ .Release.Namespace }}
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cluster-controller-continuous-cluster-sizing
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "cost-analyzer.commonLabels" . | nindent 4 }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cluster-controller-nsturndown-config
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "cost-analyzer.commonLabels" . | nindent 4 }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "kubecost.clusterControllerName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{ include "cost-analyzer.commonLabels" . | nindent 4 }}
+    {{- include "cost-analyzer.commonLabels" . | nindent 4 }}
 spec:
   strategy:
     rollingUpdate:
@@ -243,7 +213,11 @@ spec:
       {{- end }}
       containers:
       - name: {{ template "kubecost.clusterControllerName" . }}
+        {{- if eq (typeOf .Values.clusterController.image) "string" }}
         image: {{ .Values.clusterController.image }}
+        {{- else }}
+        image: {{ .Values.clusterController.image.repository }}:{{ .Values.clusterController.image.tag }}
+        {{- end}}
         imagePullPolicy: {{ .Values.clusterController.imagePullPolicy }}
         volumeMounts:
         - name: cluster-controller-keys
@@ -285,6 +259,10 @@ spec:
           hostPort: 9731
       serviceAccount: {{ template "kubecost.clusterControllerName" . }}
       serviceAccountName: {{ template "kubecost.clusterControllerName" . }}
+      {{- with .Values.clusterController.tolerations }}
+      tolerations:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
       - name: cluster-controller-keys
         secret:
