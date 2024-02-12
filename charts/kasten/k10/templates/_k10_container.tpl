@@ -630,12 +630,12 @@ stating that types are not same for the equality check
           - name: K10_GRAFANA_ENABLED
             value: {{ .Values.grafana.enabled | quote }}
 {{- end }}
-{{- if eq $service "gateway" }}
-        envFrom:
-        - configMapRef:
-            name: k10-gateway
+{{- if eq $service "dashboardbff" }}
+    {{- with .Values.global.persistence.diskSpaceAlertPercent }}
+          - name: K10_DISK_SPACE_ALERT_PERCENT
+            value: {{ . | quote }}
+    {{- end -}}
 {{- end -}}
-
 {{- if or $.stateful (or (eq (include "check.googlecreds" .) "true") (eq $service "auth" "logging")) }}
         volumeMounts:
 {{- else if  or (or (eq (include "basicauth.check" .) "true") (or .Values.auth.oidcAuth.enabled (eq (include "check.dexAuth" .) "true"))) .Values.features }}
@@ -712,7 +712,6 @@ stating that types are not same for the equality check
       - name: kanister-sidecar
         image: {{ include "get.kanisterToolsImage" .}}
         imagePullPolicy: {{ .Values.kanisterToolsImage.pullPolicy }}
-{{- $podName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "kanister-sidecar"  | include "k10.resource.request" | indent 8}}
         volumeMounts:
         - name: {{ $service }}-persistent-storage
@@ -780,6 +779,7 @@ stating that types are not same for the equality check
 
 {{- define "k10-init-container" }}
 {{- $pod := .k10_pod }}
+{{- $podName := (printf "%s-svc" $pod) }}
 {{- with .main }}
 {{- $main_context := . }}
 {{- $containerList := (dict "main" $main_context "k10_service_pod" $pod | include "get.serviceContainersInPod" | splitList " ") }}
@@ -795,6 +795,7 @@ stating that types are not same for the equality check
         - --new-config-path=/dex-config/config.yaml
         - --secret-field=bindPW
         {{- dict "main" $main_context "k10_service" $service | include "serviceImage" | indent 8 }}
+        {{- dict "main" $main_context "k10_service_pod_name" $podName "k10_service_container_name" "dex-init" | include "k10.resource.request" | indent 8}}
         volumeMounts:
         - mountPath: /etc/dex/cfg
           name: config
@@ -814,6 +815,7 @@ stating that types are not same for the equality check
             allowPrivilegeEscalation: false
         {{- dict "main" $main_context "k10_service" "upgrade" | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ $main_context.Values.global.image.pullPolicy }}
+        {{- dict "main" $main_context "k10_service_pod_name" $podName "k10_service_container_name" "upgrade-init" | include "k10.resource.request" | indent 8}}
         env:
           - name: MODEL_STORE_DIR
             valueFrom:
@@ -827,6 +829,7 @@ stating that types are not same for the equality check
       - name: schema-upgrade-check
         {{- dict "main" $main_context "k10_service" $service | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ $main_context.Values.global.image.pullPolicy }}
+        {{- dict "main" $main_context "k10_service_pod_name" $podName "k10_service_container_name" "schema-upgrade-check" | include "k10.resource.request" | indent 8}}
         env:
 {{- if $main_context.Values.clusterName }}
           - name: CLUSTER_NAME

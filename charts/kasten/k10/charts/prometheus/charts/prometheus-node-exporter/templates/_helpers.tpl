@@ -49,34 +49,14 @@ app.kubernetes.io/version: {{ . | quote }}
 {{- if .Values.releaseLabel }}
 release: {{ .Release.Name }}
 {{- end }}
-app.kubernetes.io/name: {{ include "prometheus-node-exporter.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Selector labels
-
-K10 NOTE:
-
-  The selector labels here (`app` and `release`) are divergent from the
-  selector labels set by the upstream chart. This is intentional since a
-  Deployment's `spec.selector` is immutable and K10 has already been shipped
-  with these values. However, we have always shipped with node-exporter disabled.
-
-  If a customer had explicitly enabled node-experter, a change to these selector
-  labels will mean that all customers must manually delete the Daemonset before
-  upgrading, which is a situation we don't want for our customers.
-
-  Instead, the `app.kubernetes.io/name` and `app.kubernetes.io/instance` labels
-  are included in the `prometheus-node-exporter.labels` block above.
-
 */}}
 {{- define "prometheus-node-exporter.selectorLabels" -}}
-{{/*app.kubernetes.io/name: {{ include "prometheus-node-exporter.name" . }}*/}}
-{{/*app.kubernetes.io/instance: {{ .Release.Name }}*/}}
-app: prometheus
-component: node-exporter
-release: {{ .Release.Name }}
+app.kubernetes.io/name: {{ include "prometheus-node-exporter.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 

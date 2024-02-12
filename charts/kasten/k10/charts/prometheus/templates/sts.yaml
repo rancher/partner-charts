@@ -62,7 +62,11 @@ spec:
       containers:
         {{- if .Values.configmapReload.prometheus.enabled }}
         - name: {{ template "prometheus.name" . }}-{{ .Values.server.name }}-{{ .Values.configmapReload.prometheus.name }}
-          image: "{{ include "get.cmreloadimage" .}}"
+          {{- if .Values.configmapReload.prometheus.image.digest }}
+          image: "{{ .Values.configmapReload.prometheus.image.repository }}@{{ .Values.configmapReload.prometheus.image.digest }}"
+          {{- else }}
+          image: "{{ .Values.configmapReload.prometheus.image.repository }}:{{ .Values.configmapReload.prometheus.image.tag }}"
+          {{- end }}
           imagePullPolicy: "{{ .Values.configmapReload.prometheus.image.pullPolicy }}"
           {{- with .Values.configmapReload.prometheus.containerSecurityContext }}
           securityContext:
@@ -106,7 +110,11 @@ spec:
         {{- end }}
 
         - name: {{ template "prometheus.name" . }}-{{ .Values.server.name }}
-          image: "{{ include "get.serverimage" .}}"
+          {{- if .Values.server.image.digest }}
+          image: "{{ .Values.server.image.repository }}@{{ .Values.server.image.digest }}"
+          {{- else }}
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag | default .Chart.AppVersion }}"
+          {{- end }}
           imagePullPolicy: "{{ .Values.server.image.pullPolicy }}"
           {{- with .Values.server.command }}
           command:
@@ -264,14 +272,9 @@ spec:
     {{- if .Values.server.dnsPolicy }}
       dnsPolicy: {{ .Values.server.dnsPolicy }}
     {{- end }}
-    {{- if (or .Values.global.imagePullSecret .Values.imagePullSecrets) }}
+    {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-      {{- if .Values.global.imagePullSecrets }}
-        - name: {{ .Values.global.imagePullSecret }}
-      {{- end }}
-      {{- if .Values.imagePullSecrets }}
 {{ toYaml .Values.imagePullSecrets | indent 8 }}
-      {{- end }}
     {{- end }}
     {{- if .Values.server.nodeSelector }}
       nodeSelector:
@@ -359,30 +362,24 @@ spec:
         {{- end }}
       spec:
         accessModes:
-      {{ toYaml .Values.server.persistentVolume.accessModes | indent 10 }}
+{{ toYaml .Values.server.persistentVolume.accessModes | indent 10 }}
         resources:
           requests:
             storage: "{{ .Values.server.persistentVolume.size }}"
-            {{- if .Values.server.persistentVolume.storageClass }}
-              {{- if (eq "-" .Values.server.persistentVolume.storageClass) }}
+      {{- if .Values.server.persistentVolume.storageClass }}
+      {{- if (eq "-" .Values.server.persistentVolume.storageClass) }}
         storageClassName: ""
-              {{- else }}
-        storageClassName: "{{ .Values.server.persistentVolume.storageClass }}"
-              {{- end }}
-            {{- else if .Values.global.persistence.storageClass }}
-              {{- if (eq "-" .Values.global.persistence.storageClass) }}
-        storageClassName: ""
-              {{- else }}
-        storageClassName: "{{ .Values.global.persistence.storageClass }}"
-              {{- end }}
-            {{- end }}
       {{- else }}
-          - name: storage-volume
-            emptyDir:
-                {{- if .Values.server.emptyDir.sizeLimit }}
-              sizeLimit: {{ .Values.server.emptyDir.sizeLimit }}
-                {{- else }}
-              { }
-                {{- end -}}
+        storageClassName: "{{ .Values.server.persistentVolume.storageClass }}"
       {{- end }}
       {{- end }}
+{{- else }}
+        - name: storage-volume
+          emptyDir:
+          {{- if .Values.server.emptyDir.sizeLimit }}
+            sizeLimit: {{ .Values.server.emptyDir.sizeLimit }}
+          {{- else }}
+            {}
+          {{- end -}}
+{{- end }}
+{{- end }}

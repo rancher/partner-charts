@@ -524,10 +524,16 @@ advertised-host returns a json string with the data needed for configuring the a
 {{- define "advertised-host" -}}
   {{- $host := dict "name" .externalName "address" .externalAdvertiseAddress "port" .port -}}
   {{- if .values.external.addresses -}}
-    {{- if ( .values.external.domain | default "" ) }}
-      {{- $host = dict "name" .externalName "address" (printf "%s.%s" (index .values.external.addresses .replicaIndex) (.values.external.domain)) "port" .port -}}
+    {{- $address := "" -}}
+    {{- if gt (len .values.external.addresses) 1 -}}
+      {{- $address = (index .values.external.addresses .replicaIndex) -}}
     {{- else -}}
-      {{- $host = dict "name" .externalName  "address" (index .values.external.addresses .replicaIndex) "port" .port -}}
+      {{- $address = (index .values.external.addresses 0) -}}
+    {{- end -}}
+    {{- if ( .values.external.domain | default "" ) }}
+      {{- $host = dict "name" .externalName "address" (printf "%s.%s" $address .values.external.domain) "port" .port -}}
+    {{- else -}}
+      {{- $host = dict "name" .externalName  "address" $address "port" .port -}}
     {{- end -}}
   {{- end -}}
   {{- toJson $host -}}
@@ -861,4 +867,27 @@ REDPANDA_SASL_USERNAME REDPANDA_SASL_PASSWORD REDPANDA_SASL_MECHANISM
     -}}
     {{- toJson (dict "bool" $requireClientAuth) -}}
   {{- end -}}
+{{- end -}}
+
+{{- define "storage-tiered-credentials-secret-key" -}}
+{{- $oldCondtion := (and .Values.storage.tiered.credentialsSecretRef.name .Values.storage.tiered.credentialsSecretRef.key) -}}
+{{- $newCondtion := (and .Values.storage.tiered.credentialsSecretRef.secretKey.name .Values.storage.tiered.credentialsSecretRef.secretKey.key) -}}
+{{- $configurationKey := (dig "configurationKey" "" .Values.storage.tiered.credentialsSecretRef) -}}
+{{- if empty $configurationKey -}}
+  {{- $configurationKey = .Values.storage.tiered.credentialsSecretRef.secretKey.configurationKey -}}
+{{- end -}}
+{{- $key := (dig "key" "" .Values.storage.tiered.credentialsSecretRef) -}}
+{{- if empty $key -}}
+  {{- $key = .Values.storage.tiered.credentialsSecretRef.secretKey.key -}}
+{{- end -}}
+{{- $name := (dig "name" "" .Values.storage.tiered.credentialsSecretRef) -}}
+{{- if empty $name -}}
+  {{- $name = .Values.storage.tiered.credentialsSecretRef.secretKey.name -}}
+{{- end -}}
+{{- toJson (dict
+  "bool" (or $oldCondtion $newCondtion)
+  "configurationKey" $configurationKey
+  "key" $key
+  "name" $name
+) -}}
 {{- end -}}

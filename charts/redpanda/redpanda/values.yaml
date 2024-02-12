@@ -93,12 +93,12 @@ auditLogging:
   # -- Enable or disable audit logging, for production clusters we suggest you enable,
   # however, this will only work if you also enable sasl and a listener with sasl enabled.
   enabled: false
-  # -- Kafka listener name, note that it must have `authenticationMethod` set to sasl
-  # 'internal' if using internal listener, else use external listener name, e.g., default.
+  # -- Kafka listener name, note that it must have `authenticationMethod` set to `sasl`.
+  # For external listeners, use the external listener name, such as `default`.
   listener: internal
   # -- Integer value defining the number of partitions used by a newly created audit topic.
   partitions: 12
-  # -- Event types that should be captured by audit logs, default is ["admin", "authenticate", "management"].
+  # -- Event types that should be captured by audit logs, default is [`admin`, `authenticate`, `management`].
   enabledEventTypes:
   # -- List of topics to exclude from auditing, default is null.
   excludedTopics:
@@ -113,7 +113,7 @@ auditLogging:
   # -- Defines the replication factor for a newly created audit log topic. This configuration applies
   # only to the audit log topic and may be different from the cluster or other topic configurations.
   # This cannot be altered for existing audit log topics. Setting this value is optional. If a value is not provided,
-  # Redpanda will use the internal_topic_replication_factor cluster config value. Default is null
+  # Redpanda will use the `internal_topic_replication_factor cluster` config value. Default is `null`
   replicationFactor:
 
 # -- Enterprise (optional)
@@ -267,6 +267,8 @@ external:
   # The number of brokers is defined in statefulset.replicas.
   # The values can be IP addresses or DNS names.
   # If external.domain is set, the domain is appended to these values.
+  # There is an option to define a single external address for all brokers and leverage
+  # prefixTemplate as it will be calculated during initContainer execution.
   # addresses:
   # - redpanda-0
   # - redpanda-1
@@ -417,7 +419,7 @@ storage:
   persistentVolume:
     enabled: true
     size: 20Gi
-    # -- To disable dynamic provisioning, set to "-".
+    # -- To disable dynamic provisioning, set to `-`.
     # If undefined or empty (default), then no storageClassName spec is set,
     # and the default dynamic provisioner is chosen (gp2 on AWS, standard on
     # GKE, AWS & OpenStack).
@@ -426,6 +428,9 @@ storage:
     labels: {}
     # -- Additional annotations to apply to the created PersistentVolumeClaims.
     annotations: {}
+    # -- Option to change volume claim template name for tiered storage persistent volume
+    # if tiered.mountType is set to `persistentVolume`
+    nameOverwrite: ""
   #
   # Settings for the Tiered Storage cache.
   # For details,
@@ -456,11 +461,25 @@ storage:
       # -- Additional annotations to apply to the created PersistentVolumeClaims.
       annotations: {}
 
-    # credentialsSecretRef can be used to set cloud_storage_secret_key from
+    # credentialsSecretRef can be used to set `cloud_storage_secret_key` and/or `cloud_storage_access_key` from
     # referenced Kubernetes Secret
-    credentialsSecretRef: {}
+    credentialsSecretRef:
+      accessKey:
+        # https://docs.redpanda.com/current/reference/cluster-properties/#cloud_storage_access_key
+        configurationKey: cloud_storage_access_key
+        # name:
+        # key:
+      secretKey:
+        # https://docs.redpanda.com/current/reference/cluster-properties/#cloud_storage_secret_key
+        # or
+        # https://docs.redpanda.com/current/reference/cluster-properties/#cloud_storage_azure_shared_key
+        configurationKey: cloud_storage_secret_key
+        # name:
+        # key
+      # -- DEPRECATED `configurationKey`, `name` and `key`. Please use `accessKey` and `secretKey`
+      # configurationKey: cloud_storage_secret_key
       # name:
-      # key
+      # key:
     #
     # -- Tiered Storage settings
     # Requires `enterprise.licenseKey` or `enterprised.licenseSecretRef`
@@ -476,21 +495,21 @@ storage:
       # -- Cluster level default remote read configuration for new topics.
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/tunable-properties/#cloud_storage_enable_remote_read).
       cloud_storage_enable_remote_read: true
-      # -- AWS or GCP region for where the bucket used for Tiered Storage is located (required for AWS and GCS).
+      # -- AWS or GCP region for where the bucket used for Tiered Storage is located (required for AWS and GCP).
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/cluster-properties/#cloud_storage_region).
       cloud_storage_region: ""
-      # -- AWS or GCP bucket name used for Tiered Storage (required for AWS and GCS).
+      # -- AWS or GCP bucket name used for Tiered Storage (required for AWS and GCP).
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/cluster-properties/#cloud_storage_bucket).
       cloud_storage_bucket: ""
-      # -- AWS or GCP access key (required for AWS and GCS authentication with access keys).
+      # -- AWS or GCP access key (required for AWS and GCP authentication with access keys).
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/cluster-properties/#cloud_storage_access_key).
       cloud_storage_access_key: ""
-      # -- AWS or GCP secret key (required for AWS and GCS authentication with access keys).
+      # -- AWS or GCP secret key (required for AWS and GCP authentication with access keys).
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/cluster-properties/#cloud_storage_secret_key).
       cloud_storage_secret_key: ""
       # -- AWS or GCP API endpoint.
-      # - For AWS, this can be left blank as it is generated automatically using the bucket and region (e.g. "<bucket>.s3.<region>.amazonaws.com")
-      # - For GCS, use "storage.googleapis.com"
+      # * For AWS, this can be left blank as it is generated automatically using the bucket and region. For example, `<bucket>.s3.<region>.amazonaws.com`.
+      # * For GCP, use `storage.googleapis.com`
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/cluster-properties/#cloud_storage_api_endpoint).
       cloud_storage_api_endpoint: ""
       # -- Name of the Azure container to use with Tiered Storage (required for ABS/ADLS).
@@ -508,11 +527,11 @@ storage:
       # Available starting from 23.2.8.
       # cloud_storage_azure_adls_endpoint: ""
       # cloud_storage_azure_adls_port: ""
-      # -- Source of credentials used to connect to cloud services (required for AWS and GCS authentication with IAM roles).
-      # - config_file
-      # - aws_instance_metadata
-      # - sts
-      # - gcp_instance_metadata
+      # -- Source of credentials used to connect to cloud services (required for AWS and GCP authentication with IAM roles).
+      # * `config_file`
+      # * `aws_instance_metadata`
+      # * `sts`
+      # * `gcp_instance_metadata`
       # See the [property reference documentation](https://docs.redpanda.com/docs/reference/cluster-properties/#cloud_storage_credentials_source).
       cloud_storage_credentials_source: config_file
 
@@ -584,6 +603,9 @@ post_upgrade_job:
   #   - secretRef:
   #       name: redpanda-aws-secrets
   affinity: {}
+  # When helm upgrade is performed the post-upgrade job is scheduled before Statefulset successfully finish
+  # its rollout. User can extend Job default backoff limit of `6`.
+  # backoffLimit:
 
 statefulset:
   # -- Number of Redpanda brokers (Redpanda Data recommends setting this to the number of worker nodes in the cluster)
@@ -613,7 +635,7 @@ statefulset:
   #
   # StatefulSet resources:
   # Resources are set through the top-level resources section above.
-  # It is recommended to set resources values in that section rather than here, as this will guarantee
+  # It is recommended to set resource values in that section rather than here, as this will guarantee
   # memory is allocated across containers, Redpanda, and the Seastar subsystem correctly.
   # This automatic memory allocation is in place because Repanda and the Seastar subsystem require flags
   # at startup that set the amount of memory available to each process.
@@ -637,12 +659,12 @@ statefulset:
     # Use `custom` if you want to supply your own anti-affinity rules in the `podAntiAffinity.custom` object.
     type: hard
     # -- Weight for `soft` anti-affinity rules.
-    # Does not apply for other anti-affinity types.
+    # Does not apply to other anti-affinity types.
     weight: 100
     # -- Change `podAntiAffinity.type` to `custom` and provide your own podAntiAffinity rules here.
     custom: {}
   # -- Node selection constraints for scheduling Pods of this StatefulSet.
-  # These constraints override the global nodeSelector value.
+  # These constraints override the global `nodeSelector` value.
   # For details,
   # see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector).
   nodeSelector: {}

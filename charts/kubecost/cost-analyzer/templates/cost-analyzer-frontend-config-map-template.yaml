@@ -1,5 +1,5 @@
 {{- if .Values.kubecostFrontend.enabled }}
-{{- if and (not .Values.agent) (not .Values.cloudAgent) }}
+{{- if and (not .Values.agent) (not .Values.cloudAgent) (not .Values.federatedETL.agentOnly) }}
 {{- $serviceName := include "cost-analyzer.serviceName" . -}}
 {{- if .Values.saml.enabled }}
 {{- if .Values.oidc.enabled }}
@@ -101,25 +101,22 @@ data:
     }
 {{- end }}
 
-  {{- if and (.Values.kubecostDeployment) (.Values.kubecostDeployment.queryServiceReplicas) (gt (.Values.kubecostDeployment.queryServiceReplicas | toString | atoi) 0) }}
-    upstream queryservice {
-        server {{ .Release.Name }}-query-service-load-balancer.{{ .Release.Namespace }}:9003;
+  {{- if .Values.forecasting.enabled }}
+    upstream forecasting {
+        server {{ .Release.Name }}-forecasting.{{ .Release.Namespace }}:5000;
     }
   {{- end }}
 
-  {{- if .Values.kubecostAggregator.enabled }}
+  {{- if and (not .Values.agent) (not .Values.cloudAgent) (not (eq (include "aggregator.deployMethod" .) "disabled")) }}
     upstream aggregator {
         server {{ .Release.Name }}-aggregator.{{ .Release.Namespace }}:9004;
     }
-  {{- end }}
-  {{- if .Values.kubecostAggregator.cloudCost.enabled }}
     upstream cloudCost {
-        server {{ template "cloudCost.fullname" . }}.{{ .Release.Namespace }}:9005;
+        server {{ template "cloudCost.serviceName" . }}.{{ .Release.Namespace }}:9005;
     }
   {{- end }}
-
     {{- if and .Values.diagnostics.enabled .Values.diagnostics.isDiagnosticsPrimary.enabled }}
-    {{- if or .Values.global.thanos.enabled (not (empty .Values.kubecostModel.federatedStorageConfigSecret )) }}
+    {{- if (not (empty .Values.kubecostModel.federatedStorageConfigSecret )) }}
     upstream multi-cluster-diagnostics {
         server {{ template "diagnostics.fullname" . }}.{{ .Release.Namespace }}:9007;
     }
@@ -252,7 +249,7 @@ data:
             proxy_connect_timeout       180;
             proxy_send_timeout          180;
             proxy_read_timeout          180;
-            proxy_pass http://model/oidc/;
+            proxy_pass http://aggregator/oidc/;
             proxy_redirect off;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
@@ -263,7 +260,7 @@ data:
             proxy_connect_timeout       180;
             proxy_send_timeout          180;
             proxy_read_timeout          180;
-            proxy_pass http://model/saml/;
+            proxy_pass http://aggregator/saml/;
             proxy_redirect off;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
@@ -274,7 +271,7 @@ data:
             proxy_connect_timeout       180;
             proxy_send_timeout          180;
             proxy_read_timeout          180;
-            proxy_pass http://model/login;
+            proxy_pass http://aggregator/login;
             proxy_redirect off;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
@@ -287,7 +284,7 @@ data:
             proxy_connect_timeout       180;
             proxy_send_timeout          180;
             proxy_read_timeout          180;
-            proxy_pass http://model/logout;
+            proxy_pass http://aggregator/logout;
             proxy_redirect off;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
@@ -309,65 +306,26 @@ data:
             proxy_set_header Host $http_host;
         }
     {{ end }}
-    {{- if or .Values.saml.enabled .Values.oidc.enabled }}
+    {{- if .Values.oidc.enabled }}
         location /auth {
-            proxy_pass http://model/isAuthenticated;
+            proxy_pass http://aggregator/isAuthenticated;
         }
-        {{- end }}
-        {{- if .Values.saml.rbac.enabled }}
+    {{- end }}
+    {{- if .Values.saml.enabled }}
+        location /auth {
+            proxy_pass http://aggregator/isAuthenticated;
+        }
+    {{- if .Values.saml.rbac.enabled }}
         location /authrbac {
-            proxy_pass http://model/isAdminAuthenticated;
+            proxy_pass http://aggregator/isAdminAuthenticated;
         }
     {{- end }}
-
-    # Query Service Replicas (QSR) proxy
-    {{- if and (.Values.kubecostDeployment) (.Values.kubecostDeployment.queryServiceReplicas) (gt (.Values.kubecostDeployment.queryServiceReplicas | toString | atoi) 0) }}
-
-      {{- if and (not .Values.agent) (not .Values.cloudAgent) (.Values.kubecostDeployment) (.Values.kubecostAggregator) .Values.kubecostAggregator.enabled }}
-      {{- fail "Query Service Replicas should not be used at the same time as the Kubecost Aggregator" }}
-      {{- end }}
-
-        location /model/allocation {
-            proxy_connect_timeout       {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_send_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_pass http://queryservice/allocation;
-            proxy_redirect off;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_set_header  X-Real-IP  $remote_addr;
-            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-
-        location /model/assets {
-            proxy_connect_timeout       {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_send_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_pass http://queryservice/assets;
-            proxy_redirect off;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_set_header  X-Real-IP  $remote_addr;
-            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-
-        # to get memory profile from query service need to prefix all request by queryservice/
-        # for example if you want heap dump from query service end point should be
-        # /model/queryservice/debug/pprof/heap to get queryservice heap dumps
-        location ~ /model/queryservice/(.*)$ {
-            proxy_connect_timeout       {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_send_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 600 }};
-            proxy_pass http://queryservice/$1;
-            proxy_redirect off;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_set_header  X-Real-IP  $remote_addr;
-            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
     {{- end }}
 
-{{- if and (not .Values.agent) (not .Values.cloudAgent) (.Values.kubecostDeployment) (.Values.kubecostAggregator) .Values.kubecostAggregator.enabled }}
+
+{{- if and (not .Values.agent) (not .Values.cloudAgent) (not (eq (include "aggregator.deployMethod" .) "disabled")) }}
+    # TODO make aggregator route the default, start special-casing
+    # cost-model APIs
 
     # Aggregator proxy
     {{- if and (.Values.kubecostDeployment) (.Values.kubecostDeployment.queryServiceReplicas) (gt (.Values.kubecostDeployment.queryServiceReplicas | toString | atoi) 0) }}
@@ -585,6 +543,14 @@ data:
             proxy_set_header  X-Real-IP  $remote_addr;
             proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
         }
+        location = /model/savings/persistentVolumeSizing/topline {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/savings/persistentVolumeSizing/topline;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
         location = /model/reports/allocation {
             proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
             proxy_pass http://aggregator/reports/allocation;
@@ -651,25 +617,193 @@ data:
             proxy_set_header  X-Real-IP  $remote_addr;
             proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
         }
-    {{- end }}
+        location = /model/collection {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collections {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collections;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collection/query/total {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection/query/total;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collection/query/timeseries {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection/query/timeseries;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collection/query/complement {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection/query/complement;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collection/query/complement/cloud {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection/query/complement/cloud;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collection/query/complement/kubernetes {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection/query/complement/kubernetes;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
 
-        location = /model/hideOrphanedResources {
-            default_type 'application/json';
-            {{- if .Values.kubecostFrontend.hideOrphanedResources }}
-            return 200 '{"hideOrphanedResources": "true"}';
-            {{- else }}
-            return 200 '{"hideOrphanedResources": "false"}';
-            {{- end }}
+        location = /model/collections/query/total {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collections/query/total;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
         }
-        location = /model/hideDiagnostics {
-            default_type 'application/json';
-            {{- if .Values.kubecostFrontend.hideDiagnostics }}
-            return 200 '{"hideDiagnostics": "true"}';
-            {{- else }}
-            return 200 '{"hideDiagnostics": "false"}';
-            {{- end }}
+        location = /model/collections/query/timeseries {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collections/query/timeseries;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
         }
-    {{- if .Values.kubecostAggregator.cloudCost.enabled }}
+        location = /model/collections/query/complement {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collections/query/complement;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collections/query/complement/cloud {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collections/query/complement/cloud;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collections/query/complement/kubernetes {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collections/query/complement/kubernetes;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/collection/cache/status {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/collection/cache/status;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/networkinsights {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/networkinsights;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/networkinsights/graph {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/networkinsights/graph;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/rbacGroups {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/rbacGroups;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/teams {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/teams;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/team {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/team;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/users {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/users;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/user {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/user;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/debug/orchestrator {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/debug/orchestrator;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/prediction/speccost {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/prediction/speccost;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location = /model/diagnostic/coreCount {
+            proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
+            proxy_pass http://aggregator/diagnostic/coreCount;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        #Cloud Cost Endpoints
         location = /model/cloudCost/status {
             proxy_read_timeout          {{ .Values.kubecostFrontend.timeoutSeconds | default 300 }};
             proxy_pass http://cloudCost/cloudCost/status;
@@ -718,7 +852,27 @@ data:
             proxy_set_header  X-Real-IP  $remote_addr;
             proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
         }
-    {{- end }}
+{{- end }}
+        location = /model/hideOrphanedResources {
+            default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
+            {{- if .Values.kubecostFrontend.hideOrphanedResources }}
+            return 200 '{"hideOrphanedResources": "true"}';
+            {{- else }}
+            return 200 '{"hideOrphanedResources": "false"}';
+            {{- end }}
+        }
+        location = /model/hideDiagnostics {
+            default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
+            {{- if .Values.kubecostFrontend.hideDiagnostics }}
+            return 200 '{"hideDiagnostics": "true"}';
+            {{- else }}
+            return 200 '{"hideDiagnostics": "false"}';
+            {{- end }}
+        }
 
         {{- if .Values.kubecostFrontend.trendsDisabled }}
         location /model/allocation/trends {
@@ -728,8 +882,10 @@ data:
 
         location /model/multi-cluster-diagnostics-enabled {
             default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
             {{- if and .Values.diagnostics.enabled .Values.diagnostics.isDiagnosticsPrimary.enabled }}
-            {{- if or .Values.global.thanos.enabled (not (empty .Values.kubecostModel.federatedStorageConfigSecret )) }}
+            {{- if (not (empty .Values.kubecostModel.federatedStorageConfigSecret )) }}
             return 200 '{"multi-cluster-diagnostics-enabled": "true"}';
             {{- end }}
             {{- else }}
@@ -737,9 +893,11 @@ data:
             {{- end }}
         }
         {{- if and .Values.diagnostics.enabled .Values.diagnostics.isDiagnosticsPrimary.enabled }}
-        {{- if or .Values.global.thanos.enabled (not (empty .Values.kubecostModel.federatedStorageConfigSecret )) }}
+        {{- if (not (empty .Values.kubecostModel.federatedStorageConfigSecret )) }}
         location /model/multi-cluster-diagnostics {
             default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
             proxy_read_timeout          300;
             proxy_pass http://multi-cluster-diagnostics/status;
             proxy_redirect off;
@@ -750,6 +908,8 @@ data:
         # simple alias for support
         location /model/mcd {
             default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
             proxy_read_timeout          300;
             proxy_pass http://multi-cluster-diagnostics/status?window=7d;
             proxy_redirect off;
@@ -762,13 +922,35 @@ data:
 
         location /model/aggregatorEnabled {
             default_type 'application/json';
-            {{- if .Values.kubecostAggregator.enabled }}
             return 200 '{"aggregatorEnabled": "true"}';
-            {{- else }}
-            return 200 '{"aggregatorEnabled": "false"}';
-            {{- end }}
         }
 
+        {{- if .Values.forecasting.enabled }}
+        location /forecasting {
+            default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
+            proxy_read_timeout          300;
+            proxy_pass http://forecasting/;
+            proxy_redirect off;
+            proxy_set_header Connection "";
+            proxy_set_header  X-Real-IP  $remote_addr;
+            proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        {{- else }}
+        location /forecasting {
+            default_type 'application/json';
+            return 405 '{"forecastingEnabled": "false"}';
+        }
+        {{- end }}
+        location /model/productConfigs {
+            default_type 'application/json';
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, PUT, POST, DELETE, OPTIONS' always;
+            return 200 '\n
+                {"ssoConfigured": "{{ template "ssoEnabled" . }}"}\n
+            ';
+        }
     }
 {{- end }}
 {{- end }}

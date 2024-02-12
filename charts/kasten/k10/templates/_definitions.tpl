@@ -35,8 +35,8 @@ crypto:
 dashboardbff:
 - vbrintegrationapi
 state:
-- admin
 - events
+- admin
 {{- end -}}
 {{- define "k10.aggregatedAPIs" -}}actions apps repositories vault{{- end -}}
 {{- define "k10.configAPIs" -}}config{{- end -}}
@@ -212,8 +212,9 @@ state-svc:
 {{- define "k10.aggAuditPolicyFile" -}}agg-audit-policy.yaml{{- end -}}
 {{- define "k10.siemAuditLogFilePath" -}}-{{- end -}}
 {{- define "k10.siemAuditLogFileSize" -}}100{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.104.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.105.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}
 {{- define "k10.gatewayPrefixVarName" -}}GATEWAY_PREFIX{{- end -}}
 {{- define "k10.gatewayRequestHeadersVarName" -}}GATEWAY_REQUEST_HEADERS{{- end -}}
 {{- define "k10.gatewayAuthHeadersVarName" -}}GATEWAY_AUTH_HEADERS{{- end -}}
+{{- define "k10.gatewayPortVarName" -}}GATEWAY_PORT{{- end -}}

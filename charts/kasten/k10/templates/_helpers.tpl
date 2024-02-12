@@ -9,10 +9,6 @@
     {{- end -}}
   {{- end -}}
 
-  {{- if not .Values.gateway.next_gen -}}
-    {{- $disabledServices = append $disabledServices "gateway" -}}
-  {{- end -}}
-
   {{- $disabledServices | join " " -}}
 {{- end -}}
 
@@ -1002,15 +998,15 @@ running in the same cluster.
     {{- fail (printf "Unsupported image format: %q (%s)" .image .path) -}}
   {{- end -}}
 
-  {{- $hash := $split_repo_tag_and_hash | rest | first -}}
+  {{- $digest := $split_repo_tag_and_hash | rest | first -}}
   {{- $tag := $split_repo_and_tag | rest | first -}}
 
   {{- $sha := "" -}}
-  {{- if $hash -}}
-    {{- if not ($hash | hasPrefix "sha256:") -}}
+  {{- if $digest -}}
+    {{- if not ($digest | hasPrefix "sha256:") -}}
       {{- fail (printf "Unsupported image ...@hash type: %q (%s)" .image .path) -}}
     {{- end -}}
-    {{- $sha = $hash | trimPrefix "sha256:" }}
+    {{- $sha = $digest | trimPrefix "sha256:" }}
   {{- end -}}
 
   {{- /* Split out the registry if the first component of the repo contains a "." */ -}}
@@ -1027,6 +1023,7 @@ running in the same cluster.
       "registry" $registry
       "repository" $repo
       "tag" ($tag | default "")
+      "digest" ($digest | default "")
       "sha" ($sha | default "")
     ) | toJson
   -}}

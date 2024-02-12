@@ -890,6 +890,9 @@ The name of the Service which will be used by the controller to update the Ingre
     containerPort: 10255
     protocol: TCP
   {{- end }}
+  - name: status
+    containerPort: 10254
+    protocol: TCP
   env:
   - name: POD_NAME
     valueFrom:
@@ -1155,7 +1158,9 @@ the template that it itself is using form the above sections.
 {{- end }}
 {{- end }}
 
+{{- if (.Values.plugins) }}
 {{- $_ := set $autoEnv "KONG_PLUGINS" (include "kong.plugins" .) -}}
+{{- end }}
 
 {{/*
     ====== USER-SET ENVIRONMENT VARIABLES ======
@@ -1644,6 +1649,24 @@ of a Role or ClusterRole) that provide the ingress controller access to the
 Kubernetes Cluster-scoped resources it uses to build Kong configuration.
 */}}
 {{- define "kong.kubernetesRBACClusterRules" -}}
+{{- if (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongvaults
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongvaults/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 - apiGroups:
   - configuration.konghq.com
   resources:
