@@ -890,7 +890,7 @@ The name of the Service which will be used by the controller to update the Ingre
     containerPort: 10255
     protocol: TCP
   {{- end }}
-  - name: status
+  - name: cstatus
     containerPort: 10254
     protocol: TCP
   env:
@@ -1641,6 +1641,24 @@ resource roles into their separate templates.
   - get
   - list
   - watch
+{{- if (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - konglicenses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - konglicenses/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}
 {{- end -}}
 
 {{/*

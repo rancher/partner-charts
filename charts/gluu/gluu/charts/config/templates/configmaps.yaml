@@ -146,8 +146,10 @@ data:
   CN_HYBRID_MAPPING: {{ .Values.configmap.cnPersistenceHybridMapping | quote }}
   {{- end }}
   # Auto enable installation of some services
-  {{ if eq .Values.configmap.cnCacheType "REDIS" }}
+  {{ if or (eq .Values.configmap.cnCacheType "REDIS") (eq .Values.configmap.cnMessageType "REDIS") }}
   CN_REDIS_URL: {{ .Values.configmap.cnRedisUrl | quote }}
+  {{- end }}
+  {{ if eq .Values.configmap.cnCacheType "REDIS" }}
   CN_REDIS_TYPE: {{ .Values.configmap.cnRedisType | quote }}
   CN_REDIS_USE_SSL: {{ .Values.configmap.cnRedisUseSsl | quote }}
   CN_REDIS_SSL_TRUSTSTORE: {{ .Values.configmap.cnRedisSslTruststore | quote }}
@@ -194,7 +196,6 @@ data:
   {{- if index .Values "global" "admin-ui" "enabled" }}
   # ADMIN-UI
   ADMIN_UI_JWKS: {{ cat "http://" ( index .Values "global" "auth-server" "authServerServiceName" ) ":8080/jans-auth/restv1/jwks" | quote | nospace }}
-  CN_CONFIG_API_PLUGINS: "admin-ui,scim,fido2,user-mgt"
   CN_ADMIN_UI_PLUGIN_LOGGERS: {{ index .Values "global" "config-api" "adminUiAppLoggers"
   | toJson
   | replace "adminUiLogTarget" "admin_ui_log_target"
@@ -205,9 +206,8 @@ data:
   | squote
   }}
   {{- end }}
-  {{- if .Values.global.casa.enabled }}
-  # CASA
-  CN_CASA_APP_LOGGERS: {{ .Values.global.casa
+  {{- if .Values.global.casa.enabled}}  # CASA
+  CN_CASA_APP_LOGGERS: {{ .Values.global.casa.appLoggers
   | toJson
   | replace "casaLogTarget" "casa_log_target"
   | replace "casaLogLevel" "casa_log_level"
@@ -228,6 +228,24 @@ data:
   CN_LDAP_KEY_FILE: {{ .Values.global.cnLdapKeyFile }}
   CN_LDAP_CACERT_FILE: {{ .Values.global.cnLdapCacertFile }}
   CN_LDAP_TRUSTSTORE_FILE: {{ .Values.global.cnLdapTruststoreFile }}
+  CN_CONFIG_API_PLUGINS: {{ index .Values "global" "config-api" "plugins" | quote  }}
+  {{- if .Values.global.saml.enabled }}
+  QUARKUS_TRANSACTION_MANAGER_ENABLE_RECOVERY: {{ .Values.configmap.quarkusTransactionEnableRecovery | quote }}
+  KC_LOG_LEVEL: {{ .Values.configmap.kcLogLevel | quote }}
+  KC_PROXY: {{ .Values.configmap.kcProxy | quote }}
+  KC_DB: {{ .Values.configmap.kcDbVendor | quote }}
+  KC_DB_USERNAME: {{ .Values.configmap.kcDbUsername | quote }}
+  KC_DB_SCHEMA: {{ .Values.configmap.kcDbSchema | quote }}
+  KC_DB_URL_HOST: {{ .Values.configmap.kcDbUrlHost | quote }}
+  KC_DB_URL_PORT: {{ .Values.configmap.kcDbUrlPort | quote }}
+  KC_DB_URL_DATABASE: {{ .Values.configmap.kcDbUrlDatabase | quote }}
+  KC_DB_URL_PROPERTIES: {{ .Values.configmap.kcDbUrlProperties | quote }}
+  CN_SAML_KC_DB_PASSWORD_FILE: {{ .Values.global.kcDbPasswordFile | quote }}
+  CN_SAML_KC_ADMIN_CREDENTIALS_FILE: {{ .Values.global.kcAdminCredentialsFile | quote }}
+  {{- end }}
+  CN_LOCK_ENABLED: {{ index .Values "global" "auth-server" "lockEnabled" | quote }}
+  CN_OPA_URL: {{ .Values.configmap.cnOpaUrl | quote }}
+  CN_MESSAGE_TYPE: {{ .Values.configmap.cnMessageType | quote }}
 ---
 
 apiVersion: v1

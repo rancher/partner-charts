@@ -1,6 +1,6 @@
 # nginx-ingress
 
-![Version: 5.0.24](https://img.shields.io/badge/Version-5.0.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.0](https://img.shields.io/badge/AppVersion-5.0.0-informational?style=flat-square)
+![Version: 5.0.25](https://img.shields.io/badge/Version-5.0.25-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.0.22](https://img.shields.io/badge/AppVersion-5.0.22-informational?style=flat-square)
 
 Nginx ingress definitions chart
 
@@ -10,7 +10,7 @@ Nginx ingress definitions chart
 
 | Name | Email | Url |
 | ---- | ------ | --- |
-| Mohammad Abudayyeh | <support@gluu.org> | <https://github.com/moabu> |
+| Mohammad Abudayyeh | <team@gluu.org> | <https://github.com/moabu> |
 
 ## Source Code
 
@@ -27,11 +27,13 @@ Kubernetes: `>=v1.21.0-0`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | fullnameOverride | string | `""` |  |
-| ingress | object | `{"additionalAnnotations":{},"additionalLabels":{},"authServerAdditionalAnnotations":{},"authServerLabels":{},"deviceCodeAdditionalAnnotations":{},"deviceCodeLabels":{},"enabled":true,"fido2ConfigAdditionalAnnotations":{},"fido2ConfigLabels":{},"fido2Enabled":false,"fido2Labels":{},"firebaseMessagingAdditionalAnnotations":{},"firebaseMessagingLabels":{},"hosts":["demoexample.gluu.org"],"ingressClassName":"nginx","legacy":false,"openidAdditionalAnnotations":{},"openidConfigLabels":{},"path":"/","scimAdditionalAnnotations":{},"scimConfigAdditionalAnnotations":{},"scimConfigLabels":{},"scimLabels":{},"tls":[{"hosts":["demoexample.gluu.org"],"secretName":"tls-certificate"}],"u2fAdditionalAnnotations":{},"u2fConfigLabels":{},"uma2AdditionalAnnotations":{},"uma2ConfigLabels":{},"webdiscoveryAdditionalAnnotations":{},"webdiscoveryLabels":{},"webfingerAdditionalAnnotations":{},"webfingerLabels":{}}` | Nginx ingress definitions chart |
+| ingress | object | `{"additionalAnnotations":{},"additionalLabels":{},"authServerAdditionalAnnotations":{},"authServerLabels":{},"casaAdditionalAnnotations":{},"casaLabels":{},"deviceCodeAdditionalAnnotations":{},"deviceCodeLabels":{},"enabled":true,"fido2ConfigAdditionalAnnotations":{},"fido2ConfigLabels":{},"fido2Enabled":false,"fido2Labels":{},"firebaseMessagingAdditionalAnnotations":{},"firebaseMessagingLabels":{},"hosts":["demoexample.gluu.org"],"ingressClassName":"nginx","legacy":false,"openidAdditionalAnnotations":{},"openidConfigLabels":{},"path":"/","samlAdditionalAnnotations":{},"samlLabels":{},"scimAdditionalAnnotations":{},"scimConfigAdditionalAnnotations":{},"scimConfigLabels":{},"scimLabels":{},"tls":[{"hosts":["demoexample.gluu.org"],"secretName":"tls-certificate"}],"u2fAdditionalAnnotations":{},"u2fConfigLabels":{},"uma2AdditionalAnnotations":{},"uma2ConfigLabels":{},"webdiscoveryAdditionalAnnotations":{},"webdiscoveryLabels":{},"webfingerAdditionalAnnotations":{},"webfingerLabels":{}}` | Nginx ingress definitions chart |
 | ingress.additionalAnnotations | object | `{}` | Additional annotations that will be added across all ingress definitions in the format of {cert-manager.io/issuer: "letsencrypt-prod"}. key app is taken Enable client certificate authentication nginx.ingress.kubernetes.io/auth-tls-verify-client: "optional" Create the secret containing the trusted ca certificates nginx.ingress.kubernetes.io/auth-tls-secret: "gluu/tls-certificate" Specify the verification depth in the client certificates chain nginx.ingress.kubernetes.io/auth-tls-verify-depth: "1" Specify if certificates are passed to upstream server nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "true" |
 | ingress.additionalLabels | object | `{}` | Additional labels that will be added across all ingress definitions in the format of {mylabel: "myapp"} |
 | ingress.authServerAdditionalAnnotations | object | `{}` | Auth server ingress resource additional annotations. |
 | ingress.authServerLabels | object | `{}` | Auth server config ingress resource labels. key app is taken |
+| ingress.casaAdditionalAnnotations | object | `{}` | Casa ingress resource additional annotations. |
+| ingress.casaLabels | object | `{}` | Casa ingress resource labels. key app is taken |
 | ingress.deviceCodeAdditionalAnnotations | object | `{}` | device-code ingress resource additional annotations. |
 | ingress.deviceCodeLabels | object | `{}` | device-code ingress resource labels. key app is taken |
 | ingress.fido2ConfigAdditionalAnnotations | object | `{}` | fido2 config ingress resource additional annotations. |
@@ -43,6 +45,8 @@ Kubernetes: `>=v1.21.0-0`
 | ingress.legacy | bool | `false` | Enable use of legacy API version networking.k8s.io/v1beta1 to support kubernetes 1.18. This flag should be removed next version release along with nginx-ingress/templates/ingress-legacy.yaml. |
 | ingress.openidAdditionalAnnotations | object | `{}` | openid-configuration ingress resource additional annotations. |
 | ingress.openidConfigLabels | object | `{}` | openid-configuration ingress resource labels. key app is taken |
+| ingress.samlAdditionalAnnotations | object | `{}` | SAML ingress resource additional annotations. |
+| ingress.samlLabels | object | `{}` | SAML config ingress resource labels. key app is taken |
 | ingress.scimAdditionalAnnotations | object | `{}` | SCIM ingress resource additional annotations. |
 | ingress.scimConfigAdditionalAnnotations | object | `{}` | SCIM config ingress resource additional annotations. |
 | ingress.scimConfigLabels | object | `{}` | webdiscovery ingress resource labels. key app is taken |
@@ -58,4 +62,4 @@ Kubernetes: `>=v1.21.0-0`
 | nameOverride | string | `""` |  |
 
 ----------------------------------------------
-Autogenerated from chart metadata using [helm-docs v1.11.0](https://github.com/norwoodj/helm-docs/releases/v1.11.0)
+Autogenerated from chart metadata using [helm-docs v1.12.0](https://github.com/norwoodj/helm-docs/releases/v1.12.0)
