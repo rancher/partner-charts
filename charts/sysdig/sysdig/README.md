@@ -237,7 +237,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeAnalyzer.imageAnalyzer.env`                             | The extra environment variables that will be passed onto pods. | `{}`                                                         |
 | `nodeAnalyzer.hostAnalyzer.deploy`                           | Deploys the Host Analyzer.                                   | `true    `                                                   |
 | `nodeAnalyzer.hostAnalyzer.image.repository`                 | The image repository to pull the Host Analyzer from.         | `sysdig/host-analyzer`                                       |
-| `nodeAnalyzer.hostAnalyzer.image.tag`                        | The image tag to pull the Host Analyzer.                     | `0.1.18`                                                     |
+| `nodeAnalyzer.hostAnalyzer.image.tag`                        | The image tag to pull the Host Analyzer.                     | `0.1.19`                                                     |
 | `nodeAnalyzer.hostAnalyzer.image.digest`                     | The image digest to pull.                                    | ` `                                                          |
 | `nodeAnalyzer.hostAnalyzer.image.pullPolicy`                 | The Image pull policy for the Host Analyzer.                 | `IfNotPresent`                                               |
 | `nodeAnalyzer.hostAnalyzer.schedule`                         | The scanning schedule specification for the host analyzer expressed as a crontab. | `@dailydefault`                                              |

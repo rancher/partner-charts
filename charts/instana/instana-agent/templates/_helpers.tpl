@@ -183,6 +183,8 @@ Composes a container image from a dict containing a "name" field (required), "ta
 
 
 {{- define "instana-agent.commonEnv" -}}
+- name: INSTANA_AGENT_LEADER_ELECTOR_PORT
+  value: {{ .Values.leaderElector.port | quote }}
 {{- if .Values.zone.name }}
 - name: INSTANA_ZONE
   value: {{ .Values.zone.name | quote }}
@@ -310,6 +312,35 @@ initialDelaySeconds: 600 # startupProbe isnt available before K8s 1.16
 timeoutSeconds: 5
 periodSeconds: 10
 failureThreshold: 3
+{{- end -}}
+
+{{- define "leader-elector.container" -}}
+- name: leader-elector
+  image: {{ include "image" .Values.leaderElector.image | quote }}
+  env:
+    - name: INSTANA_AGENT_POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+  command:
+    - "/busybox/sh"
+    - "-c"
+    - "sleep 12 && /app/server --election=instana --http=localhost:{{ .Values.leaderElector.port }} --id=$(INSTANA_AGENT_POD_NAME)"
+  resources:
+    requests:
+      cpu: 0.1
+      memory: "64Mi"
+  livenessProbe:
+    httpGet: # Leader elector /health endpoint expects version 0.5.8 minimum, otherwise always returns 200 OK
+      host: 127.0.0.1 # localhost because Pod has hostNetwork=true
+      path: /health
+      port: {{ .Values.leaderElector.port }}
+    initialDelaySeconds: 30
+    timeoutSeconds: 3
+    periodSeconds: 3
+    failureThreshold: 3
+  ports:
+    - containerPort: {{ .Values.leaderElector.port }}
 {{- end -}}
 
 {{- define "instana-agent.tls-volume" -}}

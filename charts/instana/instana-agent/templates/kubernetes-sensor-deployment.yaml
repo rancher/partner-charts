@@ -75,6 +75,23 @@ spec:
               {{- include "instana-agent.resources" .Values.kubernetes.deployment.pod.limits | nindent 14 }}
           ports:
             - containerPort: 42699
+        - name: leader-elector
+          image: {{ include "image" .Values.leaderElector.image | quote }}
+          env:
+            - name: INSTANA_AGENT_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command:
+            - "/busybox/sh"
+            - "-c"
+            - "sleep 12 && /app/server --election=instana --http=localhost:{{ .Values.leaderElector.port }} --id=$(INSTANA_AGENT_POD_NAME)"
+          resources:
+            requests:
+              cpu: 0.1
+              memory: "64Mi"
+          ports:
+            - containerPort: {{ .Values.leaderElector.port }}
       {{- if .Values.kubernetes.deployment.pod.tolerations }}
       tolerations:
         {{- toYaml .Values.kubernetes.deployment.pod.tolerations | nindent 8 }}

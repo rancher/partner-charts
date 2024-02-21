@@ -1,0 +1,29 @@
+#Test for dxemssql
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  labels:
+    {{- include "dxenterprisesqlag.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: dxe
+    image: "{{ .Values.dxEnterpriseContainer.repository }}:{{ .Values.dxEnterpriseContainer.tag | default .Chart.AppVersion }}"
+    imagePullPolicy: {{ .Values.dxEnterpriseContainer.pullPolicy }}
+    env:
+    - name: DX_TARGET_HOSTNAME
+      value: "{{ .Release.Name }}-0"
+    - name: DX_PASSKEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.dxEnterpriseContainer.clusterSecret }}
+          key: DX_PASSKEY
+    - name: DX_VHOST_NAME
+      value: {{ .Values.dxEnterpriseContainer.vhostName | upper | quote }}
+    - name: DX_AG_NAME
+      value: {{ .Values.availabilityGroupName | upper | quote }}
+    command: ["/bin/bash"]
+    args: ["-c", "/opt/dh2i/sbin/helm-test.sh"]
