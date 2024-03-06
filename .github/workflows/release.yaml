@@ -1,0 +1,32 @@
+name: Release Partner Charts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Update main-source branch
+      run: |
+        scripts/pull-ci-scripts
+        bin/partner-charts-ci auto
+        git push origin main-source
+
+    - name: Update main branch
+      run: |
+        # checkout action only fetches main-source, so we need to fetch main branch also
+        git fetch origin main --depth 1
+        git checkout main
+        git checkout main-source -- index.yaml assets
+        git commit -m "Release partner charts"
+        git push origin main
