@@ -1,0 +1,41 @@
+name: Auto-update charts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Update main-source branch
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_WORKFLOW: ${{ github.workflow }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: |
+        scripts/pull-ci-scripts
+        BRANCH="auto-update/$(date '+%s')"
+        git checkout -b "$BRANCH"
+        bin/partner-charts-ci auto
+
+        # exit if there are no changes
+        git diff --quiet main-source "$BRANCH" && exit 0
+
+        # close all existing PRs from branches starting with "auto-update"
+        gh pr --repo "$GITHUB_REPOSITORY" list --search 'head:auto-update' --json 'headRefName' --jq '.[] | join("\n")' | \
+          xargs -n 1 gh pr --repo "$GITHUB_REPOSITORY" close
+
+        # push changes
+        git push --set-upstream origin "$BRANCH"
+        TITLE="Auto-update charts on main-source"
+        BODY="This PR was created by the \"$GITHUB_WORKFLOW\" workflow. It auto-updates the helm charts on the main-source branch."
+        gh pr create --repo "$GITHUB_REPOSITORY" --base main-source --head "$BRANCH" --title "$TITLE" --body "$BODY"
