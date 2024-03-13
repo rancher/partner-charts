@@ -319,6 +319,34 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterPodPushgatewayMetricsInterval
+{{- if .Values.kanisterPodMetricSidecar.resources.requests.memory }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_REQUEST
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMemoryRequest
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.requests.cpu }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_REQUEST
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarCPURequest
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.limits.memory }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_LIMIT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMemoryLimit
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.limits.cpu }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_LIMIT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarCPULimit
+{{- end }}
 
 {{- end }}
           - name: LOG_LEVEL
@@ -579,7 +607,12 @@ stating that types are not same for the equality check
           - name: K10_MUTATING_WEBHOOK_PORT
             value: {{ .Values.injectKanisterSidecar.webhookServer.port | quote }}
 {{- end }}
-{{- if (list "controllermanager" "kanister" "executor" "dashboardbff"  | has $service) }}
+{{- if (list "controllermanager" "kanister" "executor" "dashboardbff" "repositories" | has $service) }}
+          - name: K10_DEFAULT_PRIORITY_CLASS_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10DefaultPriorityClassName
 {{- if .Values.genericVolumeSnapshot.resources.requests.memory }}
           - name: KANISTER_TOOLS_MEMORY_REQUESTS
             valueFrom:
@@ -627,13 +660,15 @@ stating that types are not same for the equality check
             value: {{ .Values.global.prometheus.external.baseURL }}
         {{- end -}}
     {{- end }}
-          - name: K10_GRAFANA_ENABLED
-            value: {{ .Values.grafana.enabled | quote }}
+        {{- if .Values.grafana.enabled }}
+          - name: GRAFANA_URL
+            value: {{ include "k10.prefixPath" . }}/grafana/
+        {{- end }}
 {{- end }}
 {{- if eq $service "dashboardbff" }}
-    {{- with .Values.global.persistence.diskSpaceAlertPercent }}
+    {{- if ne .Values.global.persistence.diskSpaceAlertPercent nil }}
           - name: K10_DISK_SPACE_ALERT_PERCENT
-            value: {{ . | quote }}
+            value: {{ .Values.global.persistence.diskSpaceAlertPercent | quote }}
     {{- end -}}
 {{- end -}}
 {{- if or $.stateful (or (eq (include "check.googlecreds" .) "true") (eq $service "auth" "logging")) }}
@@ -732,6 +767,22 @@ stating that types are not same for the equality check
         image: {{ include "get.dexImage" . }}
 {{- if .Values.auth.ldap.enabled }}
         command: ["/usr/local/bin/dex", "serve", "/dex-config/config.yaml"]
+{{- else if .Values.auth.openshift.enabled }}
+        {{- /*
+        In the case of OpenShift, a template config is used instead of a plain config for Dex.
+        It requires a different command to be processed correctly.
+        */}}
+        command: ["/usr/local/bin/docker-entrypoint", "dex", "serve", "/etc/dex/cfg/config.yaml"]
+        env:
+          - name: {{ include "k10.openShiftClientSecretEnvVar" . }}
+{{- if .Values.auth.openshift.clientSecretName }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.auth.openshift.clientSecretName }}
+                key: token
+{{- else }}
+            value: {{ .Values.auth.openshift.clientSecret }}
+{{- end }}
 {{- else }}
         command: ["/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"]
 {{- end }}

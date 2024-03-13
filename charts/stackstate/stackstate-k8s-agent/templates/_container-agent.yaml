@@ -79,8 +79,9 @@
       value: {{ .Values.processAgent.checkIntervals.process | quote }}
     - name: STS_PROCESS_AGENT_URL
       value: {{ include "stackstate-k8s-agent.stackstate.url" . }}
+
     - name: STS_SKIP_SSL_VALIDATION
-      value: {{ .Values.nodeAgent.skipSslValidation | quote }}
+      value: {{ or .Values.global.skipSslValidation .Values.nodeAgent.skipSslValidation | quote }}
     - name: STS_SKIP_KUBELET_TLS_VERIFY
       value: {{ .Values.nodeAgent.skipKubeletTLSVerify | quote }}
     - name: STS_STS_URL
@@ -89,9 +90,11 @@
     - name: STS_CRI_SOCKET_PATH
       value: {{ .Values.nodeAgent.containerRuntime.customSocketPath }}
     {{- end }}
-    {{- range $key, $value := .Values.nodeAgent.containers.agent.env }}
-    - name: {{ $key }}
-      value: {{ $value | quote }}
+    {{- if .Values.global.proxy.url }}
+    - name: STS_PROXY_HTTPS
+      value: {{ .Values.global.proxy.url | quote }}
+    - name: STS_PROXY_HTTP
+      value: {{ .Values.global.proxy.url | quote }}
     {{- end }}
     {{- range $key, $value := .Values.global.extraEnv.open }}
     - name: {{ $key }}
@@ -103,6 +106,10 @@
         secretKeyRef:
           name: {{ include "stackstate-k8s-agent.fullname" . }}
           key: {{ $key }}
+    {{- end }}
+    {{- range $key, $value := .Values.nodeAgent.containers.agent.env }}
+    - name: {{ $key }}
+      value: {{ $value | quote }}
     {{- end }}
   {{- if .Values.nodeAgent.containers.agent.livenessProbe.enabled }}
   livenessProbe:

@@ -1,6 +1,7 @@
 {{/* Generate service spec */}}
 {{- define "k10-default" }}
 {{- $service := .k10_service }}
+{{- $deploymentName := (printf "%s-svc" $service) }}
 {{- with .main }}
 {{- $main_context := . }}
 {{- range $skip, $statefulContainer := compact (dict "main" $main_context "k10_service_pod" $service | include "get.statefulRestServicesInPod" | splitList " ") }}
@@ -31,7 +32,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: {{ $service }}-svc
+  name: {{ $deploymentName }}
   labels:
 {{ include "helm.labels" . | indent 4 }}
     component: {{ $service }}
@@ -43,7 +44,7 @@ spec:
     matchLabels:
 {{ include "k10.common.matchLabels" . | indent 6 }}
       component: {{ $service }}
-      run: {{ $service }}-svc
+      run: {{ $deploymentName }}
   template:
     metadata:
       annotations:
@@ -56,7 +57,7 @@ spec:
       labels:
 {{ include "helm.labels" . | indent 8 }}
         component: {{ $service }}
-        run: {{ $service }}-svc
+        run: {{ $deploymentName }}
     spec:
 {{- if eq $service "executor" }}
 {{- if .Values.services.executor.hostNetwork }}
@@ -76,6 +77,7 @@ spec:
       securityContext:
 {{ toYaml .Values.services.securityContext | indent 8 }}
       serviceAccountName: {{ template "serviceAccountName" . }}
+      {{- dict "main" . "k10_deployment_name" $deploymentName | include "k10.priorityClassName" | indent 6}}
       {{- include "k10.imagePullSecrets" . | indent 6 }}
 {{- /* initContainers: */}}
 {{- (dict "main" . "k10_pod" $service | include "k10-init-container-header") }}

@@ -721,6 +721,24 @@ resources:
 {{- end }}
 {{- end -}}
 
+{{/*
+Adds priorityClassName field according to helm values.
+*/}}
+{{- define "k10.priorityClassName" }}
+{{- $deploymentName := .k10_deployment_name }}
+{{- $defaultPriorityClassName := default "" .main.Values.defaultPriorityClassName }}
+{{- $priorityClassName := $defaultPriorityClassName }}
+
+{{- if and (hasKey .main.Values "priorityClassName") (hasKey .main.Values.priorityClassName $deploymentName) }}
+  {{- $priorityClassName = index .main.Values.priorityClassName $deploymentName }}
+{{- end -}}
+
+{{- if $priorityClassName }}
+priorityClassName: {{ $priorityClassName }}
+{{- end }}
+
+{{- end }}{{/* define "k10.priorityClassName" */}}
+
 {{- define "kanisterToolsResources" }}
 {{- if .Values.genericVolumeSnapshot.resources.requests.memory }}
 KanisterToolsMemoryRequests: {{ .Values.genericVolumeSnapshot.resources.requests.memory | quote }}
@@ -733,6 +751,21 @@ KanisterToolsMemoryLimits: {{ .Values.genericVolumeSnapshot.resources.limits.mem
 {{- end }}
 {{- if .Values.genericVolumeSnapshot.resources.limits.cpu }}
 KanisterToolsCPULimits: {{ .Values.genericVolumeSnapshot.resources.limits.cpu | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "kanisterPodMetricSidecarResources" }}
+{{- if .Values.kanisterPodMetricSidecar.resources.requests.memory }}
+KanisterPodMetricSidecarMemoryRequest: {{ .Values.kanisterPodMetricSidecar.resources.requests.memory | quote }}
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.requests.cpu }}
+KanisterPodMetricSidecarCPURequest: {{ .Values.kanisterPodMetricSidecar.resources.requests.cpu | quote }}
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.limits.memory }}
+KanisterPodMetricSidecarMemoryLimit: {{ .Values.kanisterPodMetricSidecar.resources.limits.memory | quote }}
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.limits.cpu }}
+KanisterPodMetricSidecarCPULimit: {{ .Values.kanisterPodMetricSidecar.resources.limits.cpu | quote }}
 {{- end }}
 {{- end }}
 

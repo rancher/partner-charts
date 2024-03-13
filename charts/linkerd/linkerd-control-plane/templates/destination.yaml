@@ -190,7 +190,9 @@ spec:
       */}}
       {{- $_ := set $tree.Values.proxy "defaultInboundPolicy" "all-unauthenticated" }}
       {{- $_ := set $tree.Values.proxy "capabilities" (dict "drop" (list "ALL")) }}
+      {{- if not $tree.Values.proxy.nativeSidecar }}
       - {{- include "partials.proxy" $tree | indent 8 | trimPrefix (repeat 7 " ") }}
+      {{- end }}
       - args:
         - destination
         - -addr=:8086
@@ -203,6 +205,21 @@ spec:
         - -identity-trust-domain={{.Values.identityTrustDomain | default .Values.clusterDomain}}
         - -default-opaque-ports={{.Values.proxy.opaquePorts}}
         - -enable-pprof={{.Values.enablePprof | default false}}
+        {{- range (.Values.destinationController).additionalArgs }}
+        - {{ . }}
+        {{- end }}
+        {{- range (.Values.destinationController).experimentalArgs }}
+        - {{ . }}
+        {{- end }}
+        {{- if or (.Values.destinationController).additionalEnv (.Values.destinationController).experimentalEnv }}
+        env:
+        {{- with (.Values.destinationController).additionalEnv }}
+        {{- toYaml . | nindent 8 -}}
+        {{- end }}
+        {{- with (.Values.destinationController).experimentalEnv }}
+        {{- toYaml . | nindent 8 -}}
+        {{- end }}
+        {{- end }}
         {{- include "partials.linkerd.trace" . | nindent 8 -}}
         image: {{.Values.controllerImage}}:{{.Values.controllerImageVersion | default .Values.linkerdVersion}}
         imagePullPolicy: {{.Values.imagePullPolicy}}
@@ -240,6 +257,15 @@ spec:
         - -log-level={{.Values.controllerLogLevel}}
         - -log-format={{.Values.controllerLogFormat}}
         - -enable-pprof={{.Values.enablePprof | default false}}
+        {{- if or (.Values.spValidator).additionalEnv (.Values.spValidator).experimentalEnv }}
+        env:
+        {{- with (.Values.spValidator).additionalEnv }}
+        {{- toYaml . | nindent 8 -}}
+        {{- end }}
+        {{- with (.Values.spValidator).experimentalEnv }}
+        {{- toYaml . | nindent 8 -}}
+        {{- end }}
+        {{- end }}
         image: {{.Values.controllerImage}}:{{.Values.controllerImageVersion | default .Values.linkerdVersion}}
         imagePullPolicy: {{.Values.imagePullPolicy}}
         livenessProbe:
@@ -292,6 +318,12 @@ spec:
         {{- if .Values.policyController.probeNetworks }}
         - --probe-networks={{.Values.policyController.probeNetworks | join ","}}
         {{- end}}
+        {{- range .Values.policyController.additionalArgs }}
+        - {{ . }}
+        {{- end }}
+        {{- range .Values.policyController.experimentalArgs }}
+        - {{ . }}
+        {{- end }}
         image: {{.Values.policyController.image.name}}:{{.Values.policyController.image.version | default .Values.linkerdVersion}}
         imagePullPolicy: {{.Values.policyController.image.pullPolicy | default .Values.imagePullPolicy}}
         livenessProbe:
@@ -340,6 +372,12 @@ spec:
       */}}
       {{- $_ := set $tree.Values.proxyInit "ignoreOutboundPorts" .Values.proxyInit.kubeAPIServerPorts -}}
       - {{- include "partials.proxy-init" $tree | indent 8 | trimPrefix (repeat 7 " ") }}
+      {{ end -}}
+      {{- if $tree.Values.proxy.nativeSidecar }}
+        {{- $_ := set $tree.Values.proxy "startupProbeInitialDelaySeconds" 35 }}
+        {{- $_ := set $tree.Values.proxy "startupProbePeriodSeconds" 5 }}
+        {{- $_ := set $tree.Values.proxy "startupProbeFailureThreshold" 20 }}
+      - {{- include "partials.proxy" $tree | indent 8 | trimPrefix (repeat 7 " ") }}
       {{ end -}}
       {{- if .Values.priorityClassName -}}
       priorityClassName: {{ .Values.priorityClassName }}

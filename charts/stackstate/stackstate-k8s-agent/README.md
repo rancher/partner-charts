@@ -2,7 +2,7 @@
 
 Helm chart for the StackState Agent.
 
-Current chart version is `1.0.70`
+Current chart version is `1.0.76`
 
 **Homepage:** <https://github.com/StackVista/stackstate-agent>
 
@@ -61,7 +61,7 @@ stackstate/stackstate-k8s-agent
 | checksAgent.enabled | bool | `true` | Enable / disable runnning cluster checks in a separately deployed pod |
 | checksAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | checksAgent.image.repository | string | `"stackstate/stackstate-k8s-agent"` | Base container image repository. |
-| checksAgent.image.tag | string | `"6f4db72d"` | Default container image tag. |
+| checksAgent.image.tag | string | `"3bc9e882"` | Default container image tag. |
 | checksAgent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | checksAgent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | checksAgent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -101,15 +101,20 @@ stackstate/stackstate-k8s-agent
 | clusterAgent.collection.kubernetesResources.daemonsets | bool | `true` | Enable / disable collection of DaemonSets. |
 | clusterAgent.collection.kubernetesResources.deployments | bool | `true` | Enable / disable collection of Deployments. |
 | clusterAgent.collection.kubernetesResources.endpoints | bool | `true` | Enable / disable collection of Endpoints. If endpoints are disabled then StackState won't be able to connect a Service to Pods that serving it |
+| clusterAgent.collection.kubernetesResources.horizontalpodautoscalers | bool | `true` | Enable / disable collection of HorizontalPodAutoscalers. |
 | clusterAgent.collection.kubernetesResources.ingresses | bool | `true` | Enable / disable collection of Ingresses. |
 | clusterAgent.collection.kubernetesResources.jobs | bool | `true` | Enable / disable collection of Jobs. |
+| clusterAgent.collection.kubernetesResources.limitranges | bool | `true` | Enable / disable collection of LimitRanges. |
 | clusterAgent.collection.kubernetesResources.namespaces | bool | `true` | Enable / disable collection of Namespaces. |
 | clusterAgent.collection.kubernetesResources.persistentvolumeclaims | bool | `true` | Enable / disable collection of PersistentVolumeClaims. Disabling these will not let StackState connect PersistentVolumes to pods they are attached to |
 | clusterAgent.collection.kubernetesResources.persistentvolumes | bool | `true` | Enable / disable collection of PersistentVolumes. |
+| clusterAgent.collection.kubernetesResources.poddisruptionbudgets | bool | `true` | Enable / disable collection of PodDisruptionBudgets. |
 | clusterAgent.collection.kubernetesResources.replicasets | bool | `true` | Enable / disable collection of ReplicaSets. |
+| clusterAgent.collection.kubernetesResources.replicationcontrollers | bool | `true` | Enable / disable collection of ReplicationControllers. |
 | clusterAgent.collection.kubernetesResources.resourcequotas | bool | `true` | Enable / disable collection of ResourceQuotas. |
 | clusterAgent.collection.kubernetesResources.secrets | bool | `true` | Enable / disable collection of Secrets. |
 | clusterAgent.collection.kubernetesResources.statefulsets | bool | `true` | Enable / disable collection of StatefulSets. |
+| clusterAgent.collection.kubernetesResources.storageclasses | bool | `true` | Enable / disable collection of StorageClasses. |
 | clusterAgent.collection.kubernetesResources.volumeattachments | bool | `true` | Enable / disable collection of Volume Attachments. Used to bind Nodes to Persistent Volumes. |
 | clusterAgent.collection.kubernetesTimeout | int | `10` | Default timeout (in seconds) when obtaining information from the Kubernetes API. |
 | clusterAgent.collection.kubernetesTopology | bool | `true` | Enable / disable the cluster agent topology collection. |
@@ -121,7 +126,7 @@ stackstate/stackstate-k8s-agent
 | clusterAgent.enabled | bool | `true` | Enable / disable the cluster agent. |
 | clusterAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | clusterAgent.image.repository | string | `"stackstate/stackstate-k8s-cluster-agent"` | Base container image repository. |
-| clusterAgent.image.tag | string | `"6f4db72d"` | Default container image tag. |
+| clusterAgent.image.tag | string | `"3bc9e882"` | Default container image tag. |
 | clusterAgent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | clusterAgent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | clusterAgent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -145,6 +150,7 @@ stackstate/stackstate-k8s-agent
 | clusterAgent.service.port | int | `5005` | Change the Cluster Agent service port |
 | clusterAgent.service.targetPort | int | `5005` | Change the Cluster Agent service targetPort |
 | clusterAgent.serviceaccount.annotations | object | `{}` | Annotations for the service account for the cluster agent pods |
+| clusterAgent.skipSslValidation | bool | `false` | If true, ignores the server certificate being signed by an unknown authority. |
 | clusterAgent.strategy | object | `{"type":"RollingUpdate"}` | The strategy for the Deployment object. |
 | clusterAgent.tolerations | list | `[]` | Toleration labels for pod assignment. |
 | fullnameOverride | string | `""` | Override the fullname of the chart. |
@@ -152,6 +158,8 @@ stackstate/stackstate-k8s-agent
 | global.extraEnv.secret | object | `{}` | Extra secret environment variables to inject into pods via a `Secret` object. |
 | global.imagePullCredentials | object | `{}` | Globally define credentials for pulling images. |
 | global.imagePullSecrets | list | `[]` | Secrets / credentials needed for container image registry. |
+| global.proxy.url | string | `""` | Proxy for all traffic to stackstate |
+| global.skipSslValidation | bool | `false` | Enable tls validation from client |
 | httpHeaderInjectorWebhook.enabled | bool | `false` | Enable the webhook for injection http header injection sidecar proxy |
 | logsAgent.affinity | object | `{}` | Affinity settings for pod assignment. |
 | logsAgent.enabled | bool | `true` | Enable / disable k8s pod log collection |
@@ -165,6 +173,7 @@ stackstate/stackstate-k8s-agent
 | logsAgent.resources.requests.cpu | string | `"20m"` | Memory resource requests. |
 | logsAgent.resources.requests.memory | string | `"100Mi"` |  |
 | logsAgent.serviceaccount.annotations | object | `{}` | Annotations for the service account for the daemonset pods |
+| logsAgent.skipSslValidation | bool | `false` | If true, ignores the server certificate being signed by an unknown authority. |
 | logsAgent.tolerations | list | `[]` | Toleration labels for pod assignment. |
 | logsAgent.updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":100},"type":"RollingUpdate"}` | The update strategy for the DaemonSet object. |
 | nameOverride | string | `""` | Override the name of the chart. |
@@ -179,7 +188,7 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.agent.env | object | `{}` | Additional environment variables for the agent container |
 | nodeAgent.containers.agent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | nodeAgent.containers.agent.image.repository | string | `"stackstate/stackstate-k8s-agent"` | Base container image repository. |
-| nodeAgent.containers.agent.image.tag | string | `"6f4db72d"` | Default container image tag. |
+| nodeAgent.containers.agent.image.tag | string | `"3bc9e882"` | Default container image tag. |
 | nodeAgent.containers.agent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | nodeAgent.containers.agent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | nodeAgent.containers.agent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -203,7 +212,7 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.processAgent.image.pullPolicy | string | `"IfNotPresent"` | Process-agent container image pull policy. |
 | nodeAgent.containers.processAgent.image.registry | string | `nil` |  |
 | nodeAgent.containers.processAgent.image.repository | string | `"stackstate/stackstate-k8s-process-agent"` | Process-agent container image repository. |
-| nodeAgent.containers.processAgent.image.tag | string | `"432a2730"` | Default process-agent container image tag. |
+| nodeAgent.containers.processAgent.image.tag | string | `"2df5d4d6"` | Default process-agent container image tag. |
 | nodeAgent.containers.processAgent.logLevel | string | `nil` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off # If not set, fall back to the value of agent.logLevel. |
 | nodeAgent.containers.processAgent.procVolumeReadOnly | bool | `true` | Configure whether /host/proc is read only for the process agent container |
 | nodeAgent.containers.processAgent.resources.limits.cpu | string | `"125m"` | Memory resource limits. |

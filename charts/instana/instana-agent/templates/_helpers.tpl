@@ -151,7 +151,7 @@ Composes a container image from a dict containing a "name" field (required), "ta
 {{- $tag := .tag }}
 {{- $digest := .digest }}
 {{- if $digest }}
-{{- printf "%s@%s" $name $digest }}
+{{- printf "%s@sha256:%s" $name $digest }}
 {{- else if $tag }}
 {{- printf "%s:%s" $name $tag }}
 {{- else }}
