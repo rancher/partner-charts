@@ -148,6 +148,7 @@ Parameter | Description | Default
 `auth.openshift.enabled` | Enables access to the K10 dashboard by authenticating with the OpenShift OAuth server | `false`
 `auth.openshift.serviceAccount` | Name of the service account that represents an OAuth client | `None`
 `auth.openshift.clientSecret` | The token corresponding to the service account | `None`
+`auth.openshift.clientSecretName` | The secret that contains the token corresponding to the service account | `None`
 `auth.openshift.dashboardURL` | The URL used for accessing K10's dashboard | `None`
 `auth.openshift.openshiftURL` | The URL for accessing OpenShift's API server | `None`
 `auth.openshift.insecureCA` | To turn off SSL verification of connections to OpenShift | `false`
@@ -190,6 +191,7 @@ Parameter | Description | Default
 `gateway.insecureDisableSSLVerify` | Specifies whether to disable SSL verification for gateway pods | `false`
 `gateway.exposeAdminPort` | Specifies whether to expose Admin port for gateway service | `true`
 `gateway.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for gateway pod | `{}`
+`gateway.service.externalPort` | Specifies the gateway services external port | `80`
 `genericVolumeSnapshot.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for Generic Volume Snapshot restore pods | `{}`
 `prometheus.k10image.registry` | (optional) Set Prometheus image registry. | `gcr.io`
 `prometheus.k10image.repository` | (optional) Set Prometheus image repository. | `kasten-images`
@@ -257,8 +259,11 @@ Parameter | Description | Default
 `kanisterPodMetricSidecar.enabled` | Enable the sidecar container to gather metrics from ephemeral pods | `true`
 `kanisterPodMetricSidecar.metricLifetime` | Check periodically for metrics that should be removed | `2m`
 `kanisterPodMetricSidecar.pushGatewayInterval` | Set the interval for sending metrics into the Prometheus | `30s`
+`kanisterPodMetricSidecar.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for the Kanister pod metric sidecar | `{}`
 `maxJobWaitDuration` | Set a maximum duration of waiting for child jobs. If the execution of the subordinate jobs exceeds this value, the parent job will be canceled. If no value is set, a default of 10 hours will be used | `None`
 `forceRootInKanisterHooks` | Forces Kanister Execution Hooks to run with root privileges | `true`
+`defaultPriorityClassName` | Specifies the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for all K10 deployments and ephemeral pods | `None`
+`priorityClassName.<deploymentName>` | Overrides the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for the specified deployment | `{}`
 
 ## Helm tips and tricks
 

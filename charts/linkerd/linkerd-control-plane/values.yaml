@@ -22,7 +22,7 @@ controlPlaneTracing: false
 # -- namespace to send control plane traces to
 controlPlaneTracingNamespace: linkerd-jaeger
 # -- control plane version. See Proxy section for proxy version
-linkerdVersion: stable-2.14.10
+linkerdVersion: edge-24.3.2
 # -- default kubernetes deployment strategy
 deploymentStrategy:
   rollingUpdate:
@@ -71,10 +71,10 @@ policyController:
   image:
     # -- Docker image for the policy controller
     name: cr.l5d.io/linkerd/policy-controller
-    # -- Pull policy for the proxy container Docker image
+    # -- Pull policy for the policy controller container image
     # @default -- imagePullPolicy
     pullPolicy: ""
-    # -- Tag for the proxy container Docker image
+    # -- Tag for the policy controller container image
     # @default -- linkerdVersion
     version: ""
 
@@ -131,10 +131,10 @@ proxy:
   image:
     # -- Docker image for the proxy
     name: cr.l5d.io/linkerd/proxy
-    # -- Pull policy for the proxy container Docker image
+    # -- Pull policy for the proxy container image
     # @default -- imagePullPolicy
     pullPolicy: ""
-    # -- Tag for the proxy container Docker image
+    # -- Tag for the proxy container image
     # @default -- linkerdVersion
     version: ""
   # -- Log level for the proxy
@@ -198,6 +198,34 @@ proxy:
   # "all-unauthenticated", "cluster-authenticated", "cluster-unauthenticated", "deny"
   # @default -- "all-unauthenticated"
   defaultInboundPolicy: "all-unauthenticated"
+  # -- Enable KEP-753 native sidecars
+  # This is an experimental feature. It requires Kubernetes >= 1.29.
+  # If enabled, .proxy.waitBeforeExitSeconds should not be used.
+  nativeSidecar: false
+  # -- Native sidecar proxy startup probe parameters.
+  # -- LivenessProbe timeout and delay configuration
+  livenessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 1
+  # -- ReadinessProbe timeout and delay configuration
+  readinessProbe:
+    initialDelaySeconds: 2
+    timeoutSeconds: 1
+  startupProbe:
+    initialDelaySeconds: 0
+    periodSeconds: 1
+    failureThreshold: 120
+  # Configures general properties of the proxy's control plane clients.
+  control:
+    # Configures limits on API response streams.
+    streams:
+      # -- The timeout for the first update from the control plane.
+      initialTimeout: "3s"
+      # -- The timeout between consecutive updates from the control plane.
+      idleTimeout: "5m"
+      # -- The maximum duration for a response stream (i.e. before it will be
+      # reinitialized).
+      lifetime: "1h"
 
 # proxy-init configuration
 proxyInit:
@@ -226,11 +254,11 @@ proxyInit:
   image:
     # -- Docker image for the proxy-init container
     name: cr.l5d.io/linkerd/proxy-init
-    # -- Pull policy for the proxy-init container Docker image
+    # -- Pull policy for the proxy-init container image
     # @default -- imagePullPolicy
     pullPolicy: ""
-    # -- Tag for the proxy-init container Docker image
-    version: v2.2.3
+    # -- Tag for the proxy-init container image
+    version: v2.2.4
   resources:
     cpu:
       # -- Maximum amount of CPU units that the proxy-init container can use
@@ -312,8 +340,7 @@ controllerUID: 2103
 # see proxy.resources for details.
 # destinationResources -- CPU, Memory and Ephemeral Storage resources required by destination (see `proxy.resources` for sub-fields)
 #destinationResources:
-#destinationProxyResources -- CPU, Memory and Ephemeral Storage resources required by proxy
-# injected into destination pod (see `proxy.resources` for sub-fields)
+# destinationProxyResources -- CPU, Memory and Ephemeral Storage resources required by proxy injected into destination pod (see `proxy.resources` for sub-fields)
 #destinationProxyResources:
 
 # debug configuration
@@ -321,10 +348,10 @@ debugContainer:
   image:
     # -- Docker image for the debug container
     name: cr.l5d.io/linkerd/debug
-    # -- Pull policy for the debug container Docker image
+    # -- Pull policy for the debug container image
     # @default -- imagePullPolicy
     pullPolicy: ""
-    # -- Tag for the debug container Docker image
+    # -- Tag for the debug container image
     # @default -- linkerdVersion
     version: ""
 
@@ -368,6 +395,9 @@ disableHeartBeat: false
 
 # proxy injector configuration
 proxyInjector:
+  # -- Timeout in seconds before the API Server cancels a request to the proxy
+  # injector. If timeout is exceeded, the webhookfailurePolicy is used.
+  timeoutSeconds: 10
   # -- Do not create a secret resource for the proxyInjector webhook.
   # If this is set to `true`, the value `proxyInjector.caBundle` must be set
   # or the ca bundle must injected with cert-manager ca injector using
