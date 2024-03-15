@@ -128,6 +128,7 @@ spec:
       securityContext:
 {{ toYaml .Values.services.securityContext | indent 8 }}
       serviceAccountName: {{ template "meteringServiceAccountName" . }}
+      {{- dict "main" . "k10_deployment_name" $podName | include "k10.priorityClassName" | indent 6}}
       {{- include "k10.imagePullSecrets" . | indent 6 }}
 {{- if $.stateful }}
       initContainers:

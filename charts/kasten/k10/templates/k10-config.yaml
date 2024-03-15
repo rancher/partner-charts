@@ -39,6 +39,7 @@ data:
   KanisterPodMetricSidecarEnabled: {{ .Values.kanisterPodMetricSidecar.enabled | quote }}
   KanisterPodMetricSidecarMetricLifetime: {{ .Values.kanisterPodMetricSidecar.metricLifetime | quote }}
   KanisterPodPushgatewayMetricsInterval: {{ .Values.kanisterPodMetricSidecar.pushGatewayInterval | quote }}
+{{- include "kanisterPodMetricSidecarResources" . | indent 2 }}
   KanisterToolsImage: {{ include "get.kanisterToolsImage" . | quote }}
   K10MutatingWebhookTLSCertDir: "/etc/ssl/certs/webhook"
 
@@ -55,6 +56,8 @@ data:
   K10GCDaemonPeriod: {{ default (include "k10.defaultK10GCDaemonPeriod" .) .Values.garbagecollector.daemonPeriod | quote }}
   K10GCKeepMaxActions: {{ default (include "k10.defaultK10GCKeepMaxActions" .) .Values.garbagecollector.keepMaxActions | quote }}
   K10GCActionsEnabled: {{ default (include "k10.defaultK10GCActionsEnabled" .) .Values.garbagecollector.actions.enabled | quote }}
+
+  K10DefaultPriorityClassName: {{ default (include "k10.defaultK10DefaultPriorityClassName" .) .Values.defaultPriorityClassName | quote }}
 
   kubeVirtVMsUnFreezeTimeout: {{ default (include "k10.defaultKubeVirtVMsUnfreezeTimeout" .) .Values.kubeVirtVMs.snapshot.unfreezeTimeout | quote }}
 
@@ -170,7 +173,7 @@ data:
       config:
         issuer: {{ .Values.auth.openshift.openshiftURL }}
         clientID: {{printf "system:serviceaccount:%s:%s" .Release.Namespace .Values.auth.openshift.serviceAccount }}
-        clientSecret: {{ .Values.auth.openshift.clientSecret }}
+        clientSecret: {{ printf "{{ getenv \"%s\" }}" (include "k10.openShiftClientSecretEnvVar" . ) }}
         redirectURI: {{ printf "%s/dex/callback" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
         insecureCA: {{ .Values.auth.openshift.insecureCA }}
 {{- if and (eq (include "check.cacertconfigmap" .) "false") .Values.auth.openshift.useServiceAccountCA }}
