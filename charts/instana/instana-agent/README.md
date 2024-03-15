@@ -141,6 +141,7 @@ The following table lists the configurable parameters of the Instana chart and t
 | `service.create`                                    | Whether to create a service that exposes the agents' Prometheus, OpenTelemetry and other APIs inside the cluster. Requires Kubernetes 1.21+, as it relies on `internalTrafficPolicy`. The `ServiceInternalTrafficPolicy` feature gate needs to be enabled (default: enabled).                                          | `true`                                                                                                                                  |
 | `serviceAccount.create`                             | Whether a ServiceAccount should be created                                                                                                                                                                                                                                                                             | `true`                                                                                                                                  |
 | `serviceAccount.name`                               | Name of the ServiceAccount to use                                                                                                                                                                                                                                                                                      | `instana-agent`                                                                                                                         |
+| `serviceAccount.annotations`                        | Annotations to add to the service account                                                                                                                                                                                                                                                                              | `{}`                                                                                                                                    |
 | `zone.name`                                         | Zone that detected technologies will be assigned to                                                                                                                                                                                                                                                                    | `nil` You must provide either `zone.name` or `cluster.name`, see [above](#installation) for details                                     |
 | `zones`                                             | Multi-zone daemonset configuration.                                                                                                                                                                                                                                                                                    | `nil` see [below](#multiple-zones) for details                                                                                          |
 | `k8s_sensor.podDisruptionBudget.enabled`            | Whether to create DisruptionBudget for k8sensor to limit the number of concurrent disruptions                                                                                                                                                                                                                          | `false`                                                                                                                                 |
@@ -362,6 +363,10 @@ zones:
 ```
 
 ## Changelog
+
+### 1.2.69
+
+* Add possibility to set annotations for the serviceAccount.
 
 ### 1.2.68
 

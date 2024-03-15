@@ -32,14 +32,42 @@ spec:
         options:
           - name: ndots
             value: "1"
+      initContainers:
+        - name: hpe-csi-node-init
+          {{- if .Values.registry }}
+          image: {{ .Values.registry }}/hpestorage/csi-driver:v2.4.1
+          {{- else }}
+          image: quay.io/hpestorage/csi-driver:v2.4.1
+          {{- end}}
+          args: ['--node-init']
+          volumeMounts:
+            - name: root-dir
+              mountPath: /host
+              mountPropagation: "Bidirectional"
+            - name: device-dir
+              mountPath: /dev
+            - name: sys
+              mountPath: /sys
+            - name: etc-hpe-storage-dir
+              mountPath: /etc/hpe-storage
+            - name: runsystemd
+              mountPath: /run/systemd
+            - name: etcsystemd
+              mountPath: /etc/systemd/system
+          imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
       containers:
         - name: csi-node-driver-registrar
           {{- if and (.Values.registry) (eq .Values.registry "quay.io") }}
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
           {{- else if .Values.registry }}
-          image: {{ .Values.registry }}/sig-storage/csi-node-driver-registrar:v2.8.0
+          image: {{ .Values.registry }}/sig-storage/csi-node-driver-registrar:v2.10.0
           {{- else }}
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
           {{- end}}
           args:
             - "--csi-address=$(ADDRESS)"
@@ -69,9 +97,9 @@ spec:
               mountPath: /registration
         - name: hpe-csi-driver
           {{- if .Values.registry }}
-          image: {{ .Values.registry }}/hpestorage/csi-driver:v2.4.0
+          image: {{ .Values.registry }}/hpestorage/csi-driver:v2.4.1
           {{- else }}
-          image: quay.io/hpestorage/csi-driver:v2.4.0
+          image: quay.io/hpestorage/csi-driver:v2.4.1
           {{- end}}
           args :
             - "--endpoint=$(CSI_ENDPOINT)"

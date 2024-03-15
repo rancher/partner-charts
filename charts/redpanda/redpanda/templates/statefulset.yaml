@@ -163,20 +163,6 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: status.hostIP
-            {{- if (include "storage-tiered-credentials-secret-key" . | fromJson).bool }}
-            - name: CLOUD_STORAGE_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  key: {{ (include "storage-tiered-credentials-secret-key" . | fromJson).key }}
-                  name: {{ (include "storage-tiered-credentials-secret-key" . | fromJson).name }}
-            {{- end }}
-            {{- if and .Values.storage.tiered.credentialsSecretRef.accessKey.name .Values.storage.tiered.credentialsSecretRef.accessKey.key }}
-            - name: CLOUD_STORAGE_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  key: {{ .Values.storage.tiered.credentialsSecretRef.accessKey.key }}
-                  name: {{ .Values.storage.tiered.credentialsSecretRef.accessKey.name }}
-            {{- end }}
           securityContext: {{ include "container-security-context" . | nindent 12 }}
           volumeMounts: {{ include "common-mounts" . | nindent 12 }}
 {{- if dig "initContainers" "configurator" "extraVolumeMounts" false .Values.statefulset -}}
@@ -237,7 +223,7 @@ spec:
                 - -c
                 - |
                   set -e
-                  RESULT=$(curl --silent --fail -k {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://{{ include "admin-api-urls" . }}/v1/status/ready")
+                  RESULT=$(curl --silent --fail -k -m 5 {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://{{ include "admin-api-urls" . }}/v1/status/ready")
                   echo $RESULT
                   echo $RESULT | grep ready
             initialDelaySeconds: {{ .Values.statefulset.startupProbe.initialDelaySeconds }}
@@ -249,7 +235,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - curl --silent --fail -k {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://{{ include "admin-api-urls" . }}/v1/status/ready"
+                - curl --silent --fail -k -m 5 {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://{{ include "admin-api-urls" . }}/v1/status/ready"
             initialDelaySeconds: {{ .Values.statefulset.livenessProbe.initialDelaySeconds }}
             failureThreshold: {{ .Values.statefulset.livenessProbe.failureThreshold }}
             periodSeconds: {{ .Values.statefulset.livenessProbe.periodSeconds }}
@@ -266,8 +252,9 @@ spec:
                 - -c
                 - |
                   set -x
-                  rpk cluster health
-                  rpk cluster health | grep 'Healthy:.*true'
+                  RESULT=$(rpk cluster health)
+                  echo $RESULT
+                  echo $RESULT | grep 'Healthy:.*true'
             initialDelaySeconds: {{ .Values.statefulset.readinessProbe.initialDelaySeconds }}
             failureThreshold: {{ .Values.statefulset.readinessProbe.failureThreshold }}
             periodSeconds: {{ .Values.statefulset.readinessProbe.periodSeconds }}
@@ -283,7 +270,7 @@ spec:
             - name: {{ lower $name }}
               containerPort: {{ $listener.port }}
   {{- range $externalName, $external := $listener.external }}
-    {{- if $external.port }}
+  {{- if and $external.port (or $external.enabled (and $values.external.enabled (dig "enabled" true $external))) }}
             - name: {{ lower $name | trunc 6 }}-{{ lower $externalName | trunc 8 }}
               containerPort: {{ $external.port }}
     {{- end }}

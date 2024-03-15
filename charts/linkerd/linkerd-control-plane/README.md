@@ -3,7 +3,7 @@
 Linkerd gives you observability, reliability, and security
 for your microservices — with no code change required.
 
-![Version: 1.16.11](https://img.shields.io/badge/Version-1.16.11-informational?style=flat-square)
+![Version: 2024.3.3](https://img.shields.io/badge/Version-2024.3.3-informational?style=flat-square)
 ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 ![AppVersion: edge-XX.X.X](https://img.shields.io/badge/AppVersion-edge--XX.X.X-informational?style=flat-square)
 
@@ -11,8 +11,8 @@ for your microservices — with no code change required.
 
 ## Quickstart and documentation
 
-You can run Linkerd on any Kubernetes 1.21+ cluster in a matter of seconds. See
-the [Linkerd Getting Started Guide][getting-started] for how.
+You can run Linkerd on any Kubernetes cluster in a matter of seconds. See the
+[Linkerd Getting Started Guide][getting-started] for how.
 
 For more comprehensive documentation, start with the [Linkerd
 docs][linkerd-docs].
@@ -52,14 +52,9 @@ Included here for completeness-sake, but should have already been added when
 `linkerd-base` was installed.
 
 ```bash
-# To add the repo for Linkerd stable releases:
-helm repo add linkerd https://helm.linkerd.io/stable
 # To add the repo for Linkerd edge releases:
-helm repo add linkerd-edge https://helm.linkerd.io/edge
+helm repo add linkerd https://helm.linkerd.io/edge
 ```
-
-The following instructions use the `linkerd` repo. For installing an edge
-release, just replace with `linkerd-edge`.
 
 ## Installing the chart
 
@@ -135,7 +130,7 @@ extensions:
 
 ## Requirements
 
-Kubernetes: `>=1.21.0-0`
+Kubernetes: `>=1.22.0-0`
 
 | Repository | Name | Version |
 |------------|------|---------|
@@ -151,6 +146,8 @@ Kubernetes: `>=1.21.0-0`
 | commonLabels | object | `{}` | Labels to apply to all resources |
 | controlPlaneTracing | bool | `false` | enables control plane tracing |
 | controlPlaneTracingNamespace | string | `"linkerd-jaeger"` | namespace to send control plane traces to |
+| controller.podDisruptionBudget | object | `{"maxUnavailable":1}` | sets pod disruption budget parameter for all deployments |
+| controller.podDisruptionBudget.maxUnavailable | int | `1` | Maximum number of pods that can be unavailable during disruption |
 | controllerImage | string | `"cr.l5d.io/linkerd/controller"` | Docker image for the destination and identity components |
 | controllerImageVersion | string | `""` | Optionally allow a specific container image Tag (or SHA) to be specified for the controllerImage. |
 | controllerLogFormat | string | `"plain"` | Log format for the control plane components |
@@ -158,8 +155,8 @@ Kubernetes: `>=1.21.0-0`
 | controllerReplicas | int | `1` | Number of replicas for each control plane pod |
 | controllerUID | int | `2103` | User ID for the control plane components |
 | debugContainer.image.name | string | `"cr.l5d.io/linkerd/debug"` | Docker image for the debug container |
-| debugContainer.image.pullPolicy | string | imagePullPolicy | Pull policy for the debug container Docker image |
-| debugContainer.image.version | string | linkerdVersion | Tag for the debug container Docker image |
+| debugContainer.image.pullPolicy | string | imagePullPolicy | Pull policy for the debug container image |
+| debugContainer.image.version | string | linkerdVersion | Tag for the debug container image |
 | deploymentStrategy | object | `{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"}}` | default kubernetes deployment strategy |
 | disableHeartBeat | bool | `false` | Set to true to not start the heartbeat cronjob |
 | enableEndpointSlices | bool | `true` | enables the use of EndpointSlice informers for the destination service; enableEndpointSlices should be set to true only if EndpointSlice K8s feature gate is on |
@@ -203,8 +200,8 @@ Kubernetes: `>=1.21.0-0`
 | podMonitor.scrapeTimeout | string | `"10s"` | Iimeout after which the scrape is ended |
 | podMonitor.serviceMirror.enabled | bool | `true` | Enables the creation of PodMonitor for the Service Mirror component |
 | policyController.image.name | string | `"cr.l5d.io/linkerd/policy-controller"` | Docker image for the policy controller |
-| policyController.image.pullPolicy | string | imagePullPolicy | Pull policy for the proxy container Docker image |
-| policyController.image.version | string | linkerdVersion | Tag for the proxy container Docker image |
+| policyController.image.pullPolicy | string | imagePullPolicy | Pull policy for the policy controller container image |
+| policyController.image.version | string | linkerdVersion | Tag for the policy controller container image |
 | policyController.logLevel | string | `"info"` | Log level for the policy controller |
 | policyController.probeNetworks | list | `["0.0.0.0/0"]` | The networks from which probes are performed.  By default, all networks are allowed so that all probes are authorized. |
 | policyController.resources | object | destinationResources | policy controller resource requests & limits |
@@ -231,18 +228,23 @@ Kubernetes: `>=1.21.0-0`
 | profileValidator.namespaceSelector | object | `{"matchExpressions":[{"key":"config.linkerd.io/admission-webhooks","operator":"NotIn","values":["disabled"]}]}` | Namespace selector used by admission webhook |
 | prometheusUrl | string | `""` | url of external prometheus instance (used for the heartbeat) |
 | proxy.await | bool | `true` | If set, the application container will not start until the proxy is ready |
+| proxy.control.streams.idleTimeout | string | `"5m"` | The timeout between consecutive updates from the control plane. |
+| proxy.control.streams.initialTimeout | string | `"3s"` | The timeout for the first update from the control plane. |
+| proxy.control.streams.lifetime | string | `"1h"` | The maximum duration for a response stream (i.e. before it will be reinitialized). |
 | proxy.cores | int | `0` | The `cpu.limit` and `cores` should be kept in sync. The value of `cores` must be an integer and should typically be set by rounding up from the limit. E.g. if cpu.limit is '1500m', cores should be 2. |
 | proxy.defaultInboundPolicy | string | "all-unauthenticated" | The default allow policy to use when no `Server` selects a pod.  One of: "all-authenticated", "all-unauthenticated", "cluster-authenticated", "cluster-unauthenticated", "deny" |
 | proxy.disableInboundProtocolDetectTimeout | bool | `false` | When set to true, disables the protocol detection timeout on the inbound side of the proxy by setting it to a very high value |
 | proxy.disableOutboundProtocolDetectTimeout | bool | `false` | When set to true, disables the protocol detection timeout on the outbound side of the proxy by setting it to a very high value |
 | proxy.enableExternalProfiles | bool | `false` | Enable service profiles for non-Kubernetes services |
 | proxy.image.name | string | `"cr.l5d.io/linkerd/proxy"` | Docker image for the proxy |
-| proxy.image.pullPolicy | string | imagePullPolicy | Pull policy for the proxy container Docker image |
-| proxy.image.version | string | linkerdVersion | Tag for the proxy container Docker image |
+| proxy.image.pullPolicy | string | imagePullPolicy | Pull policy for the proxy container image |
+| proxy.image.version | string | linkerdVersion | Tag for the proxy container image |
 | proxy.inboundConnectTimeout | string | `"100ms"` | Maximum time allowed for the proxy to establish an inbound TCP connection |
 | proxy.inboundDiscoveryCacheUnusedTimeout | string | `"90s"` | Maximum time allowed before an unused inbound discovery result is evicted from the cache |
+| proxy.livenessProbe | object | `{"initialDelaySeconds":10,"timeoutSeconds":1}` | LivenessProbe timeout and delay configuration |
 | proxy.logFormat | string | `"plain"` | Log format (`plain` or `json`) for the proxy |
 | proxy.logLevel | string | `"warn,linkerd=info,trust_dns=error"` | Log level for the proxy |
+| proxy.nativeSidecar | bool | `false` | Enable KEP-753 native sidecars This is an experimental feature. It requires Kubernetes >= 1.29. If enabled, .proxy.waitBeforeExitSeconds should not be used. |
 | proxy.opaquePorts | string | `"25,587,3306,4444,5432,6379,9300,11211"` | Default set of opaque ports - SMTP (25,587) server-first - MYSQL (3306) server-first - Galera (4444) server-first - PostgreSQL (5432) server-first - Redis (6379) server-first - ElasticSearch (9300) server-first - Memcached (11211) clients do not issue any preamble, which breaks detection |
 | proxy.outboundConnectTimeout | string | `"1000ms"` | Maximum time allowed for the proxy to establish an outbound TCP connection |
 | proxy.outboundDiscoveryCacheUnusedTimeout | string | `"5s"` | Maximum time allowed before an unused outbound discovery result is evicted from the cache |
@@ -250,6 +252,7 @@ Kubernetes: `>=1.21.0-0`
 | proxy.ports.control | int | `4190` | Control port for the proxy container |
 | proxy.ports.inbound | int | `4143` | Inbound port for the proxy container |
 | proxy.ports.outbound | int | `4140` | Outbound port for the proxy container |
+| proxy.readinessProbe | object | `{"initialDelaySeconds":2,"timeoutSeconds":1}` | ReadinessProbe timeout and delay configuration |
 | proxy.requireIdentityOnInboundPorts | string | `""` |  |
 | proxy.resources.cpu.limit | string | `""` | Maximum amount of CPU units that the proxy can use |
 | proxy.resources.cpu.request | string | `""` | Amount of CPU units that the proxy requests |
@@ -258,14 +261,17 @@ Kubernetes: `>=1.21.0-0`
 | proxy.resources.memory.limit | string | `""` | Maximum amount of memory that the proxy can use |
 | proxy.resources.memory.request | string | `""` | Maximum amount of memory that the proxy requests |
 | proxy.shutdownGracePeriod | string | `""` | Grace period for graceful proxy shutdowns. If this timeout elapses before all open connections have completed, the proxy will terminate forcefully, closing any remaining connections. |
+| proxy.startupProbe.failureThreshold | int | `120` |  |
+| proxy.startupProbe.initialDelaySeconds | int | `0` |  |
+| proxy.startupProbe.periodSeconds | int | `1` |  |
 | proxy.uid | int | `2102` | User id under which the proxy runs |
 | proxy.waitBeforeExitSeconds | int | `0` | If set the injected proxy sidecars in the data plane will stay alive for at least the given period before receiving the SIGTERM signal from Kubernetes but no longer than the pod's `terminationGracePeriodSeconds`. See [Lifecycle hooks](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks) for more info on container lifecycle hooks. |
 | proxyInit.closeWaitTimeoutSecs | int | `0` |  |
 | proxyInit.ignoreInboundPorts | string | `"4567,4568"` | Default set of inbound ports to skip via iptables - Galera (4567,4568) |
 | proxyInit.ignoreOutboundPorts | string | `"4567,4568"` | Default set of outbound ports to skip via iptables - Galera (4567,4568) |
 | proxyInit.image.name | string | `"cr.l5d.io/linkerd/proxy-init"` | Docker image for the proxy-init container |
-| proxyInit.image.pullPolicy | string | imagePullPolicy | Pull policy for the proxy-init container Docker image |
-| proxyInit.image.version | string | `"v2.2.3"` | Tag for the proxy-init container Docker image |
+| proxyInit.image.pullPolicy | string | imagePullPolicy | Pull policy for the proxy-init container image |
+| proxyInit.image.version | string | `"v2.2.4"` | Tag for the proxy-init container image |
 | proxyInit.iptablesMode | string | `"legacy"` | Variant of iptables that will be used to configure routing. Currently, proxy-init can be run either in 'nft' or in 'legacy' mode. The mode will control which utility binary will be called. The host must support whichever mode will be used |
 | proxyInit.kubeAPIServerPorts | string | `"443,6443"` | Default set of ports to skip via iptables for control plane components so they can communicate with the Kubernetes API Server |
 | proxyInit.logFormat | string | plain | Log format (`plain` or `json`) for the proxy-init |
@@ -290,8 +296,9 @@ Kubernetes: `>=1.21.0-0`
 | proxyInjector.keyPEM | string | `""` | Certificate key for the proxy injector. If not provided and not using an external secret then Helm will generate one. |
 | proxyInjector.namespaceSelector | object | `{"matchExpressions":[{"key":"config.linkerd.io/admission-webhooks","operator":"NotIn","values":["disabled"]},{"key":"kubernetes.io/metadata.name","operator":"NotIn","values":["kube-system","cert-manager"]}]}` | Namespace selector used by admission webhook. |
 | proxyInjector.objectSelector | object | `{"matchExpressions":[{"key":"linkerd.io/control-plane-component","operator":"DoesNotExist"},{"key":"linkerd.io/cni-resource","operator":"DoesNotExist"}]}` | Object selector used by admission webhook. |
+| proxyInjector.timeoutSeconds | int | `10` | Timeout in seconds before the API Server cancels a request to the proxy injector. If timeout is exceeded, the webhookfailurePolicy is used. |
 | runtimeClassName | string | `""` | Runtime Class Name for all the pods |
 | webhookFailurePolicy | string | `"Ignore"` | Failure policy for the proxy injector |
 
 ----------------------------------------------
-Autogenerated from chart metadata using [helm-docs v1.11.0](https://github.com/norwoodj/helm-docs/releases/v1.11.0)
+Autogenerated from chart metadata using [helm-docs v1.12.0](https://github.com/norwoodj/helm-docs/releases/v1.12.0)
