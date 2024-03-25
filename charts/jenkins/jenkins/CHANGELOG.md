@@ -12,6 +12,22 @@ Use the following links to reference issues, PRs, and commits prior to v2.6.0.
 The changelog until v1.5.7 was auto-generated based on git commits.
 Those entries include a reference to the git commit to be able to get more details.
 
+## 5.1.4
+
+Update `docker.io/bats/bats` to version `1.11.0`
+
+## 5.1.3
+
+Update `jenkins/jenkins` to version `2.440.2-jdk17`
+
+## 5.1.2
+
+Update `kubernetes` to version `4203.v1dd44f5b_1cf9`
+
+## 5.1.1
+
+Update `kubernetes` to version `4199.va_1647c280eb_2`
+
 ## 5.1.0
 
 Add `agent.restrictedPssSecurityContext` to automatically inject in the jnlp container a securityContext that is suitable for the use of the restricted Pod Security Standard
