@@ -193,6 +193,13 @@ kubernetes.io/ingress.class: {{ .Values.ingress.class | quote }}
 {{- end -}}
 {{- end -}}
 
+{{/* Return ingress class name in spec */}}
+{{- define "specIngressClassName" -}}
+{{- if and .Values.ingress.class (semverCompare ">= 1.27-0" .Capabilities.KubeVersion.Version) -}}
+ingressClassName: {{ .Values.ingress.class }}
+{{- end -}}
+{{- end -}}
+
 {{/* Helm required labels */}}
 {{- define "helm.labels" -}}
 heritage: {{ .Release.Service }}
@@ -1140,4 +1147,10 @@ running in the same cluster.
       {{- .Values.siem.logging.cluster.file.size | default "" -}}
     {{- end -}}
   {{- end -}}
+{{- end -}}
+
+{{/* Returns a generated name for the OpenShift Service Account secret */}}
+{{- define "get.openshiftServiceAccountSecretName" -}}
+  {{- $serviceAccount := required "auth.openshift.serviceAccount field is required" .Values.auth.openshift.serviceAccount -}}
+  {{ printf "%s-k10-secret" $serviceAccount | quote }}
 {{- end -}}

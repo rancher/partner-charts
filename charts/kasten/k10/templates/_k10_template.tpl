@@ -107,7 +107,7 @@ spec:
     {{- $needsVolumesHeader = true }}
   {{- else if eq (include "check.cacertconfigmap" $main_context) "true" }}
     {{- $needsVolumesHeader = true }}
-  {{- else if and ( eq $service "auth" ) ( or $main_context.Values.auth.dex.enabled (eq (include "check.dexAuth" $main_context) "true")) }}
+  {{- else if and ( eq $service "auth" ) ( eq (include "check.dexAuth" $main_context) "true" ) }}
     {{- $needsVolumesHeader = true }}
   {{- else if eq $service "frontend" }}
     {{- $needsVolumesHeader = true }}
@@ -201,7 +201,7 @@ spec:
         secret:
           secretName: controllermanager-certs
 {{- end }}
-{{- if and ( has "auth" $containersInThisPod) (or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true")) }}
+{{- if and ( has "auth" $containersInThisPod) ( eq (include "check.dexAuth" .) "true" ) }}
       - name: config
         configMap:
           name: k10-dex

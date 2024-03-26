@@ -65,6 +65,11 @@ stating that types are not same for the equality check
         - containerPort: 24225
           protocol: TCP
 {{- end }}
+        securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+                drop: ["ALL"]
         livenessProbe:
 {{- if eq $service "aggregatedapis" }}
           tcpSocket:
@@ -671,6 +676,25 @@ stating that types are not same for the equality check
             value: {{ .Values.global.persistence.diskSpaceAlertPercent | quote }}
     {{- end -}}
 {{- end -}}
+{{- if eq $service "controllermanager" }}
+    {{- if .Values.multicluster.primary.create }}
+        {{- if not .Values.multicluster.enabled }}
+            {{- fail "Cannot setup cluster as primary without enabling feature with multicluster.enabled=true" -}}
+        {{- end }}
+        {{- if not .Values.multicluster.primary.name }}
+            {{- fail "Cannot setup cluster as primary without setting cluster name with multicluster.primary.name" -}}
+        {{- end }}
+        {{- if not .Values.multicluster.primary.ingressURL }}
+            {{- fail "Cannot setup cluster as primary without providing an ingress with multicluster.primary.ingressURL" -}}
+        {{- end }}
+          - name: K10_MC_CREATE_PRIMARY
+            value: "true"
+          - name: K10_MC_PRIMARY_NAME
+            value: {{ .Values.multicluster.primary.name | quote }}
+          - name: K10_MC_PRIMARY_INGRESS_URL
+            value: {{ .Values.multicluster.primary.ingressURL | quote }}
+    {{- end }}
+{{- end -}}
 {{- if or $.stateful (or (eq (include "check.googlecreds" .) "true") (eq $service "auth" "logging")) }}
         volumeMounts:
 {{- else if  or (or (eq (include "basicauth.check" .) "true") (or .Values.auth.oidcAuth.enabled (eq (include "check.dexAuth" .) "true"))) .Values.features }}
@@ -762,7 +786,7 @@ stating that types are not same for the equality check
           readOnly: true
 {{- end }}
 {{- end }} {{/* and (eq $service "catalog") $.stateful */}}
-{{- if and ( eq $service "auth" ) ( or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true")) }}
+{{- if and ( eq $service "auth" ) ( eq (include "check.dexAuth" .) "true" ) }}
       - name: dex
         image: {{ include "get.dexImage" . }}
 {{- if .Values.auth.ldap.enabled }}
@@ -775,7 +799,12 @@ stating that types are not same for the equality check
         command: ["/usr/local/bin/docker-entrypoint", "dex", "serve", "/etc/dex/cfg/config.yaml"]
         env:
           - name: {{ include "k10.openShiftClientSecretEnvVar" . }}
-{{- if .Values.auth.openshift.clientSecretName }}
+{{- if and (not .Values.auth.openshift.clientSecretName) (not .Values.auth.openshift.clientSecret) }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "get.openshiftServiceAccountSecretName" . }}
+                key: token
+{{- else if .Values.auth.openshift.clientSecretName }}
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.auth.openshift.clientSecretName }}
@@ -783,8 +812,6 @@ stating that types are not same for the equality check
 {{- else }}
             value: {{ .Values.auth.openshift.clientSecret }}
 {{- end }}
-{{- else }}
-        command: ["/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"]
 {{- end }}
         ports:
         - name: http

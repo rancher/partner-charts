@@ -45,27 +45,6 @@ spec:
       containers:
       - args:
         - |-
-            ARCH=$(uname -m)
-            case $ARCH in
-                x86_64)
-                    ARCH=amd64
-                    ;;
-                arm | arm64 | aarch64)
-                    ARCH=arm64
-                    ;;
-            esac
-            {{- if .Values.http_proxy }}
-            HTTP_PROXY={{ .Values.http_proxy | quote }} \
-            {{- end }}
-            {{- if .Values.https_proxy }}
-            HTTPS_PROXY={{ .Values.https_proxy | quote }} \
-            {{- end }}
-            {{- if .Values.no_proxy }}
-            NO_PROXY={{ .Values.no_proxy | quote }} \
-            {{- end }}
-            curl -Lfs "https://storage.googleapis.com/kubernetes-release/release/v1.20.0/bin/linux/${ARCH}/kubectl" \
-            -o /usr/local/bin/kubectl
-            chmod +x /usr/local/bin/kubectl
             keytool -importcert -noprompt -cacerts  -storepass changeit  -alias speedscale -file /etc/ssl/speedscale/tls.crt
             kubectl -n ${POD_NAMESPACE} delete secret speedscale-jks || true
             kubectl -n ${POD_NAMESPACE} create secret generic speedscale-jks --from-file=cacerts.jks=${JAVA_HOME}/lib/security/cacerts
@@ -89,7 +68,7 @@ spec:
         - secretRef:
             name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
             optional: false
-        image: 'openjdk'
+        image: '{{ .Values.image.registry }}/amazoncorretto'
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         name: create-jks
         resources: {}
