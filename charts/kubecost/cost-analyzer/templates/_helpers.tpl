@@ -6,6 +6,8 @@ Set important variables before starting main templates
 {{- define "aggregator.deployMethod" -}}
   {{- if (.Values.federatedETL).primaryCluster }}
     {{- printf "statefulset" }}
+  {{- else if or ((.Values.federatedETL).agentOnly) (.Values.agent) (.Values.cloudAgent) }}
+    {{- printf "disabled" }}
   {{- else if (not .Values.kubecostAggregator) }}
     {{- printf "singlepod" }}
   {{- else if .Values.kubecostAggregator.enabled }}
@@ -20,6 +22,14 @@ Set important variables before starting main templates
     {{- fail "Unknown kubecostAggregator.deployMethod value" }}
   {{- end }}
 {{- end }}
+
+{{- define "frontend.deployMethod" -}}
+  {{- if eq .Values.kubecostFrontend.deployMethod "haMode" -}}
+    {{- printf "haMode" -}}
+  {{- else -}}
+    {{- printf "singlepod" -}}
+  {{- end -}}
+{{- end -}}
 
 {{/*
 Kubecost 2.0 preconditions
@@ -100,7 +110,9 @@ Kubecost 2.0 preconditions
   {{- if ((.Values.kubecostDeployment).statefulSet).enabled -}}
     {{- fail "\nIn Kubecost 2.0, kubecostDeployment does not support running as a statefulSet. Please reach out to support to discuss upgrade paths." -}}
   {{- end -}}
-
+  {{- if and (eq (include "aggregator.deployMethod" .) "statefulset") (.Values.federatedETL).agentOnly }}
+    {{- fail "\nKubecost does not support running federatedETL.agentOnly with the aggregator statefulset" }}
+  {{- end }}
 {{- end -}}
 
 {{- define "cloudIntegrationFromProductConfigs" }}
@@ -201,6 +213,38 @@ support templating a chart which uses the lookup function.
 {{- end -}}
 
 {{/*
+ Ensure that the Prometheus retention is not set too low
+*/}}
+{{- define "prometheusRetentionCheck" }}
+{{- if ((.Values.prometheus).server).enabled }}
+
+  {{- $retention := .Values.prometheus.server.retention }}
+  {{- $etlHourlyDurationHours := (int .Values.kubecostModel.etlHourlyStoreDurationHours) }}
+
+  {{- if (hasSuffix "d" $retention) }}
+    {{- $retentionDays := (int (trimSuffix "d" $retention)) }}
+    {{- if lt $retentionDays 3 }}
+      {{- fail (printf "With a daily resolution, Prometheus retention must be set >= 3 days. Provided retention is %s" $retention) }}
+    {{- else if le (mul $retentionDays 24) $etlHourlyDurationHours }}
+      {{- fail (printf "Prometheus retention (%s) must be greater than .Values.kubecostModel.etlHourlyStoreDurationHours (%d)" $retention $etlHourlyDurationHours) }}
+    {{- end }}
+
+  {{- else if (hasSuffix "h" $retention) }}
+    {{- $retentionHours := (int (trimSuffix "h" $retention)) }}
+    {{- if lt $retentionHours 50 }}
+      {{- fail (printf "With an hourly resolution, Prometheus retention must be set >= 50 hours. Provided retention is %s" $retention) }}
+    {{- else if le $retentionHours $etlHourlyDurationHours }}
+      {{- fail (printf "Prometheus retention (%s) must be greater than .Values.kubecostModel.etlHourlyStoreDurationHours (%d)" $retention $etlHourlyDurationHours) }}
+    {{- end }}
+
+  {{- else }}
+    {{- fail "prometheus.server.retention must be set in days (e.g. 5d) or hours (e.g. 97h)"}}
+
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "cost-analyzer.name" -}}
@@ -217,6 +261,9 @@ Expand the name of the chart.
 {{- end -}}
 {{- define "forecasting.name" -}}
 {{- default "forecasting" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- define "frontend.name" -}}
+{{- default "frontend" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -258,6 +305,9 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 {{- define "forecasting.fullname" -}}
 {{- printf "%s-%s" .Release.Name (include "forecasting.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- define "frontend.fullname" -}}
+{{- printf "%s-%s" .Release.Name (include "frontend.name" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -309,6 +359,10 @@ Create the fully qualified name for Prometheus alertmanager service.
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "frontend.serviceName" -}}
+{{ include "frontend.fullname" . }}
 {{- end -}}
 
 {{- define "diagnostics.serviceName" -}}
@@ -455,13 +509,19 @@ app: diagnostics
 {{- end }}
 
 {{/*
-{{- end -}}
-
-{{/*
 Create the selector labels.
 */}}
 {{- define "cost-analyzer.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "cost-analyzer.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app: cost-analyzer
+{{- end -}}
+
+{{/*
+Create the selector labels for haMode frontend.
+*/}}
+{{- define "frontend.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "frontend.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app: cost-analyzer
 {{- end -}}
@@ -795,10 +855,10 @@ If release name contains chart name it will be used as a full name.
 Create the name of the service account
 */}}
 {{- define "grafana.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create -}}
-    {{ default (include "grafana.fullname" .) .Values.serviceAccount.name }}
+{{- if .Values.grafana.serviceAccount.create -}}
+    {{ default (include "grafana.fullname" .) .Values.grafana.serviceAccount.name }}
 {{- else -}}
-    {{ default "default" .Values.serviceAccount.name }}
+    {{ default "default" .Values.grafana.serviceAccount.name }}
 {{- end -}}
 {{- end -}}
 
@@ -880,6 +940,10 @@ Begin Kubecost 2.0 templates
       # of the init container that gives everything under /var/configs 777.
       mountPath: /var/configs/waterfowl
     {{- end }}
+    {{- if and ((.Values.kubecostProductConfigs).productKey).enabled ((.Values.kubecostProductConfigs).productKey).secretname (eq (include "aggregator.deployMethod" .) "statefulset") }}
+    - name: productkey-secret
+      mountPath: /var/configs/productkey
+    {{- end }}
     {{- if .Values.saml }}
     {{- if .Values.saml.enabled }}
     {{- if .Values.saml.secretName }}
@@ -910,7 +974,7 @@ Begin Kubecost 2.0 templates
     {{- if .Values.oidc.enabled }}
     - name: oidc-config
       mountPath: /var/configs/oidc
-    {{- if .Values.oidc.secretName }}
+    {{- if or .Values.oidc.existingCustomSecret.name .Values.oidc.secretName }}
     - name: oidc-client-secret
       mountPath: /var/configs/oidc-client-secret
     {{- end }}
@@ -927,6 +991,10 @@ Begin Kubecost 2.0 templates
         configMapKeyRef:
           name: {{ .Values.prometheus.server.clusterIDConfigmap }}
           key: CLUSTER_ID
+    {{- end }}
+    {{- if and ((.Values.kubecostProductConfigs).productKey).mountPath (eq (include "aggregator.deployMethod" .) "statefulset") }}
+    - name: PRODUCT_KEY_MOUNT_PATH
+      value: {{ .Values.kubecostProductConfigs.productKey.mountPath }}
     {{- end }}
     {{- if (gt (int .Values.kubecostAggregator.numDBCopyPartitions) 0) }}
     - name: NUM_DB_COPY_CHUNKS
@@ -960,6 +1028,12 @@ Begin Kubecost 2.0 templates
     - name: no_proxy
       value:  {{ .Values.systemProxy.noProxy }}
     {{- end }}
+    {{- if ((.Values.kubecostProductConfigs).carbonEstimates) }}
+    - name: CARBON_ESTIMATES_ENABLED
+      value: "true"
+    {{- end }}
+    - name: CUSTOM_COST_ENABLED
+      value: {{ .Values.kubecostModel.plugins.enabled | quote }}
     {{- if .Values.kubecostAggregator.extraEnv -}}
     {{- toYaml .Values.kubecostAggregator.extraEnv | nindent 4 }}
     {{- end }}
@@ -1043,6 +1117,15 @@ Begin Kubecost 2.0 templates
 
 {{- define "aggregator.jaeger.sidecarContainerTemplate" }}
 - name: embedded-jaeger
+  env:
+  - name: SPAN_STORAGE_TYPE
+    value: badger
+  - name: BADGER_EPHEMERAL
+    value: "true"
+  - name: BADGER_DIRECTORY_VALUE
+    value: /tmp/badger/data
+  - name: BADGER_DIRECTORY_KEY
+    value: /tmp/badger/key
   securityContext:
     {{- toYaml .Values.kubecostAggregator.jaeger.containerSecurityContext | nindent 4 }}
   image: {{ .Values.kubecostAggregator.jaeger.image }}:{{ .Values.kubecostAggregator.jaeger.imageVersion }}
@@ -1083,6 +1166,10 @@ Begin Kubecost 2.0 templates
       protocol: TCP
   resources:
     {{- toYaml .Values.kubecostAggregator.cloudCost.resources | nindent 4 }}
+  securityContext:
+    {{- if .Values.global.containerSecurityContext }}
+    {{- toYaml .Values.global.containerSecurityContext | nindent 4 }}
+    {{- end }}
   volumeMounts:
     - name: persistent-configs
       mountPath: /var/configs
@@ -1099,6 +1186,18 @@ Begin Kubecost 2.0 templates
     - name: cloud-integration
       mountPath: /var/configs/cloud-integration
   {{- end }}
+    {{- if .Values.kubecostModel.plugins.enabled }}
+    - mountPath: {{ .Values.kubecostModel.plugins.folder }}
+      name: plugins-dir
+      readOnly: false
+    - name: tmp
+      mountPath: /tmp
+    {{- range $key := .Values.kubecostModel.plugins.enabledPlugins }}
+    - mountPath: {{ $.Values.kubecostModel.plugins.folder }}/config
+      name: plugins-config
+      readOnly: true
+    {{- end }}
+    {{- end }}
   env:
     - name: CONFIG_PATH
       value: /var/configs/
@@ -1118,6 +1217,8 @@ Begin Kubecost 2.0 templates
       value: {{ .Values.kubecostAggregator.cloudCost.queryWindowDays | default 7 | quote }}
     - name: CLOUD_COST_RUN_WINDOW_DAYS
       value: {{ .Values.kubecostAggregator.cloudCost.runWindowDays | default 3 | quote }}
+    - name: CUSTOM_COST_ENABLED
+      value: {{ .Values.kubecostModel.plugins.enabled | quote }}
     {{- with .Values.kubecostModel.cloudCost }}
     {{- with .labelList }}
     - name: CLOUD_COST_IS_INCLUDE_LIST
@@ -1164,6 +1265,17 @@ Backups configured flag for nginx configmap
 */}}
 {{- define "dataBackupConfigured" -}}
   {{- if or (.Values.kubecostModel).etlBucketConfigSecret (.Values.kubecostModel).federatedStorageConfigSecret -}}
+    {{- printf "true" -}}
+  {{- else -}}
+    {{- printf "false" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
+costEventsAuditEnabled flag for nginx configmap
+*/}}
+{{- define "costEventsAuditEnabled" -}}
+  {{- if or (.Values.costEventsAudit).enabled -}}
     {{- printf "true" -}}
   {{- else -}}
     {{- printf "false" -}}
@@ -1232,3 +1344,19 @@ for more information
 {{- fail (include "azureCloudIntegrationJSON" .) }}
 {{- end }}
 {{- end }}
+
+{{- define "clusterControllerEnabled" }}
+{{- if (.Values.clusterController).enabled }}
+{{- printf "true" -}}
+{{- else -}}
+{{- printf "false" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "pluginsEnabled" }}
+{{- if ((.Values.kubecostModel.plugins).install).enabled}}
+{{- printf "true" -}}
+{{- else -}}
+{{- printf "false" -}}
+{{- end -}}
+{{- end -}}

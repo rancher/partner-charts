@@ -37,6 +37,8 @@ spec:
     metadata:
       labels:
         {{- include "cost-analyzer.selectorLabels" . | nindent 8 }}
+        {{/* Force pod restarts on upgrades to ensure the nginx config is current */}}
+        helm-rollout-restarter: {{ randAlphaNum 5 | quote }}
         {{- if .Values.global.additionalLabels }}
         {{ toYaml .Values.global.additionalLabels | nindent 8 }}
         {{- end }}
@@ -63,6 +65,8 @@ spec:
       restartPolicy: Always
       serviceAccountName: {{ template "cost-analyzer.serviceAccountName" . }}
       volumes:
+        - name: plugins-dir
+          emptyDir: {}
         {{- if .Values.global.gcpstore.enabled }}
         - name: ubbagent-config
           configMap:
@@ -76,7 +80,7 @@ spec:
         {{- end }}
         - name: tmp
           emptyDir: {}
-        {{- if and .Values.kubecostFrontend.enabled (not .Values.federatedETL.agentOnly) }}
+        {{- if and .Values.kubecostFrontend.enabled (not .Values.federatedETL.agentOnly) (not (eq (include "frontend.deployMethod" .) "haMode")) }}
         - name: nginx-conf
           configMap:
             name: nginx-conf
@@ -110,8 +114,7 @@ spec:
            secretName: {{ .Values.kubecostModel.federatedStorageConfigSecret }}
         {{- end }}
         {{- if .Values.kubecostProductConfigs }}
-        {{- if .Values.kubecostProductConfigs.productKey }}
-        {{- if and .Values.kubecostProductConfigs.productKey.enabled .Values.kubecostProductConfigs.productKey.secretname }}
+        {{- if and ((.Values.kubecostProductConfigs).productKey).enabled ((.Values.kubecostProductConfigs).productKey).secretname }}
         - name: productkey-secret
           secret:
             secretName: {{ .Values.kubecostProductConfigs.productKey.secretname }}
@@ -119,7 +122,6 @@ spec:
             - key: productkey.json
               path: productkey.json
         {{- end }}
-        {{- end -}}
         {{- if .Values.kubecostProductConfigs }}
         {{- if .Values.kubecostProductConfigs.gcpSecretName }}
         - name: gcp-key-secret
@@ -294,8 +296,8 @@ spec:
             claimName: {{ template "cost-analyzer.fullname" . }}-db
 {{- end }}
 {{- end }}
-{{- if .Values.supportNFS }}
       initContainers:
+      {{- if .Values.supportNFS }}
         - name: config-db-perms-fix
         {{- if .Values.initChownDataImage }}
           image: {{ .Values.initChownDataImage }}
@@ -546,11 +548,9 @@ spec:
             {{- end }}
             {{- end }}
             {{- if .Values.kubecostProductConfigs }}
-            {{- if .Values.kubecostProductConfigs.productKey }}
-            {{- if .Values.kubecostProductConfigs.productKey.secretname }}
+            {{- if and ((.Values.kubecostProductConfigs).productKey).enabled ((.Values.kubecostProductConfigs).productKey).secretname }}
             - name: productkey-secret
               mountPath: /var/configs/productkey
-            {{- end }}
             {{- end }}
             {{- if .Values.kubecostProductConfigs.gcpSecretName }}
             - name: gcp-key-secret
@@ -611,7 +611,7 @@ spec:
             {{- if .Values.oidc.enabled }}
             - name: oidc-config
               mountPath: /var/configs/oidc
-            {{- if .Values.oidc.secretName }}
+            {{- if or .Values.oidc.existingCustomSecret.name .Values.oidc.secretName }}
             - name: oidc-client-secret
               mountPath: /var/configs/oidc-client-secret
             {{- end }}
@@ -699,11 +699,9 @@ spec:
               value: production
             {{- end }}
             {{- if .Values.kubecostProductConfigs }}
-            {{- if .Values.kubecostProductConfigs.productKey }}
-            {{- if .Values.kubecostProductConfigs.productKey.mountPath }}
+            {{- if ((.Values.kubecostProductConfigs).productKey).mountPath }}
             - name: PRODUCT_KEY_MOUNT_PATH
               value: {{ .Values.kubecostProductConfigs.productKey.mountPath }}
-            {{- end }}
             {{- end }}
             {{- if .Values.kubecostProductConfigs.ingestPodUID }}
             - name: INGEST_POD_UID
@@ -1007,8 +1005,11 @@ spec:
                   key: kubecost-token
             - name: WATERFOWL_ENABLED
               value: "true"
+            {{- if not (.Values.diagnostics.enabled) }}
+            - name: DIAGNOSTICS_RUN_IN_COST_MODEL
+              value: "false"
             {{- /*A pre-requisite for running MultiClusterDiagnostics in the cost-model container is a configured federated-store secret and cluster_id*/}}
-            {{- if or (empty .Values.kubecostModel.federatedStorageConfigSecret) (eq .Values.prometheus.server.global.external_labels.cluster_id "cluster-one") }}
+            {{- else if or (empty .Values.kubecostModel.federatedStorageConfigSecret) (eq .Values.prometheus.server.global.external_labels.cluster_id "cluster-one") }}
             - name: DIAGNOSTICS_RUN_IN_COST_MODEL
               value: "false"
             {{- else if .Values.diagnostics.deployment.enabled }}
@@ -1034,7 +1035,7 @@ spec:
             - name: DIAGNOSTICS_COLLECT_HELM_VALUES
               value: {{ quote .Values.diagnostics.collectHelmValues }}
             {{- end }}
-        {{- if and .Values.kubecostFrontend.enabled (not .Values.federatedETL.agentOnly) }}
+        {{- if and .Values.kubecostFrontend.enabled (not .Values.federatedETL.agentOnly) (not (eq (include "frontend.deployMethod" .) "haMode")) }}
         {{- if .Values.kubecostFrontend }}
         {{- if .Values.kubecostFrontend.fullImageName }}
         - image: {{ .Values.kubecostFrontend.fullImageName }}
