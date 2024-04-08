@@ -29,9 +29,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
+- garbagecollector
 - repositories
 - bloblifecyclemanager
-- garbagecollector
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -63,6 +63,7 @@ state:
 {{- define "k10.exportActionsDetails" -}}exportactions/details{{- end -}}
 {{- define "k10.retireActions" -}}retireactions{{- end -}}
 {{- define "k10.runActions" -}}runactions{{- end -}}
+{{- define "k10.runActionsDetails" -}}runactions/details{{- end -}}
 {{- define "k10.backupClusterActions" -}}backupclusteractions{{- end -}}
 {{- define "k10.backupClusterActionsDetails" -}}backupclusteractions/details{{- end -}}
 {{- define "k10.restoreClusterActions" -}}restoreclusteractions{{- end -}}
@@ -212,7 +213,7 @@ state-svc:
 {{- define "k10.aggAuditPolicyFile" -}}agg-audit-policy.yaml{{- end -}}
 {{- define "k10.siemAuditLogFilePath" -}}-{{- end -}}
 {{- define "k10.siemAuditLogFileSize" -}}100{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.106.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.107.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}
 {{- define "k10.openShiftClientSecretEnvVar" -}}K10_OPENSHIFT_CLIENT_SECRET{{- end -}}
 {{- define "k10.defaultK10DefaultPriorityClassName" -}}{{- end -}}

@@ -139,6 +139,7 @@ Parameter | Description | Default
 `auth.oidcAuth.prompt` | The type of prompt to be used during authentication (none, consent, login or select_account) | `select_account`
 `auth.oidcAuth.clientID` | Client ID given by the OIDC provider for K10 | `None`
 `auth.oidcAuth.clientSecret` | Client secret given by the OIDC provider for K10 | `None`
+`auth.oidcAuth.clientSecretName` | The secret that contains the Client ID and Client secret given by the OIDC provider for K10 | `None`
 `auth.oidcAuth.usernameClaim` | The claim to be used as the username | `sub`
 `auth.oidcAuth.usernamePrefix` | Prefix that has to be used with the username obtained from the username claim | `None`
 `auth.oidcAuth.groupClaim` | Name of a custom OpenID Connect claim for specifying user groups | `None`

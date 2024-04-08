@@ -4,26 +4,18 @@ kind: Deployment
 metadata:
   name: {{ .Values.redisOperator.name }}
   namespace: {{ .Release.Namespace }}
-  labels:
-    control-plane: "{{ .Values.redisOperator.name }}"
-    app.kubernetes.io/name: {{ .Values.redisOperator.name }}
-    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+  labels: {{- include "redisOperator.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:
-    matchLabels:
-      name: {{ .Values.redisOperator.name }}
+    matchLabels: {{- include "redisOperator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
       {{- with .Values.redisOperator.podAnnotations }}
       {{- toYaml . | nindent 8 }}
       {{- end }}
-      labels:
-        name: {{ .Values.redisOperator.name }}
+      labels: {{- include "redisOperator.selectorLabels" . | nindent 8 }}
       {{- with .Values.redisOperator.podLabels }}
       {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -39,29 +31,45 @@ spec:
         {{- range $arg := .Values.redisOperator.extraArgs }}
         - {{ $arg }}
         {{- end }}
-{{- if .Values.watch_namespace }}
+      {{- if .Values.redisOperator.webhook }}
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      {{- end }}
         env:
-          - name: NAMESPACE
-            value: {{ .Values.watch_namespace }}
-{{- end }}
-{{- if .Values.resources }}
-        resources:
-{{ toYaml .Values.resources | indent 10 }}
-{{- end }}
-      nodeSelector:
-{{- with .Values.nodeSelector }}
-{{ toYaml . | indent 8 }}
-{{- end }}
+        - name: ENABLE_WEBHOOKS
+          value: "{{ .Values.redisOperator.webhook | toString }}"
+        {{- if .WATCH_NAMESPACE }}
+        - name: WATCH_NAMESPACE
+          value: {{ .WATCH_NAMESPACE }}
+        {{- end }}
+        {{- range $env := .Values.redisOperator.env }}
+        - name: {{ $env.name }}
+          value: {{ $env.value | quote }}
+        {{- end }} 
+      {{- if .Values.resources }}
+        resources: {{ toYaml .Values.resources | nindent 10 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName}}
       priorityClassName: {{ .Values.priorityClassName }}
-{{- with .Values.affinity }}
+      {{- end }}
+      {{- with .Values.affinity }}
       affinity: {{ toYaml . | nindent 8 }}
-{{- end }}
-      tolerations:
-{{- if .Values.tolerateAllTaints }}
-        - operator: Exists
-{{- end }}
-{{- with .Values.tolerations }}
-{{ toYaml . | indent 8 }}
-{{- end }}
+      {{- end }}
       serviceAccountName: "{{ .Values.serviceAccountName }}"
       serviceAccount: "{{ .Values.serviceAccountName }}"
+      {{- if .Values.redisOperator.webhook }}
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.certificate.secretName }}
+      {{- end }}

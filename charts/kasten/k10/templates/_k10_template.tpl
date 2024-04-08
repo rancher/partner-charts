@@ -140,6 +140,11 @@ spec:
       - name: k10-oidc-auth
         secret:
           secretName: {{ default "k10-oidc-auth" .Values.auth.oidcAuth.secretName }}
+{{- if .Values.auth.oidcAuth.clientSecretName }}
+      - name: k10-oidc-auth-creds
+        secret:
+          secretName: {{ .Values.auth.oidcAuth.clientSecretName }}
+{{- end }}
 {{- end }}
 {{- if .Values.auth.openshift.enabled }}
       - name: k10-oidc-auth
