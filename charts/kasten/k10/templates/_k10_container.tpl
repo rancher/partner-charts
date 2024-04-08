@@ -736,6 +736,11 @@ stating that types are not same for the equality check
         - name: k10-oidc-auth
           mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth"
           readOnly: true
+{{- if .Values.auth.oidcAuth.clientSecretName }}
+        - name: k10-oidc-auth-creds
+          mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth-creds"
+          readOnly: true
+{{- end }}
 {{- end }}
 {{- if eq (include "check.googlecreds" .) "true" }}
         - name: service-account
