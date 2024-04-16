@@ -6,7 +6,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
 {{ include "stackstate-k8s-agent.labels" . | indent 4 }}
+{{ include "stackstate-k8s-agent.global.extraLabels" . | indent 4 }}
     app.kubernetes.io/component: logs-agent
+  annotations:
+{{ include "stackstate-k8s-agent.global.extraAnnotations" . | indent 4 }}
 spec:
   selector:
     matchLabels:
@@ -22,10 +25,12 @@ spec:
       annotations:
         {{- include "stackstate-k8s-agent.checksum-configs" . | nindent 8 }}
         {{- include "stackstate-k8s-agent.logsAgent.configmap.override.checksum" . | nindent 8 }}
+{{ include "stackstate-k8s-agent.global.extraAnnotations" . | indent 8 }}
       labels:
         app.kubernetes.io/component: logs-agent
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/name: {{ include "stackstate-k8s-agent.name" . }}
+{{ include "stackstate-k8s-agent.global.extraLabels" . | indent 8 }}
     spec:
       {{- include "stackstate-k8s-agent.image.pullSecrets" (dict "images" (list .Values.logsAgent.image .Values.all.image) "context" $) | nindent 6 }}
       containers:
@@ -36,11 +41,7 @@ spec:
           - -config.file=/etc/promtail/promtail.yaml
           imagePullPolicy: "{{ .Values.logsAgent.image.pullPolicy }}"
           env:
-          - name: STS_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "stackstate-k8s-agent.fullname" . }}
-                key: sts-api-key
+          {{ include "stackstate-k8s-agent.apiKeyEnv" . | nindent 10 }}
           - name: "HOSTNAME" # needed when using kubernetes_sd_configs
             valueFrom:
               fieldRef:

@@ -111,3 +111,21 @@ volumeMounts:
     mountPath: /scripts
 command: [ "/scripts/delete-cert.sh" ]
 {{- end }}
+
+{{/*
+Returns a YAML with extra annotations.
+*/}}
+{{- define "http-header-injector.global.extraAnnotations" -}}
+{{- with .Values.global.extraAnnotations }}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Returns a YAML with extra labels.
+*/}}
+{{- define "http-header-injector.global.extraLabels" -}}
+{{- with .Values.global.extraLabels }}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
