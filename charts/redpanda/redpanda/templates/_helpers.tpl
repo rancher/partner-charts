@@ -205,19 +205,6 @@ Use AppVersion if image.tag is not set
   {{- $result -}}
 {{- end -}}
 
-{{- define "external-nodeport-enabled" -}}
-{{- $values := .Values -}}
-{{- $enabled := and .Values.external.enabled (eq .Values.external.type "NodePort") -}}
-{{- range $listener := .Values.listeners -}}
-  {{- range $external := $listener.external -}}
-    {{- if and (dig "enabled" false $external) (eq (dig "type" $values.external.type $external) "NodePort") -}}
-      {{- $enabled = true -}}
-    {{- end -}}
-  {{- end -}}
-{{- end -}}
-{{- toJson (dict "bool" $enabled) -}}
-{{- end -}}
-
 {{- define "external-loadbalancer-enabled" -}}
 {{- $values := .Values -}}
 {{- $enabled := and .Values.external.enabled (eq .Values.external.type "LoadBalancer") -}}
@@ -848,7 +835,7 @@ REDPANDA_SASL_USERNAME REDPANDA_SASL_PASSWORD REDPANDA_SASL_MECHANISM
 {{- define "tiered-storage-env-vars" -}}
     {{- $config := (include "storage-tiered-config" . | fromJson) -}}
     [
-        {{- if and (include "is-licensed" . | fromJson).bool (dig "cloud_storage_enabled" false $config) -}}
+        {{- if dig "cloud_storage_enabled" false $config -}}
             {{include "secret-ref-or-value" (dict
                 "Name" "RPK_CLOUD_STORAGE_SECRET_KEY"
                 "Value" (dig "cloud_storage_secret_key" nil $config)

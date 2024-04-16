@@ -3,7 +3,7 @@
 Linkerd gives you observability, reliability, and security
 for your microservices — with no code change required.
 
-![Version: 2024.4.1](https://img.shields.io/badge/Version-2024.4.1-informational?style=flat-square)
+![Version: 2024.4.2](https://img.shields.io/badge/Version-2024.4.2-informational?style=flat-square)
 ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 ![AppVersion: edge-XX.X.X](https://img.shields.io/badge/AppVersion-edge--XX.X.X-informational?style=flat-square)
 
@@ -205,7 +205,7 @@ Kubernetes: `>=1.22.0-0`
 | policyController.image.version | string | linkerdVersion | Tag for the policy controller container image |
 | policyController.logLevel | string | `"info"` | Log level for the policy controller |
 | policyController.probeNetworks | list | `["0.0.0.0/0","::/0"]` | The networks from which probes are performed.  By default, all networks are allowed so that all probes are authorized. |
-| policyController.resources | object | destinationResources | policy controller resource requests & limits |
+| policyController.resources | object | `{"cpu":{"limit":"","request":""},"ephemeral-storage":{"limit":"","request":""},"memory":{"limit":"","request":""}}` | policy controller resource requests & limits |
 | policyController.resources.cpu.limit | string | `""` | Maximum amount of CPU units that the policy controller can use |
 | policyController.resources.cpu.request | string | `""` | Amount of CPU units that the policy controller requests |
 | policyController.resources.ephemeral-storage.limit | string | `""` | Maximum amount of ephemeral storage that the policy controller can use |

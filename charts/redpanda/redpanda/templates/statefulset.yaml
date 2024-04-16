@@ -43,7 +43,7 @@ metadata:
 {{- end }}
 spec:
   selector:
-    matchLabels: {{ (include "statefulset-pod-labels" .) | nindent 6 }}
+    matchLabels: {{ (include "statefulset-pod-labels-selector" .) | nindent 6 }}
   serviceName: {{ template "redpanda.servicename" . }}
   replicas: {{ .Values.statefulset.replicas | int64 }}
   updateStrategy:
@@ -52,12 +52,7 @@ spec:
   template:
     metadata:
       labels: {{ (include "statefulset-pod-labels" .) | nindent 8 }}
-        redpanda.com/poddisruptionbudget: {{ template "redpanda.fullname" . }}
-      annotations:
-        config.redpanda.com/checksum: {{ include "statefulset-checksum-annotation" . }}
-{{- with $.Values.statefulset.annotations }}
-        {{- toYaml . | nindent 8 }}
-{{- end }}
+      annotations:{{ ( get ( (include "redpanda.StatefulSetPodAnnotations" (dict "a" (list . (include "statefulset-checksum-annotation" .) )) ) | fromJson) "r" ) | toYaml | nindent 8 }}
     spec:
       terminationGracePeriodSeconds: {{ .Values.statefulset.terminationGracePeriodSeconds }}
       securityContext: {{ include "pod-security-context" . | nindent 8 }}
@@ -123,7 +118,7 @@ spec:
           resources: {{- toYaml .Values.statefulset.fsValidator.tuning.resources | nindent 12 }}
   {{- end }}
 {{- end }}
-{{- if and (include "is-licensed" . | fromJson).bool (include "storage-tiered-config" .|fromJson).cloud_storage_enabled }}
+{{- if (include "storage-tiered-config" .|fromJson).cloud_storage_enabled }}
         - name: set-tiered-storage-cache-dir-ownership
           image: {{ .Values.statefulset.initContainerImage.repository }}:{{ .Values.statefulset.initContainerImage.tag }}
           command: ["/bin/sh", "-c", 'mkdir -p {{ include "tieredStorage.cacheDirectory" . }}; chown {{ $uid }}:{{ $gid }} -R {{ include "tieredStorage.cacheDirectory" . }}']
@@ -289,7 +284,7 @@ spec:
               mountPath: /var/lifecycle
             - name: datadir
               mountPath: /var/lib/redpanda/data
-{{- if and (include "is-licensed" . | fromJson).bool (include "storage-tiered-config" .|fromJson).cloud_storage_enabled (ne (include "storage-tiered-mountType" .) "none") }}
+{{- if and (include "storage-tiered-config" .|fromJson).cloud_storage_enabled (ne (include "storage-tiered-mountType" .) "none") }}
             - name: {{ default "tiered-storage-dir" .Values.storage.persistentVolume.nameOverwrite }}
               mountPath: {{ include "tieredStorage.cacheDirectory" . }}
 {{- end }}
@@ -364,7 +359,7 @@ spec:
       {{- else }}
           emptyDir: {}
       {{- end }}
-      {{- if and (include "is-licensed" . | fromJson).bool (include "storage-tiered-config" .|fromJson).cloud_storage_enabled }}
+      {{- if (include "storage-tiered-config" .|fromJson).cloud_storage_enabled }}
         {{- $tieredType := include "storage-tiered-mountType" . }}
         {{- if and (ne $tieredType "none") (ne $tieredType "persistentVolume") }}
         - name: tiered-storage-dir
@@ -401,7 +396,7 @@ spec:
           topologyKey: {{ $v.topologyKey }}
           whenUnsatisfiable: {{ $v.whenUnsatisfiable }}
           labelSelector:
-            matchLabels: {{ include "statefulset-pod-labels" $ | nindent 14 }}
+            matchLabels: {{ include "statefulset-pod-labels-selector" $ | nindent 14 }}
     {{- end }}
 {{- end }}
 {{- with ( include "statefulset-nodeSelectors" . ) }}
@@ -416,7 +411,7 @@ spec:
 {{- with ( include "statefulset-tolerations" . ) }}
       tolerations: {{- . | nindent 8 }}
 {{- end }}
-{{- if or .Values.storage.persistentVolume.enabled (and (include "is-licensed" . | fromJson).bool (include "storage-tiered-config" .|fromJson).cloud_storage_enabled (eq (include "storage-tiered-mountType" .) "persistentVolume" )) }}
+{{- if or .Values.storage.persistentVolume.enabled (and (include "storage-tiered-config" .|fromJson).cloud_storage_enabled (eq (include "storage-tiered-mountType" .) "persistentVolume" )) }}
   volumeClaimTemplates:
 {{- if .Values.storage.persistentVolume.enabled }}
     - metadata:
@@ -447,7 +442,7 @@ spec:
           requests:
             storage: {{ .Values.storage.persistentVolume.size | quote }}
 {{- end }}
-{{- if and (include "is-licensed" . | fromJson).bool (include "storage-tiered-config" .|fromJson).cloud_storage_enabled (eq (include "storage-tiered-mountType" .) "persistentVolume") }}
+{{- if and (include "storage-tiered-config" .|fromJson).cloud_storage_enabled (eq (include "storage-tiered-mountType" .) "persistentVolume") }}
     - metadata:
         name: {{ default "tiered-storage-dir" .Values.storage.persistentVolume.nameOverwrite }}
         labels:

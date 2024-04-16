@@ -43,11 +43,71 @@
 {{- range $_ := (list 1) -}}
 {{- $values := $dot.Values.AsMap -}}
 {{- $labels := (dict ) -}}
-{{- if (ne $values.commonLabels nil) -}}
+{{- if (ne $values.commonLabels (coalesce nil)) -}}
 {{- $labels = $values.commonLabels -}}
 {{- end -}}
 {{- $defaults := (dict "helm.sh/chart" (get (fromJson (include "redpanda.Chart" (dict "a" (list $dot) ))) "r") "app.kubernetes.io/name" (get (fromJson (include "redpanda.Name" (dict "a" (list $dot) ))) "r") "app.kubernetes.io/instance" $dot.Release.Name "app.kubernetes.io/managed-by" $dot.Release.Service "app.kubernetes.io/component" (get (fromJson (include "redpanda.Name" (dict "a" (list $dot) ))) "r") ) -}}
-{{- (dict "r" (merge $defaults $labels)) | toJson -}}
+{{- (dict "r" (merge (dict ) $labels $defaults)) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.StatefulSetPodLabelsSelector" -}}
+{{- $dot := (index .a 0) -}}
+{{- $statefulSet := (index .a 1) -}}
+{{- range $_ := (list 1) -}}
+{{- if (and $dot.Release.IsUpgrade (ne $statefulSet (coalesce nil))) -}}
+{{- $existingStatefulSetLabelSelector := (dig "spec" "selector" "matchLabels" (coalesce nil) $statefulSet) -}}
+{{- if (ne $existingStatefulSetLabelSelector (coalesce nil)) -}}
+{{- (dict "r" $existingStatefulSetLabelSelector) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+{{- $values := $dot.Values.AsMap -}}
+{{- $commonLabels := (dict ) -}}
+{{- if (ne $values.commonLabels (coalesce nil)) -}}
+{{- $commonLabels = $values.commonLabels -}}
+{{- end -}}
+{{- $component := (printf "%s-statefulset" (trimSuffix "-" (trunc 51 (get (fromJson (include "redpanda.Name" (dict "a" (list $dot) ))) "r")))) -}}
+{{- $defaults := (dict "app.kubernetes.io/component" $component "app.kubernetes.io/instance" $dot.Release.Name "app.kubernetes.io/name" (get (fromJson (include "redpanda.Name" (dict "a" (list $dot) ))) "r") ) -}}
+{{- (dict "r" (merge (dict ) $commonLabels $defaults)) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.StatefulSetPodLabels" -}}
+{{- $dot := (index .a 0) -}}
+{{- $statefulSet := (index .a 1) -}}
+{{- range $_ := (list 1) -}}
+{{- if (and $dot.Release.IsUpgrade (ne $statefulSet (coalesce nil))) -}}
+{{- $existingStatefulSetPodTemplateLabels := (dig "spec" "template" "metadata" "labels" (coalesce nil) $statefulSet) -}}
+{{- if (ne $existingStatefulSetPodTemplateLabels (coalesce nil)) -}}
+{{- (dict "r" $existingStatefulSetPodTemplateLabels) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+{{- $values := $dot.Values.AsMap -}}
+{{- $statefulSetLabels := (dict ) -}}
+{{- if (ne $values.statefulset.podTemplate.labels (coalesce nil)) -}}
+{{- $statefulSetLabels = $values.statefulset.podTemplate.labels -}}
+{{- end -}}
+{{- $defults := (dict "redpanda.com/poddisruptionbudget" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r") ) -}}
+{{- (dict "r" (merge (dict ) $statefulSetLabels (get (fromJson (include "redpanda.StatefulSetPodLabelsSelector" (dict "a" (list $dot (coalesce nil)) ))) "r") $defults)) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.StatefulSetPodAnnotations" -}}
+{{- $dot := (index .a 0) -}}
+{{- $configMapChecksum := (index .a 1) -}}
+{{- range $_ := (list 1) -}}
+{{- $values := $dot.Values.AsMap -}}
+{{- $configMapChecksumAnnotation := (dict "config.redpanda.com/checksum" $configMapChecksum ) -}}
+{{- if (ne $values.statefulset.podTemplate.annotations (coalesce nil)) -}}
+{{- (dict "r" (merge (dict ) $values.statefulset.podTemplate.annotations $configMapChecksumAnnotation)) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- (dict "r" (merge (dict ) $values.statefulset.annotations $configMapChecksumAnnotation)) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
@@ -95,7 +155,7 @@
 {{- $dot := (index .a 0) -}}
 {{- range $_ := (list 1) -}}
 {{- $values := $dot.Values.AsMap -}}
-{{- if (and (ne $values.service nil) (ne $values.service.name nil)) -}}
+{{- if (and (ne $values.service (coalesce nil)) (ne $values.service.name (coalesce nil))) -}}
 {{- (dict "r" (get (fromJson (include "redpanda.cleanForK8s" (dict "a" (list $values.service.name) ))) "r")) | toJson -}}
 {{- break -}}
 {{- end -}}
@@ -120,7 +180,7 @@
 {{- $dot := (index .a 0) -}}
 {{- range $_ := (list 1) -}}
 {{- $values := $dot.Values.AsMap -}}
-{{- if (and (ne $values.tls.enabled nil) $values.tls.enabled) -}}
+{{- if (and (ne $values.tls.enabled (coalesce nil)) $values.tls.enabled) -}}
 {{- (dict "r" true) | toJson -}}
 {{- break -}}
 {{- end -}}

@@ -4,7 +4,10 @@ metadata:
   name: {{ .Release.Name }}-cluster-agent
   labels:
 {{ include "stackstate-k8s-agent.labels" . | indent 4 }}
+{{ include "stackstate-k8s-agent.global.extraLabels" . | indent 4 }}
     app.kubernetes.io/component: cluster-agent
+  annotations:
+{{ include "stackstate-k8s-agent.global.extraAnnotations" . | indent 4 }}
 spec:
   replicas: {{ .Values.clusterAgent.replicaCount }}
   selector:
@@ -21,10 +24,12 @@ spec:
       annotations:
         {{- include "stackstate-k8s-agent.checksum-configs" . | nindent 8 }}
         {{- include "stackstate-k8s-agent.configmap.override.checksum" . | nindent 8 }}
+{{ include "stackstate-k8s-agent.global.extraAnnotations" . | indent 8 }}
       labels:
         app.kubernetes.io/component: cluster-agent
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/name: {{ include "stackstate-k8s-agent.name" . }}
+{{ include "stackstate-k8s-agent.global.extraLabels" . | indent 8 }}
     spec:
       {{- include "stackstate-k8s-agent.image.pullSecrets" (dict "images" (list .Values.clusterAgent.image .Values.all.image) "context" $) | nindent 6 }}
       {{- if .Values.clusterAgent.priorityClassName }}
@@ -45,16 +50,8 @@ spec:
                 command: [ "/bin/sh", "-c", "echo 'Giving slim.ai monitor time to submit data...'; sleep 120" ]
         {{- end }}
           env:
-          - name: STS_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "stackstate-k8s-agent.fullname" . }}
-                key: sts-api-key
-          - name: STS_CLUSTER_AGENT_AUTH_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "stackstate-k8s-agent.fullname" . }}
-                key: sts-cluster-auth-token
+          {{ include "stackstate-k8s-agent.apiKeyEnv" . | nindent 10 }}
+          {{ include "stackstate-k8s-agent.clusterAgentAuthTokenEnv" . | nindent 10 }}
           - name: KUBERNETES_HOSTNAME
             valueFrom:
               fieldRef:

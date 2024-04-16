@@ -1,6 +1,6 @@
 # http-header-injector
 
-![Version: 0.0.7](https://img.shields.io/badge/Version-0.0.7-informational?style=flat-square) ![AppVersion: 0.0.1](https://img.shields.io/badge/AppVersion-0.0.1-informational?style=flat-square)
+![Version: 0.0.9](https://img.shields.io/badge/Version-0.0.9-informational?style=flat-square) ![AppVersion: 0.0.1](https://img.shields.io/badge/AppVersion-0.0.1-informational?style=flat-square)
 
 Helm chart for deploying the http-header-injector sidecar, which automatically injects x-request-id into http traffic
 going through the cluster for pods which have the annotation `http-header-injector.stackstate.io/inject: enabled` is set.
@@ -17,12 +17,14 @@ going through the cluster for pods which have the annotation `http-header-inject
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| certificatePrehook | object | `{"image":{"pullPolicy":"IfNotPresent","registry":null,"repository":"stackstate/container-tools","tag":"1.2.0"}}` | Helm prehook to setup/remove a certificate for the sidecarInjector mutationwebhook |
+| certificatePrehook | object | `{"image":{"pullPolicy":"IfNotPresent","registry":null,"repository":"stackstate/container-tools","tag":"1.2.0"},"resources":{"limits":{"cpu":"100m","memory":"100Mi"},"requests":{"cpu":"100m","memory":"100Mi"}}}` | Helm prehook to setup/remove a certificate for the sidecarInjector mutationwebhook |
 | certificatePrehook.image.pullPolicy | string | `"IfNotPresent"` | Policy when pulling an image |
 | certificatePrehook.image.registry | string | `nil` | Registry for the docker image. |
 | certificatePrehook.image.tag | string | `"1.2.0"` | The tag for the docker image |
 | debug | bool | `false` | Enable debugging. This will leave leave artifacts around like the prehook jobs for further inspection |
 | enabled | bool | `true` | Enable/disable the mutationwebhook |
+| global.extraAnnotations | object | `{}` | Extra annotations added ta all resources created by the helm chart |
+| global.extraLabels | object | `{}` | Extra labels added ta all resources created by the helm chart |
 | global.imagePullCredentials | object | `{}` | Globally define credentials for pulling images. |
 | global.imagePullSecrets | list | `[]` | Globally add image pull secrets that are used. |
 | global.imageRegistry | string | `nil` | Globally override the image registry that is used. Can be overridden by specific containers. Defaults to quay.io |
