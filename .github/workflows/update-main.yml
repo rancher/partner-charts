@@ -12,8 +12,6 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-
     - name: Configure git
       run: |
         git config --global user.name "github-actions[bot]"
@@ -23,8 +21,8 @@ jobs:
       uses: rancher-eio/read-vault-secrets@main
       with:
         secrets: |
-          github/repo/rancher/partner-charts/github/app-credentials appId | APP_ID ;
-          github/repo/rancher/partner-charts/github/app-credentials privateKey | PRIVATE_KEY
+          secret/data/github/repo/rancher/partner-charts/github/app-credentials appId | APP_ID ;
+          secret/data/github/repo/rancher/partner-charts/github/app-credentials privateKey | PRIVATE_KEY
 
     - name: Generate short-lived github app token
       uses: actions/create-github-app-token@v1
@@ -33,9 +31,11 @@ jobs:
         app-id: ${{ env.APP_ID }}
         private-key: ${{ env.PRIVATE_KEY }}
 
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ steps.app-token.outputs.token }}
+
     - name: Update main branch with latest from main-source
-      env:
-        APP_TOKEN: ${{ steps.app-token.outputs.token }}
       run: |
         # checkout action only fetches main-source, so we need to fetch main
         git fetch origin main --depth 1
@@ -48,5 +48,4 @@ jobs:
         git diff-index --quiet HEAD assets index.yaml && exit 0
 
         git commit -m "Release partner charts"
-        git remote set-url origin https://x-access-token:${APP_TOKEN}@github.com/rancher/partner-charts
-        git push origin
+        git push origin main
