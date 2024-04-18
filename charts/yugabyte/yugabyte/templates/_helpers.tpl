@@ -26,7 +26,7 @@ Generate common labels.
 {{- define "yugabyte.labels" }}
 heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
 release: {{ .Release.Name | quote }}
-chart: {{ .Chart.Name | quote }}
+chart: {{ .Values.oldNamingStyle | ternary .Chart.Name (include "yugabyte.chart" .) | quote }}
 component: {{ .Values.Component | quote }}
 {{- if .Values.commonLabels}}
 {{ toYaml .Values.commonLabels }}
@@ -57,89 +57,6 @@ release: {{ .root.Release.Name | quote }}
 {{- end }}
 
 {{/*
-Create secrets in DBNamespace from other namespaces by iterating over envSecrets.
-*/}}
-{{- define "yugabyte.envsecrets" -}}
-{{- range $v := .secretenv }}
-{{- if $v.valueFrom.secretKeyRef.namespace }}
-{{- $secretObj := (lookup
-"v1"
-"Secret"
-$v.valueFrom.secretKeyRef.namespace
-$v.valueFrom.secretKeyRef.name)
-| default dict }}
-{{- $secretData := (get $secretObj "data") | default dict }}
-{{- $secretValue := (get $secretData $v.valueFrom.secretKeyRef.key) | default "" }}
-{{- if (and (not $secretValue) (not $v.valueFrom.secretKeyRef.optional)) }}
-{{- required (printf "Secret or key missing for %s/%s in namespace: %s"
-$v.valueFrom.secretKeyRef.name
-$v.valueFrom.secretKeyRef.key
-$v.valueFrom.secretKeyRef.namespace)
-nil }}
-{{- end }}
-{{- if $secretValue }}
-apiVersion: v1
-kind: Secret
-metadata:
-  {{- $secretfullname := printf "%s-%s-%s-%s"
-  $.root.Release.Name
-  $v.valueFrom.secretKeyRef.namespace
-  $v.valueFrom.secretKeyRef.name
-  $v.valueFrom.secretKeyRef.key
-  }}
-  name: {{ printf "%s-%s-%s-%s-%s-%s"
-  $.root.Release.Name
-  ($v.valueFrom.secretKeyRef.namespace | substr 0 5)
-  ($v.valueFrom.secretKeyRef.name | substr 0 5)
-  ( $v.valueFrom.secretKeyRef.key | substr 0 5)
-  (sha256sum $secretfullname | substr 0 4)
-  ($.suffix)
-  | lower | replace "." "" | replace "_" ""
-  }}
-  namespace: "{{ $.root.Release.Namespace }}"
-  labels:
-    {{- include "yugabyte.labels" $.root | indent 4 }}
-type: Opaque # should it be an Opaque secret?
-data:
-  {{ $v.valueFrom.secretKeyRef.key }}: {{ $secretValue | quote }}
-{{- end }}
-{{- end }}
----
-{{- end }}
-{{- end }}
-
-{{/*
-Add env secrets to DB statefulset.
-*/}}
-{{- define "yugabyte.addenvsecrets" -}}
-{{- range $v := .secretenv }}
-- name: {{ $v.name }}
-  valueFrom:
-    secretKeyRef:
-      {{- if $v.valueFrom.secretKeyRef.namespace }}
-      {{- $secretfullname := printf "%s-%s-%s-%s"
-      $.root.Release.Name
-      $v.valueFrom.secretKeyRef.namespace
-      $v.valueFrom.secretKeyRef.name
-      $v.valueFrom.secretKeyRef.key
-      }}
-      name: {{ printf "%s-%s-%s-%s-%s-%s"
-      $.root.Release.Name
-      ($v.valueFrom.secretKeyRef.namespace | substr 0 5)
-      ($v.valueFrom.secretKeyRef.name | substr 0 5)
-      ($v.valueFrom.secretKeyRef.key | substr 0 5)
-      (sha256sum $secretfullname | substr 0 4)
-      ($.suffix)
-      | lower | replace "." "" | replace "_" ""
-      }}
-      {{- else }}
-      name: {{ $v.valueFrom.secretKeyRef.name }}
-      {{- end }}
-      key: {{ $v.valueFrom.secretKeyRef.key }}
-      optional: {{ $v.valueFrom.secretKeyRef.optional | default "false" }}
-{{- end }}
-{{- end }}
-{{/*
 Create Volume name.
 */}}
 {{- define "yugabyte.volume_name" -}}
@@ -167,21 +84,18 @@ Generate a preflight check script invocation.
 */}}
 {{- define "yugabyte.preflight_check" -}}
 {{- if not .Values.preflight.skipAll -}}
-{{- $port := .Preflight.Port -}}
-{{- range $addr := split "," .Preflight.Addr -}}
 if [ -f /home/yugabyte/tools/k8s_preflight.py ]; then
   PYTHONUNBUFFERED="true" /home/yugabyte/tools/k8s_preflight.py \
     dnscheck \
-    --addr="{{ $addr }}" \
-{{- if not $.Values.preflight.skipBind }}
-    --port="{{ $port }}"
+    --addr="{{ .Preflight.Addr }}" \
+{{- if not .Values.preflight.skipBind }}
+    --port="{{ .Preflight.Port }}"
 {{- else }}
     --skip_bind
 {{- end }}
 fi && \
-{{ end }}
-{{- end }}
-{{- end }}
+{{- end -}}
+{{- end -}}
 
 {{/*
 Get YugaByte fs data directories.
@@ -216,20 +130,12 @@ echo "disk check at: $(date)" \
 Generate server FQDN.
 */}}
 {{- define "yugabyte.server_fqdn" -}}
-  {{- if .Values.multicluster.createServicePerPod -}}
+  {{- if (and .Values.istioCompatibility.enabled .Values.multicluster.createServicePerPod) -}}
     {{- printf "$(HOSTNAME).$(NAMESPACE).svc.%s" .Values.domainName -}}
-  {{- else if (and .Values.oldNamingStyle .Values.multicluster.createServiceExports) -}}
-    {{ $membershipName := required "A valid membership name is required! Please set multicluster.kubernetesClusterId" .Values.multicluster.kubernetesClusterId }}
-    {{- printf "$(HOSTNAME).%s.%s.$(NAMESPACE).svc.clusterset.local" $membershipName .Service.name -}}
   {{- else if .Values.oldNamingStyle -}}
     {{- printf "$(HOSTNAME).%s.$(NAMESPACE).svc.%s" .Service.name .Values.domainName -}}
   {{- else -}}
-    {{- if .Values.multicluster.createServiceExports -}}
-      {{ $membershipName := required "A valid membership name is required! Please set multicluster.kubernetesClusterId" .Values.multicluster.kubernetesClusterId }}
-      {{- printf "$(HOSTNAME).%s.%s-%s.$(NAMESPACE).svc.clusterset.local" $membershipName (include "yugabyte.fullname" .) .Service.name -}}
-    {{- else -}}
-      {{- printf "$(HOSTNAME).%s-%s.$(NAMESPACE).svc.%s" (include "yugabyte.fullname" .) .Service.name .Values.domainName -}}
-    {{- end -}}
+    {{- printf "$(HOSTNAME).%s-%s.$(NAMESPACE).svc.%s" (include "yugabyte.fullname" .) .Service.name .Values.domainName -}}
   {{- end -}}
 {{- end -}}
 
@@ -242,25 +148,10 @@ Generate server broadcast address.
 
 {{/*
 Generate server RPC bind address.
-
-In case of multi-cluster services (MCS), we set it to $(POD_IP) to
-ensure YCQL uses a resolvable address.
-See https://github.com/yugabyte/yugabyte-db/issues/16155
-
-We use a workaround for above in case of Istio by setting it to
-$(POD_IP) and localhost. Master doesn't support that combination, so
-we stick to 0.0.0.0, which works for master.
 */}}
 {{- define "yugabyte.rpc_bind_address" -}}
-  {{- $port := index .Service.ports "tcp-rpc-port" -}}
   {{- if .Values.istioCompatibility.enabled -}}
-    {{- if (eq .Service.name "yb-masters") -}}
-      0.0.0.0:{{ $port }}
-    {{- else -}}
-      $(POD_IP):{{ $port }},127.0.0.1:{{ $port }}
-    {{- end -}}
-  {{- else if (or .Values.multicluster.createServiceExports .Values.multicluster.createServicePerPod) -}}
-    $(POD_IP):{{ $port }}
+    0.0.0.0:{{ index .Service.ports "tcp-rpc-port" -}}
   {{- else -}}
     {{- include "yugabyte.server_fqdn" . -}}
   {{- end -}}
@@ -277,7 +168,7 @@ Generate server web interface.
 Generate server CQL proxy bind address.
 */}}
 {{- define "yugabyte.cql_proxy_bind_address" -}}
-  {{- if or .Values.istioCompatibility.enabled .Values.multicluster.createServiceExports .Values.multicluster.createServicePerPod -}}
+  {{- if .Values.istioCompatibility.enabled -}}
     0.0.0.0:{{ index .Service.ports "tcp-yql-port" -}}
   {{- else -}}
     {{- include "yugabyte.server_fqdn" . -}}
@@ -322,10 +213,10 @@ Compute the maximum number of unavailable pods based on the number of master rep
 Set consistent issuer name.
 */}}
 {{- define "yugabyte.tls_cm_issuer" -}}
-  {{- if .Values.tls.certManager.bootstrapSelfsigned -}}
-    {{ .Values.oldNamingStyle | ternary "yugabyte-selfsigned" (printf "%s-selfsigned" (include "yugabyte.fullname" .)) }}
+  {{- if .Values.tls.certManager.useClusterIssuer -}}
+    {{ .Values.tls.certManager.clusterIssuer }}
   {{- else -}}
-    {{ .Values.tls.certManager.useClusterIssuer | ternary .Values.tls.certManager.clusterIssuer .Values.tls.certManager.issuer}}
+    {{ .Values.oldNamingStyle | ternary "yugabyte-selfsigned" (printf "%s-selfsigned" (include "yugabyte.fullname" .)) }}
   {{- end -}}
 {{- end -}}
 
@@ -364,52 +255,4 @@ Set consistent issuer name.
         {{- end -}}
       {{- end -}}
   {{- end -}}
-{{- end -}}
-
-{{/*
-  Default nodeAffinity for multi-az deployments
-*/}}
-{{- define "yugabyte.multiAZNodeAffinity" -}}
-requiredDuringSchedulingIgnoredDuringExecution:
-  nodeSelectorTerms:
-  - matchExpressions:
-    - key: failure-domain.beta.kubernetes.io/zone
-      operator: In
-      values:
-      - {{ quote .Values.AZ }}
-  - matchExpressions:
-    - key: topology.kubernetes.io/zone
-      operator: In
-      values:
-      - {{ quote .Values.AZ }}
-{{- end -}}
-
-{{/*
-  Default podAntiAffinity for master and tserver
-
-  This requires "appLabelArgs" to be passed in - defined in service.yaml
-  we have a .root and a .label in appLabelArgs
-*/}}
-{{- define "yugabyte.podAntiAffinity" -}}
-preferredDuringSchedulingIgnoredDuringExecution:
-- weight: 100
-  podAffinityTerm:
-    labelSelector:
-      matchExpressions:
-      {{- if .root.Values.oldNamingStyle }}
-      - key: app
-        operator: In
-        values:
-        - "{{ .label }}"
-      {{- else }}
-      - key: app.kubernetes.io/name
-        operator: In
-        values:
-        - "{{ .label }}"
-      - key: release
-        operator: In
-        values:
-        - {{ .root.Release.Name | quote }}
-      {{- end }}
-    topologyKey: kubernetes.io/hostname
 {{- end -}}

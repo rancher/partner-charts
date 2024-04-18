@@ -184,6 +184,16 @@ returns: formatted image string
 {{- define "kuma.parentSecrets" -}}
 {{- end -}}
 
+{{- define "kuma.pluginPoliciesEnabled" -}}
+{{- $list := list -}}
+{{- range $k, $v := .Values.plugins.policies -}}
+{{- if $v -}}
+{{- $list = append $list (printf "%s" $k) -}}
+{{- end -}}
+{{- end -}}
+{{ join "," $list }}
+{{- end -}}
+
 {{- define "kuma.defaultEnv" -}}
 env:
 {{ include "kuma.parentEnv" . }}
@@ -255,8 +265,8 @@ env:
   value: "false"
 - name: KUMA_RUNTIME_KUBERNETES_SERVICE_ACCOUNT_NAME
   value: "system:serviceaccount:{{ .Release.Namespace }}:{{ include "kuma.name" . }}-control-plane"
-{{- if .Values.experimental.gatewayAPI }}
-- name: KUMA_EXPERIMENTAL_GATEWAY_API
+{{- if .Values.experimental.sidecarContainers }}
+- name: KUMA_EXPERIMENTAL_SIDECAR_CONTAINERS
   value: "true"
 {{- end }}
 {{- if .Values.cni.enabled }}
@@ -287,6 +297,8 @@ env:
 - name: KUMA_MULTIZONE_ZONE_KDS_TLS_SKIP_VERIFY
   value: "true"
 {{- end }}
+- name: KUMA_PLUGIN_POLICIES_ENABLED
+  value: {{ include "kuma.pluginPoliciesEnabled" . | quote }}
 {{- end }}
 
 {{- define "kuma.controlPlane.tls.general.caSecretName" -}}
@@ -304,6 +316,8 @@ env:
 {{ end }}
 
 env:
+- name: KUMA_PLUGIN_POLICIES_ENABLED
+  value: {{ include "kuma.pluginPoliciesEnabled" . | quote }}
 - name: KUMA_GENERAL_WORK_DIR
   value: "/tmp/kuma"
 - name: KUMA_ENVIRONMENT
@@ -358,6 +372,8 @@ env:
 - name: KUMA_MULTIZONE_GLOBAL_KDS_TLS_KEY_FILE
   value: /var/run/secrets/kuma.io/kds-server-tls-cert/tls.key
 {{- end }}
+- name: KUMA_STORE_POSTGRES_TLS_MODE
+  value: {{ .Values.postgres.tls.mode }}
 {{- if or (eq .Values.postgres.tls.mode "verifyCa") (eq .Values.postgres.tls.mode "verifyFull") }}
 {{- if empty .Values.postgres.tls.caSecretName }}
 {{ fail "if mode is 'verifyCa' or 'verifyFull' then you must provide .Values.postgres.tls.caSecretName" }}
@@ -372,8 +388,6 @@ env:
 - name: KUMA_STORE_POSTGRES_TLS_CA_PATH
   value: /var/run/secrets/kuma.io/postgres-tls-cert/ca.crt
 {{- end }}
-- name: KUMA_STORE_POSTGRES_TLS_MODE
-  value: {{ .Values.postgres.tls.mode }}
 {{- if .Values.postgres.tls.disableSSLSNI }}
 - name: KUMA_STORE_POSTGRES_TLS_DISABLE_SSLSNI
   value: {{ .Values.postgres.tls.disableSSLSNI }}

@@ -31,31 +31,27 @@ data:
     log.override.path = "/opt/yugabyte/yugaware/data/logs"
 
     db {
-      default.dbname=${POSTGRES_DB}
   {{ if .Values.postgres.external.host }}
       default.host="{{ .Values.postgres.external.host }}"
       default.port={{ .Values.postgres.external.port }}
+      default.url="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${POSTGRES_DB}${db.default.params}
   {{ else if eq .Values.ip_version_support "v6_only" }}
-      default.host="[::1]"
+      default.host="::1"
+      default.url="jdbc:postgresql://[::1]:"${db.default.port}"/"${POSTGRES_DB}${db.default.params}
   {{ else }}
       default.host="127.0.0.1"
+      default.url="jdbc:postgresql://127.0.0.1:"${db.default.port}"/"${POSTGRES_DB}${db.default.params}
   {{ end }}
-      default.url="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${db.default.dbname}${db.default.params}
       default.params="{{ .Values.jdbcParams }}"
+      default.driver=org.postgresql.Driver
       default.username=${POSTGRES_USER}
       default.password=${POSTGRES_PASSWORD}
-  {{ if .Values.yugaware.cloud.enabled }}
-      perf_advisor.driver="org.hsqldb.jdbc.JDBCDriver"
-      perf_advisor.url="jdbc:hsqldb:mem:perf-advisor"
-      perf_advisor.createDatabaseIfMissing=false
-      perf_advisor.username="sa"
-      perf_advisor.password="sa"
-      perf_advisor.migration.auto=false
-      perf_advisor.migration.disabled=true
-  {{ else }}
-      perf_advisor.url="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${db.perf_advisor.dbname}${db.default.params}
-      perf_advisor.createDatabaseUrl="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${db.default.dbname}${db.default.params}
-  {{ end }}
+      default.logStatements=true
+      default.migration.initOnMigrate=true
+      default.migration.auto=true
+    }
+    ebean {
+      default = ["com.yugabyte.yw.models.*"]
     }
 
     {{- if .Values.tls.enabled }}
@@ -144,7 +140,7 @@ data:
     {{- range $key, $value := .Values.additionalAppConf.nonStringConf }}
     {{ $key }} = {{ $value }}
     {{- end }}
-{{- if and .Values.tls.enabled (not .Values.tls.certManager.enabled) }}
+{{- if .Values.tls.enabled }}
 ---
 apiVersion: v1
 kind: Secret
@@ -159,8 +155,8 @@ type: Opaque
 data:
 {{- include "getOrCreateServerPem" (dict "Namespace" .Release.Namespace "Root" . "Name" (printf "%s%s" .Release.Name "-yugaware-tls-pem")) | nindent 2 }}
 {{- end }}
+
 ---
-{{- if not (and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io")) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -186,25 +182,6 @@ data:
       docker-upgrade pg_upgrade | tee -a /pg_upgrade_logs/pg_upgrade_11_to_14.log;
       echo "host all all all scram-sha-256" >> "${PGDATANEW}/pg_hba.conf";
     fi
-{{- end }}
-{{- if .Values.securityContext.enabled }}
----
-apiVersion: "v1"
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-yugaware-pg-prerun
-  labels:
-    app: {{ template "yugaware.name" . }}
-    chart: {{ template "yugaware.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
-data:
-  pg-prerun.sh: |
-    #!/bin/bash
-    set -x -o errexit
-
-    mkdir -p $PGDATA && chown -R $PG_UID:$PG_GID $PGDATA;
-{{- end }}
 
 {{- if .Values.prometheus.remoteWrite.tls.enabled }}
 ---
@@ -275,11 +252,7 @@ data:
             - 'container_cpu_usage_seconds_total{pod=~"(.*)yb-(.*)"}'
             - 'container_memory_working_set_bytes{pod=~"(.*)yb-(.*)"}'
             # kube-state-metrics
-            # Supports >= OCP v4.4
-            # OCP v4.4 has upgraded the KSM from 1.8.0 to 1.9.5.
-            # https://docs.openshift.com/container-platform/4.4/release_notes/ocp-4-4-release-notes.html#ocp-4-4-cluster-monitoring-version-updates
-            # - 'kube_pod_container_resource_requests_cpu_cores{pod=~"(.*)yb-(.*)"}'
-            - 'kube_pod_container_resource_requests{pod=~"(.*)yb-(.*)", unit="core"}'
+            - 'kube_pod_container_resource_requests_cpu_cores{pod=~"(.*)yb-(.*)"}'
 
         static_configs:
           - targets:
@@ -299,15 +272,8 @@ data:
             regex: "(.*)"
             target_label: "container_name"
             replacement: "$1"
-          # rename new name of the CPU metric to the old name and label
-          # ref: https://github.com/kubernetes/kube-state-metrics/blob/master/CHANGELOG.md#v200-alpha--2020-09-16
-          - source_labels: ["__name__", "unit"]
-            regex: "kube_pod_container_resource_requests;core"
-            target_label: "__name__"
-            replacement: "kube_pod_container_resource_requests_cpu_cores"
 
       {{- else }}
-      {{- if .Values.prometheus.scrapeKubernetesNodes }}
 
       - job_name: 'kubernetes-nodes'
 
@@ -356,8 +322,8 @@ data:
         - targets: ['kube-state-metrics.kube-system.svc.{{.Values.domainName}}:8080']
         metric_relabel_configs:
           # Only keep the metrics which we care about
-          - source_labels: ["__name__", "unit"]
-            regex: "kube_pod_container_resource_requests;core"
+          - source_labels: ["__name__"]
+            regex: "kube_pod_container_resource_requests_cpu_cores"
             action: keep
           # Save the name of the metric so we can group_by since we cannot by __name__ directly...
           - source_labels: ["__name__"]
@@ -375,16 +341,6 @@ data:
           # Keep metrics from YugabyteDB pods, discard everything else
           - source_labels: ["pod_name"]
             regex: "(.*)yb-(.*)"
-            action: keep
-          # rename new name of the CPU metric to the old name and label
-          # ref: https://github.com/kubernetes/kube-state-metrics/blob/master/CHANGELOG.md#v200-alpha--2020-09-16
-          - source_labels: ["__name__", "unit"]
-            regex: "kube_pod_container_resource_requests;core"
-            target_label: "__name__"
-            replacement: "kube_pod_container_resource_requests_cpu_cores"
-          # Keep metrics for CPU, discard duplicate metrics
-          - source_labels: ["__name__"]
-            regex: "kube_pod_container_resource_requests_cpu_cores"
             action: keep
 
       - job_name: 'kubernetes-cadvisor'
@@ -431,21 +387,6 @@ data:
             action: keep
 
       {{- end }}
-      {{- end }}
-
-      {{- if .Values.tls.enabled }}
-
-      - job_name: 'platform'
-        metrics_path: "/api/v1/prometheus_metrics"
-        scheme: https
-        tls_config:
-          insecure_skip_verify: true
-        static_configs:
-          - targets: [
-            '{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}:9443'
-          ]
-
-      {{- else }}
 
       - job_name: 'platform'
         metrics_path: "/api/v1/prometheus_metrics"
@@ -453,14 +394,6 @@ data:
           - targets: [
             '{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}:9000'
           ]
-
-      {{- end }}
-
-      - job_name: 'node-agent'
-        metrics_path: "/metrics"
-        file_sd_configs:
-          - files:
-            - '/opt/yugabyte/prometheus/targets/node-agent.*.json'
 
       - job_name: "node"
         file_sd_configs:
@@ -547,8 +480,6 @@ data:
             replacement: "$1"
 
       - job_name: "yugabyte"
-        tls_config:
-          insecure_skip_verify: true
         metrics_path: "/prometheus-metrics"
         file_sd_configs:
           - files:

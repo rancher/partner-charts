@@ -25,11 +25,8 @@ spec:
 {{- end }}
       labels:
         app: {{ .Release.Name }}-yugaware
-{{- if .Values.yugaware.pod.labels }}
-{{ toYaml .Values.yugaware.pod.labels | indent 8 }}
-{{- end }}
     spec:
-      serviceAccountName: {{ .Values.yugaware.serviceAccount | default .Release.Name }}
+      serviceAccountName: {{ .Release.Name }}
       imagePullSecrets:
       - name: {{ .Values.image.pullSecret }}
       {{- if .Values.securityContext.enabled }}
@@ -38,30 +35,6 @@ spec:
         {{- if (semverCompare ">=1.20-x" .Capabilities.KubeVersion.Version) }}
         fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
         {{- end }}
-      {{- end }}
-      {{- if .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8}}
-      {{- end }}
-      {{- if .Values.tolerations }}
-      tolerations:
-      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
-      {{- end }}
-      {{- if .Values.zoneAffinity }}
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: failure-domain.beta.kubernetes.io/zone
-                operator: In
-                values:
-{{ toYaml .Values.zoneAffinity | indent 18 }}
-            - matchExpressions:
-              - key: topology.kubernetes.io/zone
-                operator: In
-                values:
-{{ toYaml .Values.zoneAffinity | indent 18 }}
       {{- end }}
       volumes:
         - name: yugaware-storage
@@ -111,36 +84,15 @@ spec:
           secret:
             secretName: {{ .Release.Name }}-yugaware-prometheus-remote-write-tls
         {{- end }}
-        {{- if not (and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io")) }}
         - name: pg-upgrade-11-to-14
           configMap:
             name: {{ .Release.Name }}-yugaware-pg-upgrade
             items:
               - key: pg-upgrade-11-to-14.sh
                 path: pg-upgrade-11-to-14.sh
-        {{- end }}
-        - name: pg-init
-          configMap:
-            name: {{ .Release.Name }}-yugaware-pg-prerun
-            items:
-              - key: pg-prerun.sh
-                path: pg-prerun.sh
-          {{- if .Values.postgres.extraVolumes -}}
-            {{- include "yugaware.isExtraVolumesMappingExists" .Values.postgres -}}
-            {{- .Values.postgres.extraVolumes | toYaml | nindent 8 -}}
-          {{ end }}
-      {{- with .Values.dnsConfig }}
-      dnsConfig: {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.dnsPolicy }}
-      dnsPolicy: {{ . | quote }}
-      {{- end }}
       initContainers:
         - image: {{ include "full_yugaware_image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.initContainers.prometheusConfiguration.resources }}
-          resources: {{- toYaml .Values.initContainers.prometheusConfiguration.resources | nindent 12 }}
-          {{ end -}}
           name: prometheus-configuration
           {{- if .Values.securityContext.enabled }}
           command:
@@ -168,13 +120,9 @@ spec:
           - name: init-container-script
             mountPath: /init-container
           {{- end }}
-        {{- if not (and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io")) }}
         - image: {{ include "full_image" (dict "containerName" "postgres-upgrade" "root" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           name: postgres-upgrade
-          {{- if .Values.initContainers.postgresUpgrade.resources }}
-          resources: {{- toYaml .Values.initContainers.postgresUpgrade.resources | nindent 12 }}
-          {{ end -}}
           command:
           - 'bash'
           - '-c'
@@ -204,46 +152,12 @@ spec:
           - name: yugaware-storage
             mountPath: /pg_upgrade_logs
             subPath: postgres_data_14
-        {{- end }}
-        {{- if .Values.securityContext.enabled }}
-        - image: {{ include "full_image" (dict "containerName" "postgres" "root" .) }}
-          name: postgres-init
-          {{- if .Values.initContainers.postgresInit.resources }}
-          resources: {{- toYaml .Values.initContainers.postgresInit.resources | nindent 12 }}
-          {{ end -}}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/bin/bash", "/pg_prerun/pg-prerun.sh"]
-          env:
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
-            - name: PG_UID
-              value: {{ .Values.securityContext.runAsUser | quote }}
-            - name: PG_GID
-              value: {{ .Values.securityContext.runAsGroup | quote }}
-          volumeMounts:
-          - name: yugaware-storage
-            mountPath: /var/lib/postgresql/data
-            subPath: postgres_data_14
-          - name: pg-init
-            mountPath: /pg_prerun
-        {{- end }}
       containers:
         {{ if not .Values.postgres.external.host }}
         - name: postgres
           image: {{ include "full_image" (dict "containerName" "postgres" "root" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args:
-          {{- if and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io") }}
-          - "run-postgresql"
-          {{- end }}
-          - "-c"
-          - "huge_pages=off"
-          {{- if .Values.securityContext.enabled }}
-          securityContext:
-            runAsUser: {{ required "runAsUser cannot be empty" .Values.securityContext.runAsUser }}
-            runAsGroup: {{ .Values.securityContext.runAsGroup | default 0 }}
-            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
-          {{- end }}
+          args: ["-c", "huge_pages=off"]
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -260,37 +174,8 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-yugaware-global-config
                   key: postgres_db
-            {{- if and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io") }}
-            # Hardcoded the POSTGRESQL_USER because it's mandatory env var in RH PG image
-            # It doesn't have access to create the DB, so YBA fails to create the perf_advisor DB.
-            # Need to use admin user of RH PG image (postgres)
-            # Changing the user name won't be possible moving forward for OpenShift certified chart
-            - name: POSTGRESQL_USER
-              value: pg-yba
-              # valueFrom:
-              #   secretKeyRef:
-              #     name: {{ .Release.Name }}-yugaware-global-config
-              #     key: postgres_user
-            - name: POSTGRESQL_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-yugaware-global-config
-                  key: postgres_password
-            - name: POSTGRESQL_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-yugaware-global-config
-                  key: postgres_password
-            - name: POSTGRESQL_DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-yugaware-global-config
-                  key: postgres_db
-            {{- else }}
-            # The RH Postgres image doesn't allow this directory to be changed.
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
-            {{- end }}
           ports:
             - containerPort: 5432
               name: postgres
@@ -302,17 +187,8 @@ spec:
 
           volumeMounts:
             - name: yugaware-storage
-              {{- if and (.Values.ocpCompatibility.enabled) (eq .Values.image.postgres.registry "registry.redhat.io") }}
-              mountPath: /var/lib/pgsql/data
-              subPath: postgres_data_13
-              {{- else }}
               mountPath: /var/lib/postgresql/data
               subPath: postgres_data_14
-              {{- end }}
-         {{- if .Values.postgres.extraVolumeMounts -}}
-          {{- include "yugaware.isExtraVolumesMappingExists" .Values.postgres -}}
-          {{- .Values.postgres.extraVolumeMounts | toYaml | nindent 12 -}}
-        {{- end -}}
         {{ end }}
         - name: prometheus
           image: {{ include "full_image" (dict "containerName" "prometheus" "root" .) }}
@@ -338,9 +214,6 @@ spec:
             subPath: prometheus.yml
           - name: yugaware-storage
             mountPath: /prometheus/
-          - mountPath: /opt/yugabyte/yugaware/data/keys/
-            name: yugaware-storage
-            subPath: data/keys
           {{- if .Values.prometheus.scrapeNodes }}
           - name: yugaware-storage
             mountPath: /opt/yugabyte/prometheus/targets
@@ -362,9 +235,6 @@ spec:
             - --web.enable-admin-api
             - --web.enable-lifecycle
             - --storage.tsdb.retention.time={{ .Values.prometheus.retentionTime }}
-            - --query.max-concurrency={{ .Values.prometheus.queryConcurrency }}
-            - --query.max-samples={{ .Values.prometheus.queryMaxSamples }}
-            - --query.timeout={{ .Values.prometheus.queryTimeout }}
           ports:
             - containerPort: 9090
         - name: yugaware
@@ -381,18 +251,12 @@ spec:
           resources:
 {{ toYaml .Values.yugaware.resources | indent 12 }}
           {{- end }}
-          args: ["bin/yugaware","-Dconfig.file=/data/application.docker.conf"]
+
+          command: [ "/sbin/tini", "--"]
+          args:
+            - "bin/yugaware"
+            - "-Dconfig.file=/data/application.docker.conf"
           env:
-          # Conditionally set these env variables, if runAsUser is not 0(root)
-          # or 10001(yugabyte).
-          {{- if eq (include "checkNssWrapperExportRequired" .) "true" }}
-            - name: NSS_WRAPPER_GROUP
-              value: "/tmp/group.template"
-            - name: NSS_WRAPPER_PASSWD
-              value: "/tmp/passwd.template"
-            - name: LD_PRELOAD
-              value: "/usr/lib64/libnss_wrapper.so"
-          {{- end }}
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -413,7 +277,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-yugaware-global-config
                   key: app_secret
-            {{- with .Values.yugaware.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
           ports:
             - containerPort: 9000
               name: yugaware
@@ -430,9 +293,6 @@ spec:
           - name: yugaware-storage
             mountPath: /opt/yugabyte/releases/
             subPath: releases
-          - name: yugaware-storage
-            mountPath: /opt/yugabyte/ybc/releases/
-            subPath: ybc_releases
           # old path for backward compatibility
           - name: yugaware-storage
             mountPath: /opt/releases/
