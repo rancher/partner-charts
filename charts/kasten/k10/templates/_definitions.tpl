@@ -29,9 +29,9 @@ vbrintegrationapi:
 {{- end -}}
 {{- define "k10.colocatedServiceLookup" -}}
 crypto:
+- bloblifecyclemanager
 - garbagecollector
 - repositories
-- bloblifecyclemanager
 dashboardbff:
 - vbrintegrationapi
 state:
@@ -92,6 +92,7 @@ state:
 {{- define "k10.defaultK10LimiterGenericVolumeCopies" -}}10{{- end -}}
 {{- define "k10.defaultK10LimiterGenericVolumeRestores" -}}10{{- end -}}
 {{- define "k10.defaultK10LimiterCsiSnapshots" -}}10{{- end -}}
+{{- define "k10.defaultK10LimiterImageCopies" -}}10{{- end -}}
 {{- define "k10.defaultK10LimiterProviderSnapshots" -}}10{{- end -}}
 {{- define "k10.defaultK10GCDaemonPeriod" -}}21600{{- end -}}
 {{- define "k10.defaultK10GCKeepMaxActions" -}}1000{{- end -}}

@@ -2,13 +2,14 @@
 {{- $service_port := .Values.gateway.service.externalPort -}}
 {{ if .Values.ingress.create }}
 {{ include "authEnabled.check" . }}
+{{ include "check.ingress.defaultBackend" . }}
 apiVersion: {{ template "ingress.apiVersion" . }}
 kind: Ingress
 metadata:
   labels:
 {{ include "helm.labels" . | indent 4 }}
   namespace: {{ .Release.Namespace }}
-  name: {{ .Release.Name }}-ingress
+  name: {{ .Values.ingress.name | default (printf "%s-ingress" .Release.Name) }}
   annotations:
 {{ include "ingressClassAnnotation" . | indent 4 }}
     {{- if and .Values.secrets.apiTlsCrt .Values.secrets.apiTlsKey }}
@@ -20,6 +21,31 @@ metadata:
     {{- end }}
 spec:
 {{ include "specIngressClassName" . | indent 2 }}
+{{ with .Values.ingress.defaultBackend }}
+  {{- if or .service.enabled .resource.enabled }}
+  defaultBackend:
+    {{- with .service }}
+    {{- if .enabled }}
+    service:
+      name: {{ required "`name` is required in the `ingress.defaultBackend.service`." .name }}
+      port:
+        {{- if .port.name }}
+        name: {{ .port.name }}
+        {{- else if .port.number }}
+        number: {{ .port.number }}
+        {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- with .resource }}
+    {{- if .enabled }}
+    resource:
+      apiGroup: {{ .apiGroup }}
+      name: {{ required "`name` is required in the `ingress.defaultBackend.resource`." .name }}
+      kind: {{ required "`kind` is required in the `ingress.defaultBackend.resource`." .kind }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
 {{- if .Values.ingress.tls.enabled }}
   tls:
   - hosts:

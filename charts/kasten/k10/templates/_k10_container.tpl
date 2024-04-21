@@ -105,7 +105,24 @@ stating that types are not same for the equality check
                 name: google-secret
                 key: kasten-gke-project
 {{- end }}
-{{- if eq (include "check.azurecreds" .) "true" }}
+{{- if or  (eq (include "check.azuresecret" .) "true") (eq (include "check.azurecreds" .) "true" )  }}
+{{- if eq (include "check.azuresecret" .) "true" }}
+          - name: AZURE_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.azureClientSecretName }}
+                key: azure_client_id
+          - name: AZURE_TENANT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.azureClientSecretName }}
+                key: azure_tenant_id
+          - name: AZURE_CLIENT_SECRET
+            valueFrom:
+             secretKeyRef:
+               name: {{ .Values.secrets.azureClientSecretName }}
+               key: azure_client_secret
+{{- else }}
 {{- if or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureClientSecretCreds" .) "true") }}
           - name: AZURE_CLIENT_ID
             valueFrom:
@@ -124,6 +141,7 @@ stating that types are not same for the equality check
               secretKeyRef:
                 name: azure-creds
                 key: azure_client_secret
+{{- end }}
 {{- end }}
 {{- if .Values.secrets.azureResourceGroup }}
           - name: AZURE_RESOURCE_GROUP
@@ -437,11 +455,28 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: K10LimiterProviderSnapshots
+          - name: K10_LIMITER_IMAGE_COPIES
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10LimiterImageCopies
+          - name: K10_EPHEMERAL_PVC_OVERHEAD
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10EphemeralPVCOverhead
           - name: AWS_ASSUME_ROLE_DURATION
             valueFrom:
               configMapKeyRef:
                 name: k10-config
                 key: AWSAssumeRoleDuration
+{{- if (list "kanister" "executor" "repositories" | has $service) }}
+          - name: K10_DATA_STORE_DISABLE_COMPRESSION
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: k10DataStoreDisableCompression
+{{- end }}
 {{- if (list "dashboardbff" "catalog" "executor" "crypto" | has $service) }}
     {{- if .Values.metering.mode }}
           - name: K10REPORTMODE

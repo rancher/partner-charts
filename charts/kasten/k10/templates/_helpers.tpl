@@ -115,6 +115,16 @@
     {{- $internal_capabilities = append $internal_capabilities "mc" -}}
   {{- end -}}
 
+  {{- /* FIPS */ -}}
+  {{- $fips := .Values.fips | default dict -}}
+  {{- if $fips.enabled -}}
+    {{- $internal_capabilities = append $internal_capabilities "fips" -}}
+
+    {{- if not $fips.allowNonFIPSImports -}}
+      {{- $internal_capabilities = append $internal_capabilities "fips.strict.migrations" -}}
+    {{- end -}}
+  {{- end -}}
+
   {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
 {{- end -}}
 
@@ -491,7 +501,7 @@ Checks and enforces only 1 set of azure creds is specified
 {{ if and (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true") }}
 {{- fail "useDefaultMSI is set to true, but an additional ClientID is also provided. Please choose one." }}
 {{- end -}}
-{{ if and (eq (include "check.azureClientSecretCreds" .) "true") (or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true")) }}
+{{ if and ( or (eq (include "check.azureClientSecretCreds" .) "true") (eq (include "check.azuresecret" .) "true" )) (or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true")) }}
 {{- fail "Both Azure ClientSecret and Managed Identity creds are available, but only one is allowed. Please choose one." }}
 {{- end -}}
 {{- end -}}
@@ -609,6 +619,12 @@ Check if Azure creds are specified
 */}}
 {{- define "check.azurecreds" -}}
 {{- if or (eq (include "check.azureClientSecretCreds" .) "true") ( or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true")) -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "check.azuresecret" -}}
+{{- if .Values.secrets.azureClientSecretName }}
 {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -934,6 +950,24 @@ Is ingress part of stable APIVersion.
   {{- eq (include "ingress.apiVersion" .) "networking.k8s.io/v1" -}}
 {{- end -}}
 
+{{/*
+Check if `ingress.defaultBackend` is properly formatted when specified.
+*/}}
+{{- define "check.ingress.defaultBackend" -}}
+  {{- if .Values.ingress.defaultBackend -}}
+    {{- if and .Values.ingress.defaultBackend.service.enabled .Values.ingress.defaultBackend.resource.enabled -}}
+      {{- fail "Both `service` and `resource` cannot be enabled in the `ingress.defaultBackend`. Provide only one." -}}
+    {{- end -}}
+    {{- if .Values.ingress.defaultBackend.service.enabled -}}
+      {{- if and (not .Values.ingress.defaultBackend.service.port.name) (not .Values.ingress.defaultBackend.service.port.number) -}}
+        {{- fail "Provide either `name` or `number` in the `ingress.defaultBackend.service.port`." -}}
+      {{- end -}}
+      {{- if and .Values.ingress.defaultBackend.service.port.name .Values.ingress.defaultBackend.service.port.number -}}
+        {{- fail "Both `name` and `number` cannot be specified in the `ingress.defaultBackend.service.port`. Provide only one." -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 
 {{- define "check.validatePrometheusConfig" -}}
     {{if and ( and .Values.global.prometheus.external.host .Values.global.prometheus.external.port) .Values.prometheus.server.enabled}}

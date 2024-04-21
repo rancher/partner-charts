@@ -69,13 +69,22 @@ Parameter | Description | Default
 `serviceAccount.create`| Specifies whether a ServiceAccount should be created | `true`
 `serviceAccount.name` | The name of the ServiceAccount to use. If not set, a name is derived using the release and chart names. | `None`
 `ingress.create` | Specifies whether the K10 dashboard should be exposed via ingress | `false`
+`ingress.name` | Optional name of the Ingress object for the K10 dashboard. If not set, the name is formed using the release name. | `{Release.Name}-ingress`
 `ingress.class` | Cluster ingress controller class: `nginx`, `GCE` | `None`
 `ingress.host` | FQDN (e.g., `k10.example.com`) for name-based virtual host | `None`
 `ingress.urlPath` | URL path for K10 Dashboard (e.g., `/k10`) | `Release.Name`
+`ingress.pathType` | Specifies the path type for the ingress resource | `ImplementationSpecific`
 `ingress.annotations` | Additional Ingress object annotations | `{}`
 `ingress.tls.enabled` | Configures a TLS use for `ingress.host` | `false`
 `ingress.tls.secretName` | Specifies a name of TLS secret | `None`
-`ingress.pathType` | Specifies the path type for the ingress resource | `ImplementationSpecific`
+`ingress.defaultBackend.service.enabled` | Configures the default backend backed by a service for the K10 dashboard Ingress (mutually exclusive setting with `ingress.defaultBackend.resource.enabled`). | `false`
+`ingress.defaultBackend.service.name` | The name of a service referenced by the default backend (required if the service-backed default backend is used). | `None`
+`ingress.defaultBackend.service.port.name` | The port name of a service referenced by the default backend (mutually exclusive setting with port `number`, required if the service-backed default backend is used). | `None`
+`ingress.defaultBackend.service.port.number` | The port number of a service referenced by the default backend (mutually exclusive setting with port `name`, required if the service-backed default backend is used). | `None`
+`ingress.defaultBackend.resource.enabled` | Configures the default backend backed by a resource for the K10 dashboard Ingress (mutually exclusive setting with `ingress.defaultBackend.service.enabled`). | `false`
+`ingress.defaultBackend.resource.apiGroup` | Optional API group of a resource backing the default backend. | `''`
+`ingress.defaultBackend.resource.kind` | The type of a resource being referenced by the default backend (required if the resource default backend is used). | `None`
+`ingress.defaultBackend.resource.name` | The name of a resource being referenced by the default backend (required if the resource default backend is used). | `None`
 `global.persistence.size` | Default global size of volumes for K10 persistent services  | `20Gi`
 `global.persistence.catalog.size` | Size of a volume for catalog service  | `global.persistence.size`
 `global.persistence.jobs.size` | Size of a volume for jobs service  | `global.persistence.size`
@@ -99,6 +108,7 @@ Parameter | Description | Default
 `secrets.azureTenantId` | Azure tenant ID (required for Azure deployment) | `None`
 `secrets.azureClientId` | Azure Service App ID | `None`
 `secrets.azureClientSecret` | Azure Service APP secret | `None`
+`secrets.azureClientSecretName` | The secret that contains ClientID, ClientSecret and TenantID for Azure | `None`
 `secrets.azureResourceGroup` | Resource Group name that was created for the Kubernetes cluster | `None`
 `secrets.azureSubscriptionID` | Subscription ID in your Azure tenant | `None`
 `secrets.azureResourceMgrEndpoint` | Resource management endpoint for the Azure Stack instance | `None`
@@ -194,6 +204,10 @@ Parameter | Description | Default
 `gateway.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for gateway pod | `{}`
 `gateway.service.externalPort` | Specifies the gateway services external port | `80`
 `genericVolumeSnapshot.resources.[requests\|limits].[cpu\|memory]` | Resource requests and limits for Generic Volume Snapshot restore pods | `{}`
+`multicluster.enabled` | Choose whether to enable the multi-cluster system components and capabilities | `true`
+`multicluster.primary.create` | Choose whether to setup cluster as a multi-cluster primary | `false`
+`multicluster.primary.name` | Primary cluster name | `''`
+`multicluster.primary.ingressURL` | Primary cluster dashboard URL | `''`
 `prometheus.k10image.registry` | (optional) Set Prometheus image registry. | `gcr.io`
 `prometheus.k10image.repository` | (optional) Set Prometheus image repository. | `kasten-images`
 `prometheus.rbac.create` | (optional) Whether to create Prometheus RBAC configuration. Warning - this action will allow prometheus to scrape pods in all k8s namespaces | `false`
@@ -239,6 +253,7 @@ Parameter | Description | Default
 `limiter.genericVolumeRestores` | Limit of concurrent generic volume snapshot restore operations | `10`
 `limiter.csiSnapshots` | Limit of concurrent CSI snapshot create operations | `10`
 `limiter.providerSnapshots` | Limit of concurrent cloud provider create operations | `10`
+`limiter.imageCopies` | Limit of concurrent image copy operations | `10`
 `cluster.domainName` | Specifies the domain name of the cluster | `cluster.local`
 `kanister.backupTimeout` | Specifies timeout to set on Kanister backup operations | `45`
 `kanister.restoreTimeout` | Specifies timeout to set on Kanister restore operations | `600`
@@ -265,6 +280,7 @@ Parameter | Description | Default
 `forceRootInKanisterHooks` | Forces Kanister Execution Hooks to run with root privileges | `true`
 `defaultPriorityClassName` | Specifies the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for all K10 deployments and ephemeral pods | `None`
 `priorityClassName.<deploymentName>` | Overrides the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for the specified deployment | `{}`
+`ephemeralPVCOverhead` | Set the percentage increase for the ephemeral Persistent Volume Claim's storage request, e.g. PVC size = (file raw size) * (1 + `ephemeralPVCOverhead`) | `0.1`
 
 ## Helm tips and tricks
 
