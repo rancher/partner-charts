@@ -3,7 +3,7 @@
 description: Find the default values and descriptions of settings in the Redpanda Helm chart.
 ---
 
-![Version: 5.7.41](https://img.shields.io/badge/Version-5.7.41-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v23.3.11](https://img.shields.io/badge/AppVersion-v23.3.11-informational?style=flat-square)
+![Version: 5.8.0](https://img.shields.io/badge/Version-5.8.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v23.3.11](https://img.shields.io/badge/AppVersion-v23.3.11-informational?style=flat-square)
 
 This page describes the official Redpanda Helm Chart. In particular, this page describes the contents of the chart’s [`values.yaml` file](https://github.com/redpanda-data/helm-charts/blob/main/charts/redpanda/values.yaml). Each of the settings is listed and described on this page, along with any default values.
 
@@ -641,7 +641,7 @@ Memory resources For details, see the [Pod resources documentation](https://docs
 
 ### [resources.memory.container](https://artifacthub.io/packages/helm/redpanda-data/redpanda?modal=values&path=resources.memory.container)
 
-Enables memory locking. For production, set to `true`. enable_memory_locking: false  It is recommended to have at least 2Gi of memory per core for the Redpanda binary. This memory is taken from the total memory given to each container. The Helm chart allocates 80% of the container's memory to Redpanda, leaving the rest for the Seastar subsystem (reserveMemory) and other container processes. So at least 2.5Gi per core is recommended in order to ensure Redpanda has a full 2Gi.  These values affect `--memory` and `--reserve-memory` flags passed to Redpanda and the memory requests/limits in the StatefulSet. Valid suffixes: B, K, M, G, Ki, Mi, and Gi To create `Guaranteed` Pod QoS for Redpanda brokers, provide both container max and min values for the container. For details, see https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/#create-a-pod-that-gets-assigned-a-qos-class-of-guaranteed * Every container in the Pod must have a memory limit and a memory request. * For every container in the Pod, the memory limit must equal the memory request.
+Enables memory locking. For production, set to `true`. enable_memory_locking: false  It is recommended to have at least 2Gi of memory per core for the Redpanda binary. This memory is taken from the total memory given to each container. The Helm chart allocates 80% of the container's memory to Redpanda, leaving the rest for the Seastar subsystem (reserveMemory) and other container processes. So at least 2.5Gi per core is recommended in order to ensure Redpanda has a full 2Gi.  These values affect `--memory` and `--reserve-memory` flags passed to Redpanda and the memory requests/limits in the StatefulSet. Valid suffixes: k, M, G, T, P, Ki, Mi, Gi, Ti, Pi To create `Guaranteed` Pod QoS for Redpanda brokers, provide both container max and min values for the container. For details, see https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/#create-a-pod-that-gets-assigned-a-qos-class-of-guaranteed * Every container in the Pod must have a memory limit and a memory request. * For every container in the Pod, the memory limit must equal the memory request.
 
 **Default:** `{"max":"2.5Gi"}`
 
@@ -684,6 +684,12 @@ The name of the service account to use. If not set and `serviceAccount.create` i
 Additional flags to pass to redpanda,
 
 **Default:** `[]`
+
+### [statefulset.additionalSelectorLabels](https://artifacthub.io/packages/helm/redpanda-data/redpanda?modal=values&path=statefulset.additionalSelectorLabels)
+
+Additional labels to be added to statefulset label selector. For example, `my.k8s.service: redpanda`.
+
+**Default:** `{}`
 
 ### [statefulset.annotations](https://artifacthub.io/packages/helm/redpanda-data/redpanda?modal=values&path=statefulset.annotations)
 
@@ -848,6 +854,12 @@ Additional annotations to apply to the Pods of this StatefulSet.
 Additional labels to apply to the Pods of this StatefulSet.
 
 **Default:** `{}`
+
+### [statefulset.podTemplate.spec](https://artifacthub.io/packages/helm/redpanda-data/redpanda?modal=values&path=statefulset.podTemplate.spec)
+
+A subset of Kubernetes' PodSpec type that will be merged into the redpanda StatefulSet via a [strategic merge patch](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#use-a-strategic-merge-patch-to-update-a-deployment).
+
+**Default:** `{"containers":[]}`
 
 ### [statefulset.priorityClassName](https://artifacthub.io/packages/helm/redpanda-data/redpanda?modal=values&path=statefulset.priorityClassName)
 

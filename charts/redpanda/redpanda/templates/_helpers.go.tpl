@@ -11,7 +11,7 @@
 {{- define "redpanda.Name" -}}
 {{- $dot := (index .a 0) -}}
 {{- range $_ := (list 1) -}}
-{{- $tmp_tuple_1 := (get (fromJson (include "_shims.compact" (dict "a" (list (get (fromJson (include "_shims.typetest" (dict "a" (list "string" (index $dot.Values "nameOverride")) ))) "r")) ))) "r") -}}
+{{- $tmp_tuple_1 := (get (fromJson (include "_shims.compact" (dict "a" (list (get (fromJson (include "_shims.typetest" (dict "a" (list "string" (index $dot.Values "nameOverride") "") ))) "r")) ))) "r") -}}
 {{- $ok_2 := $tmp_tuple_1.T2 -}}
 {{- $override_1 := $tmp_tuple_1.T1 -}}
 {{- if (and $ok_2 (ne $override_1 "")) -}}
@@ -26,7 +26,7 @@
 {{- define "redpanda.Fullname" -}}
 {{- $dot := (index .a 0) -}}
 {{- range $_ := (list 1) -}}
-{{- $tmp_tuple_2 := (get (fromJson (include "_shims.compact" (dict "a" (list (get (fromJson (include "_shims.typetest" (dict "a" (list "string" (index $dot.Values "fullnameOverride")) ))) "r")) ))) "r") -}}
+{{- $tmp_tuple_2 := (get (fromJson (include "_shims.compact" (dict "a" (list (get (fromJson (include "_shims.typetest" (dict "a" (list "string" (index $dot.Values "fullnameOverride") "") ))) "r")) ))) "r") -}}
 {{- $ok_4 := $tmp_tuple_2.T2 -}}
 {{- $override_3 := $tmp_tuple_2.T1 -}}
 {{- if (and $ok_4 (ne $override_3 "")) -}}
@@ -54,35 +54,33 @@
 
 {{- define "redpanda.StatefulSetPodLabelsSelector" -}}
 {{- $dot := (index .a 0) -}}
-{{- $statefulSet := (index .a 1) -}}
+{{- $existing := (index .a 1) -}}
 {{- range $_ := (list 1) -}}
-{{- if (and $dot.Release.IsUpgrade (ne $statefulSet (coalesce nil))) -}}
-{{- $existingStatefulSetLabelSelector := (dig "spec" "selector" "matchLabels" (coalesce nil) $statefulSet) -}}
-{{- if (ne $existingStatefulSetLabelSelector (coalesce nil)) -}}
-{{- (dict "r" $existingStatefulSetLabelSelector) | toJson -}}
+{{- if (and $dot.Release.IsUpgrade (ne $existing (coalesce nil))) -}}
+{{- if (gt (int (get (fromJson (include "_shims.len" (dict "a" (list $existing.spec.selector.matchLabels) ))) "r")) 0) -}}
+{{- (dict "r" $existing.spec.selector.matchLabels) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
 {{- $values := $dot.Values.AsMap -}}
-{{- $commonLabels := (dict ) -}}
-{{- if (ne $values.commonLabels (coalesce nil)) -}}
-{{- $commonLabels = $values.commonLabels -}}
+{{- $additionalSelectorLabels := (dict ) -}}
+{{- if (ne $values.statefulset.additionalSelectorLabels (coalesce nil)) -}}
+{{- $additionalSelectorLabels = $values.statefulset.additionalSelectorLabels -}}
 {{- end -}}
 {{- $component := (printf "%s-statefulset" (trimSuffix "-" (trunc 51 (get (fromJson (include "redpanda.Name" (dict "a" (list $dot) ))) "r")))) -}}
 {{- $defaults := (dict "app.kubernetes.io/component" $component "app.kubernetes.io/instance" $dot.Release.Name "app.kubernetes.io/name" (get (fromJson (include "redpanda.Name" (dict "a" (list $dot) ))) "r") ) -}}
-{{- (dict "r" (merge (dict ) $commonLabels $defaults)) | toJson -}}
+{{- (dict "r" (merge (dict ) $additionalSelectorLabels $defaults)) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "redpanda.StatefulSetPodLabels" -}}
 {{- $dot := (index .a 0) -}}
-{{- $statefulSet := (index .a 1) -}}
+{{- $existing := (index .a 1) -}}
 {{- range $_ := (list 1) -}}
-{{- if (and $dot.Release.IsUpgrade (ne $statefulSet (coalesce nil))) -}}
-{{- $existingStatefulSetPodTemplateLabels := (dig "spec" "template" "metadata" "labels" (coalesce nil) $statefulSet) -}}
-{{- if (ne $existingStatefulSetPodTemplateLabels (coalesce nil)) -}}
-{{- (dict "r" $existingStatefulSetPodTemplateLabels) | toJson -}}
+{{- if (and $dot.Release.IsUpgrade (ne $existing (coalesce nil))) -}}
+{{- if (gt (int (get (fromJson (include "_shims.len" (dict "a" (list $existing.spec.template.metadata.labels) ))) "r")) 0) -}}
+{{- (dict "r" $existing.spec.template.metadata.labels) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
@@ -91,8 +89,8 @@
 {{- if (ne $values.statefulset.podTemplate.labels (coalesce nil)) -}}
 {{- $statefulSetLabels = $values.statefulset.podTemplate.labels -}}
 {{- end -}}
-{{- $defults := (dict "redpanda.com/poddisruptionbudget" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r") ) -}}
-{{- (dict "r" (merge (dict ) $statefulSetLabels (get (fromJson (include "redpanda.StatefulSetPodLabelsSelector" (dict "a" (list $dot (coalesce nil)) ))) "r") $defults)) | toJson -}}
+{{- $defaults := (dict "redpanda.com/poddisruptionbudget" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r") ) -}}
+{{- (dict "r" (merge (dict ) $statefulSetLabels (get (fromJson (include "redpanda.StatefulSetPodLabelsSelector" (dict "a" (list $dot $existing) ))) "r") $defaults)) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
@@ -196,7 +194,7 @@
 {{- if (empty $external) -}}
 {{- continue -}}
 {{- end -}}
-{{- $keys := (keys $external) -}}
+{{- $keys := (keys (get (fromJson (include "_shims.typeassertion" (dict "a" (list (printf "map[%s]%s" "string" "interface {}") $external) ))) "r")) -}}
 {{- range $_, $key := $keys -}}
 {{- $enabled := (dig "listeners" $listener "external" $key "enabled" false $dot.Values.AsMap) -}}
 {{- $tlsCert := (dig "listeners" $listener "external" $key "tls" "cert" false $dot.Values.AsMap) -}}
