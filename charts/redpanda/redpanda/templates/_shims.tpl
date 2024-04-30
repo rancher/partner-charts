@@ -1,4 +1,4 @@
-{{- /* Generated from "_shims.go" */ -}}
+{{- /* Generated from "bootstrap.go" */ -}}
 
 {{- define "_shims.typetest" -}}
 {{- $typ := (index .a 0) -}}
@@ -71,6 +71,32 @@
 {{- break -}}
 {{- end -}}
 {{- (dict "r" (len $m)) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "_shims.ptr_Deref" -}}
+{{- $ptr := (index .a 0) -}}
+{{- $def := (index .a 1) -}}
+{{- range $_ := (list 1) -}}
+{{- if (ne $ptr (coalesce nil)) -}}
+{{- (dict "r" $ptr) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- (dict "r" $def) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "_shims.ptr_Equal" -}}
+{{- $a := (index .a 0) -}}
+{{- $b := (index .a 1) -}}
+{{- range $_ := (list 1) -}}
+{{- if (and (eq $a (coalesce nil)) (eq $b (coalesce nil))) -}}
+{{- (dict "r" true) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- (dict "r" (eq $a $b)) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
