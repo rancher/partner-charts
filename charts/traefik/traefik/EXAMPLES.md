@@ -348,6 +348,21 @@ By default, Kubernetes recursively changes ownership and permissions for the con
 => An initContainer can be used to avoid an issue on this sensitive file.
 See [#396](https://github.com/traefik/traefik-helm-chart/issues/396) for more details.
 
+**Step 1**: Create `Secret` with CloudFlare token:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare
+type: Opaque
+stringData:
+  token: TTT
+```
+
+**Step 2**:
+
 ```yaml
 persistence:
   enabled: true
@@ -361,8 +376,8 @@ env:
   - name: CF_DNS_API_TOKEN
     valueFrom:
       secretKeyRef:
-        name: yyy
-        key: zzz
+        name: cloudflare
+        key: token
 deployment:
   initContainers:
     - name: volume-permissions
@@ -371,6 +386,20 @@ deployment:
       volumeMounts:
       - mountPath: /data
         name: data
+```
+
+and after, in an `IngressRoute`:
+
+```yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: [...]
+spec:
+  entryPoints: [...]
+  routes: [...]
+  tls:
+    certResolver: letsencrypt
 ```
 
 This example needs a CloudFlare token in a Kubernetes `Secret` and a working `StorageClass`.
@@ -580,4 +609,16 @@ spec:
     kind: Deployment
     name: release-name-traefik
   maxReplicas: 3
+```
+
+# Use latest build of Traefik v3 from master
+
+An experimental build of Traefik Proxy is available on a specific repository.
+
+It can be used with those _values_:
+
+```yaml
+image:
+  repository: traefik/traefik
+  tag: experimental-v3.0
 ```
