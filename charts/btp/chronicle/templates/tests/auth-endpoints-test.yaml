@@ -1,0 +1,160 @@
+{{- if .Values.test.auth.enabled }}
+{{ if not (or (.Values.devIdProvider.enabled) (or (.Values.auth.jwks.url) (.Values.auth.userinfo.url)))}}
+{{ required "If 'test.auth.enabled' you need to provide 'auth.jwks.url', 'auth.userinfo.url', or enable the `devIdProvider`!" .Values.devIdProvider.enabled }}
+{{ end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common.names.fullname" . }}-auth-endpoints-test
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: auth-endpoints-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName:  {{ include "lib.serviceAccountName" . }}
+      {{- if .Values.devIdProvider.enabled }}
+      automountServiceAccountToken: true
+      initContainers:
+        - name: wait
+          {{- include "lib.image" (dict "imageRoot" .Values.test.api.image "global" .Values.global ) | nindent 10 }}
+          command: [ "sh", "-c" ]
+          args:
+            - |
+              URL="{{ include "chronicle.id-provider.service.jwks.url" . }}"
+
+              wait_for_url() {
+                local url=$1
+                scheme=$(echo "$url" | cut -f 1 -d :)
+                hostAndPort=$(echo "$url" | cut -f 3 -d /)
+                HOST=$(echo "$hostAndPort" | cut -f 1 -d :)
+                port=$(echo "$hostAndPort" | awk -F: '{print $2}')
+
+                case $scheme in
+                  "http")
+                    defaultPort=80
+                    ;;
+                  "https")
+                    defaultPort=443
+                    ;;
+                  *)
+                    defaultPort=80
+                    ;;
+                esac
+
+                PORT=${port:-$defaultPort}
+                wait-for-it "$HOST:$PORT" --timeout=120
+              }
+
+              echo "Waiting for id-provider to be ready ..."
+              wait_for_url "$URL"
+
+              if [ $? -eq 0 ]; then
+                echo "Id-provider is ready. Exiting."
+                exit 0
+              else
+                echo "Timeout occurred. Please check if the correct URL has been provided."
+                exit 1
+              fi
+        - name: tok
+          image: alpine/k8s:1.24.13
+          command: [ "sh", "-ec" ]
+          args:
+            - |
+              echo "Waiting to ensure id-provider is ready ..."
+              sleep 20
+              echo "Getting token from id-provider ..."
+              kubectl exec {{ include "chronicle.id-provider.service" . }}-0 -c id-provider -- oauth-token > /shared-data/jwks-token
+              echo "Token loaded. Exiting."
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+      {{- end }}
+      containers:
+        - name: jwks
+          image: alpine/k8s:1.24.13
+          command: [ "sh", "-c"]
+          args:
+            - |
+              {{ if or (.Values.auth.jwks.url) (.Values.devIdProvider.enabled) }}
+              {{ if .Values.auth.jwks.url }}
+              echo "Checking provided JWKS endpoint: {{ .Values.auth.jwks.url }}."
+              endPoint="{{ .Values.auth.jwks.url }}"
+              {{ else if .Values.auth.userinfo.url }}
+              echo "JWKS endpoint not set but userinfo url is set - skipping JWKS check."
+              exit 0
+              {{ else }}
+              echo "Checking JWKS endpoint from id-provider: {{ include "chronicle.id-provider.service.jwks.url" . }}."
+              endPoint="{{ include "chronicle.id-provider.service.jwks.url" . }}"
+              {{ end }}
+
+              time curl -s -o /shared-data/jwks.json $endPoint
+
+              cat /shared-data/jwks.json | jq . > /dev/null \
+                || { echo "JWKS endpoint did not return a valid JSON object."; echo "DEBUG: $(cat /shared-data/jwks.json)"; exit 1; }
+              echo "JWKS endpoint returned a valid JSON object:"
+              cat /shared-data/jwks.json
+              echo
+              {{ else }}
+              echo "Skipping JWKS endpoint check."
+              {{ end }}
+
+              echo -e "Exiting."
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+        - name: userinfo
+          image: alpine/k8s:1.24.13
+          command: [ "sh", "-c"]
+          args:
+            - |
+              {{ if or (.Values.auth.userinfo.url) (.Values.devIdProvider.enabled) }}
+              {{ if .Values.auth.userinfo.url }}
+              {{ if not .Values.test.auth.token }}
+              {{ required "If providing 'auth.userinfo.url' you need to provide a 'test.auth.token'!" .Values.test.auth.token}}
+              {{ end }}
+              echo "Checking user-provided userinfo endpoint: $endPoint"
+              endPoint="{{ .Values.auth.userinfo.url }}"
+              {{ else if .Values.auth.jwks.url }}
+              echo "Userinfo endpoint not set but JWKS url is set - skipping userinfo check."
+              exit 0
+              {{ else }}
+              echo "Checking id-provider userinfo endpoint: $endPoint"
+              endPoint="{{ include "chronicle.id-provider.service.userinfo.url" . }}"
+              {{ end }}
+
+              {{ if .Values.test.auth.token }}
+              {{ if not .Values.auth.userinfo.url }}
+              {{ required "If providing 'test.auth.token' you need to provide a 'auth.userinfo.url'!" .Values.auth.userinfo.url }}
+              {{ end }}
+              echo "Using 'test.auth.token' to check userinfo endpoint."
+              time curl -s -H "Authorization: Bearer {{ .Values.test.auth.token }}" -o /shared-data/userinfo.json $endPoint
+              {{ else }}
+              echo "Using token from id-provider to check userinfo endpoint."
+              time curl -s -H "Authorization: Bearer $(cat /shared-data/jwks-token)" -o /shared-data/userinfo.json $endPoint
+              {{ end }}
+
+              if jq -e 'has("error")' /shared-data/userinfo.json > /dev/null; then
+                echo "Userinfo endpoint returned an error:"
+                echo "DEBUG: $(cat /shared-data/userinfo.json)"
+                exit 1
+              else
+                echo "Userinfo endpoint returned a valid JSON object: $(cat /shared-data/userinfo.json)"
+                echo
+              fi
+              {{ else }}
+              echo "Skipping userinfo endpoint check."
+              {{ end }}
+
+              echo -e "Exiting."
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+{{- end }}

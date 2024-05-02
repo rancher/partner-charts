@@ -1,10 +1,12 @@
+# Chronicle on Hyperledger Sawtooth
+
 Chronicle records provenance information of any physical or digital asset on a distributed ledger.
 
 - Chronicle is available with Hyperledger Sawtooth as its default backing ledger.
 - Chronicle is built on the established W3C PROV Ontology standard; it uses the lightweight JSON-LD linked data format, and the data query language GraphQL.
 - Chronicle is easily adaptable to enable users to model, capture, and query provenance information pertinent to their industry, application and use case.
 
-You can find example domains and further instructions at https://examples.btp.works
+You can find example domains and further instructions at <https://examples.chronicle.works>
 
 ## *Important*
 

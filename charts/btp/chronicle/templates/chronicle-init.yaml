@@ -3,12 +3,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  annotations:
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
   name: {{ include "common.names.fullname" . }}-init
   labels: {{ include "chronicle.labels" . | nindent 4 }}
     component: chronicle
 spec:
+  ttlSecondsAfterFinished: 100
   template:
     metadata:
       labels: {{ include "chronicle.labels" . | nindent 8 }}
@@ -159,13 +158,17 @@ spec:
           command: [ "bash", "-ec"]
           args:
             - |
-              if opactl \
-                  --sawtooth-address tcp://$HOST:$PORT \
-                    get-policy \
-                      --id {{ .Values.opa.policy.id }} \
-                      --output policy.bin >/dev/null 2>&1; then
+              echo "Attempting to get policy."
+              opactl \
+                --sawtooth-address tcp://$HOST:$PORT \
+                  get-policy \
+                    --id {{ .Values.opa.policy.id }} \
+                    --output /shared-data/policy.bin || true
+
+              if [ -f "/shared-data/policy.bin" ]; then
                 echo "Policy already set."
                 touch /shared-data/policy-already-set
+                exit 0
               else
                 echo "Policy not found."
                 exit 0
@@ -197,7 +200,7 @@ spec:
                     set-policy \
                       --id {{ .Values.opa.policy.id }} \
                       -p {{ .Values.opa.policy.url }} \
-                      --root-key /shared-data/root.pem
+                      --root-key /shared-data/root.pem || true
               fi
           env: {{ include "lib.safeToYaml" .Values.env | nindent 12 }}
             - name: HOST

@@ -12,15 +12,45 @@ global:
 affinity: {}
 
 auth:
-  ## @md | `auth.required` | if true require authentication | false |
+  ## @md | `auth.required` | if true require authentication, rejecting 'anonymous' requests | false |
   required: false
   id:
-    claims: email
+    ## @md | `auth.id.claims` | Chronicle provides default values ["iss", "sub"] | nil |
+    claims:
   jwks:
-    enabled: true
     url:
   userinfo:
     url:
+
+## @md | `livenessProbe.enabled` | if true, enables the liveness probe | false |
+livenessProbe:
+  enabled: false
+  ## @md | `livenessProbe.timeoutSeconds` | number of seconds after which the probe times out | 10 |
+  timeoutSeconds: 20
+  ## @md | `livenessProbe.periodSeconds` | how often (in seconds) to perform the probe | 60 |
+  periodSeconds: 60
+  ## @md | `livenessProbe.failureThreshold` | when a probe fails, Kubernetes will try failureThreshold times before giving up | 1 |
+  failureThreshold: 1
+  ## @md | `livenessProbe.namespaceName` | the Chronicle namespace in which the probe operates | default |
+  namespaceName: default
+  ## @md | `livenessProbe.namespaceUuid` | the UUID of the Chronicle namespace in which the probe operates | fd717fd6-70f1-44c1-81de-287d5e101089 |
+  namespaceUuid: fd717fd6-70f1-44c1-81de-287d5e101089
+
+## @md | `startUpProbe.enabled` | if true, enables the startup probe | true |
+startUpProbe:
+  enabled: false
+  ## @md | `startUpProbe.initialDelaySeconds` | number of seconds after which the probe starts | 5 |
+  initialDelaySeconds: 5
+  ## @md | `startUpProbe.failureThreshold` | when a probe fails, Kubernetes will try failureThreshold times before giving up | 30 |
+  failureThreshold: 30
+  ## @md | `startUpProbe.periodSeconds` | how often (in seconds) to perform the probe | 10 |
+  periodSeconds: 10
+  ## @md | `startUpProbe.timeoutSeconds` | number of seconds after which the probe times out | 3 |
+  timeoutSeconds: 3
+  ## @md | `startUpProbe.namespaceName` | the Chronicle namespace in which the probe operates | default |
+  namespaceName: default
+  ## @md | `startUpProbe.namespaceUuid` | the UUID of the Chronicle namespace in which the probe operates | fd717fd6-70f1-44c1-81de-287d5e101089 |
+  namespaceUuid: fd717fd6-70f1-44c1-81de-287d5e101089
 
 ## @md | `backtraceLevel` | backtrace level for Chronicle  | nil |
 backtraceLevel: full
@@ -34,7 +64,7 @@ devIdProvider:
     ## @md | `devIdProvider.image.repository` | the image repository | blockchaintp/id-provider |
     repository: blockchaintp/id-provider-amd64
     ## @md | `devIdProvider.image.tag` | the image tag | latest |
-    tag: BTP2.1.0-0.7.3
+    tag: BTP2.1.0-0.7.6
 
 ## @md | `extraVolumes` | a list of additional volumes to add to chronicle | [] |
 extraVolumes: []
@@ -45,7 +75,7 @@ image:
   ## @md | `image.repository` | the repository of the image | blockchaintp/chronicle |
   repository: blockchaintp/chronicle-amd64
   ## @md | `image.tag`| the tag of the image to use | latest |
-  tag: BTP2.1.0-0.7.3
+  tag: BTP2.1.0-0.7.6
   ## @md | `image.pullPolicy` | the image pull policy to use | IfNotPresent |
   pullPolicy: IfNotPresent
 
@@ -89,7 +119,7 @@ logLevel: info
 
 opa:
   ## @md | `opa.enabled` | if true set up a full OPA enabled setup | true |
-  enabled: true
+  enabled: false
   opaInit:
     ## @md | `opa.init.image` | the image to use for the chronicle-init container | blockchaintp/chronicle-opa-init |
     image:
@@ -98,7 +128,7 @@ opa:
       ## @md | `image.repository` | the repository of the image | blockchaintp/chronicle |
       repository: blockchaintp/opactl-amd64
       ## @md | `image.tag`| the tag of the image to use | latest |
-      tag: BTP2.1.0-0.7.3
+      tag: BTP2.1.0-0.7.6
   policy:
     entrypoint: allow_transactions.allowed_users
     id: allow_transactions
@@ -108,7 +138,7 @@ opa:
       ## @md | `image.repository` | the repository of the image | blockchaintp/chronicle |
       repository: blockchaintp/opa-tp-amd64
       ## @md | `image.tag`| the tag of the image to use | latest |
-      tag: BTP2.1.0-0.7.3
+      tag: BTP2.1.0-0.7.6
       ## @md | `image.pullPolicy` | the image pull policy to use | IfNotPresent |
       pullPolicy: IfNotPresent
     ## @md | `opa.tp.resources` | resources | map | nil |
@@ -131,17 +161,24 @@ serviceAccount:
   name:
 
 test:
-  ## @md | `test.enabled` | true to enable test Jobs and Services | true |
-  enabled: true
+  ## @md | `test.api` | test the chronicle GraphQL server API |
   api:
-    ## @md | `api-test-container.image` | the image to use for the api-test container | blockchaintp/chronicle-api-test |
+    ## @md | `test.api.enabled` | true to enable api-test Jobs and Services | true |
+    enabled: false
+    ## @md | `test.api.image` | the image to use for the api-test container | blockchaintp/chronicle-helm-api-test |
     image:
       ## @md | `test.api.image.pullPolicy` | the image pull policy | IfNotPresent |
       pullPolicy: IfNotPresent
       ## @md | `test.api.image.repository` | the image repository | blockchaintp/chronicle-helm-api-test |
       repository: blockchaintp/chronicle-helm-api-test-amd64
       ## @md | `test.api.image.tag` | the image tag | latest |
-      tag: BTP2.1.0-0.7.3
+      tag: BTP2.1.0-0.7.6
+  ## @md | `test.auth` | test the chronicle auth server API |
+  auth:
+    ## @md | `test.auth.enabled` | true to enable auth-related testing | true |
+    enabled: true
+    ## @md | `test.auth.token` | provide a token for auth-related testing | nil |
+    token:
 
 postgres:
   # if enabled we allocate a postgres database here
@@ -211,7 +248,7 @@ tp:
     ## @md | `tp.image.repository` | the image repository | blockchaintp/chronicle-tp |
     repository: blockchaintp/chronicle-tp-amd64
     ## @md | `tp.image.tag` | the image tag | latest |
-    tag: BTP2.1.0-0.7.3
+    tag: BTP2.1.0-0.7.6
   ## @md | `tp.extraVolumes` | extra volumes declarations for the chronicle-tp deployment | list | nil
   extraVolumes:
   ## @md | `tp.extraVolumeMounts` | extra volume mounts for chronicle-tp deployment | list | nil

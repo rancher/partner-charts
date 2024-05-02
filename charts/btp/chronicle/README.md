@@ -1,9 +1,10 @@
-# Chronicle
+# Chronicle on Hyperledger Sawtooth
 
 | field | description | default |
 |-|-|-|
 | `affinity`| custom affinity rules for the chronicle pod | {} |
-| `auth.required` | if true require authentication | false |
+| `auth.required` | if true require authentication, rejecting 'anonymous' requests | false |
+| `auth.id.claims` | Chronicle provides default values ["iss", "sub"] | nil |
 | `backtraceLevel` | backtrace level for Chronicle  | nil |
 | `devIdProvider.image` | the image to use for the id-provider container | blockchaintp/id-provider |
 | `devIdProvider.image.pullPolicy` | the image pull policy | IfNotPresent |
@@ -44,11 +45,15 @@
 | `replicas` | number of Chronicle replicas to run | 1 |
 | `serviceAccount.create` | true to create a service account | false |
 | `serviceAccount.name` | name of the service account | nil (defaults to based on release name) |
-| `test.enabled` | true to enable test Jobs and Services | true |
-| `api-test-container.image` | the image to use for the api-test container | blockchaintp/chronicle-api-test |
+| `test.api` | test the chronicle GraphQL server API |
+| `test.api.enabled` | true to enable api-test Jobs and Services | true |
+| `test.api.image` | the image to use for the api-test container | blockchaintp/chronicle-helm-api-test |
 | `test.api.image.pullPolicy` | the image pull policy | IfNotPresent |
 | `test.api.image.repository` | the image repository | blockchaintp/chronicle-helm-api-test |
 | `test.api.image.tag` | the image tag | latest |
+| `test.auth` | test the chronicle auth server API |
+| `test.auth.enabled` | true to enable auth-related testing | true |
+| `test.auth.token` | provide a token for auth-related testing | nil |
 | `postgres.enabled` | if true create an internal postgres instance | boolean | true |
 | `postgres.env` | postgres environment variables | map | N/A |
 | `postgres.image.repository` | postgres image repository | string | "postgres" |
@@ -82,3 +87,19 @@
 | `tp.maxUnavailable` | maximum unavailable nodes during a rolling upgrade |
 | `tp.minReadySeconds` | minimum time before node becomes available |
 | `sawtooth` | sawtooth options may be configured | see [Sawtooth](../sawtooth/README.md) |
+| `livenessProbe.enabled` | if true, enables the liveness probe | false |
+| `livenessProbe.initialDelaySeconds` | delay before liveness probe is initiated | 30 |
+| `livenessProbe.periodSeconds` | how often to perform the probe | 10 |
+| `livenessProbe.timeoutSeconds` | when the probe times out | 1 |
+| `livenessProbe.failureThreshold` | how many times to retry the probe before giving up | 3 |
+| `livenessProbe.successThreshold` | how many times the probe must report success to be considered successful after having failed | 1 |
+| `livenessProbe.namespaceName` | the namespace name for the liveness probe | "default" |
+| `livenessProbe.namespaceUuid` | the namespace UUID for the liveness probe | "fd717fd6-70f1-44c1-81de-287d5e101089" |
+| `startupProbe.enabled` | if true, enables the startup probe | false |
+| `startupProbe.initialDelaySeconds` | delay before startup probe is initiated | 10 |
+| `startupProbe.periodSeconds` | how often to perform the probe | 10 |
+| `startupProbe.timeoutSeconds` | when the probe times out | 1 |
+| `startupProbe.failureThreshold` | how many times to retry the probe before giving up | 3 |
+| `startupProbe.successThreshold` | how many times the probe must report success to be considered successful after having failed | 1 |
+| `startupProbe.namespaceName` | the namespace name for the startup probe | "default" |
+| `startupProbe.namespaceUuid` | the namespace UUID for the startup probe | "fd717fd6-70f1-44c1-81de-287d5e101089" |

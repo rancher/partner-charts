@@ -55,20 +55,74 @@ chronicle: {{ include "common.names.fullname" . }}
 {{ include "common.names.fullname" . }}-test-id-provider
 {{- end -}}
 
-{{- define "chronicle.jwksUrl" -}}
+{{- define "chronicle.id-provider.service.jwks.url" -}}
+http://{{ include "chronicle.id-provider.service" . }}:8090/jwks
+{{- end -}}
+
+{{- define "chronicle.id-provider.service.userinfo.url" -}}
+http://{{ include "chronicle.id-provider.service" . }}:8090/userinfo
+{{- end -}}
+
+{{- define "chronicle.id-claims" -}}
+{{- if .Values.auth.id.claims -}}
+--id-claims {{ .Values.auth.id.claims }} \
+{{- else -}}
+{{- /* Do nothing */ -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The JWKS and userinfo URLs are connected. */}}
+{{/* If either is provided Chronicle will use the user-provided options. */}}
+{{/* If neither is provided Chronicle should fall back to using the 'devIdProvider'.*/}}
+{{- define "chronicle.jwks-url.url" -}}
+{{- if or (.Values.auth.jwks.url) (.Values.auth.userinfo.url) -}}
 {{- if .Values.auth.jwks.url -}}
 {{ .Values.auth.jwks.url }}
+{{- end -}}
 {{- else -}}
 {{- if .Values.devIdProvider.enabled -}}
-http://{{ include "chronicle.id-provider.service" . }}:8090/jwks
-{{- else -}}
-{{ required "devIdProvider.enabled must be true or auth.jwks.url must be set!" .Values.auth.jwks.url }}
+{{ include "chronicle.id-provider.service.jwks.url" . }}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "chronicle.userinfoUrl" -}}
+{{- define "chronicle.jwks-url.cli" -}}
+{{- if or (.Values.auth.jwks.url) (.Values.auth.userinfo.url) -}}
+{{- if .Values.auth.jwks.url -}}
+--jwks-address {{ include "chronicle.jwks-url.url" . }} \
+{{- end -}}
+{{- else -}}
+{{- if .Values.devIdProvider.enabled -}}
+--jwks-address {{ include "chronicle.jwks-url.url" . }} \
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The JWKS and userinfo URLs are connected. */}}
+{{/* If either is provided Chronicle will use the user-provided options. */}}
+{{/* If neither is provided Chronicle should fall back to using the 'devIdProvider'.*/}}
+{{- define "chronicle.userinfo-url" -}}
+{{- if or (.Values.auth.jwks.url) (.Values.auth.userinfo.url) -}}
+{{- if .Values.auth.userinfo.url -}}
 {{ .Values.auth.userinfo.url }}
+{{- end -}}
+{{- else -}}
+{{- if .Values.devIdProvider.enabled -}}
+{{ include "chronicle.id-provider.service.userinfo.url" . }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "chronicle.userinfo-url.cli" -}}
+{{- if or (.Values.auth.jwks.url) (.Values.auth.userinfo.url) -}}
+{{- if .Values.auth.userinfo.url -}}
+--userinfo-address {{ include "chronicle.userinfo-url" . }} \
+{{- end -}}
+{{- else -}}
+{{- if .Values.devIdProvider.enabled -}}
+--userinfo-address {{ include "chronicle.userinfo-url" . }} \
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "chronicle.root-key.secret" -}}
