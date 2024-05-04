@@ -164,10 +164,11 @@ spec:
         persistentVolumeClaim:
           claimName: {{ $statefulContainer }}-pv-claim
 {{- end }}
-{{- if eq (include "check.googlecreds" .) "true" }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true"  }}
+{{- $gkeSecret := default "google-secret" .Values.secrets.googleClientSecretName }}
       - name: service-account
         secret:
-          secretName: google-secret
+          secretName: {{ $gkeSecret }}
 {{- end }}
 {{- if and (list "controllermanager" "executor" "catalog" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
       - name: bound-sa-token

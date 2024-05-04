@@ -59,6 +59,7 @@ Parameter | Description | Default
 `license` | License string obtained from Kasten | `None`
 `rbac.create` | Whether to enable RBAC with a specific cluster role and binding for K10  | `true`
 `scc.create` | Whether to create a SecurityContextConstraints for K10 ServiceAccounts  | `false`
+`scc.priority` | Sets the SecurityContextConstraints priority  | `15`
 `services.dashboardbff.hostNetwork` | Whether the dashboardbff pods may use the node network | `false`
 `services.executor.hostNetwork` | Whether the executor pods may use the node network | `false`
 `services.executor.workerCount` | Specifies count of running executor workers | 8
@@ -103,6 +104,7 @@ Parameter | Description | Default
 `secrets.awsAccessKeyId` | AWS access key ID (required for AWS deployment) | `None`
 `secrets.awsSecretAccessKey` | AWS access key secret | `None`
 `secrets.awsIamRole` | ARN of the AWS IAM role assumed by K10 to perform any AWS operation. | `None`
+`secrets.awsClientSecretName` | The secret that contains AWS access key ID, AWS access key secret and AWS IAM role for AWS | `None`
 `secrets.googleApiKey` | Non-default base64 encoded GCP Service Account key | `None`
 `secrets.googleProjectId` | Sets Google Project ID other than the one used in the GCP Service Account | `None`
 `secrets.azureTenantId` | Azure tenant ID (required for Azure deployment) | `None`
@@ -118,6 +120,7 @@ Parameter | Description | Default
 `secrets.vsphereEndpoint` | vSphere endpoint for login | `None`
 `secrets.vsphereUsername` | vSphere username for login | `None`
 `secrets.vspherePassword` | vSphere password for login | `None`
+`secrets.vsphereClientSecretName` | The secret that contains vSphere username, vSphere password and vSphere endpoint | `None`
 `secrets.dockerConfig` | Set base64 encoded docker config to use for image pull operations. Alternative to the ``secrets.dockerConfigPath`` | `None`
 `secrets.dockerConfigPath` | Use ``--set-file secrets.dockerConfigPath=path_to_docker_config.yaml`` to specify docker config for image pull. Will be overwritten if ``secrets.dockerConfig`` is set | `None`
 `cacertconfigmap.name` | Name of the ConfigMap that contains a certificate for a trusted root certificate authority | `None`

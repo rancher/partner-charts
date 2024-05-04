@@ -182,6 +182,9 @@ spec:
                 name: k10-config
                 key: clustername
 {{- end }}
+{{- if (.Values.fips | default dict).enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
+{{- end }}
           {{- with $capabilities := include "k10.capabilities" . }}
           - name: K10_CAPABILITIES
             value: {{ $capabilities | quote }}

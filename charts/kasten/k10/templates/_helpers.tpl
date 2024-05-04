@@ -118,11 +118,7 @@
   {{- /* FIPS */ -}}
   {{- $fips := .Values.fips | default dict -}}
   {{- if $fips.enabled -}}
-    {{- $internal_capabilities = append $internal_capabilities "fips" -}}
-
-    {{- if not $fips.allowNonFIPSImports -}}
-      {{- $internal_capabilities = append $internal_capabilities "fips.strict.migrations" -}}
-    {{- end -}}
+    {{- $internal_capabilities = append $internal_capabilities "fips.strict" -}}
   {{- end -}}
 
   {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
@@ -467,6 +463,12 @@ Check if AWS creds are specified
 {{- end -}}
 {{- end -}}
 
+{{- define "check.awsSecretName" -}}
+{{- if .Values.secrets.awsClientSecretName -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
 {{/*
 Check if Azure MSI with Default ID is specified
 */}}
@@ -602,14 +604,29 @@ Check if Google creds are specified
 {{- end -}}
 {{- end -}}
 
+{{- define "check.googleCredsSecret" -}}
+{{- if .Values.secrets.googleClientSecretName -}}
+    {{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "check.googleCredsOrSecret" -}}
+{{- if or (eq (include "check.googlecreds" .) "true") (eq (include "check.googleCredsSecret" .) "true")}}
+    {{- print true -}}
+{{- end -}}
+{{- end -}}
+
 {{/*
-Check if Google Project ID is specified
+Check if Google Project ID is not set without Google API Key
 */}}
 {{- define "check.googleproject" -}}
 {{- if .Values.secrets.googleProjectId -}}
   {{- if not .Values.secrets.googleApiKey -}}
-    {{- fail "secrets.googleApiKey field is required when using secrets.googleProjectId" -}}
+    {{- print false -}}
+  {{- else -}}
+    {{- print true -}}
   {{- end -}}
+{{- else -}}
   {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -634,6 +651,12 @@ Check if Vsphere creds are specified
 */}}
 {{- define "check.vspherecreds" -}}
 {{- if or (or .Values.secrets.vsphereEndpoint .Values.secrets.vsphereUsername) .Values.secrets.vspherePassword -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "check.vsphereClientSecret" -}}
+{{- if .Values.secrets.vsphereClientSecretName -}}
 {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -1158,6 +1181,55 @@ running in the same cluster.
   {{- end -}}
 {{- end -}}
 
+{{/* Fail if FIPS is enabled and Grafana is turned on  */}}
+{{- define "k10.fail.fipsGrafana" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (.Values.grafana.enabled) -}}
+    {{- fail "fips.enabled and grafana.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and Prometheus is turned on  */}}
+{{- define "k10.fail.fipsPrometheus" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (.Values.prometheus.server.enabled) -}}
+    {{- fail "fips.enabled and prometheus.server.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and Multicluster is turned on  */}}
+{{- define "k10.fail.fipsMulticluster" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (.Values.multicluster.enabled) -}}
+    {{- fail "fips.enabled and multicluster.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and PDF reporting is turned on  */}}
+{{- define "k10.fail.fipsPDFReports" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (.Values.reporting.pdfReports) -}}
+    {{- fail "fips.enabled and reporting.pdfReports cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and next gen gateway is turned off  */}}
+{{- define "k10.fail.fipsGatewayNextGen" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (not .Values.gateway.next_gen) -}}
+    {{- fail "gateway.next_gen must be enabled if fips.enabled=true" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and auth.ldap is turned on  */}}
+{{- define "k10.fail.fipsDexAuthLDAP" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (.Values.auth.ldap.enabled) -}}
+    {{- fail "fips.enabled and auth.ldap.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and auth.openshift is turned on  */}}
+{{- define "k10.fail.fipsDexAuthOpenshift" -}}
+  {{- if and ((.Values.fips | default dict).enabled) (.Values.auth.openshift.enabled) -}}
+    {{- fail "fips.enabled and auth.openshift.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
 {{/* Check to see whether SIEM logging is enabled */}}
 {{- define "k10.siemEnabled" -}}
   {{- if or .Values.siem.logging.cluster.enabled .Values.siem.logging.cloud.awsS3.enabled -}}
@@ -1188,3 +1260,14 @@ running in the same cluster.
   {{- $serviceAccount := required "auth.openshift.serviceAccount field is required" .Values.auth.openshift.serviceAccount -}}
   {{ printf "%s-k10-secret" $serviceAccount | quote }}
 {{- end -}}
+
+{{/*
+Returns the required environment variables to enforce FIPS mode using
+the Microsoft Go toolchain and Red Hat's OpenSSL.
+*/}}
+{{- define "k10.enforceFIPSEnvironmentVariables" }}
+- name: GOFIPS
+  value: "1"
+- name: OPENSSL_FORCE_FIPS_MODE
+  value: "1"
+{{- end }}

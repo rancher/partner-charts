@@ -35,8 +35,8 @@ crypto:
 dashboardbff:
 - vbrintegrationapi
 state:
-- admin
 - events
+- admin
 {{- end -}}
 {{- define "k10.aggregatedAPIs" -}}actions apps repositories vault{{- end -}}
 {{- define "k10.configAPIs" -}}config{{- end -}}

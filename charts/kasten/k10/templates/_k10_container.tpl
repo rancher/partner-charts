@@ -94,16 +94,27 @@ stating that types are not same for the equality check
           - name: {{ include "k10.disabledServicesEnvVar" . }}
             value: {{ include "get.disabledServices" . | quote }}
 {{- end -}}
-{{- if eq (include "check.googlecreds" .) "true" }}
-          - name: GOOGLE_APPLICATION_CREDENTIALS
-            value: "/var/run/secrets/kasten.io/kasten-gke-sa.json"
+{{- if not (eq (include "check.googleproject" . ) "true") -}}
+    {{- fail "secrets.googleApiKey field is required when using secrets.googleProjectId" -}}
+{{- end -}}
+{{- $gkeSecret := default "google-secret" .Values.secrets.googleClientSecretName }}
+{{- $gkeProjectId := "kasten-gke-project" }}
+{{- $gkeApiKey :=  "/var/run/secrets/kasten.io/kasten-gke-sa.json"}}
+{{- if eq (include "check.googleCredsSecret" .) "true" }}
+    {{- $gkeProjectId = "google-project-id" }}
+    {{- $gkeApiKey =  "/var/run/secrets/kasten.io/google-api-key" }}
 {{- end }}
-{{- if eq (include "check.googleproject" .) "true" }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true" }}
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            value: {{ $gkeApiKey }}
+{{- end }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true"  }}
           - name: projectID
             valueFrom:
               secretKeyRef:
-                name: google-secret
-                key: kasten-gke-project
+                name: {{ $gkeSecret }}
+                key: {{ $gkeProjectId }}
+                optional: true
 {{- end }}
 {{- if or  (eq (include "check.azuresecret" .) "true") (eq (include "check.azurecreds" .) "true" )  }}
 {{- if eq (include "check.azuresecret" .) "true" }}
@@ -190,24 +201,44 @@ stating that types are not same for the equality check
             value: "{{ .Values.azure.useDefaultMSI }}"
 {{- end }}
 {{- end }}
-{{- if eq (include "check.awscreds" .) "true" }}
+
+{{- /*
+There are 3 valid states of the secret provided by customer:
+1. Only role set
+2. Both aws_access_key_id and aws_secret_access_key are set
+3. All of role, aws_access_key_id and aws_secret_access_key are set.
+*/}}
+{{- if eq (include "check.awsSecretName" .) "true"  }}
+    {{- $customerSecret := (lookup "v1" "Secret" .Release.Namespace .Values.secrets.awsClientSecretName )}}
+    {{- if $customerSecret }}
+        {{- if and (not $customerSecret.data.role) (not $customerSecret.data.aws_access_key_id) (not $customerSecret.data.aws_secret_access_key) }}
+                {{ fail "Provided secret must contain at least AWS IAM Role or AWS access key ID together with AWS secret access key"}}
+        {{- end }}
+        {{- if not (or (and $customerSecret.data.aws_access_key_id $customerSecret.data.aws_secret_access_key) (and (not $customerSecret.data.aws_access_key_id) (not $customerSecret.data.aws_secret_access_key))) }}
+            {{ fail "Provided secret lacks aws_access_key_id or aws_secret_access_key" }}
+        {{- end }}
+    {{- end }}
+{{- end }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "metering" "kanister" | has $service}}
+{{- $awsSecretName := default "aws-creds" .Values.secrets.awsClientSecretName }}
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
-                name: aws-creds
+                name: {{ $awsSecretName }}
                 key: aws_access_key_id
+                optional: true
           - name: AWS_SECRET_ACCESS_KEY
             valueFrom:
               secretKeyRef:
-                name: aws-creds
+                name: {{ $awsSecretName }}
                 key: aws_secret_access_key
-{{- if .Values.secrets.awsIamRole }}
+                optional: true
           - name: K10_AWS_IAM_ROLE
             valueFrom:
               secretKeyRef:
-                name: aws-creds
+                name: {{ $awsSecretName }}
                 key: role
-{{- end }}
+                optional: true
 {{- end }}
 {{- if list "controllermanager" "executor" "catalog" | has $service}}
 {{- if eq (include "check.gwifenabled" .) "true"}}
@@ -242,21 +273,22 @@ stating that types are not same for the equality check
 {{- end }}
 {{- end }}
 {{- end }}
-{{- if eq (include "check.vspherecreds" .) "true" }}
+{{- if or (eq (include "check.vspherecreds" .) "true") (eq (include "check.vsphereClientSecret" .) "true") }}
+{{- $vsphereSecretName := default "vsphere-creds" .Values.secrets.vsphereClientSecretName }}
           - name: VSPHERE_ENDPOINT
             valueFrom:
               secretKeyRef:
-                name: vsphere-creds
+                name: {{ $vsphereSecretName }}
                 key: vsphere_endpoint
           - name: VSPHERE_USERNAME
             valueFrom:
               secretKeyRef:
-                name: vsphere-creds
+                name: {{ $vsphereSecretName }}
                 key: vsphere_username
           - name: VSPHERE_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: vsphere-creds
+                name: {{ $vsphereSecretName }}
                 key: vsphere_password
 {{- end }}
           - name: VERSION
@@ -270,6 +302,9 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: clustername
+{{- end }}
+{{- if (.Values.fips | default dict).enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
 {{- end }}
           {{- with $capabilities := include "k10.capabilities" . }}
           - name: K10_CAPABILITIES
@@ -730,7 +765,7 @@ stating that types are not same for the equality check
             value: {{ .Values.multicluster.primary.ingressURL | quote }}
     {{- end }}
 {{- end -}}
-{{- if or $.stateful (or (eq (include "check.googlecreds" .) "true") (eq $service "auth" "logging")) }}
+{{- if or $.stateful (or (eq (include "check.googleCredsOrSecret" .) "true") (eq $service "auth" "logging")) }}
         volumeMounts:
 {{- else if  or (or (eq (include "basicauth.check" .) "true") (or .Values.auth.oidcAuth.enabled (eq (include "check.dexAuth" .) "true"))) .Values.features }}
         volumeMounts:
@@ -777,7 +812,7 @@ stating that types are not same for the equality check
           readOnly: true
 {{- end }}
 {{- end }}
-{{- if eq (include "check.googlecreds" .) "true" }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true"}}
         - name: service-account
           mountPath: "/var/run/secrets/kasten.io"
 {{- end }}
@@ -812,6 +847,10 @@ stating that types are not same for the equality check
         image: {{ include "get.kanisterToolsImage" .}}
         imagePullPolicy: {{ .Values.kanisterToolsImage.pullPolicy }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "kanister-sidecar"  | include "k10.resource.request" | indent 8}}
+{{- if (.Values.fips | default dict).enabled }}
+        env:
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
+{{- end }}
         volumeMounts:
         - name: {{ $service }}-persistent-storage
           mountPath: {{ .Values.global.persistence.mountPath | quote }}
@@ -831,6 +870,10 @@ stating that types are not same for the equality check
         image: {{ include "get.dexImage" . }}
 {{- if .Values.auth.ldap.enabled }}
         command: ["/usr/local/bin/dex", "serve", "/dex-config/config.yaml"]
+{{- if (.Values.fips | default dict).enabled }}
+        env:
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
+{{- end }}
 {{- else if .Values.auth.openshift.enabled }}
         {{- /*
         In the case of OpenShift, a template config is used instead of a plain config for Dex.
@@ -851,6 +894,9 @@ stating that types are not same for the equality check
                 key: token
 {{- else }}
             value: {{ .Values.auth.openshift.clientSecret }}
+{{- end }}
+{{- if (.Values.fips | default dict).enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
 {{- end }}
 {{- end }}
         ports:
