@@ -3,7 +3,7 @@
 Linkerd gives you observability, reliability, and security
 for your microservices — with no code change required.
 
-![Version: 2024.5.1](https://img.shields.io/badge/Version-2024.5.1-informational?style=flat-square)
+![Version: 2024.5.2](https://img.shields.io/badge/Version-2024.5.2-informational?style=flat-square)
 ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 ![AppVersion: edge-XX.X.X](https://img.shields.io/badge/AppVersion-edge--XX.X.X-informational?style=flat-square)
 
@@ -162,7 +162,7 @@ Kubernetes: `>=1.22.0-0`
 | destinationController.meshedHttp2ClientProtobuf.keep_alive.timeout.seconds | int | `3` |  |
 | destinationController.meshedHttp2ClientProtobuf.keep_alive.while_idle | bool | `true` |  |
 | disableHeartBeat | bool | `false` | Set to true to not start the heartbeat cronjob |
-| disableIPv6 | bool | `false` | disables routing IPv6 traffic in addition to IPv4 traffic through the proxy (IPv6 routing only available as of proxy-init v2.3.0 and linkerd-cni v1.4.0) |
+| disableIPv6 | bool | `true` | disables routing IPv6 traffic in addition to IPv4 traffic through the proxy (IPv6 routing only available as of proxy-init v2.3.0 and linkerd-cni v1.4.0) |
 | enableEndpointSlices | bool | `true` | enables the use of EndpointSlice informers for the destination service; enableEndpointSlices should be set to true only if EndpointSlice K8s feature gate is on |
 | enableH2Upgrade | bool | `true` | Allow proxies to perform transparent HTTP/2 upgrading |
 | enablePSP | bool | `false` | Add a PSP resource and bind it to the control plane ServiceAccounts. Note PSP has been deprecated since k8s v1.21 |
