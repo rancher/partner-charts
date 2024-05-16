@@ -45,7 +45,7 @@ You may also run `helm show values` on this chart's dependencies for additional 
 | `manager.image.hub` | `intel` |
 | `manager.image.tag` | `` |
 | `kubeRbacProxy.image.hub` | `gcr.io` |
-| `kubeRbacProxy.image.tag` | `v0.14.1` |
+| `kubeRbacProxy.image.tag` | `v0.16.0` |
 | `kubeRbacProxy.image.pullPolicy` | `IfNotPresent` |
 | `privateRegistry.registryUrl` | `` |
 | `privateRegistry.registryUser` | `` |
