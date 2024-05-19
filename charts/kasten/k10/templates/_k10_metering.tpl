@@ -122,6 +122,7 @@ spec:
         checksum/secret: {{ include (print .Template.BasePath "/secrets.yaml") . | sha256sum }}
       labels:
 {{ include "helm.labels" . | indent 8 }}
+{{- include "k10.azMarketPlace.billingIdentifier" . }}
         component: {{ $service }}
         run: {{ $service }}-svc
     spec:

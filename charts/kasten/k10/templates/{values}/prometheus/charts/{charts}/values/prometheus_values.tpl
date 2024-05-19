@@ -76,6 +76,7 @@
     "repository" "configmap-reload"
     "tag" (include "get.k10ImageTag" $)
 ) -}}
+
 {{- if (index .Values.global.images "configmap-reload") -}}
   {{- $prometheus_configmap_reload_image = (
         include "k10.splitImage" (dict
@@ -83,6 +84,15 @@
           "path" "global.images.configmap-reload"
         )
       ) | fromJson
+  -}}
+{{- end -}}
+
+{{- if .Values.global.azMarketPlace -}}
+  {{- $prometheus_configmap_reload_image = (dict
+      "registry" .Values.global.azure.images.configmapreload.registry
+      "repository" .Values.global.azure.images.configmapreload.image
+      "tag" .Values.global.azure.images.configmapreload.tag
+      ) 
   -}}
 {{- end -}}
 
@@ -112,6 +122,15 @@
           "path" "global.images.prometheus"
         )
       ) | fromJson
+  -}}
+{{- end -}}
+
+{{- if .Values.global.azMarketPlace -}}
+  {{- $prometheus_server_image = ( dict
+            "registry" .Values.global.azure.images.prometheus.registry
+            "repository" .Values.global.azure.images.prometheus.image
+            "tag" .Values.global.azure.images.prometheus.tag
+      ) 
   -}}
 {{- end -}}
 

@@ -202,6 +202,15 @@
   {{- $grafana_image = (include "k10.splitImage" $grafana_image_args) | fromJson -}}
 {{- end -}}
 
+{{- if .Values.global.azMarketPlace -}}
+  {{- $grafana_image = ( dict
+            "registry" .Values.global.azure.images.grafana.registry
+            "repository" .Values.global.azure.images.grafana.image
+            "tag" .Values.global.azure.images.grafana.tag
+      ) 
+  -}}
+{{- end -}}
+
 {{- $_ := set .Values.grafana.image "registry" $grafana_image.registry -}}
 {{- $_ := set .Values.grafana.image "repository" $grafana_image.repository -}}
 {{- $_ := set .Values.grafana.image "tag" $grafana_image.tag -}}
@@ -218,9 +227,19 @@
   "repository" "init"
   "tag" (include "get.k10ImageTag" $)
 ) -}}
+
 {{- if .Values.global.images.init -}}
   {{- $init_image_args := (dict "image" .Values.global.images.init "path" "global.images.init") -}}
   {{- $init_image = (include "k10.splitImage" $init_image_args) | fromJson -}}
+{{- end -}}
+
+{{- if .Values.global.azMarketPlace -}}
+  {{- $init_image = ( dict
+            "registry" .Values.global.azure.images.init.registry
+            "repository" .Values.global.azure.images.init.image
+            "tag" .Values.global.azure.images.init.tag
+      ) 
+  -}}
 {{- end -}}
 
 {{- $_ := set .Values.grafana.downloadDashboardsImage "registry" $init_image.registry -}}

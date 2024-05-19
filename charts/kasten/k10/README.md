@@ -57,9 +57,9 @@ Parameter | Description | Default
 `eula.company` | Company name. Required field if EULA is accepted | `None`
 `eula.email` | Contact email. Required field if EULA is accepted | `None`
 `license` | License string obtained from Kasten | `None`
-`rbac.create` | Whether to enable RBAC with a specific cluster role and binding for K10  | `true`
-`scc.create` | Whether to create a SecurityContextConstraints for K10 ServiceAccounts  | `false`
-`scc.priority` | Sets the SecurityContextConstraints priority  | `15`
+`rbac.create` | Whether to enable RBAC with a specific cluster role and binding for K10 | `true`
+`scc.create` | Whether to create a SecurityContextConstraints for K10 ServiceAccounts | `false`
+`scc.priority` | Sets the SecurityContextConstraints priority | `15`
 `services.dashboardbff.hostNetwork` | Whether the dashboardbff pods may use the node network | `false`
 `services.executor.hostNetwork` | Whether the executor pods may use the node network | `false`
 `services.executor.workerCount` | Specifies count of running executor workers | 8
@@ -86,7 +86,7 @@ Parameter | Description | Default
 `ingress.defaultBackend.resource.apiGroup` | Optional API group of a resource backing the default backend. | `''`
 `ingress.defaultBackend.resource.kind` | The type of a resource being referenced by the default backend (required if the resource default backend is used). | `None`
 `ingress.defaultBackend.resource.name` | The name of a resource being referenced by the default backend (required if the resource default backend is used). | `None`
-`global.persistence.size` | Default global size of volumes for K10 persistent services  | `20Gi`
+`global.persistence.size` | Default global size of volumes for K10 persistent services | `20Gi`
 `global.persistence.catalog.size` | Size of a volume for catalog service  | `global.persistence.size`
 `global.persistence.jobs.size` | Size of a volume for jobs service  | `global.persistence.size`
 `global.persistence.logging.size` | Size of a volume for logging service  | `global.persistence.size`
@@ -173,7 +173,7 @@ Parameter | Description | Default
 `auth.ldap.host` | Host and optional port of the AD/LDAP server in the form `host:port` | `None`
 `auth.ldap.insecureNoSSL` | Required if the AD/LDAP host is not using TLS | `false`
 `auth.ldap.insecureSkipVerifySSL` | To turn off SSL verification of connections to the AD/LDAP host | `false`
-`auth.ldap.startTLS` | When set to true, ldap:// is used to connect to the server followed by creation of a TLS session. When set to false, ldaps:// is used.  | `false`
+`auth.ldap.startTLS` | When set to true, ldap:// is used to connect to the server followed by creation of a TLS session. When set to false, ldaps:// is used. | `false`
 `auth.ldap.bindDN` | The Distinguished Name(username) used for connecting to the AD/LDAP host | `None`
 `auth.ldap.bindPW` | The password corresponding to the `bindDN` for connecting to the AD/LDAP host | `None`
 `auth.ldap.bindPWSecretName` | The name of the secret that contains the password corresponding to the `bindDN` for connecting to the AD/LDAP host | `None`
@@ -257,7 +257,7 @@ Parameter | Description | Default
 `limiter.csiSnapshots` | Limit of concurrent CSI snapshot create operations | `10`
 `limiter.providerSnapshots` | Limit of concurrent cloud provider create operations | `10`
 `limiter.imageCopies` | Limit of concurrent image copy operations | `10`
-`cluster.domainName` | Specifies the domain name of the cluster | `cluster.local`
+`cluster.domainName` | Specifies the domain name of the cluster | `""`
 `kanister.backupTimeout` | Specifies timeout to set on Kanister backup operations | `45`
 `kanister.restoreTimeout` | Specifies timeout to set on Kanister restore operations | `600`
 `kanister.deleteTimeout` | Specifies timeout to set on Kanister delete operations | `45`
@@ -284,7 +284,7 @@ Parameter | Description | Default
 `defaultPriorityClassName` | Specifies the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for all K10 deployments and ephemeral pods | `None`
 `priorityClassName.<deploymentName>` | Overrides the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for the specified deployment | `{}`
 `ephemeralPVCOverhead` | Set the percentage increase for the ephemeral Persistent Volume Claim's storage request, e.g. PVC size = (file raw size) * (1 + `ephemeralPVCOverhead`) | `0.1`
-
+`datastore.parallelUploads` | Specifies how many files can be uploaded in parallel to the data store | `8`
 ## Helm tips and tricks
 
 There is a way of setting values via a yaml file instead of using `--set`.

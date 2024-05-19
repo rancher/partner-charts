@@ -119,6 +119,8 @@
   {{- $fips := .Values.fips | default dict -}}
   {{- if $fips.enabled -}}
     {{- $internal_capabilities = append $internal_capabilities "fips.strict" -}}
+    {{- $internal_capabilities = append $internal_capabilities "crypto.storagerepository.v2" -}}
+    {{- $internal_capabilities = append $internal_capabilities "crypto.vbr.v2" -}}
   {{- end -}}
 
   {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
@@ -281,6 +283,10 @@ external-dns.alpha.kubernetes.io/hostname: {{ .Values.externalGateway.fqdn.name 
 Prometheus scrape config template for k10 services
 */}}
 {{- define "k10.prometheusScrape" -}}
+{{- $cluster_domain := "" -}}
+{{- with .main.Values.cluster.domainName -}}
+  {{- $cluster_domain = printf ".%s" . -}}
+{{- end -}}
 {{- $admin_port := default 8877 .main.Values.service.gatewayAdminPort -}}
 - job_name: {{ .k10service }}
   metrics_path: /metrics
@@ -295,13 +301,13 @@ Prometheus scrape config template for k10 services
   static_configs:
     - targets:
       {{- if eq "gateway" .k10service }}
-      - {{ .k10service }}-admin.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:{{ $admin_port }}
+      - {{ .k10service }}-admin.{{ .main.Release.Namespace }}.svc{{ $cluster_domain }}:{{ $admin_port }}
       {{- else if eq "aggregatedapis" .k10service }}
-      - {{ .k10service }}-svc.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:443
+      - {{ .k10service }}-svc.{{ .main.Release.Namespace }}.svc{{ $cluster_domain }}:443
       {{- else }}
       {{- $service := default .k10service (index (include "get.enabledColocatedServices" . | fromYaml) .k10service).primary }}
       {{- $port := default .main.Values.service.externalPort (index (include "get.enabledColocatedServices" . | fromYaml) .k10service).port }}
-      - {{ $service }}-svc.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:{{ $port }}
+      - {{ $service }}-svc.{{ .main.Release.Namespace }}.svc{{ $cluster_domain }}:{{ $port }}
       {{- end }}
       labels:
         application: {{ .main.Release.Name }}
@@ -312,6 +318,10 @@ Prometheus scrape config template for k10 services
 Prometheus scrape config template for k10 services
 */}}
 {{- define "k10.prometheusTargetConfig" -}}
+{{- $cluster_domain := "" -}}
+{{- with .main.Values.cluster.domainName -}}
+  {{- $cluster_domain = printf ".%s" . -}}
+{{- end -}}
 {{- $admin_port := default 8877 .main.Values.service.gatewayAdminPort | toString -}}
 - service: {{ .k10service }}
   metricsPath: /metrics
@@ -326,15 +336,15 @@ Prometheus scrape config template for k10 services
   {{- $serviceFqdn := "" }}
   {{- $servicePort := "" }}
   {{- if eq "gateway" .k10service -}}
-    {{- $serviceFqdn = printf "%s-admin.%s.svc.%s" .k10service .main.Release.Namespace .main.Values.cluster.domainName -}}
+    {{- $serviceFqdn = printf "%s-admin.%s.svc%s" .k10service .main.Release.Namespace $cluster_domain -}}
     {{- $servicePort = $admin_port -}}
   {{- else if eq "aggregatedapis" .k10service -}}
-    {{- $serviceFqdn = printf "%s-svc.%s.svc.%s" .k10service .main.Release.Namespace .main.Values.cluster.domainName -}}
+    {{- $serviceFqdn = printf "%s-svc.%s.svc%s" .k10service .main.Release.Namespace $cluster_domain -}}
     {{- $servicePort = "443" -}}
   {{- else -}}
     {{- $service := default .k10service (index (include "get.enabledColocatedServices" .main | fromYaml) .k10service).primary -}}
     {{- $port := default .main.Values.service.externalPort (index (include "get.enabledColocatedServices" .main | fromYaml) .k10service).port | toString -}}
-    {{- $serviceFqdn = printf "%s-svc.%s.svc.%s" $service .main.Release.Namespace .main.Values.cluster.domainName -}}
+    {{- $serviceFqdn = printf "%s-svc.%s.svc%s" $service .main.Release.Namespace $cluster_domain -}}
     {{- $servicePort = $port -}}
   {{- end }}
   fqdn: {{ $serviceFqdn }}
@@ -406,6 +416,8 @@ images or not
 {{- define "dex.dexImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "dex.dexImageName" .) }}
+  {{- else if .Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.dex.registry .Values.global.azure.images.dex.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "dex.dexImageName" .) }}
   {{- end }}
@@ -416,7 +428,11 @@ images or not
 {{- end -}}
 
 {{- define "dex.dexImageTag" -}}
+ {{- if .Values.global.azMarketPlace }}
+    {{- print .Values.global.azure.images.dex.tag }}
+ {{- else }}
   {{- .Values.global.image.tag | default .Chart.AppVersion }}
+ {{- end -}}
 {{- end -}}
 
 {{/*
@@ -441,6 +457,8 @@ Get the emissary image.
 {{- define "k10.emissaryImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "k10.emissaryImageName" .) }}
+  {{- else if .Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.emissary.registry .Values.global.azure.images.emissary.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "k10.emissaryImageName" .) }}
   {{- end }}
@@ -451,7 +469,11 @@ Get the emissary image.
 {{- end -}}
 
 {{- define "k10.emissaryImageTag" -}}
-  {{- include "get.k10ImageTag" . }}
+  {{- if .Values.global.azMarketPlace }}
+    {{- print .Values.global.azure.images.emissary.tag }}
+  {{- else }}
+    {{- include "get.k10ImageTag" . }}
+  {{- end }}
 {{- end -}}
 
 {{/*
@@ -522,6 +544,8 @@ Get the kanister-tools image.
 {{- define "kan.kanisterToolsImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "kan.kanisterToolsImageName" .) }}
+  {{- else if .Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.kanistertools.registry .Values.global.azure.images.kanistertools.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "kan.kanisterToolsImageName" .) }}
   {{- end }}
@@ -532,7 +556,11 @@ Get the kanister-tools image.
 {{- end -}}
 
 {{- define "kan.kanisterToolsImageTag" -}}
-  {{- include "get.k10ImageTag" . }}
+ {{- if .Values.global.azMarketPlace }}
+    {{- print .Values.global.azure.images.kanistertools.tag }}
+  {{- else }}
+    {{- include "get.k10ImageTag" . }}
+  {{- end }}
 {{- end -}}
 
 {{/*
@@ -1074,6 +1102,8 @@ running in the same cluster.
 {{- define "init.ImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "init.ImageName" .) }}
+  {{- else if .main.Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.init.registry .Values.global.azure.images.init.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "init.ImageName" .) }}
   {{- end }}
@@ -1216,20 +1246,6 @@ running in the same cluster.
   {{- end -}}
 {{- end -}}
 
-{{/* Fail if FIPS is enabled and auth.ldap is turned on  */}}
-{{- define "k10.fail.fipsDexAuthLDAP" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (.Values.auth.ldap.enabled) -}}
-    {{- fail "fips.enabled and auth.ldap.enabled cannot both be enabled at the same time" -}}
-  {{- end -}}
-{{- end -}}
-
-{{/* Fail if FIPS is enabled and auth.openshift is turned on  */}}
-{{- define "k10.fail.fipsDexAuthOpenshift" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (.Values.auth.openshift.enabled) -}}
-    {{- fail "fips.enabled and auth.openshift.enabled cannot both be enabled at the same time" -}}
-  {{- end -}}
-{{- end -}}
-
 {{/* Check to see whether SIEM logging is enabled */}}
 {{- define "k10.siemEnabled" -}}
   {{- if or .Values.siem.logging.cluster.enabled .Values.siem.logging.cloud.awsS3.enabled -}}
@@ -1270,4 +1286,13 @@ the Microsoft Go toolchain and Red Hat's OpenSSL.
   value: "1"
 - name: OPENSSL_FORCE_FIPS_MODE
   value: "1"
+{{- end }}
+
+{{/*
+Returns a billing identifier label to be added to workloads for azure marketplace offer
+*/}}
+{{- define "k10.azMarketPlace.billingIdentifier" -}}
+ {{- if .Values.global.azMarketPlace }}
+        azure-extensions-usage-release-identifier: {{.Release.Name}}
+ {{- end }}
 {{- end }}

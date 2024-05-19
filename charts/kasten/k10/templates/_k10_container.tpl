@@ -94,6 +94,7 @@ stating that types are not same for the equality check
           - name: {{ include "k10.disabledServicesEnvVar" . }}
             value: {{ include "get.disabledServices" . | quote }}
 {{- end -}}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "kanister" | has $service}}
 {{- if not (eq (include "check.googleproject" . ) "true") -}}
     {{- fail "secrets.googleApiKey field is required when using secrets.googleProjectId" -}}
 {{- end -}}
@@ -116,6 +117,8 @@ stating that types are not same for the equality check
                 key: {{ $gkeProjectId }}
                 optional: true
 {{- end }}
+{{- end }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "kanister" | has $service}}
 {{- if or  (eq (include "check.azuresecret" .) "true") (eq (include "check.azurecreds" .) "true" )  }}
 {{- if eq (include "check.azuresecret" .) "true" }}
           - name: AZURE_CLIENT_ID
@@ -201,6 +204,7 @@ stating that types are not same for the equality check
             value: "{{ .Values.azure.useDefaultMSI }}"
 {{- end }}
 {{- end }}
+{{- end }}
 
 {{- /*
 There are 3 valid states of the secret provided by customer:
@@ -273,6 +277,7 @@ There are 3 valid states of the secret provided by customer:
 {{- end }}
 {{- end }}
 {{- end }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" | has $service}}
 {{- if or (eq (include "check.vspherecreds" .) "true") (eq (include "check.vsphereClientSecret" .) "true") }}
 {{- $vsphereSecretName := default "vsphere-creds" .Values.secrets.vsphereClientSecretName }}
           - name: VSPHERE_ENDPOINT
@@ -290,6 +295,7 @@ There are 3 valid states of the secret provided by customer:
               secretKeyRef:
                 name: {{ $vsphereSecretName }}
                 key: vsphere_password
+{{- end }}
 {{- end }}
           - name: VERSION
             valueFrom:
@@ -350,62 +356,18 @@ There are 3 valid states of the secret provided by customer:
             value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/datamover:" }}
             {{- end }}{{/* if .Values.global.airgapped.repository */}}
 
-          - name: K10_KANISTER_POD_METRICS_IMAGE
-            {{- if not .Values.global.rhMarketPlace }}
-            {{- if .Values.global.airgapped.repository }}
-            value: {{ (include "get.k10ImageTag" .)  | print .Values.global.airgapped.repository "/metric-sidecar:" }}
-            {{- else }}
-            value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/metric-sidecar:" }}
-            {{- end }}{{/* if .Values.global.airgapped.repository */}}
-            {{- else }}
-            value: {{ index .Values.global.images "metric-sidecar" }}
-            {{- end }}{{/* if not .Values.global.rhMarketPlace */}}
-
-          - name: KANISTER_POD_READY_WAIT_TIMEOUT
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: KanisterPodReadyWaitTimeout
-
-          - name: K10_KANISTER_POD_METRICS_ENABLED
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: KanisterPodMetricSidecarEnabled
-          - name: PUSHGATEWAY_METRICS_INTERVAL
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: KanisterPodPushgatewayMetricsInterval
-{{- if .Values.kanisterPodMetricSidecar.resources.requests.memory }}
-          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_REQUEST
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: KanisterPodMetricSidecarMemoryRequest
 {{- end }}
-{{- if .Values.kanisterPodMetricSidecar.resources.requests.cpu }}
-          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_REQUEST
+{{- if eq $service "executor"}}
+          - name: DATA_STORE_LOG_LEVEL
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: KanisterPodMetricSidecarCPURequest
-{{- end }}
-{{- if .Values.kanisterPodMetricSidecar.resources.limits.memory }}
-          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_LIMIT
+                key: DataStoreLogLevel
+          - name: DATA_STORE_FILE_LOG_LEVEL
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: KanisterPodMetricSidecarMemoryLimit
-{{- end }}
-{{- if .Values.kanisterPodMetricSidecar.resources.limits.cpu }}
-          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_LIMIT
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: KanisterPodMetricSidecarCPULimit
-{{- end }}
-
+                key: DataStoreFileLogLevel
 {{- end }}
           - name: LOG_LEVEL
             valueFrom:
@@ -511,6 +473,63 @@ There are 3 valid states of the secret provided by customer:
               configMapKeyRef:
                 name: k10-config
                 key: k10DataStoreDisableCompression
+
+          - name: K10_KANISTER_POD_METRICS_IMAGE
+            {{- if not .Values.global.rhMarketPlace }}
+            {{- if .Values.global.airgapped.repository }}
+            value: {{ (include "get.k10ImageTag" .)  | print .Values.global.airgapped.repository "/metric-sidecar:" }}
+            {{- else }}
+            value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/metric-sidecar:" }}
+            {{- end }}{{/* if .Values.global.airgapped.repository */}}
+            {{- else }}
+            value: {{ index .Values.global.images "metric-sidecar" }}
+            {{- end }}{{/* if not .Values.global.rhMarketPlace */}}
+
+          - name: KANISTER_POD_READY_WAIT_TIMEOUT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodReadyWaitTimeout
+
+          - name: K10_KANISTER_POD_METRICS_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarEnabled
+          - name: PUSHGATEWAY_METRICS_INTERVAL
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodPushgatewayMetricsInterval
+        {{- if .Values.kanisterPodMetricSidecar.resources.requests.memory }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_REQUEST
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMemoryRequest
+        {{- end }}
+        {{- if .Values.kanisterPodMetricSidecar.resources.requests.cpu }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_REQUEST
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarCPURequest
+        {{- end }}
+        {{- if .Values.kanisterPodMetricSidecar.resources.limits.memory }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_LIMIT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMemoryLimit
+        {{- end }}
+        {{- if .Values.kanisterPodMetricSidecar.resources.limits.cpu }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_LIMIT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarCPULimit
+        {{- end }}
+
 {{- end }}
 {{- if (list "dashboardbff" "catalog" "executor" "crypto" | has $service) }}
     {{- if .Values.metering.mode }}
@@ -797,6 +816,7 @@ There are 3 valid states of the secret provided by customer:
           mountPath: /etc/ssl/certs/webhook
           readOnly: true
 {{- end }}
+{{- if list "dashboardbff" "auth" "controllermanager" | has $service}}
 {{- if eq (include "basicauth.check" .) "true" }}
         - name: k10-basic-auth
           mountPath: "/var/run/secrets/kasten.io/k10-basic-auth"
@@ -810,6 +830,7 @@ There are 3 valid states of the secret provided by customer:
         - name: k10-oidc-auth-creds
           mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth-creds"
           readOnly: true
+{{- end }}
 {{- end }}
 {{- end }}
 {{- if eq (include "check.googleCredsOrSecret" .) "true"}}
@@ -847,8 +868,16 @@ There are 3 valid states of the secret provided by customer:
         image: {{ include "get.kanisterToolsImage" .}}
         imagePullPolicy: {{ .Values.kanisterToolsImage.pullPolicy }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "kanister-sidecar"  | include "k10.resource.request" | indent 8}}
-{{- if (.Values.fips | default dict).enabled }}
         env:
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
+{{- if (.Values.fips | default dict).enabled }}
           {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
 {{- end }}
         volumeMounts:

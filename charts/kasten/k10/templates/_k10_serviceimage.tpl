@@ -17,6 +17,9 @@ value that is specified.
 {{- $tagFromDefs := "" -}}
 {{- if .main.Values.global.airgapped.repository }}
 {{- $serviceImage = (include "get.k10ImageTag" .main) | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
+{{- else if .main.Values.global.azMarketPlace }}
+{{- $az_image := (get .main.Values.global.azure.images .k10_service) }}
+{{- $serviceImage = print $az_image.registry "/" $az_image.image  ":"  $az_image.tag }}
 {{- else }}
 {{- $serviceImage = (include "get.k10ImageTag" .main)  | print .main.Values.global.image.registry "/" .k10_service ":" }}
 {{- end }}{{/* if .main.Values.global.airgapped.repository */}}

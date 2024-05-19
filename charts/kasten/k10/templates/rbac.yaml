@@ -254,6 +254,31 @@ subjects:
   kind: Group
   name: {{ . }}
 {{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: {{ .Release.Namespace }}-{{ template "serviceAccountName" . }}-mc-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name:  {{ .Release.Name }}-mc-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: k10:admins
+{{- range .Values.auth.k10AdminUsers }}
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: {{ . }}
+{{- end }}
+{{- range default .Values.auth.groupAllowList .Values.auth.k10AdminGroups }}
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ . }}
+{{- end }}
 {{- end }}
 {{- if and .Values.rbac.create (not .Values.prometheus.rbac.create) }}
 ---

@@ -1,5 +1,9 @@
 {{ include "check.validatePrometheusConfig" .}}
 {{- if .Values.prometheus.server.enabled -}}
+{{- $cluster_domain := "" -}}
+{{- with .Values.cluster.domainName -}}
+  {{- $cluster_domain = printf ".%s" . -}}
+{{- end -}}
 {{- $rbac := .Values.prometheus.rbac.create -}}
 kind: ConfigMap
 apiVersion: v1
@@ -17,14 +21,14 @@ data:
     scrape_configs:
       - job_name: httpServiceDiscovery
         http_sd_configs:
-          - url: {{ printf "http://metering-svc.%s.svc.%s:8000/v0/listScrapeTargets" .Release.Namespace .Values.cluster.domainName }}
+          - url: {{ printf "http://metering-svc.%s.svc%s:8000/v0/listScrapeTargets" .Release.Namespace $cluster_domain }}
 {{- if .Values.kanisterPodMetricSidecar.enabled }}
       - job_name: pushAggregator
         honor_timestamps: true
         metrics_path: /v0/push-metric-agg/metrics
         static_configs:
           - targets:
-              - {{ printf "metering-svc.%s.svc.%s:8000" .Release.Namespace .Values.cluster.domainName }}
+              - {{ printf "metering-svc.%s.svc%s:8000" .Release.Namespace $cluster_domain }}
 {{- end -}}
 {{- if .Values.prometheus.scrapeCAdvisor }}
       - job_name: 'kubernetes-cadvisor'

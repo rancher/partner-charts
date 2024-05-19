@@ -56,6 +56,7 @@ spec:
 {{- end}}
       labels:
 {{ include "helm.labels" . | indent 8 }}
+{{- include "k10.azMarketPlace.billingIdentifier" . }}
         component: {{ $service }}
         run: {{ $deploymentName }}
     spec:
@@ -131,6 +132,7 @@ spec:
         configMap:
           name: k10-features
 {{- end }}
+{{- if list "dashboardbff" "auth" "controllermanager" | has $pod}}
 {{- if eq (include "basicauth.check" .) "true" }}
       - name: k10-basic-auth
         secret:
@@ -158,6 +160,7 @@ spec:
       - name: k10-logos-dex
         configMap:
           name: k10-logos-dex
+{{- end }}
 {{- end }}
 {{- range $skip, $statefulContainer := compact (dict "main" . "k10_service_pod" $pod | include "get.statefulRestServicesInPod" | splitList " ") }}
       - name: {{ $statefulContainer }}-persistent-storage
