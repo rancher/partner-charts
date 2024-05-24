@@ -61,7 +61,7 @@ controller:
   name: controller
   image:
     repository: haproxytech/kubernetes-ingress    # can be changed to use CE or EE Controller images
-    tag: "{{ .Chart.AppVersion }}"
+    tag: ""                                       # overrides the image tag whose default is the chart appVersion
     pullPolicy: IfNotPresent
 
   ## Deployment or DaemonSet pod mode
@@ -77,6 +77,11 @@ controller:
   ## Running container without root privileges
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
   unprivileged: true
+
+  ## Allow privileged port binding without root privileges
+  ## ref: https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/
+  ## Note: this feature enables net.ipv4.ip_unprivileged_port_start=0 sysctl when running in unprivileged mode
+  allowPrivilegedPorts: false
 
   ## Restricts container syscalls
   ## ref: https://kubernetes.io/docs/tutorials/security/seccomp/
@@ -340,6 +345,8 @@ controller:
   #   annotationKey: value
 
   ## Controller Logging configuration
+  ## Careful: this block will be ignored if you use config.cr-global.
+  ## In this case, move your logging config in entry spec.log_targets in your CR.
   logging:
     ## Controller logging level
     ## This only relevant to Controller logs
@@ -560,3 +567,17 @@ controller:
         path: /metrics
         scheme: http
         interval: 30s
+
+  ## Controller sync mode with Kubernetes
+  ## Note: requires Enterprise Kubernetes Ingress Controller
+  ## Possible values: 'default' or 'fetch'
+  ## - 'default': the sync is done based on K8s informers (event based)
+  ## - 'fetch':  the controller pulls data periodically (from K8s or from proxy)
+  sync:
+    mode: default                                       # can be 'default' or 'fetch'
+    fetchParams:                                        # Mandatory if mode is 'fetch'
+      # period: 3s                                      # optional, default is 5s
+      source: k8s                                       # possible values are: 'proxy', 'k8s'
+    proxyParams:                                        # Mandatory if source is 'proxy'
+      replicaCount: 3                                   # number of replicas of the proxy, mandatory if source is 'proxy'
+      proxySvcLabelSelector: run:haproxy-ingress-proxy  # label selector of the proxy service, mandatory if source is 'proxy'
