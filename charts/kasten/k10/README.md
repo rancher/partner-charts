@@ -285,6 +285,8 @@ Parameter | Description | Default
 `priorityClassName.<deploymentName>` | Overrides the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for the specified deployment | `{}`
 `ephemeralPVCOverhead` | Set the percentage increase for the ephemeral Persistent Volume Claim's storage request, e.g. PVC size = (file raw size) * (1 + `ephemeralPVCOverhead`) | `0.1`
 `datastore.parallelUploads` | Specifies how many files can be uploaded in parallel to the data store | `8`
+`kastenDisasterRecovery.quickMode.enabled` | Enables K10 Quick Disaster Recovery | `false`
+`fips.enabled` | Specifies whether K10 should be run in the FIPS mode of operation | `false`
 ## Helm tips and tricks
 
 There is a way of setting values via a yaml file instead of using `--set`.

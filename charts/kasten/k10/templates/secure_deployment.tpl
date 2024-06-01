@@ -18,4 +18,3 @@ A secure deployment is defined as one of the following:
 {{- include "k10.fail.fipsPrometheus" . -}}
 {{- include "k10.fail.fipsMulticluster" . -}}
 {{- include "k10.fail.fipsPDFReports" . -}}
-{{- include "k10.fail.fipsGatewayNextGen" . -}}

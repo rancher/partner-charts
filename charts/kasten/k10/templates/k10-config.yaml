@@ -69,6 +69,8 @@ data:
 
   k10JobMaxWaitDuration: {{ .Values.maxJobWaitDuration | quote }}
 
+  quickDisasterRecoveryEnabled: {{ .Values.kastenDisasterRecovery.quickMode.enabled | quote }}
+
   k10ForceRootInKanisterHooks: {{ .Values.forceRootInKanisterHooks | quote }}
 
   {{- if .Values.awsConfig.efsBackupVaultName }}
@@ -135,7 +137,7 @@ data:
       name: OpenShift
       config:
         issuer: {{ .Values.auth.openshift.openshiftURL }}
-        clientID: {{printf "system:serviceaccount:%s:%s" .Release.Namespace .Values.auth.openshift.serviceAccount }}
+        clientID: {{ printf "system:serviceaccount:%s:%s" .Release.Namespace (include "get.openshiftServiceAccountName" .) }}
         clientSecret: {{ printf "{{ getenv \"%s\" }}" (include "k10.openShiftClientSecretEnvVar" . ) }}
         redirectURI: {{ printf "%s/dex/callback" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
         insecureCA: {{ .Values.auth.openshift.insecureCA }}
@@ -222,7 +224,7 @@ binaryData:
     {{ $files.Get . | b64enc }}
   {{- end }}
 {{ end }}
-{{ if .Values.gateway.next_gen }}
+{{ if (include "k10.capability.gateway" $) }}
 ---
 apiVersion: v1
 kind: ConfigMap

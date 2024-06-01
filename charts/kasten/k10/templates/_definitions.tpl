@@ -208,16 +208,17 @@ state-svc:
       cpu: 2m
       memory: 30Mi
 {{- end -}}
-{{- define "k10.multiClusterVersion" -}}2{{- end -}}
+{{- define "k10.multiClusterVersion" -}}2.5{{- end -}}
 {{- define "k10.mcExternalPort" -}}18000{{- end -}}
 {{- define "k10.defaultKubeVirtVMsUnfreezeTimeout" -}}5m{{- end -}}
 {{- define "k10.aggAuditPolicyFile" -}}agg-audit-policy.yaml{{- end -}}
 {{- define "k10.siemAuditLogFilePath" -}}-{{- end -}}
 {{- define "k10.siemAuditLogFileSize" -}}100{{- end -}}
-{{- define "k10.kanisterToolsImageTag" -}}0.108.0{{- end -}}
+{{- define "k10.kanisterToolsImageTag" -}}0.109.0{{- end -}}
 {{- define "k10.disabledServicesEnvVar" -}}K10_DISABLED_SERVICES{{- end -}}
 {{- define "k10.openShiftClientSecretEnvVar" -}}K10_OPENSHIFT_CLIENT_SECRET{{- end -}}
 {{- define "k10.defaultK10DefaultPriorityClassName" -}}{{- end -}}
+{{- define "k10.dexServiceAccountName" -}}k10-dex-k10-sa{{- end -}}
 {{- define "k10.gatewayPrefixVarName" -}}PREFIX_PATH{{- end -}}
 {{- define "k10.gatewayRequestHeadersVarName" -}}EXTAUTH_REQUEST_HEADERS{{- end -}}
 {{- define "k10.gatewayAuthHeadersVarName" -}}EXTAUTH_AUTH_HEADERS{{- end -}}

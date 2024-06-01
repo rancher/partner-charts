@@ -10,7 +10,7 @@ metadata:
     service: gateway
 {{ include "helm.labels" . | indent 4 }}
   name: gateway
-  {{- if not $.Values.gateway.next_gen }}
+  {{- if not (include "k10.capability.gateway" $) }}
   annotations:
     getambassador.io/config: |
       ---
@@ -82,7 +82,7 @@ spec:
   selector:
     service: gateway
 ---
-{{- if not $.Values.gateway.next_gen }}
+{{- if not (include "k10.capability.gateway" $) }}
 {{- if .Values.gateway.exposeAdminPort }}
 apiVersion: v1
 kind: Service
@@ -125,7 +125,7 @@ spec:
         component: gateway
 {{ include "helm.labels" . | indent 8 }}
 {{- include "k10.azMarketPlace.billingIdentifier" . }}
-{{- if $.Values.gateway.next_gen }}
+{{- if (include "k10.capability.gateway" $) }}
     spec:
       serviceAccountName: {{ template "serviceAccountName" . }}
       {{- dict "main" . "k10_deployment_name" "gateway" | include "k10.priorityClassName" | indent 6}}
@@ -151,7 +151,7 @@ spec:
               configMapKeyRef:
                 name: k10-config
                 key: version
-{{- if (.Values.fips | default dict).enabled }}
+{{- if .Values.fips.enabled }}
           {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
 {{- end }}
           {{- with $capabilities := include "k10.capabilities" . }}

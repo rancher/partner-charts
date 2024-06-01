@@ -116,11 +116,12 @@
   {{- end -}}
 
   {{- /* FIPS */ -}}
-  {{- $fips := .Values.fips | default dict -}}
-  {{- if $fips.enabled -}}
+  {{- if .Values.fips.enabled -}}
     {{- $internal_capabilities = append $internal_capabilities "fips.strict" -}}
+    {{- $internal_capabilities = append $internal_capabilities "crypto.k10.v2" -}}
     {{- $internal_capabilities = append $internal_capabilities "crypto.storagerepository.v2" -}}
     {{- $internal_capabilities = append $internal_capabilities "crypto.vbr.v2" -}}
+    {{- $internal_capabilities = append $internal_capabilities "gateway" -}}
   {{- end -}}
 
   {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
@@ -136,6 +137,32 @@
   {{- end -}}
 
   {{- concat $internal_capabilities_mask (.Values.capabilitiesMask | default list) | join " " -}}
+{{- end -}}
+
+{{/*
+  k10.capability checks whether a given capability is enabled
+
+  For example:
+
+    include "k10.capability" (. | merge (dict "capability" "SOME.CAPABILITY"))
+*/}}
+{{- define "k10.capability" -}}
+  {{- $capabilities := dict -}}
+  {{- range $capability := include "k10.capabilities" . | splitList " " -}}
+    {{- $_ := set $capabilities $capability "enabled" -}}
+  {{- end -}}
+  {{- range $capability := include "k10.capabilities_mask" . | splitList " " -}}
+    {{- $_ := unset $capabilities $capability -}}
+  {{- end -}}
+
+  {{- index $capabilities .capability | default "" -}}
+{{- end -}}
+
+{{/*
+  k10.capability.gateway checks whether the "gateway" capability is enabled
+*/}}
+{{- define "k10.capability.gateway" -}}
+  {{- include "k10.capability" (. | merge (dict "capability" "gateway")) -}}
 {{- end -}}
 
 {{/* Check if basic auth is needed */}}
@@ -1213,36 +1240,29 @@ running in the same cluster.
 
 {{/* Fail if FIPS is enabled and Grafana is turned on  */}}
 {{- define "k10.fail.fipsGrafana" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (.Values.grafana.enabled) -}}
+  {{- if and (.Values.fips.enabled) (.Values.grafana.enabled) -}}
     {{- fail "fips.enabled and grafana.enabled cannot both be enabled at the same time" -}}
   {{- end -}}
 {{- end -}}
 
 {{/* Fail if FIPS is enabled and Prometheus is turned on  */}}
 {{- define "k10.fail.fipsPrometheus" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (.Values.prometheus.server.enabled) -}}
+  {{- if and (.Values.fips.enabled) (.Values.prometheus.server.enabled) -}}
     {{- fail "fips.enabled and prometheus.server.enabled cannot both be enabled at the same time" -}}
   {{- end -}}
 {{- end -}}
 
 {{/* Fail if FIPS is enabled and Multicluster is turned on  */}}
 {{- define "k10.fail.fipsMulticluster" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (.Values.multicluster.enabled) -}}
+  {{- if and (.Values.fips.enabled) (.Values.multicluster.enabled) -}}
     {{- fail "fips.enabled and multicluster.enabled cannot both be enabled at the same time" -}}
   {{- end -}}
 {{- end -}}
 
 {{/* Fail if FIPS is enabled and PDF reporting is turned on  */}}
 {{- define "k10.fail.fipsPDFReports" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (.Values.reporting.pdfReports) -}}
+  {{- if and (.Values.fips.enabled) (.Values.reporting.pdfReports) -}}
     {{- fail "fips.enabled and reporting.pdfReports cannot both be enabled at the same time" -}}
-  {{- end -}}
-{{- end -}}
-
-{{/* Fail if FIPS is enabled and next gen gateway is turned off  */}}
-{{- define "k10.fail.fipsGatewayNextGen" -}}
-  {{- if and ((.Values.fips | default dict).enabled) (not .Values.gateway.next_gen) -}}
-    {{- fail "gateway.next_gen must be enabled if fips.enabled=true" -}}
   {{- end -}}
 {{- end -}}
 
@@ -1273,8 +1293,15 @@ running in the same cluster.
 
 {{/* Returns a generated name for the OpenShift Service Account secret */}}
 {{- define "get.openshiftServiceAccountSecretName" -}}
-  {{- $serviceAccount := required "auth.openshift.serviceAccount field is required" .Values.auth.openshift.serviceAccount -}}
-  {{ printf "%s-k10-secret" $serviceAccount | quote }}
+  {{ printf "%s-k10-secret" (include "get.openshiftServiceAccountName" .) | quote }}
+{{- end -}}
+
+{{/*
+Returns a generated name for the OpenShift Service Account if a service account name
+is not configuredby the user using the helm value auth.openshift.serviceAccount
+*/}}
+{{- define "get.openshiftServiceAccountName" -}}
+  {{ default (include "k10.dexServiceAccountName" .) .Values.auth.openshift.serviceAccount}}
 {{- end -}}
 
 {{/*
@@ -1286,6 +1313,10 @@ the Microsoft Go toolchain and Red Hat's OpenSSL.
   value: "1"
 - name: OPENSSL_FORCE_FIPS_MODE
   value: "1"
+{{- if .Values.fips.disable_ems }}
+- name: KASTEN_CRYPTO_POLICY
+  value: disable_ems
+{{- end }}
 {{- end }}
 
 {{/*

@@ -309,7 +309,7 @@ There are 3 valid states of the secret provided by customer:
                 name: k10-config
                 key: clustername
 {{- end }}
-{{- if (.Values.fips | default dict).enabled }}
+{{- if .Values.fips.enabled }}
           {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
 {{- end }}
           {{- with $capabilities := include "k10.capabilities" . }}
@@ -332,6 +332,13 @@ There are 3 valid states of the secret provided by customer:
               configMapKeyRef:
                 name: k10-config
                 key: kubeVirtVMsUnFreezeTimeout
+{{- end }}
+{{- if eq $service "executor" }}
+          - name: QUICK_DISASTER_RECOVERY_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: quickDisasterRecoveryEnabled
 {{- end }}
 {{- if or (eq $service "executor") (eq $service "controllermanager") }}
 {{- if or  .Values.global.imagePullSecret (or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath)  }}
@@ -877,7 +884,7 @@ There are 3 valid states of the secret provided by customer:
           - name: K10_CAPABILITIES_MASK
             value: {{ $capabilities_mask | quote }}
           {{- end }}
-{{- if (.Values.fips | default dict).enabled }}
+{{- if .Values.fips.enabled }}
           {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
 {{- end }}
         volumeMounts:
@@ -899,7 +906,7 @@ There are 3 valid states of the secret provided by customer:
         image: {{ include "get.dexImage" . }}
 {{- if .Values.auth.ldap.enabled }}
         command: ["/usr/local/bin/dex", "serve", "/dex-config/config.yaml"]
-{{- if (.Values.fips | default dict).enabled }}
+{{- if .Values.fips.enabled }}
         env:
           {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
 {{- end }}
@@ -924,7 +931,7 @@ There are 3 valid states of the secret provided by customer:
 {{- else }}
             value: {{ .Values.auth.openshift.clientSecret }}
 {{- end }}
-{{- if (.Values.fips | default dict).enabled }}
+{{- if .Values.fips.enabled }}
           {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
 {{- end }}
 {{- end }}
