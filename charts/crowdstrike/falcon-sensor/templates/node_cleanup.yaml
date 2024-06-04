@@ -1,4 +1,4 @@
-{{- if .Values.node.enabled }}
+{{- if and .Values.node.enabled .Values.node.hooks.postDelete.enabled }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -56,7 +56,7 @@ spec:
     spec:
     {{- if and (.Values.node.image.pullSecrets) (.Values.node.image.registryConfigJSON) }}
       {{- fail "node.image.pullSecrets and node.image.registryConfigJSON cannot be used together." }}
-    {{- else -}}
+    {{- else }}
     {{- if or (.Values.node.image.pullSecrets) (.Values.node.image.registryConfigJSON) }}
       imagePullSecrets:
       {{- if .Values.node.image.pullSecrets }}
@@ -67,12 +67,12 @@ spec:
       {{- end }}
     {{- end }}
     {{- end }}
-    {{- if .Values.node.daemonset.tolerations }}    
+    {{- if .Values.node.daemonset.tolerations }}
       tolerations:
       {{- with .Values.node.daemonset.tolerations }}
         {{- toYaml . | nindent 6 }}
       {{- end }}
-    {{- end }}  
+    {{- end }}
       nodeSelector:
         kubernetes.io/os: linux
     {{- if .Values.node.daemonset.nodeAffinity }}
@@ -86,31 +86,63 @@ spec:
       - name: cleanup-opt-crowdstrike
         image: "{{ include "falcon-sensor.image" . }}"
         imagePullPolicy: "{{ .Values.node.image.pullPolicy }}"
-        command: ["/bin/bash"]
-        # Sensor versions 6.53+ have a helper binary to clean-up /opt/CrowdStrike upon removal of the helm release
-        args: ['-c', 'if [ -x "/opt/CrowdStrike/falcon-daemonset-init" ]; then echo "Running /opt/CrowdStrike/falcon-daemonset-init -u"; /opt/CrowdStrike/falcon-daemonset-init -u ; else rm -rf "/host_opt/CrowdStrike"; fi']
-        volumeMounts:
-          - name: opt-crowdstrike
-            mountPath: /host_opt
+        command:
+          - /bin/bash
+        args:
+          - '-c'
+          - >-
+            echo "Running /opt/CrowdStrike/falcon-daemonset-init -u";
+            /opt/CrowdStrike/falcon-daemonset-init -u
+        {{- if or .Values.node.gke.autopilot .Values.node.daemonset.resources }}
+        resources:
+          requests:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+          limits:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+        {{- end }}
         securityContext:
           runAsUser: 0
           privileged: true
-          readOnlyRootFilesystem: false
           allowPrivilegeEscalation: true
+        {{- if .Values.node.gke.autopilot }}
+          readOnlyRootFilesystem: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - SYS_PTRACE
+              - SYS_CHROOT
+              - DAC_READ_SEARCH
+        {{- else }}
+          readOnlyRootFilesystem: false
+        {{- end }}
       containers:
       - name: cleanup-sleep
         image: "{{ include "falcon-sensor.image" . }}"
         imagePullPolicy: "{{ .Values.node.image.pullPolicy }}"
-        command: ["sleep", "10"]
+        args:
+        - -c
+        - sleep 10
+        command:
+        - /bin/bash
+        {{- if or .Values.node.gke.autopilot .Values.node.daemonset.resources }}
+        resources:
+          requests:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+          limits:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+        {{- end }}
         securityContext:
-          runAsUser: 0
-          privileged: true
-          readOnlyRootFilesystem: false
+          privileged: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: true
-      volumes:
-      - name: opt-crowdstrike
-        hostPath:
-          path: /opt
       serviceAccountName: {{ .Values.serviceAccount.name }}-node-cleanup
       terminationGracePeriodSeconds: {{ .Values.node.terminationGracePeriod }}
       hostPID: true

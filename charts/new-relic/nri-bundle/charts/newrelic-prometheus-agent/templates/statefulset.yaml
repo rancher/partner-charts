@@ -48,6 +48,10 @@ spec:
 
       initContainers:
         - name: configurator
+          {{- with include "newrelic.common.securityContext.container" . }}
+          securityContext:
+            {{- . | nindent 12 }}
+          {{- end }}
           image: {{ include "newrelic-prometheus.configurator.configurator_image" ( dict "imageRoot" .Values.images.configurator "context" .) }}
           imagePullPolicy: {{ .Values.images.configurator.pullPolicy }}
           args:
@@ -56,6 +60,9 @@ spec:
             {{- if include "newrelic.common.verboseLog" . }}
             - --verbose=true
             {{- end }}
+          {{- with .Values.resources.configurator }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: configurator-config
               mountPath: /etc/configurator/
@@ -137,10 +144,9 @@ spec:
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with include "newrelic.common.nodeSelector" . }}
       nodeSelector:
-        {{- . | nindent 8 }}
-      {{- end }}
+        kubernetes.io/os: linux
+        {{ include "newrelic.common.nodeSelector" . | nindent 8 }}
       {{- with include "newrelic.common.affinity" . }}
       affinity:
         {{- . | nindent 8 }}

@@ -125,7 +125,7 @@ Generates the dockerconfig for the credentials to pull from containers.instana.i
 Output limits or defaults
 */}}
 {{- define "instana-agent.resources" -}}
-{{- $memory := default "512Mi" .memory -}}
+{{- $memory := default "768Mi" .memory -}}
 {{- $cpu := default 0.5 .cpu -}}
 memory: "{{ dict "memory" $memory | include "ensureMemoryMeasurement" }}"
 cpu: {{ $cpu }}
@@ -151,7 +151,7 @@ Composes a container image from a dict containing a "name" field (required), "ta
 {{- $tag := .tag }}
 {{- $digest := .digest }}
 {{- if $digest }}
-{{- printf "%s@%s" $name $digest }}
+{{- printf "%s@sha256:%s" $name $digest }}
 {{- else if $tag }}
 {{- printf "%s:%s" $name $tag }}
 {{- else }}
@@ -308,8 +308,8 @@ httpGet:
   host: 127.0.0.1 # localhost because Pod has hostNetwork=true
   path: /status
   port: 42699
-initialDelaySeconds: 300 # startupProbe isnt available before K8s 1.16
-timeoutSeconds: 3
+initialDelaySeconds: 600 # startupProbe isnt available before K8s 1.16
+timeoutSeconds: 5
 periodSeconds: 10
 failureThreshold: 3
 {{- end -}}

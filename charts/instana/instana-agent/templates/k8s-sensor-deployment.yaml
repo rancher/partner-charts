@@ -4,7 +4,7 @@
 
 {{- $user_name_password := "" -}}
 {{ if .Values.agent.proxyUser }}
-  {{- $user_name_password = print .Values.agent.proxyUser ":" .Values.agent.proxyPass "@" -}}
+  {{- $user_name_password = print .Values.agent.proxyUser ":" .Values.agent.proxyPassword "@" -}}
 {{ end}}
 
 apiVersion: apps/v1
@@ -124,19 +124,8 @@ spec:
         {{- toYaml .Values.k8s_sensor.deployment.pod.tolerations | nindent 8 }}
       {{- end }}
       affinity:
-        podAntiAffinity:
-          # Soft anti-affinity policy: try not to schedule multiple kubernetes-sensor pods on the same node.
-          # If the policy is set to "requiredDuringSchedulingIgnoredDuringExecution", if the cluster has
-          # fewer nodes than the amount of desired replicas, `helm install/upgrade --wait` will not return.
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: instana/agent-mode
-                  operator: In
-                  values: [ KUBERNETES ]
-              topologyKey: "kubernetes.io/hostname"
+        {{- toYaml .Values.k8s_sensor.deployment.pod.affinity | nindent 8 }}
+  minReadySeconds: {{ $.Values.k8s_sensor.deployment.minReadySeconds }}
 {{- end -}}
 {{- end -}}
 {{- end -}}

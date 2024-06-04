@@ -4,6 +4,7 @@ we have to start using .Values.reportingSecret instead
 of correct version .Values.metering.reportingSecret */}}
 {{- define "k10-metering" }}
 {{ $service := .k10_service }}
+{{- $podName := (printf "%s-svc" $service) }}
 {{ $main := .main }}
 {{- with .main }}
 {{- $servicePort := .Values.service.externalPort -}}
@@ -121,12 +122,14 @@ spec:
         checksum/secret: {{ include (print .Template.BasePath "/secrets.yaml") . | sha256sum }}
       labels:
 {{ include "helm.labels" . | indent 8 }}
+{{- include "k10.azMarketPlace.billingIdentifier" . }}
         component: {{ $service }}
         run: {{ $service }}-svc
     spec:
       securityContext:
 {{ toYaml .Values.services.securityContext | indent 8 }}
       serviceAccountName: {{ template "meteringServiceAccountName" . }}
+      {{- dict "main" . "k10_deployment_name" $podName | include "k10.priorityClassName" | indent 6}}
       {{- include "k10.imagePullSecrets" . | indent 6 }}
 {{- if $.stateful }}
       initContainers:
@@ -140,6 +143,7 @@ spec:
             allowPrivilegeEscalation: false
         {{- dict "main" . "k10_service" "upgrade" | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "upgrade-init" | include "k10.resource.request" | indent 8}}
         env:
           - name: MODEL_STORE_DIR
             value: /var/reports/
@@ -151,11 +155,8 @@ spec:
       - name: {{ $service }}-svc
         {{- dict "main" . "k10_service" $service | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
-{{- if eq .Release.Namespace "default" }}
-{{- $podName := (printf "%s-svc" $service) }}
 {{- $containerName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" $containerName  | include "k10.resource.request" | indent 8}}
-{{- end }}
         ports:
         - containerPort: {{ .Values.service.externalPort }}
         livenessProbe:
@@ -170,6 +171,11 @@ spec:
               configMapKeyRef:
                 name: k10-config
                 key: version
+          - name: KANISTER_TOOLS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterToolsImage
 {{- if .Values.clusterName }}
           - name: CLUSTER_NAME
             valueFrom:
@@ -177,6 +183,19 @@ spec:
                 name: k10-config
                 key: clustername
 {{- end }}
+{{- if .Values.fips.enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
+{{- end }}
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
+          - name: K10_HOST_SVC
+            value: {{ $service }}
           - name: LOG_LEVEL
             valueFrom:
               configMapKeyRef:
@@ -206,13 +225,6 @@ spec:
             value: /tmp/reports/clustergraceperiod
           - name: NODE_USAGE_STORE
             value: /tmp/reports/node_usage_history
-{{- end }}
-{{- if eq "true" (include "overwite.kanisterToolsImage" .) }}
-          - name: KANISTER_TOOLS
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: overwriteKanisterTools
 {{- end }}
 {{- if .Values.metering.awsRegion }}
           - name: AWS_REGION

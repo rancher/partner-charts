@@ -14,10 +14,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */}}
-{{- if and (include "kafka-internal-tls-enabled" . | fromJson).bool (not (include "sasl-enabled" . | fromJson).bool) -}}
+{{- if and .Values.tests.enabled (include "kafka-internal-tls-enabled" . | fromJson).bool (not (include "sasl-enabled" . | fromJson).bool) -}}
   {{- $service := .Values.listeners.kafka -}}
   {{- $cert := get .Values.tls.certs $service.tls.cert -}}
-  {{- $root := deepCopy . }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -32,9 +31,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   restartPolicy: Never
-  securityContext:
-    runAsUser: 65535
-    runAsGroup: 65535
+  securityContext: {{ include "pod-security-context" . | nindent 4 }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets: {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -59,26 +56,7 @@ spec:
         do sleep 2
         done
       resources: {{ toYaml .Values.statefulset.resources | nindent 12 }}
-      volumeMounts:
-        - name: {{ template "redpanda.fullname" . }}
-          mountPath: /tmp/base-config
-        - name: config
-          mountPath: /etc/redpanda
-  {{- range $name, $cert := .Values.tls.certs }}
-        - name: redpanda-{{ $name }}-cert
-          mountPath: {{ printf "/etc/tls/certs/%s" $name }}
-  {{- end }}
-  volumes:
-    - name: {{ template "redpanda.fullname" . }}
-      configMap:
-        name: {{ template "redpanda.fullname" . }}
-    - name: config
-      emptyDir: {}
-  {{- range $name, $cert := .Values.tls.certs }}
-    {{- $r :=  set $root "tempCert" ( dict "name" $name "cert" $cert ) }}
-    - name: redpanda-{{ $name }}-cert
-      secret:
-        defaultMode: 0644
-        secretName: {{ template "cert-secret-name" $r }}
-  {{- end }}
+      volumeMounts: {{ include "default-mounts" . | nindent 8 }}
+      securityContext: {{ include "container-security-context" . | nindent 8 }}
+  volumes: {{ include "default-volumes" . | nindent 4 }}
 {{- end }}

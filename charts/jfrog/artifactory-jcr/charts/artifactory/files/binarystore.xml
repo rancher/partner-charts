@@ -1,3 +1,35 @@
+{{- if eq .Values.artifactory.persistence.type "nfs" -}}
+<config version="2">
+    {{- if  (.Values.artifactory.persistence.maxCacheSize) }}
+    <chain> <!--template="file-system"-->
+        <provider id="cache-fs" type="cache-fs">
+            <provider id="file-system" type="file-system"/>
+        </provider>
+    </chain>
+    {{- else }}
+    <chain> <!--template="file-system"-->
+        <provider id="file-system" type="file-system"/>
+    </chain>
+    {{- end }}
+
+    {{- if .Values.artifactory.persistence.maxCacheSize }}
+    <provider id="cache-fs" type="cache-fs">
+        <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize | int64 }}</maxCacheSize>
+        <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
+    </provider>
+    {{- end }}
+
+    <provider id="file-system" type="file-system">
+        <fileStoreDir>{{ .Values.artifactory.persistence.nfs.dataDir }}/filestore</fileStoreDir>
+    </provider>
+</config>
+{{- end }}
 {{- if eq .Values.artifactory.persistence.type "file-system" -}}
 <!-- File system filestore -->
 <config version="v1">
@@ -15,6 +47,12 @@
     <provider id="cache-fs" type="cache-fs">
         <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize | int64 }}</maxCacheSize>
         <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
     </provider>
     {{- end }}
 </config>
@@ -40,6 +78,12 @@
     <provider id="cache-fs" type="cache-fs">
         <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize | int64 }}</maxCacheSize>
         <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
     </provider>
 
     <!-- Shards add local file-system provider configuration -->
@@ -58,7 +102,7 @@
     </provider>
 </config>
 {{- end }}
-{{- if or (eq .Values.artifactory.persistence.type "google-storage") (eq .Values.artifactory.persistence.type "google-storage-v2") (eq .Values.artifactory.persistence.type "cluster-google-storage-v2")  }}
+{{- if or (eq .Values.artifactory.persistence.type "google-storage") (eq .Values.artifactory.persistence.type "google-storage-v2") (eq .Values.artifactory.persistence.type "cluster-google-storage-v2") (eq .Values.artifactory.persistence.type "google-storage-v2-direct")  }}
 <!-- Google storage -->
 <config version="2">
     {{- if or (eq .Values.artifactory.persistence.type "google-storage") (eq .Values.artifactory.persistence.type "google-storage-v2") }}
@@ -90,12 +134,24 @@
             </provider>
         </provider>
     </chain>
+    {{- else if eq .Values.artifactory.persistence.type "google-storage-v2-direct" }}
+    <chain>  <!--template="google-storage-v2-direct"-->
+        <provider id="cache-fs" type="cache-fs">
+            <provider id="google-storage-v2" type="google-storage-v2"/>
+        </provider>
+    </chain>
     {{- end }}
 
     <!-- Set max cache-fs size -->
     <provider id="cache-fs" type="cache-fs">
         <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize | int64 }}</maxCacheSize>
         <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
     </provider>
 
     {{- if eq .Values.artifactory.persistence.type "cluster-google-storage-v2" }}
@@ -172,6 +228,12 @@
     <provider id="cache-fs" type="cache-fs">
         <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize | int64}}</maxCacheSize>
         <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
     </provider>
     {{- end }}
 
@@ -206,8 +268,20 @@
         <bucketName>{{ .bucketName }}</bucketName>
         <path>{{ .path }}</path>
         <endpoint>{{ .endpoint }}</endpoint>
+        {{- with .port }}
+        <port>{{ . }}</port>
+        {{- end }}
+        {{- with .useHttp }}
+        <useHttp>{{ . }}</useHttp>
+        {{- end }}
         {{- with .maxConnections }}
         <maxConnections>{{ . }}</maxConnections>
+        {{- end }}
+        {{- with .connectionTimeout }}
+        <connectionTimeout>{{ . }}</connectionTimeout>
+        {{- end }}
+        {{- with .socketTimeout }}
+        <socketTimeout>{{ . }}</socketTimeout>
         {{- end }}
         {{- with .kmsServerSideEncryptionKeyId }}
         <kmsServerSideEncryptionKeyId>{{ . }}</kmsServerSideEncryptionKeyId>
@@ -240,6 +314,12 @@
         {{- end }}
         {{- with .enablePathStyleAccess }}
         <enablePathStyleAccess>{{ . }}</enablePathStyleAccess>
+        {{- end }}
+        {{- with .multiPartLimit }}
+        <multiPartLimit>{{ . | int64 }}</multiPartLimit>
+        {{- end }}
+        {{- with .multipartElementSize }}
+        <multipartElementSize>{{ . | int64 }}</multipartElementSize>
         {{- end }}
     </provider>
     {{- end }}
@@ -284,6 +364,12 @@
     <provider id="cache-fs" type="cache-fs">
         <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize | int64 }}</maxCacheSize>
         <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
     </provider>
 
     {{- if eq .Values.artifactory.persistence.type "cluster-azure-blob-storage" }}
@@ -312,5 +398,29 @@
         <multipartElementSize>{{ .Values.artifactory.persistence.azureBlob.multipartElementSize | int64 }}</multipartElementSize>
         <testConnection>{{ .Values.artifactory.persistence.azureBlob.testConnection }}</testConnection>
     </provider>
+</config>
+{{- end }}
+{{- if eq .Values.artifactory.persistence.type "azure-blob-storage-v2-direct" -}}
+<config version="3">
+    <chain template="azure-blob-storage-v2-direct"/>
+    <provider type="cache-fs" id="cache-fs">
+        <cacheProviderDir>{{ .Values.artifactory.persistence.maxCacheSize | int64 }}</cacheProviderDir> 
+        <maxCacheSize>{{ .Values.artifactory.persistence.cacheProviderDir }}</maxCacheSize>
+        {{- if .Values.artifactory.persistence.maxFileSizeLimit }}
+        <maxFileSizeLimit>{{.Values.artifactory.persistence.maxFileSizeLimit | int64}}</maxFileSizeLimit>
+        {{- end }}
+        {{- if .Values.artifactory.persistence.skipDuringUpload }}
+        <skipDuringUpload>{{.Values.artifactory.persistence.skipDuringUpload}}</skipDuringUpload>
+        {{- end }}
+    </provider>
+    <provider id="azure-blob-storage-v2" type="azure-blob-storage-v2">
+        <accountName>{{ .Values.artifactory.persistence.azureBlob.accountName }}</accountName>
+        <accountKey>{{ .Values.artifactory.persistence.azureBlob.accountKey }}</accountKey>
+        <endpoint>{{ .Values.artifactory.persistence.azureBlob.endpoint }}</endpoint>
+        <container>{{ .Values.artifactory.persistence.azureBlob.containerName }}</container> 
+        <multiPartLimit>{{ .Values.artifactory.persistence.azureBlob.multiPartLimit | int64 }}</multiPartLimit>
+        <multipartElementSize>{{ .Values.artifactory.persistence.azureBlob.multipartElementSize | int64 }}</multipartElementSize>
+        <testConnection>{{ .Values.artifactory.persistence.azureBlob.testConnection }}</testConnection>
+    </provider>   
 </config>
 {{- end }}

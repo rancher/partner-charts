@@ -72,11 +72,6 @@ helm ls --all-namespaces
 helm delete `my-name` --namespace=federatorai
 ```
 
-## To delete the Custom Resource Definitions (CRDs):
-```
-kubectl delete crd alamedaservices.federatorai.containers.ai
-```
-
 
 ## Configuration
 
@@ -155,13 +150,6 @@ Their default values and other configurable parameters are specified inside valu
 | federatoraiDashboardFrontend.service.externalTrafficPolicy     | Enable client source IP preservation                                                                                               |
 | federatoraiDashboardFrontend.service.healthCheckNodePort       | Specifies the health check node port (numeric port number) for the service if `externalTrafficPolicy` is set to Local.             |
 | federatoraiDashboardFrontend.service.annotations               | Additional annotations for REST service                                                                                            |
-
-
-### federatoraiOperator Parameters
-
-| Parameter                                                      | Description                                      |
-| -------------------------------------------------------------- | ------------------------------------------------ |
-| federatoraiOperator.enabled                                    | Enable deployment of federatorai-operator        |
 
 
 ### federatoraiPostgresql Parameters

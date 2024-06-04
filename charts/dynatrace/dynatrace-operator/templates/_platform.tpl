@@ -28,10 +28,19 @@ Auto-detect the platform (if not set), according to the available APIVersions
 {{- end }}
 
 {{/*
+Exclude Kubernetes manifest not running on OLM
+*/}}
+{{- define "dynatrace-operator.openshiftOrOlm" -}}
+{{- if and (or (eq (include "dynatrace-operator.platform" .) "openshift") (.Values.olm)) (eq (include "dynatrace-operator.partial" .) "false") -}}
+    {{ default "true" }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Check if platform is set to a valid one
 */}}
 {{- define "dynatrace-operator.platformIsValid" -}}
-{{- $validPlatforms := list "kubernetes" "openshift" "google-marketplace" "gke-autopilot" -}}
+{{- $validPlatforms := list "kubernetes" "openshift" "google-marketplace" "gke-autopilot" "azure-marketplace" -}}
 {{- if has (include "dynatrace-operator.platform" .) $validPlatforms -}}
     {{ default "set" }}
 {{- end -}}

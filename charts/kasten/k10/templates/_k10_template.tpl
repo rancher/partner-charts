@@ -1,6 +1,7 @@
 {{/* Generate service spec */}}
 {{- define "k10-default" }}
 {{- $service := .k10_service }}
+{{- $deploymentName := (printf "%s-svc" $service) }}
 {{- with .main }}
 {{- $main_context := . }}
 {{- range $skip, $statefulContainer := compact (dict "main" $main_context "k10_service_pod" $service | include "get.statefulRestServicesInPod" | splitList " ") }}
@@ -31,7 +32,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: {{ $service }}-svc
+  name: {{ $deploymentName }}
   labels:
 {{ include "helm.labels" . | indent 4 }}
     component: {{ $service }}
@@ -43,7 +44,7 @@ spec:
     matchLabels:
 {{ include "k10.common.matchLabels" . | indent 6 }}
       component: {{ $service }}
-      run: {{ $service }}-svc
+      run: {{ $deploymentName }}
   template:
     metadata:
       annotations:
@@ -55,8 +56,9 @@ spec:
 {{- end}}
       labels:
 {{ include "helm.labels" . | indent 8 }}
+{{- include "k10.azMarketPlace.billingIdentifier" . }}
         component: {{ $service }}
-        run: {{ $service }}-svc
+        run: {{ $deploymentName }}
     spec:
 {{- if eq $service "executor" }}
 {{- if .Values.services.executor.hostNetwork }}
@@ -76,6 +78,7 @@ spec:
       securityContext:
 {{ toYaml .Values.services.securityContext | indent 8 }}
       serviceAccountName: {{ template "serviceAccountName" . }}
+      {{- dict "main" . "k10_deployment_name" $deploymentName | include "k10.priorityClassName" | indent 6}}
       {{- include "k10.imagePullSecrets" . | indent 6 }}
 {{- /* initContainers: */}}
 {{- (dict "main" . "k10_pod" $service | include "k10-init-container-header") }}
@@ -105,9 +108,13 @@ spec:
     {{- $needsVolumesHeader = true }}
   {{- else if eq (include "check.cacertconfigmap" $main_context) "true" }}
     {{- $needsVolumesHeader = true }}
-  {{- else if and ( eq $service "auth" ) ( or $main_context.Values.auth.dex.enabled (eq (include "check.dexAuth" $main_context) "true")) }}
+  {{- else if and ( eq $service "auth" ) ( eq (include "check.dexAuth" $main_context) "true" ) }}
     {{- $needsVolumesHeader = true }}
   {{- else if eq $service "frontend" }}
+    {{- $needsVolumesHeader = true }}
+  {{- else if and (list "controllermanager" "executor" "catalog" | has $pod) (eq (include "check.projectSAToken" $main_context) "true")}}
+    {{- $needsVolumesHeader = true }}
+  {{- else if and (eq $service "aggregatedapis") (include "k10.siemEnabled" $main_context) }}
     {{- $needsVolumesHeader = true }}
   {{- end }}{{/* volumes header needed check */}}
 {{- end }}{{/* range $skip, $service := $containerList */}}
@@ -125,6 +132,7 @@ spec:
         configMap:
           name: k10-features
 {{- end }}
+{{- if list "dashboardbff" "auth" "controllermanager" | has $pod}}
 {{- if eq (include "basicauth.check" .) "true" }}
       - name: k10-basic-auth
         secret:
@@ -134,6 +142,11 @@ spec:
       - name: k10-oidc-auth
         secret:
           secretName: {{ default "k10-oidc-auth" .Values.auth.oidcAuth.secretName }}
+{{- if .Values.auth.oidcAuth.clientSecretName }}
+      - name: k10-oidc-auth-creds
+        secret:
+          secretName: {{ .Values.auth.oidcAuth.clientSecretName }}
+{{- end }}
 {{- end }}
 {{- if .Values.auth.openshift.enabled }}
       - name: k10-oidc-auth
@@ -148,15 +161,28 @@ spec:
         configMap:
           name: k10-logos-dex
 {{- end }}
+{{- end }}
 {{- range $skip, $statefulContainer := compact (dict "main" . "k10_service_pod" $pod | include "get.statefulRestServicesInPod" | splitList " ") }}
       - name: {{ $statefulContainer }}-persistent-storage
         persistentVolumeClaim:
           claimName: {{ $statefulContainer }}-pv-claim
 {{- end }}
-{{- if eq (include "check.googlecreds" .) "true" }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true"  }}
+{{- $gkeSecret := default "google-secret" .Values.secrets.googleClientSecretName }}
       - name: service-account
         secret:
-          secretName: google-secret
+          secretName: {{ $gkeSecret }}
+{{- end }}
+{{- if and (list "controllermanager" "executor" "catalog" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
+      - name: bound-sa-token
+        projected:
+            sources:
+            - serviceAccountToken:
+{{- if eq (include "check.gwifidpaud" .) "true" }}
+                audience:  {{ .Values.google.workloadIdentityFederation.idp.aud }}
+{{- end }}
+                expirationSeconds: 3600
+                path: token
 {{- end }}
 {{- if eq (include "check.cacertconfigmap" .) "true" }}
       - name: {{ .Values.cacertconfigmap.name }}
@@ -167,6 +193,11 @@ spec:
       - name: frontend-config
         configMap:
           name: frontend-config
+{{- end }}
+{{- if and (eq $pod "aggregatedapis") (include "k10.siemEnabled" .) }}
+      - name: aggauditpolicy-config
+        configMap:
+          name: aggauditpolicy-config
 {{- end }}
 {{- $containersInThisPod := (dict "main" . "k10_service_pod" $pod | include "get.serviceContainersInPod" | splitList " ") }}
 {{- if has "logging" $containersInThisPod }}
@@ -179,7 +210,7 @@ spec:
         secret:
           secretName: controllermanager-certs
 {{- end }}
-{{- if and ( has "auth" $containersInThisPod) (or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true")) }}
+{{- if and ( has "auth" $containersInThisPod) ( eq (include "check.dexAuth" .) "true" ) }}
       - name: config
         configMap:
           name: k10-dex

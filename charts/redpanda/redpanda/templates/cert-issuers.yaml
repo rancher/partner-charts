@@ -15,12 +15,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 {{- if (include "tls-enabled" . | fromJson).bool }}
-  {{- $root := deepCopy . }}
   {{- $release := .Release }}
   {{- $values := .Values }}
   {{- range $name, $data := $values.tls.certs }}
     {{/* If secretRef is defined, do not create any of these certificates. */}}
     {{- if not (hasKey $data "secretRef") }}
+      {{- $d := $data.duration }}
 
 ---
 {{/* If issuerRef is defined, use the specified issuer for the certs
@@ -33,7 +33,7 @@ metadata:
   name: {{ template "redpanda.fullname" $ }}-{{ $name }}-selfsigned-issuer
   namespace: {{ $release.Namespace | quote }}
   labels:
-{{- with include "full.labels" $root }}
+{{- with include "full.labels" $ }}
   {{- . | nindent 4 }}
 {{- end }}
 spec:
@@ -47,7 +47,7 @@ metadata:
   name: {{ template "redpanda.fullname" $ }}-{{ $name }}-root-issuer
   namespace: {{ $release.Namespace | quote }}
   labels:
-{{- with include "full.labels" $root }}
+{{- with include "full.labels" $ }}
   {{- . | nindent 4 }}
 {{- end }}
 spec:
@@ -61,10 +61,11 @@ metadata:
   name: {{ template "redpanda.fullname" $ }}-{{ $name }}-root-certificate
   namespace: {{ $release.Namespace | quote }}
   labels:
-{{- with include "full.labels" $root }}
+{{- with include "full.labels" $ }}
   {{- . | nindent 4 }}
 {{- end }}
 spec:
+  duration: {{ $d | default "43800h" }}
   isCA: true
   commonName: {{ template "redpanda.fullname" $ }}-{{ $name }}-root-certificate
   secretName: {{ template "redpanda.fullname" $ }}-{{ $name }}-root-certificate

@@ -1,5 +1,279 @@
 # Changelog
 
+## 2.38.0
+
+### Changes
+
+* Added support for setting `SVC.tls.appProtocol` and `SVC.http.appProtocol` values to configure the appProtocol fields
+  for Kubernetes Service HTTP and TLS ports. It might be useful for integration with external load balancers like GCP.
+  [#1018](https://github.com/Kong/charts/pull/1018)
+
+## 2.37.1
+
+* Rename the controller status port. This fixes a collision with the proxy status port in the Prometheus ServiceMonitor.
+  [#1008](https://github.com/Kong/charts/pull/1008)
+
+## 2.37.0
+
+### Changes
+
+* Bumped default `kong/kubernetes-ingress-controller` image tag and updated CRDs to 3.1.
+  [#1011](https://github.com/Kong/charts/pull/1011)
+* Bumped default `kong` image tag to 3.6.
+  [#1011](https://github.com/Kong/charts/pull/1011)
+
+## 2.36.0
+
+### Fixed
+
+* Add `KongLicense` RBAC rules.
+  [#1006](https://github.com/Kong/charts/pull/1006)
+
+## 2.35.1
+
+### Fixed
+
+* The plugin helper no longer sets the plugin list when not in use.
+  [#1002](https://github.com/Kong/charts/pull/1002)
+
+## 2.35.0
+
+### Added
+
+* Added controller's RBAC rules for `KongVault` CRD (installed only when KIC
+  version >= 3.1.0).
+  [#992](https://github.com/Kong/charts/pull/992)
+
+### Fixed
+
+* Added a missing `envFrom` render in the main Kong proxy container.
+  [#994](https://github.com/Kong/charts/pull/994)
+
+## 2.34.0
+
+### Added
+
+* The `envFrom` and `ingressController.envFrom` values.yaml keys now populate
+  the container field of the same name. This loads environment variables from
+  ConfigMap or Secret resource keys in bulk:
+  https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+  [#987](https://github.com/Kong/charts/pull/987)
+* Kong listens now use both IPv4 and IPv6 addresses.
+  [#986](https://github.com/Kong/charts/pull/986)
+
+## 2.33.3
+
+### Fixed
+
+* Add RBAC rules for get, list and watch operations on namespaces so that Gateway API
+  controllers in KIC can access using a cached controller-runtime client.
+  [#974](https://github.com/Kong/charts/pull/974)
+
+## 2.33.2
+
+### Fixed
+
+* Fix a template bug related to the `affinity` field for migrations Pods.
+  [#972](https://github.com/Kong/charts/pull/972)
+
+## 2.33.1
+
+### Fixed
+
+* Use changed `incubator.ingress-controller.konghq.com` API group name in `KongServiceFacade`
+  RBAC rules. Refer to [KIC#5302](https://github.com/Kong/kubernetes-ingress-controller/pull/5302)
+  for rename reasoning.
+  [#968](https://github.com/Kong/charts/pull/968)
+
+## 2.33.0
+
+### Improvements
+
+* Only allow `None` ClusterIPs on ClusterIP-type Services.
+  [#961](https://github.com/Kong/charts/pull/961)
+  [#962](https://github.com/Kong/charts/pull/962)
+* Bumped Kong version to 3.5.
+  [#957](https://github.com/Kong/charts/pull/957)
+* Support for `affinity` configuration has been added to migration job templates.
+* Display a warning message when Kong Manager is enabled and the Admin API is disabled.
+* Validate Gateway API's `Gateway` and `HTTPRoute` resources in the controller's
+  admission webhook only when KIC version is 3.0 or higher.
+  [#954](https://github.com/Kong/charts/pull/954)
+* Added controller's RBAC rules for `KongServiceFacade` CRD (installed only when
+  KongServiceFacade feature gate turned on and KIC version >= 3.1.0).
+  [#963](https://github.com/Kong/charts/pull/963)
+
+## 2.32.0
+
+### Improvements
+
+* Add new `deployment.hostname` value to make identifying instances in
+  controlplane/dataplane configurations easier.
+  [#943](https://github.com/Kong/charts/pull/943)
+
+## 2.31.0
+
+### Improvements
+
+* Added controller's RBAC rules for `KongUpstreamPolicy` CRD.
+  [#917](https://github.com/Kong/charts/pull/917)
+* Added services resource to admission webhook config for KIC >= 3.0.0.
+  [#919](https://github.com/Kong/charts/pull/919)
+* Update default ingress controller version to v3.0
+  [#929](https://github.com/Kong/charts/pull/929)
+  [#930](https://github.com/Kong/charts/pull/930)
+
+### Fixed
+
+* The target port for cmetrics should only be applied if the ingress controller is enabled.
+  [#926](https://github.com/Kong/charts/pull/926)
+* Fix RBAC for Gateway API v1.
+  [#928](https://github.com/Kong/charts/pull/928)
+* Enable Admission webhook for Gateway API v1 resources.
+  [#928](https://github.com/Kong/charts/pull/928)
+
+## 2.30.0
+
+### Improvements
+
+* Prevent installing PodDisruptionBudget for `replicaCount: 1` or `autoscaling.minReplicas: 1`.
+  [#896](https://github.com/Kong/charts/pull/896)
+* The admission webhook now will be triggered on Secrets creation for KIC 2.12.1+.
+  [#907](https://github.com/Kong/charts/pull/907)
+* Container security context defaults now comply with the restricted pod
+  security standard. This includes an enforced run as user ID set to 1000. UID
+  1000 is used for official Kong images other than Alpine images (which use UID
+  100) and for KIC images 3.0.0+ (older images use UID 65532). Images that do
+  not use UID 1000 can still run with this user, as static image files are
+  world-accessible and runtime-created files are created in temporary
+  directories created for the run as user.
+  [#911](https://github.com/Kong/charts/pull/911)
+* Allow using templates (via `tpl`) when specifying `proxy.nameOverride`.
+  [#914](https://github.com/Kong/charts/pull/914)
+
+## 2.29.0
+
+### Improvements
+* Make it possible to set the admission webhook's `timeoutSeconds`.
+  [#894](https://github.com/Kong/charts/pull/894)
+
+## 2.28.1
+
+### Fixed
+
+* The admission webhook now includes Gateway API resources and Ingress
+  resources for controller versions 2.12+. This version introduces new
+  validations for Kong's regex path implementation.
+  [#892](https://github.com/Kong/charts/pull/892)
+
+## 2.28.0
+
+### Improvements
+
+* Bump default `kong` image tag to 3.4.
+  [#883](https://github.com/Kong/charts/pull/883)
+* Bump default ingress controller image tag to 2.12.
+* Added validation rule for `latency` upstream load balancing algorithm to
+  CRDs. [Upgrade your CRDs](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#updates-to-crds)
+  when installing this release.
+
+## 2.27.0
+
+### Improvements
+
+* Listens now all support `.address` configuration. This was an existing
+  setting that was not applied properly for some listens.
+  [#881](https://github.com/Kong/charts/pull/881)
+
+## 2.26.5
+
+### Fixed 
+
+* Kuma ServiceAccount Token hints and volumes are also available in migrations
+  Pods.
+  [#877](https://github.com/Kong/charts/pull/877)
+
+## 2.26.4
+
+### Fixed 
+
+* updated `admin_api_uri` to `admin_gui_api_url` as per [kong documentation](https://docs.konghq.com/gateway/3.4.x/reference/configuration/#admin_api_uri). 
+
+## 2.26.3
+
+### Fixed 
+
+* Enabled Service and Ingress in Kong Manager for non enterprise users.
+
+## 2.26.2
+
+### Fixed 
+
+* Add missing CRD KongConsumerGroup and extend status subresource for CRDs
+
+## 2.26.1
+
+### Fixed
+
+* Fix parsing enterprise tags (like e.g. `3.4.0.0`)
+  [#857](https://github.com/Kong/charts/pull/857)
+
+## 2.26.0
+
+### Breaking changes
+
+2.26 changes the default proxy readiness endpoint for newer Kong versions. This
+causes an issue in a narrow edge case. If all of the following are true:
+
+* You use Kong 3.3 or newer.
+* You use controller 2.10 or older.
+* You run the controller and proxy in separate Deployments.
+
+you are affected and should review [the 2.26 upgrade instructions](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#2260).
+
+### Improvements
+
+* Use the Kong 3.3 `/status/ready` endpoint for readiness probes by default if
+  available. If not available, use the old `/status` default.
+  [#844](https://github.com/Kong/charts/pull/844)
+* Add ArgoCD `Sync` and `BeforeHookCreation` [hook policies](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/)
+  to the the init and pre-upgrade migrations Jobs.
+* Add controller's RBAC rules for `KongConsumerGroups` CRD.
+  [#850](https://github.com/Kong/charts/pull/850)
+* Updated controller version to 2.11.
+
+## 2.25.0
+
+- Generate the `adminApiService.name` value from `.Release.Name` rather than
+  hardcoding to `kong`
+  [#839](https://github.com/Kong/charts/pull/839)
+
+## 2.24.0
+
+### Improvements
+
+* Running `tpl` against user-supplied labels and annotations used in Deployment
+  [#814](https://github.com/Kong/charts/pull/814)
+
+  Example:
+  ```yaml
+  podLabels:
+    version: "{{ .Values.image.tag }}"  # Will render dynamically when overridden downstream
+  ```
+
+* Fail to render templates when PodSecurityPolicy was requested but cluster doesn't
+  serve its API.
+  [#823](https://github.com/Kong/charts/pull/823)
+* Add support for multiple hosts and tls configurations for Kong proxy `Ingress`.
+  [#813](https://github.com/Kong/charts/pull/813)
+* Bump postgres default tag to `13.11.0-debian-11-r20` which includes arm64 images.
+  [#834](https://github.com/Kong/charts/pull/834)
+
+### Fixed
+
+* Fix Ingress and HPA API versions during capabilities checking
+  [#827](https://github.com/Kong/charts/pull/827)
+
 ## 2.23.0
 
 ### Improvements
@@ -38,7 +312,7 @@
 
 ## 2.20.2
 
-### Fixed 
+### Fixed
 
 * Automatic license provisioning for Gateways managed by Ingress Controllers in Konnect mode
   is disabled by default.

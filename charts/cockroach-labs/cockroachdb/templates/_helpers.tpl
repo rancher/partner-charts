@@ -51,11 +51,11 @@ Create chart name and version as used by the chart label.
 {{/*
 Create the name of the ServiceAccount to use.
 */}}
-{{- define "cockroachdb.tls.serviceAccount.name" -}}
-{{- if .Values.tls.serviceAccount.create -}}
-    {{- default (include "cockroachdb.fullname" .) .Values.tls.serviceAccount.name -}}
+{{- define "cockroachdb.serviceAccount.name" -}}
+{{- if .Values.statefulset.serviceAccount.create -}}
+    {{- default (include "cockroachdb.fullname" .) .Values.statefulset.serviceAccount.name -}}
 {{- else -}}
-    {{- default "default" .Values.tls.serviceAccount.name -}}
+    {{- default "default" .Values.statefulset.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
 
@@ -274,7 +274,7 @@ Validate that if user enabled tls, then either self-signed certificates or certi
 {{- end -}}
 
 {{- define "cockroachdb.securityContext.versionValidation" }}
-{{/* Allow using `securityContext` for custom images. */}}
+{{- /* Allow using `securityContext` for custom images. */}}
 {{- if ne "cockroachdb/cockroach" .Values.image.repository -}}
     {{ print true }}
 {{- else -}}

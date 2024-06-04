@@ -106,6 +106,65 @@
   {{- end -}}
 {{- end -}}
 
+{{- define "k10.capabilities" -}}
+  {{- /* Internal capabilities enabled by other Helm values are added here */ -}}
+  {{- $internal_capabilities := list -}}
+
+  {{- /* Multi-cluster */ -}}
+  {{- if eq .Values.multicluster.enabled true -}}
+    {{- $internal_capabilities = append $internal_capabilities "mc" -}}
+  {{- end -}}
+
+  {{- /* FIPS */ -}}
+  {{- if .Values.fips.enabled -}}
+    {{- $internal_capabilities = append $internal_capabilities "fips.strict" -}}
+    {{- $internal_capabilities = append $internal_capabilities "crypto.k10.v2" -}}
+    {{- $internal_capabilities = append $internal_capabilities "crypto.storagerepository.v2" -}}
+    {{- $internal_capabilities = append $internal_capabilities "crypto.vbr.v2" -}}
+    {{- $internal_capabilities = append $internal_capabilities "gateway" -}}
+  {{- end -}}
+
+  {{- concat $internal_capabilities (.Values.capabilities | default list) | join " " -}}
+{{- end -}}
+
+{{- define "k10.capabilities_mask" -}}
+  {{- /* Internal capabilities masked by other Helm values are added here */ -}}
+  {{- $internal_capabilities_mask := list -}}
+
+  {{- /* Multi-cluster */ -}}
+  {{- if eq .Values.multicluster.enabled false -}}
+    {{- $internal_capabilities_mask = append $internal_capabilities_mask "mc" -}}
+  {{- end -}}
+
+  {{- concat $internal_capabilities_mask (.Values.capabilitiesMask | default list) | join " " -}}
+{{- end -}}
+
+{{/*
+  k10.capability checks whether a given capability is enabled
+
+  For example:
+
+    include "k10.capability" (. | merge (dict "capability" "SOME.CAPABILITY"))
+*/}}
+{{- define "k10.capability" -}}
+  {{- $capabilities := dict -}}
+  {{- range $capability := include "k10.capabilities" . | splitList " " -}}
+    {{- $_ := set $capabilities $capability "enabled" -}}
+  {{- end -}}
+  {{- range $capability := include "k10.capabilities_mask" . | splitList " " -}}
+    {{- $_ := unset $capabilities $capability -}}
+  {{- end -}}
+
+  {{- index $capabilities .capability | default "" -}}
+{{- end -}}
+
+{{/*
+  k10.capability.gateway checks whether the "gateway" capability is enabled
+*/}}
+{{- define "k10.capability.gateway" -}}
+  {{- include "k10.capability" (. | merge (dict "capability" "gateway")) -}}
+{{- end -}}
+
 {{/* Check if basic auth is needed */}}
 {{- define "basicauth.check" -}}
   {{- if .Values.auth.basicAuth.enabled }}
@@ -166,6 +225,13 @@ Check if the auth options are implemented using Dex
 {{- define "ingressClassAnnotation" -}}
 {{- if .Values.ingress.class -}}
 kubernetes.io/ingress.class: {{ .Values.ingress.class | quote }}
+{{- end -}}
+{{- end -}}
+
+{{/* Return ingress class name in spec */}}
+{{- define "specIngressClassName" -}}
+{{- if and .Values.ingress.class (semverCompare ">= 1.27-0" .Capabilities.KubeVersion.Version) -}}
+ingressClassName: {{ .Values.ingress.class }}
 {{- end -}}
 {{- end -}}
 
@@ -244,6 +310,10 @@ external-dns.alpha.kubernetes.io/hostname: {{ .Values.externalGateway.fqdn.name 
 Prometheus scrape config template for k10 services
 */}}
 {{- define "k10.prometheusScrape" -}}
+{{- $cluster_domain := "" -}}
+{{- with .main.Values.cluster.domainName -}}
+  {{- $cluster_domain = printf ".%s" . -}}
+{{- end -}}
 {{- $admin_port := default 8877 .main.Values.service.gatewayAdminPort -}}
 - job_name: {{ .k10service }}
   metrics_path: /metrics
@@ -258,13 +328,13 @@ Prometheus scrape config template for k10 services
   static_configs:
     - targets:
       {{- if eq "gateway" .k10service }}
-      - {{ .k10service }}-admin.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:{{ $admin_port }}
+      - {{ .k10service }}-admin.{{ .main.Release.Namespace }}.svc{{ $cluster_domain }}:{{ $admin_port }}
       {{- else if eq "aggregatedapis" .k10service }}
-      - {{ .k10service }}-svc.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:443
+      - {{ .k10service }}-svc.{{ .main.Release.Namespace }}.svc{{ $cluster_domain }}:443
       {{- else }}
       {{- $service := default .k10service (index (include "get.enabledColocatedServices" . | fromYaml) .k10service).primary }}
       {{- $port := default .main.Values.service.externalPort (index (include "get.enabledColocatedServices" . | fromYaml) .k10service).port }}
-      - {{ $service }}-svc.{{ .main.Release.Namespace }}.svc.{{ .main.Values.cluster.domainName }}:{{ $port }}
+      - {{ $service }}-svc.{{ .main.Release.Namespace }}.svc{{ $cluster_domain }}:{{ $port }}
       {{- end }}
       labels:
         application: {{ .main.Release.Name }}
@@ -275,6 +345,10 @@ Prometheus scrape config template for k10 services
 Prometheus scrape config template for k10 services
 */}}
 {{- define "k10.prometheusTargetConfig" -}}
+{{- $cluster_domain := "" -}}
+{{- with .main.Values.cluster.domainName -}}
+  {{- $cluster_domain = printf ".%s" . -}}
+{{- end -}}
 {{- $admin_port := default 8877 .main.Values.service.gatewayAdminPort | toString -}}
 - service: {{ .k10service }}
   metricsPath: /metrics
@@ -289,15 +363,15 @@ Prometheus scrape config template for k10 services
   {{- $serviceFqdn := "" }}
   {{- $servicePort := "" }}
   {{- if eq "gateway" .k10service -}}
-    {{- $serviceFqdn = printf "%s-admin.%s.svc.%s" .k10service .main.Release.Namespace .main.Values.cluster.domainName -}}
+    {{- $serviceFqdn = printf "%s-admin.%s.svc%s" .k10service .main.Release.Namespace $cluster_domain -}}
     {{- $servicePort = $admin_port -}}
   {{- else if eq "aggregatedapis" .k10service -}}
-    {{- $serviceFqdn = printf "%s-svc.%s.svc.%s" .k10service .main.Release.Namespace .main.Values.cluster.domainName -}}
+    {{- $serviceFqdn = printf "%s-svc.%s.svc%s" .k10service .main.Release.Namespace $cluster_domain -}}
     {{- $servicePort = "443" -}}
   {{- else -}}
     {{- $service := default .k10service (index (include "get.enabledColocatedServices" .main | fromYaml) .k10service).primary -}}
     {{- $port := default .main.Values.service.externalPort (index (include "get.enabledColocatedServices" .main | fromYaml) .k10service).port | toString -}}
-    {{- $serviceFqdn = printf "%s-svc.%s.svc.%s" $service .main.Release.Namespace .main.Values.cluster.domainName -}}
+    {{- $serviceFqdn = printf "%s-svc.%s.svc%s" $service .main.Release.Namespace $cluster_domain -}}
     {{- $servicePort = $port -}}
   {{- end }}
   fqdn: {{ $serviceFqdn }}
@@ -369,6 +443,8 @@ images or not
 {{- define "dex.dexImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "dex.dexImageName" .) }}
+  {{- else if .Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.dex.registry .Values.global.azure.images.dex.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "dex.dexImageName" .) }}
   {{- end }}
@@ -379,7 +455,11 @@ images or not
 {{- end -}}
 
 {{- define "dex.dexImageTag" -}}
+ {{- if .Values.global.azMarketPlace }}
+    {{- print .Values.global.azure.images.dex.tag }}
+ {{- else }}
   {{- .Values.global.image.tag | default .Chart.AppVersion }}
+ {{- end -}}
 {{- end -}}
 
 {{/*
@@ -404,6 +484,8 @@ Get the emissary image.
 {{- define "k10.emissaryImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "k10.emissaryImageName" .) }}
+  {{- else if .Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.emissary.registry .Values.global.azure.images.emissary.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "k10.emissaryImageName" .) }}
   {{- end }}
@@ -414,7 +496,11 @@ Get the emissary image.
 {{- end -}}
 
 {{- define "k10.emissaryImageTag" -}}
-  {{- include "get.k10ImageTag" . }}
+  {{- if .Values.global.azMarketPlace }}
+    {{- print .Values.global.azure.images.emissary.tag }}
+  {{- else }}
+    {{- include "get.k10ImageTag" . }}
+  {{- end }}
 {{- end -}}
 
 {{/*
@@ -426,12 +512,8 @@ Check if AWS creds are specified
 {{- end -}}
 {{- end -}}
 
-{{/*
-Check if kanister-tools image has k10- in name
-this means we need to overwrite kanister image in the system
-*/}}
-{{- define "overwite.kanisterToolsImage" -}}
-{{- if or .Values.global.airgapped.repository .Values.global.rhMarketPlace -}}
+{{- define "check.awsSecretName" -}}
+{{- if .Values.secrets.awsClientSecretName -}}
 {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -470,46 +552,137 @@ Checks and enforces only 1 set of azure creds is specified
 {{ if and (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true") }}
 {{- fail "useDefaultMSI is set to true, but an additional ClientID is also provided. Please choose one." }}
 {{- end -}}
-{{ if and (eq (include "check.azureClientSecretCreds" .) "true") (or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true")) }}
+{{ if and ( or (eq (include "check.azureClientSecretCreds" .) "true") (eq (include "check.azuresecret" .) "true" )) (or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true")) }}
 {{- fail "Both Azure ClientSecret and Managed Identity creds are available, but only one is allowed. Please choose one." }}
 {{- end -}}
 {{- end -}}
 
 {{/*
-Figure out the kanisterToolsImage.image based on
-the value of airgapped.repository value
-The details on how these image are being generated
-is in below issue
-https://kasten.atlassian.net/browse/K10-4036
-Using substr to remove repo from kanisterToolsImage
+Get the kanister-tools image.
 */}}
-{{- define "get.kanisterToolsImage" }}
-{{- if not .Values.global.rhMarketPlace }}
-{{- if .Values.global.airgapped.repository }}
-{{- printf "%s/%s:k10-%s" (.Values.global.airgapped.repository) (.Values.kanisterToolsImage.image) (include "k10.kanisterToolsImageTag" .) -}}
-{{- else }}
-{{- printf "%s/%s/%s:%s" (.Values.kanisterToolsImage.registry) (.Values.kanisterToolsImage.repository) (.Values.kanisterToolsImage.image) (include "k10.kanisterToolsImageTag" .) -}}
+{{- define "get.kanisterToolsImage" -}}
+  {{- (get .Values.global.images (include "kan.kanisterToolsImageName" .)) | default (include "kan.kanisterToolsImage" .)  }}
 {{- end }}
-{{- else }}
-{{- printf "%s" (get .Values.global.images "kanister-tools") -}}
-{{- end }}
-{{- end }}
+
+{{- define "kan.kanisterToolsImage" -}}
+  {{- printf "%s:%s" (include "kan.kanisterToolsImageRepo" .) (include "kan.kanisterToolsImageTag" .) }}
+{{- end -}}
+
+{{- define "kan.kanisterToolsImageRepo" -}}
+  {{- if .Values.global.airgapped.repository }}
+    {{- printf "%s/%s" .Values.global.airgapped.repository (include "kan.kanisterToolsImageName" .) }}
+  {{- else if .Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.kanistertools.registry .Values.global.azure.images.kanistertools.image }}
+  {{- else }}
+    {{- printf "%s/%s" .Values.global.image.registry (include "kan.kanisterToolsImageName" .) }}
+  {{- end }}
+{{- end -}}
+
+{{- define "kan.kanisterToolsImageName" -}}
+  {{- printf "kanister-tools" }}
+{{- end -}}
+
+{{- define "kan.kanisterToolsImageTag" -}}
+ {{- if .Values.global.azMarketPlace }}
+    {{- print .Values.global.azure.images.kanistertools.tag }}
+  {{- else }}
+    {{- include "get.k10ImageTag" . }}
+  {{- end }}
+{{- end -}}
+
+{{/*
+Check if Google Workload Identity Federation is enabled
+*/}}
+{{- define "check.gwifenabled" -}}
+{{- if .Values.google.workloadIdentityFederation.enabled -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/*
+Check if Google Workload Identity Federation Identity Provider is set
+*/}}
+{{- define "check.gwifidptype" -}}
+{{- if .Values.google.workloadIdentityFederation.idp.type -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Fail if Google Workload Identity Federation is enabled but no Identity Provider is set
+*/}}
+{{- define "validate.gwif.idp.type" -}}
+{{- if and (eq (include "check.gwifenabled" .) "true") (ne (include "check.gwifidptype" .) "true") -}}
+  {{- fail "Google Workload Federation is enabled but helm flag for idp type is missing. Please set helm value google.workloadIdentityFederation.idp.type" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if K8S Bound Service Account Token (aka Projected Service Account Token) is needed,
+which is when GWIF is enabled and the IdP is kubernetes
+*/}}
+{{- define "check.projectSAToken" -}}
+{{- if and (eq (include "check.gwifenabled" .) "true") (eq .Values.google.workloadIdentityFederation.idp.type "kubernetes") -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if the audience that the bound service account token is intended for is set
+*/}}
+{{- define "check.gwifidpaud" -}}
+{{- if .Values.google.workloadIdentityFederation.idp.aud -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Fail if Service Account token projection is expected but no indented Audience is set
+*/}}
+{{- define "validate.gwif.idp.aud" -}}
+{{- if and (eq (include "check.projectSAToken" .) "true") (ne (include "check.gwifidpaud" .) "true") -}}
+  {{- fail "Kubernetes is set as the Identity Provider but an intended Audience is missing. Please set helm value google.workloadIdentityFederation.idp.aud" -}}
+{{- end -}}
+{{- end -}}
+
 
 {{/*
 Check if Google creds are specified
 */}}
 {{- define "check.googlecreds" -}}
 {{- if .Values.secrets.googleApiKey -}}
-{{- print true -}}
+  {{- if eq (include "check.isBase64" .Values.secrets.googleApiKey) "false" -}}
+    {{- fail "secrets.googleApiKey must be base64 encoded" -}}
+  {{- end -}}
+  {{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "check.googleCredsSecret" -}}
+{{- if .Values.secrets.googleClientSecretName -}}
+    {{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "check.googleCredsOrSecret" -}}
+{{- if or (eq (include "check.googlecreds" .) "true") (eq (include "check.googleCredsSecret" .) "true")}}
+    {{- print true -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-Check if IBM SL api key is specified
+Check if Google Project ID is not set without Google API Key
 */}}
-{{- define "check.ibmslcreds" -}}
-{{- if or .Values.secrets.ibmSoftLayerApiKey .Values.secrets.ibmSoftLayerApiUsername -}}
-{{- print true -}}
+{{- define "check.googleproject" -}}
+{{- if .Values.secrets.googleProjectId -}}
+  {{- if not .Values.secrets.googleApiKey -}}
+    {{- print false -}}
+  {{- else -}}
+    {{- print true -}}
+  {{- end -}}
+{{- else -}}
+  {{- print true -}}
 {{- end -}}
 {{- end -}}
 
@@ -518,6 +691,12 @@ Check if Azure creds are specified
 */}}
 {{- define "check.azurecreds" -}}
 {{- if or (eq (include "check.azureClientSecretCreds" .) "true") ( or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureMSIWithDefaultID" .) "true")) -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "check.azuresecret" -}}
+{{- if .Values.secrets.azureClientSecretName }}
 {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -531,11 +710,17 @@ Check if Vsphere creds are specified
 {{- end -}}
 {{- end -}}
 
+{{- define "check.vsphereClientSecret" -}}
+{{- if .Values.secrets.vsphereClientSecretName -}}
+{{- print true -}}
+{{- end -}}
+{{- end -}}
+
 {{/*
 Check if Vault token secret creds are specified
 */}}
 {{- define "check.vaulttokenauth" -}}
-{{- if .Values.vault.secretName -}} 
+{{- if .Values.vault.secretName -}}
 {{- print true -}}
 {{- end -}}
 {{- end -}}
@@ -637,6 +822,24 @@ resources:
 {{- end }}
 {{- end -}}
 
+{{/*
+Adds priorityClassName field according to helm values.
+*/}}
+{{- define "k10.priorityClassName" }}
+{{- $deploymentName := .k10_deployment_name }}
+{{- $defaultPriorityClassName := default "" .main.Values.defaultPriorityClassName }}
+{{- $priorityClassName := $defaultPriorityClassName }}
+
+{{- if and (hasKey .main.Values "priorityClassName") (hasKey .main.Values.priorityClassName $deploymentName) }}
+  {{- $priorityClassName = index .main.Values.priorityClassName $deploymentName }}
+{{- end -}}
+
+{{- if $priorityClassName }}
+priorityClassName: {{ $priorityClassName }}
+{{- end }}
+
+{{- end }}{{/* define "k10.priorityClassName" */}}
+
 {{- define "kanisterToolsResources" }}
 {{- if .Values.genericVolumeSnapshot.resources.requests.memory }}
 KanisterToolsMemoryRequests: {{ .Values.genericVolumeSnapshot.resources.requests.memory | quote }}
@@ -652,9 +855,30 @@ KanisterToolsCPULimits: {{ .Values.genericVolumeSnapshot.resources.limits.cpu | 
 {{- end }}
 {{- end }}
 
+{{- define "kanisterPodMetricSidecarResources" }}
+{{- if .Values.kanisterPodMetricSidecar.resources.requests.memory }}
+KanisterPodMetricSidecarMemoryRequest: {{ .Values.kanisterPodMetricSidecar.resources.requests.memory | quote }}
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.requests.cpu }}
+KanisterPodMetricSidecarCPURequest: {{ .Values.kanisterPodMetricSidecar.resources.requests.cpu | quote }}
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.limits.memory }}
+KanisterPodMetricSidecarMemoryLimit: {{ .Values.kanisterPodMetricSidecar.resources.limits.memory | quote }}
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.resources.limits.cpu }}
+KanisterPodMetricSidecarCPULimit: {{ .Values.kanisterPodMetricSidecar.resources.limits.cpu | quote }}
+{{- end }}
+{{- end }}
+
 {{- define "get.kanisterPodCustomLabels" -}}
 {{- if .Values.kanisterPodCustomLabels }}
 KanisterPodCustomLabels: {{ .Values.kanisterPodCustomLabels | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "get.gvsActivationToken" }}
+{{- if .Values.genericStorageBackup.token }}
+GVSActivationToken: {{ .Values.genericStorageBackup.token | quote }}
 {{- end }}
 {{- end }}
 
@@ -711,27 +935,15 @@ Lookup and return only enabled colocated services
 {{- $statefulRestSvcsInPod | join " " }}
 {{- end -}}
 
-{{- define "k10.ingressPath" -}}
-    {{- if and .Values.global.ingress.create .Values.global.route.enabled -}}
-        {{  fail "Either enable ingress or route"}}
-    {{- end -}}
-    {{- if .Values.global.ingress.create -}}
-        {{ if .Values.global.ingress.urlPath }}
-            {{- print .Values.global.ingress.urlPath -}}
-        {{ else }}
-            {{- print .Release.Name -}}
-        {{- end -}}
-    {{- else if .Values.global.route.enabled -}}
-        {{ if .Values.global.route.path }}
-            {{- print .Values.global.route.path -}}
-         {{ else }}
-            {{- print .Release.Name -}}
-        {{- end -}}
-     {{ else }}
-            {{- print .Release.Name -}}
-    {{- end -}}
+{{- define "k10.prefixPath" -}}
+  {{- if .Values.route.enabled -}}
+    /{{ .Values.route.path | default .Release.Name | trimPrefix "/" | trimSuffix "/" }}
+  {{- else if .Values.ingress.create -}}
+    /{{ .Values.ingress.urlPath | default .Release.Name | trimPrefix "/" | trimSuffix "/" }}
+  {{- else -}}
+    /{{ .Release.Name }}
+  {{- end -}}
 {{- end -}}
-
 
 {{/*
 Check if encryption keys are specified
@@ -739,27 +951,6 @@ Check if encryption keys are specified
 {{- define "check.primaryKey" -}}
 {{- if (or .Values.encryption.primaryKey.awsCmkKeyId .Values.encryption.primaryKey.vaultTransitKeyName) -}}
 {{- print true -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "check.validateMonitoringProperties" -}}
-{{- include "check.monitoringPrefix" . -}}
-{{- include "check.monitoringFullNameOverride" . -}}
-{{- end -}}
-
-{{- define "check.monitoringPrefix" -}}
-{{- if eq .Values.prometheus.server.enabled .Values.grafana.enabled -}}
-{{- if not (eq .Values.prometheus.server.prefixURL .Values.grafana.prometheusPrefixURL) -}}
-{{ fail "Prometheus and Grafana prefixURL should match. Please check values of prometheus.server.prefixURL and grafana.prometheusPrefixURL" }}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "check.monitoringFullNameOverride" -}}
-{{- if eq .Values.prometheus.server.enabled .Values.grafana.enabled -}}
-{{- if not (eq .Values.prometheus.server.fullnameOverride .Values.grafana.prometheusName) -}}
-{{ fail "The Prometheus name overrides must match. Please check values of prometheus.server.fullnameOverride and grafana.prometheusName" }}
-{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -789,6 +980,20 @@ imagePullSecrets:
   - name: {{ . }}
   {{- end }}
 {{- end }}
+{{- end }}
+
+{{/*
+k10.imagePullSecretNames gets us just the secret names that are going be used
+as imagePullSecrets in the k10 services.
+*/}}
+{{- define "k10.imagePullSecretNames" }}
+{{- $pullSecretsSpec := (include "k10.imagePullSecrets" . ) | fromYaml }}
+{{- if $pullSecretsSpec }}
+  {{- range $pullSecretsSpec.imagePullSecrets }}
+    {{- $secretName := . }}
+    {{- printf "%s " ( $secretName.name) }}
+  {{- end}}
+{{- end}}
 {{- end }}
 
 {{/*
@@ -823,6 +1028,24 @@ Is ingress part of stable APIVersion.
   {{- eq (include "ingress.apiVersion" .) "networking.k8s.io/v1" -}}
 {{- end -}}
 
+{{/*
+Check if `ingress.defaultBackend` is properly formatted when specified.
+*/}}
+{{- define "check.ingress.defaultBackend" -}}
+  {{- if .Values.ingress.defaultBackend -}}
+    {{- if and .Values.ingress.defaultBackend.service.enabled .Values.ingress.defaultBackend.resource.enabled -}}
+      {{- fail "Both `service` and `resource` cannot be enabled in the `ingress.defaultBackend`. Provide only one." -}}
+    {{- end -}}
+    {{- if .Values.ingress.defaultBackend.service.enabled -}}
+      {{- if and (not .Values.ingress.defaultBackend.service.port.name) (not .Values.ingress.defaultBackend.service.port.number) -}}
+        {{- fail "Provide either `name` or `number` in the `ingress.defaultBackend.service.port`." -}}
+      {{- end -}}
+      {{- if and .Values.ingress.defaultBackend.service.port.name .Values.ingress.defaultBackend.service.port.number -}}
+        {{- fail "Both `name` and `number` cannot be specified in the `ingress.defaultBackend.service.port`. Provide only one." -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 
 {{- define "check.validatePrometheusConfig" -}}
     {{if and ( and .Values.global.prometheus.external.host .Values.global.prometheus.external.port) .Values.prometheus.server.enabled}}
@@ -878,6 +1101,13 @@ running in the same cluster.
   {{- end }}
 {{- end -}}
 
+{{/* Used to verify if Ironbank is enabled */}}
+{{- define "ironbank.enabled" -}}
+  {{- if (.Values.global.ironbank | default dict).enabled -}}
+    {{- print true -}}
+  {{- end -}}
+{{- end -}}
+
 {{/* Get the K10 image tag. Fails if not set correctly */}}
 {{- define "get.k10ImageTag" -}}
   {{- $imageTag := coalesce .Values.global.image.tag (include "k10.imageTag" .) }}
@@ -899,6 +1129,8 @@ running in the same cluster.
 {{- define "init.ImageRepo" -}}
   {{- if .Values.global.airgapped.repository }}
     {{- printf "%s/%s" .Values.global.airgapped.repository (include "init.ImageName" .) }}
+  {{- else if .main.Values.global.azMarketPlace }}
+    {{- printf "%s/%s" .Values.global.azure.images.init.registry .Values.global.azure.images.init.image }}
   {{- else }}
     {{- printf "%s/%s" .Values.global.image.registry (include "init.ImageName" .) }}
   {{- end }}
@@ -907,3 +1139,191 @@ running in the same cluster.
 {{- define "init.ImageName" -}}
   {{- printf "init" }}
 {{- end -}}
+
+{{- define "k10.splitImage" -}}
+  {{- $split_repo_tag_and_hash := .image | splitList "@" -}}
+  {{- $split_repo_and_tag := $split_repo_tag_and_hash | first | splitList ":" -}}
+  {{- $repo := $split_repo_and_tag | first -}}
+
+  {{- /* Error if there are extra pieces we don't understand in the image */ -}}
+  {{- $split_repo_tag_and_hash_len := $split_repo_tag_and_hash | len -}}
+  {{- $split_repo_and_tag_len := $split_repo_and_tag | len -}}
+  {{- if or (gt $split_repo_tag_and_hash_len 2) (gt $split_repo_and_tag_len 2) -}}
+    {{- fail (printf "Unsupported image format: %q (%s)" .image .path) -}}
+  {{- end -}}
+
+  {{- $digest := $split_repo_tag_and_hash | rest | first -}}
+  {{- $tag := $split_repo_and_tag | rest | first -}}
+
+  {{- $sha := "" -}}
+  {{- if $digest -}}
+    {{- if not ($digest | hasPrefix "sha256:") -}}
+      {{- fail (printf "Unsupported image ...@hash type: %q (%s)" .image .path) -}}
+    {{- end -}}
+    {{- $sha = $digest | trimPrefix "sha256:" }}
+  {{- end -}}
+
+  {{- /* Split out the registry if the first component of the repo contains a "." */ -}}
+  {{- $registry := "" }}
+  {{- $split_repo := $repo | splitList "/" -}}
+  {{- if first $split_repo | contains "." -}}
+    {{- $registry = first $split_repo -}}
+    {{- $split_repo = rest $split_repo -}}
+  {{- end -}}
+  {{- $repo = $split_repo | join "/" -}}
+
+  {{-
+    (dict
+      "registry" $registry
+      "repository" $repo
+      "tag" ($tag | default "")
+      "digest" ($digest | default "")
+      "sha" ($sha | default "")
+    ) | toJson
+  -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and the admin image is turned on  */}}
+{{- define "k10.fail.ironbankPdfReports" -}}
+  {{- if and (include "ironbank.enabled" .) (.Values.reporting.pdfReports) -}}
+    {{- fail "global.ironbank.enabled and reporting.pdfReports cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
+{{- define "k10.fail.ironbankRHMarketplace" -}}
+  {{- if and (include "ironbank.enabled" .) (.Values.global.rhMarketPlace) -}}
+    {{- fail "global.ironbank.enabled and global.rhMarketPlace cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
+{{- define "k10.fail.ironbankGrafana" -}}
+  {{- if (include "ironbank.enabled" .) -}}
+    {{- range $key, $value := .Values.grafana.sidecar -}}
+      {{/* 
+        https://go.dev/doc/go1.18: the "and" used to evaluate all conditions and not terminate early
+        if a predicate was met, so we must have the below as their own conditional for any customers
+        used go version < 1.18.
+       */}}
+      {{- if kindIs "map" $value -}}
+        {{- if hasKey $value "enabled" -}}
+          {{- if $value.enabled -}}
+            {{- fail (printf "Ironbank deployment does not support grafana sidecar %s" $key) -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if Ironbank is enabled and images we don't support are turned on  */}}
+{{- define "k10.fail.ironbankPrometheus" -}}
+  {{- if (include "ironbank.enabled" .) -}}
+    {{- $prometheusDict := pick .Values.prometheus "alertmanager" "kube-state-metrics" "prometheus-node-exporter" "prometheus-pushgateway" -}}
+    {{- range $key, $value := $prometheusDict -}}
+      {{/* 
+        https://go.dev/doc/go1.18: the "and" used to evaluate all conditions and not terminate early
+        if a predicate was met, so we must have the below as their own conditional for any customers
+        used go version < 1.18.
+       */}}
+      {{- if kindIs "map" $value -}}
+        {{- if hasKey $value "enabled" -}}
+          {{- if $value.enabled -}}
+            {{- fail (printf "Ironbank deployment does not support prometheus %s" $key) -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and Grafana is turned on  */}}
+{{- define "k10.fail.fipsGrafana" -}}
+  {{- if and (.Values.fips.enabled) (.Values.grafana.enabled) -}}
+    {{- fail "fips.enabled and grafana.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and Prometheus is turned on  */}}
+{{- define "k10.fail.fipsPrometheus" -}}
+  {{- if and (.Values.fips.enabled) (.Values.prometheus.server.enabled) -}}
+    {{- fail "fips.enabled and prometheus.server.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and Multicluster is turned on  */}}
+{{- define "k10.fail.fipsMulticluster" -}}
+  {{- if and (.Values.fips.enabled) (.Values.multicluster.enabled) -}}
+    {{- fail "fips.enabled and multicluster.enabled cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Fail if FIPS is enabled and PDF reporting is turned on  */}}
+{{- define "k10.fail.fipsPDFReports" -}}
+  {{- if and (.Values.fips.enabled) (.Values.reporting.pdfReports) -}}
+    {{- fail "fips.enabled and reporting.pdfReports cannot both be enabled at the same time" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Check to see whether SIEM logging is enabled */}}
+{{- define "k10.siemEnabled" -}}
+  {{- if or .Values.siem.logging.cluster.enabled .Values.siem.logging.cloud.awsS3.enabled -}}
+    {{- true -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Determine if logging should go to filepath instead of stdout */}}
+{{- define "k10.siemLoggingClusterFile" -}}
+  {{- if .Values.siem.logging.cluster.enabled -}}
+    {{- if (.Values.siem.logging.cluster.file | default dict).enabled -}}
+      {{- .Values.siem.logging.cluster.file.path | default "" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Determine if a max file size should be used */}}
+{{- define "k10.siemLoggingClusterFileSize" -}}
+  {{- if .Values.siem.logging.cluster.enabled -}}
+    {{- if (.Values.siem.logging.cluster.file | default dict).enabled -}}
+      {{- .Values.siem.logging.cluster.file.size | default "" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Returns a generated name for the OpenShift Service Account secret */}}
+{{- define "get.openshiftServiceAccountSecretName" -}}
+  {{ printf "%s-k10-secret" (include "get.openshiftServiceAccountName" .) | quote }}
+{{- end -}}
+
+{{/*
+Returns a generated name for the OpenShift Service Account if a service account name
+is not configuredby the user using the helm value auth.openshift.serviceAccount
+*/}}
+{{- define "get.openshiftServiceAccountName" -}}
+  {{ default (include "k10.dexServiceAccountName" .) .Values.auth.openshift.serviceAccount}}
+{{- end -}}
+
+{{/*
+Returns the required environment variables to enforce FIPS mode using
+the Microsoft Go toolchain and Red Hat's OpenSSL.
+*/}}
+{{- define "k10.enforceFIPSEnvironmentVariables" }}
+- name: GOFIPS
+  value: "1"
+- name: OPENSSL_FORCE_FIPS_MODE
+  value: "1"
+{{- if .Values.fips.disable_ems }}
+- name: KASTEN_CRYPTO_POLICY
+  value: disable_ems
+{{- end }}
+{{- end }}
+
+{{/*
+Returns a billing identifier label to be added to workloads for azure marketplace offer
+*/}}
+{{- define "k10.azMarketPlace.billingIdentifier" -}}
+ {{- if .Values.global.azMarketPlace }}
+        azure-extensions-usage-release-identifier: {{.Release.Name}}
+ {{- end }}
+{{- end }}

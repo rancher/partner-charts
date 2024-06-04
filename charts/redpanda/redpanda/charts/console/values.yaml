@@ -1,3 +1,18 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Default values for console.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -27,15 +42,23 @@ nameOverride: ""
 # -- Override `console.fullname` template.
 fullnameOverride: ""
 
+# -- Automount API credentials for the Service Account into the pod.
+automountServiceAccountToken: true
+
 serviceAccount:
   # -- Specifies whether a service account should be created.
   create: true
+  # -- Specifies whether a service account should automount API-Credentials
+  automountServiceAccountToken: true
   # -- Annotations to add to the service account.
   annotations: {}
   # -- The name of the service account to use.
   # If not set and `serviceAccount.create` is `true`,
   # a name is generated using the `console.fullname` template
   name: ""
+
+# Common labels to add to all the pods
+commonLabels: {}
 
 # -- Annotations to add to the deployment.
 annotations: {}
@@ -60,6 +83,7 @@ securityContext:
 service:
   type: ClusterIP
   port: 8080
+  # nodePort: 30001
   # -- Override the value in `console.config.server.listenPort` if not `nil`
   targetPort:
   annotations: {}
@@ -148,6 +172,18 @@ extraVolumeMounts: []
 # -- Add additional containers, such as for oauth2-proxy.
 extraContainers: []
 
+# -- Any initContainers defined should be written here
+initContainers:
+  # -- Additional set of init containers
+  extraInitContainers: |-
+#    - name: "test-init-container"
+#      image: "mintel/docker-alpine-bash-curl-jq:latest"
+#      command: [ "/bin/bash", "-c" ]
+#      args:
+#        - |
+#          set -xe
+#          echo "Hello World!"
+
 # -- SecretMounts is an abstraction to make a Secret available in the container's filesystem.
 # Under the hood it creates a volume and a volume mount for the Redpanda Console container.
 secretMounts: []
@@ -207,6 +243,13 @@ secret:
       # tlsCert:
       # tlsKey:
 
+# -- Settings for license key, as an alternative to secret.enterprise when
+# a license secret is available
+enterprise:
+  licenseSecretRef:
+    name: ""
+    key: ""
+
 # -- Settings for liveness and readiness probes.
 # For details,
 # see the [Kubernetes documentation](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/#configure-probes).
@@ -229,3 +272,8 @@ configmap:
   create: true
 deployment:
   create: true
+
+strategy: {}
+
+tests:
+  enabled: true

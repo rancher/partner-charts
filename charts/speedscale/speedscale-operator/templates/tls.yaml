@@ -23,30 +23,34 @@ metadata:
   creationTimestamp: null
   name: speedscale-operator-create-jks
   namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 30
   template:
     metadata:
+      annotations:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
       creationTimestamp: null
+      labels:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
     spec:
       containers:
       - args:
         - |-
-            ARCH=$(uname -m)
-            case $ARCH in
-                x86_64)
-                    ARCH=amd64
-                    ;;
-                arm | arm64 | aarch64)
-                    ARCH=arm64
-                    ;;
-            esac
-            curl -Lfs "https://storage.googleapis.com/kubernetes-release/release/v1.20.0/bin/linux/${ARCH}/kubectl" \
-            -o /usr/local/bin/kubectl
-            chmod +x /usr/local/bin/kubectl
-            keytool -importcert -noprompt -cacerts  -storepass changeit  -alias speedscale -file /etc/ssl/speedscale/tls.crt
+            keytool -keystore /usr/lib/jvm/jre/lib/security/cacerts  -importcert -noprompt -trustcacerts  -storepass changeit  -alias speedscale -file /etc/ssl/speedscale/tls.crt
             kubectl -n ${POD_NAMESPACE} delete secret speedscale-jks || true
-            kubectl -n ${POD_NAMESPACE} create secret generic speedscale-jks --from-file=cacerts.jks=${JAVA_HOME}/lib/security/cacerts
+            kubectl -n ${POD_NAMESPACE} create secret generic speedscale-jks --from-file=cacerts.jks=/usr/lib/jvm/jre/lib/security/cacerts
+
+            # in case we're in istio
+            curl -X POST http://127.0.0.1:15000/quitquitquit || true
         command:
         - sh
         - -c
@@ -64,7 +68,7 @@ spec:
         - secretRef:
             name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
             optional: false
-        image: 'openjdk'
+        image: '{{ .Values.image.registry }}/amazoncorretto'
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         name: create-jks
         resources: {}

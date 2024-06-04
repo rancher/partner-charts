@@ -21,22 +21,27 @@ limitations under the License.
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "redpanda.fullname" . }}
+  name: {{ include "redpanda.servicename" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
     monitoring.redpanda.com/enabled: {{ .Values.monitoring.enabled | quote }}
 {{- with include "full.labels" . }}
   {{- . | nindent 4 }}
 {{- end }}
+{{- with dig "service" "internal" "annotations" dict .Values.AsMap }}
+  annotations: {{ toYaml . | nindent 4 }}
+{{- end }}
 spec:
   type: ClusterIP
   publishNotReadyAddresses: true
   clusterIP: None
-  selector:
-    app.kubernetes.io/name: {{ template "redpanda.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  selector: {{ (include "statefulset-pod-labels-selector" .) | nindent 4 }}
   ports:
-    - name: admin
+  {{- range $name, $listener := .Values.listeners }}
+    {{- if dig "enabled" true $listener}}
+    - name: {{ lower $name }}
       protocol: TCP
-      targetPort: {{ .Values.listeners.admin.port }}
-      port: {{ .Values.listeners.admin.port }}
+      port: {{ $listener.port }}
+      targetPort: {{ $listener.port }}
+    {{- end }}
+  {{- end }}

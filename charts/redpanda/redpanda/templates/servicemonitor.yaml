@@ -1,4 +1,3 @@
-{{- if and (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") .Values.monitoring.enabled }}
 {{/*
 Licensed to the Apache Software Foundation (ASF) under one or more
 contributor license agreements.  See the NOTICE file distributed with
@@ -15,6 +14,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */}}
+{{- if .Values.monitoring.enabled }}
 ---
 # This servicemonitor is used by Prometheus Operator to scrape the metrics
 apiVersion: monitoring.coreos.com/v1
@@ -33,7 +33,19 @@ spec:
   endpoints:
   - interval: {{ .Values.monitoring.scrapeInterval }}
     path: /public_metrics
-    targetPort: admin
+    port: admin
+    {{- if dig "enableHttp2" "" .Values.monitoring }}
+    enableHttp2: .Values.monitoring.enableHttp2
+    {{- end }}
+  {{- if or .Values.tls.enabled .Values.monitoring.tlsConfig }}
+    scheme: https
+    tlsConfig:
+      {{- if  dig "tlsConfig" dict .Values.monitoring }}
+      {{- .Values.monitoring.tlsConfig | toYaml | nindent 6 }}
+      {{- else }}
+      insecureSkipVerify: true
+      {{- end}}
+  {{- end }}
   selector:
     matchLabels:
       monitoring.redpanda.com/enabled: "true"

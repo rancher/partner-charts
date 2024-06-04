@@ -21,13 +21,32 @@
 # Allowed values: string
 # Default value: None
 driverName: "csi-powerstore.dellemc.com"
+# "version" is used to verify the values file matches driver version
+# Not recommend to change
+version: v2.10.1
 
-# Driver version required to pull the latest driver image
-version: "v2.7.0"
+# "images" defines every container images used for the driver and its sidecars.
+#  To use your own images, or a private registry, change the values here.
+images:
+  # "driver" defines the container image, used for the driver container.
+  driver: dellemc/csi-powerstore:v2.10.1
+  # CSI sidecars
+  attacher: registry.k8s.io/sig-storage/csi-attacher:v4.5.0
+  provisioner: registry.k8s.io/sig-storage/csi-provisioner:v4.0.0
+  snapshotter: registry.k8s.io/sig-storage/csi-snapshotter:v7.0.1
+  resizer: registry.k8s.io/sig-storage/csi-resizer:v1.10.0
+  registrar: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
+  healthmonitor: registry.k8s.io/sig-storage/csi-external-health-monitor-controller:v0.11.0
+
+  # CSM sidecars
+  replication: dellemc/dell-csi-replicator:v1.8.1
+  vgsnapshotter: dellemc/csi-volumegroup-snapshotter:v1.5.1
+  podmon: dellemc/podmon:v1.9.1
+  metadataretriever: dellemc/csi-metadata-retriever:v1.7.3
 
 # Specify kubelet config dir path.
 # Ensure that the config.yaml file is present at this path.
-# Default value: None
+# Default value: /var/lib/kubelet
 kubeletConfigDir: /var/lib/kubelet
 
 # nodeFCPortsFilterFile: It is the name of the environment variable which store path to the file which
@@ -52,6 +71,13 @@ externalAccess:
 #  Never: Never pull the image.
 # Default value: None
 imagePullPolicy: IfNotPresent
+
+# maxPowerstoreVolumesPerNode: Specify default value for maximum number of volumes that controller can publish to the node.
+# If value is zero CO SHALL decide how many volumes of this type can be published by the controller to the node.
+# This limit is applicable to all the nodes in the cluster for which node label 'max-powerstore-volumes-per-node' is not set.
+# Allowed values: n, where n >= 0
+# Default value: 0
+maxPowerstoreVolumesPerNode: 0
 
 # nfsAcls: enables setting permissions on NFS mount directory
 # This value acts as default value for NFS ACL (nfsAcls), if not specified for an array config in secret
@@ -96,10 +122,6 @@ controller:
     #   false: disable volume-group-snapshot feature(do not install vg-snapshotter sidecar)
     # Default value: false
     enabled: false
-    # image: Image to use for volume-group-snapshotter. This shouldn't be changed
-    # Allowed values: string
-    # Default value: dellemc/csi-volumegroup-snapshotter:v1.2.0
-    image: dellemc/csi-volumegroup-snapshotter:v1.2.0
 
   # snapshot: allows to enable/disable snapshot feature
   # snapshot CRDs needs to be installed before enabling this feature
@@ -148,11 +170,6 @@ controller:
     # Default value: false
     enabled: false
 
-    # image: Image to use for dell-csi-replicator. This shouldn't be changed
-    # Allowed values: string
-    # Default value: None
-    image: dellemc/dell-csi-replicator:v1.5.0
-
     # replicationContextPrefix: prefix to use for naming of resources created by replication feature
     # Allowed values: string
     # Default value: powerstore
@@ -162,9 +179,6 @@ controller:
     # Allowed values: string
     # Default value: replication.storage.dell.com
     replicationPrefix: "replication.storage.dell.com"
-
-  # Image for csi-metadata-retriever
-  metadataretriever: dellemc/csi-metadata-retriever:v1.4.0
 
   # nodeSelector: Define node selection constraints for controller pods.
   # For the pod to be eligible to run on a node, the node must have each
@@ -239,7 +253,7 @@ node:
   #   effect: "NoSchedule"
 
   # Uncomment if CSM for Resiliency and CSI Driver pods monitor are enabled
-  #tolerations:
+  # tolerations:
   #  - key: "offline.vxflexos.storage.dell.com"
   #    operator: "Exists"
   #    effect: "NoSchedule"
@@ -311,31 +325,26 @@ storageCapacity:
 # Enable this feature only after contact support for additional information
 podmon:
   enabled: false
-  image: dellemc/podmon:v1.6.0
-  #controller:
-  #  args:
-  #    - "--csisock=unix:/var/run/csi/csi.sock"
-  #    - "--labelvalue=csi-powerstore"
-  #    - "--arrayConnectivityPollRate=60"
-  #    - "--driverPath=csi-powerstore.dellemc.com"
-  #    - "--mode=controller"
-  #    - "--skipArrayConnectionValidation=false"
-  #    - "--driver-config-params=/powerstore-config-params/driver-config-params.yaml"
-  #    - "--driverPodLabelValue=dell-storage"
-  #    - "--ignoreVolumelessPods=false"
+  controller:
+    args:
+      - "--csisock=unix:/var/run/csi/csi.sock"
+      - "--labelvalue=csi-powerstore"
+      - "--arrayConnectivityPollRate=60"
+      - "--driverPath=csi-powerstore.dellemc.com"
+      - "--mode=controller"
+      - "--skipArrayConnectionValidation=false"
+      - "--driver-config-params=/powerstore-config-params/driver-config-params.yaml"
+      - "--driverPodLabelValue=dell-storage"
+      - "--ignoreVolumelessPods=false"
 
-  #node:
-  #  args:
-  #    - "--csisock=unix:/var/lib/kubelet/plugins/csi-powerstore.dellemc.com/csi_sock"
-  #    - "--labelvalue=csi-powerstore"
-  #    - "--arrayConnectivityPollRate=60"
-  #    - "--driverPath=csi-powerstore.dellemc.com"
-  #    - "--mode=node"
-  #    - "--leaderelection=false"
-  #    - "--driver-config-params=/powerstore-config-params/driver-config-params.yaml"
-  #    - "--driverPodLabelValue=dell-storage"
-  #    - "--ignoreVolumelessPods=false"
-
-images:
-  # "driver" defines the container image, used for the driver container.
-  driverRepository: dellemc
+  node:
+    args:
+      - "--csisock=unix:/var/lib/kubelet/plugins/csi-powerstore.dellemc.com/csi_sock"
+      - "--labelvalue=csi-powerstore"
+      - "--arrayConnectivityPollRate=60"
+      - "--driverPath=csi-powerstore.dellemc.com"
+      - "--mode=node"
+      - "--leaderelection=false"
+      - "--driver-config-params=/powerstore-config-params/driver-config-params.yaml"
+      - "--driverPodLabelValue=dell-storage"
+      - "--ignoreVolumelessPods=false"

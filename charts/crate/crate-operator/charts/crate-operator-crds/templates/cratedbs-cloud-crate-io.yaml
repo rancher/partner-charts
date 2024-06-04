@@ -291,11 +291,43 @@ spec:
                       snapshot:
                         description: The name of the snapshot to use.
                         type: string
+                      type:
+                        type: string
+                        enum: ["all", "tables", "metadata", "partitions", "sections"]
                       tables:
                         description: The tables to restore from the backup.
-                          Format '<schema_name>.<table_name>'. Defaults to 'all'
+                          Format '<schema_name>.<table_name>'.
                         items:
                           type: string
+                        type: array
+                      sections:
+                        description: Restore a single metadata group or only tables or views.
+                        items:
+                          type: string
+                          enum: ["tables", "views", "users", "privileges", "analyzers", "udfs"]
+                        type: array
+                      partitions:
+                        description: Restore certain table partitions by their column and value.
+                        items:
+                          properties:
+                            table_ident:
+                              type: string
+                            columns:
+                              items:
+                                properties:
+                                  name:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                - name
+                                - value
+                                type: object
+                              type: array
+                          required:
+                          - table_ident
+                          - columns
+                          type: object
                         type: array
                     required:
                     - snapshot
@@ -383,6 +415,28 @@ spec:
                 - name
                 - version
                 type: object
+              grandCentral:
+                properties:
+                  backendImage:
+                    description: The image of the grand central backend.
+                    type: string
+                  backendEnabled:
+                    description: Flag indicating whether grand central backend is
+                      deployed for this cluster.
+                    type: boolean
+                  jwkUrl:
+                    description: The endpoint to retrieve the list of JWK public keys
+                      used for verifying JWT tokens.
+                    type: string
+                  apiUrl:
+                    description: The CrateDB Cloud API URL.
+                    type: string
+                required:
+                - backendImage
+                - jwkUrl
+                - apiUrl
+                - backendEnabled
+                type: object
               nodes:
                 properties:
                   data:
@@ -405,6 +459,9 @@ spec:
                         replicas:
                           description: Number of CrateDB nodes of this type.
                           type: number
+                        nodepool:
+                          description: Type of nodepool where the cluster should run.
+                          type: string
                         resources:
                           properties:
                             cpus:
@@ -487,6 +544,9 @@ spec:
                         description: Number of master nodes. Should be an odd number.
                         minimum: 3
                         type: number
+                      nodepool:
+                        description: Type of nodepool where the cluster should run.
+                        type: string
                       resources:
                         properties:
                           cpus:

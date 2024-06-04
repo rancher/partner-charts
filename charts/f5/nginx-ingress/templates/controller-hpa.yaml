@@ -1,4 +1,4 @@
-{{- if and .Values.controller.autoscaling.enabled (eq .Values.controller.kind "deployment") (semverCompare ">=1.23.0" .Capabilities.KubeVersion.Version) -}}
+{{- if and .Values.controller.autoscaling.enabled (eq .Values.controller.kind "deployment") (.Capabilities.APIVersions.Has "autoscaling/v2") -}}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -17,6 +17,10 @@ spec:
     name: {{ include "nginx-ingress.controller.fullname" . }}
   minReplicas: {{ .Values.controller.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.controller.autoscaling.maxReplicas }}
+{{- if .Values.controller.autoscaling.behavior }}
+  behavior:
+{{ toYaml .Values.controller.autoscaling.behavior | indent 4 }}
+{{- end }}
   metrics:
     {{- if .Values.controller.autoscaling.targetMemoryUtilizationPercentage }}
     - type: Resource

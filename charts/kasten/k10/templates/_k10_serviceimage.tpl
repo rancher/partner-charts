@@ -3,7 +3,6 @@ Helper to get k10 service image
 The details on how these image are being generated
 is in below issue
 https://kasten.atlassian.net/browse/K10-4036
-Using substr to remove repo from ambassadorImage
 */}}
 {{- define "serviceImage" -}}
 {{/*
@@ -18,15 +17,16 @@ value that is specified.
 {{- $tagFromDefs := "" -}}
 {{- if .main.Values.global.airgapped.repository }}
 {{- $serviceImage = (include "get.k10ImageTag" .main) | print .main.Values.global.airgapped.repository "/" .k10_service ":" }}
+{{- else if .main.Values.global.azMarketPlace }}
+{{- $az_image := (get .main.Values.global.azure.images .k10_service) }}
+{{- $serviceImage = print $az_image.registry "/" $az_image.image  ":"  $az_image.tag }}
 {{- else }}
 {{- $serviceImage = (include "get.k10ImageTag" .main)  | print .main.Values.global.image.registry "/" .k10_service ":" }}
 {{- end }}{{/* if .main.Values.global.airgapped.repository */}}
 {{- $serviceImageKey := print (replace "-" "" .k10_service) "Image" }}
-{{- if eq $serviceImageKey "ambassadorImage" }}
-{{- $tagFromDefs = (include "k10.ambassadorImageTag" .) }}
-{{- else if eq $serviceImageKey "dexImage" }}
+{{- if eq $serviceImageKey "dexImage" }}
 {{- $tagFromDefs = (include "dex.dexImageTag" .) }}
-{{- end }}{{/* if eq $serviceImageKey "ambassadorImage" */}}
+{{- end }}{{/* if eq $serviceImageKey "dexImage" */}}
 {{- if index .main.Values $serviceImageKey }}
 {{- $service_values := index .main.Values $serviceImageKey }}
 {{- if .main.Values.global.airgapped.repository }}

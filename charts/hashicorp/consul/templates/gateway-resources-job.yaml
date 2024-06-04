@@ -31,12 +31,14 @@ spec:
         {{- end }}
       annotations:
         "consul.hashicorp.com/connect-inject": "false"
+        "consul.hashicorp.com/mesh-inject": "false"
     spec:
       restartPolicy: Never
       serviceAccountName: {{ template "consul.fullname" . }}-gateway-resources
       containers:
         - name: gateway-resources
           image: {{ .Values.global.imageK8S }}
+          {{- include "consul.restrictedSecurityContext" . | nindent 10 }}
           command:
             - consul-k8s-control-plane
           args:
@@ -49,7 +51,7 @@ spec:
             - -heritage={{ .Release.Service }}
             - -release-name={{ .Release.Name }}
             - -component=api-gateway
-            {{- if .Values.apiGateway.enabled }} # Overide values from the old stanza. To be removed in 1.17 (t-eckert 2023-05-19)
+            {{- if .Values.apiGateway.enabled }} # Override values from the old stanza. To be removed after ~1.18 (t-eckert 2023-05-19) NET-6263
             {{- if .Values.apiGateway.managedGatewayClass.deployment }}
             {{- if .Values.apiGateway.managedGatewayClass.deployment.defaultInstances }}
             - -deployment-default-instances={{ .Values.apiGateway.managedGatewayClass.deployment.defaultInstances }}
@@ -84,16 +86,31 @@ spec:
             {{- end}}
             {{- end}}
             {{- if .Values.connectInject.apiGateway.managedGatewayClass.nodeSelector }}
-            - -node-selector={{ .Values.connectInject.apiGateway.managedGatewayClass.nodeSelector }}
+            - -node-selector
+            - {{- toYaml .Values.connectInject.apiGateway.managedGatewayClass.nodeSelector | nindent 14 -}}
             {{- end }}
             {{- if .Values.connectInject.apiGateway.managedGatewayClass.tolerations }}
             - -tolerations={{ .Values.connectInject.apiGateway.managedGatewayClass.tolerations }}
             {{- end }}
             {{- if .Values.connectInject.apiGateway.managedGatewayClass.copyAnnotations.service }}
-            - -service-annotations={{ .Values.connectInject.apiGateway.managedGatewayClass.copyAnnotations.service.annotations }}
+            - -service-annotations
+            - {{- toYaml .Values.connectInject.apiGateway.managedGatewayClass.copyAnnotations.service.annotations | nindent 14 -}}
             {{- end }}
             - -service-type={{ .Values.connectInject.apiGateway.managedGatewayClass.serviceType }}
-            {{- end}}
+            {{- if .Values.global.openshift.enabled  }}
+            - -openshift-scc-name={{ .Values.connectInject.apiGateway.managedGatewayClass.openshiftSCCName }}
+            {{- end }}
+            - -map-privileged-container-ports={{ .Values.connectInject.apiGateway.managedGatewayClass.mapPrivilegedContainerPorts }}
+            {{- if (ne (.Values.connectInject.apiGateway.managedGatewayClass.metrics.enabled | toString) "-") }}
+            - -enable-metrics={{ .Values.connectInject.apiGateway.managedGatewayClass.metrics.enabled | toString }}
+            {{- end }}
+            {{- if .Values.connectInject.apiGateway.managedGatewayClass.metrics.path }}
+            - -metrics-path={{ .Values.connectInject.apiGateway.managedGatewayClass.metrics.path }}
+            {{- end }}
+            {{- if .Values.connectInject.apiGateway.managedGatewayClass.metrics.port }}
+            - -metrics-port={{ .Values.connectInject.apiGateway.managedGatewayClass.metrics.port }}
+            {{- end }}
+            {{- end }}
           resources:
             requests:
               memory: "50Mi"
@@ -101,12 +118,16 @@ spec:
             limits:
               memory: "50Mi"
               cpu: "50m"
+          volumeMounts:
+            - name: config
+              mountPath: /consul/config
+              readOnly: true
       {{- if .Values.global.acls.tolerations }}
       tolerations:
         {{ tpl .Values.global.acls.tolerations . | indent 8 | trim }}
       {{- end }}
-      {{- if .Values.global.acls.nodeSelector }}
-      nodeSelector:
-        {{ tpl .Values.global.acls.nodeSelector . | indent 8 | trim }}
-      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ template "consul.fullname" . }}-gateway-resources-config
 {{- end }}

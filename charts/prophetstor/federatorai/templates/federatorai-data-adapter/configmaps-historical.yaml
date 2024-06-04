@@ -65,6 +65,7 @@ data:
       rabbitmq_port = "$RABBITMQ_PORT"
       rabbitmq_subscriber = "historical_data_adapter"
       expired_time = "8760h"
+      cloud_metadata_expired_time = "$CLOUD_METADATA_EXPIRED_TIME"
       event_cache_expired_time = "$POST_EVENT_INTERVAL"
 
       ## set collect_metadata_only=false to collect resource metadata and metrics
@@ -82,7 +83,11 @@ data:
       ## Automation
       enable_dump_mock_data = false
       testing_mode = false
+      fake_fed_server_mode = false
       configuration_mock_data_path = "/var/log/mock_server/mock_data/configuration"
+      aws_mock_data_path = "/var/log/mock_server/mock_data/aws"
+      azure_mock_data_path = "/var/log/mock_server/mock_data/azure"
+      gcp_mock_data_path = "/var/log/mock_server/mock_data/gcp"
       datadog_mock_data_path = "/var/log/mock_server/mock_data/datadog"
       sysdig_mock_data_path = "/var/log/mock_server/mock_data/sysdig"
       prometheus_mock_data_path = "/var/log/mock_server/mock_data/prometheus"
@@ -106,120 +111,13 @@ data:
         cluster_name = []
         kube_cluster_name = []
 
-    #############################
-    ### Aggregator Basicstats ###
-    #############################
-
-    # Datadog metrics
-    [[aggregators.basicstats]]
-      grace = "2m"
-      period = "1m"
-      drop_original = true
-      # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
-      traverse_all_rules = false
-      # By default, data adapter send all the metrics through basicstats
-      namepass = ["datadog_cluster_collection_done"]
-      # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
-      namedrop = []
-      [[aggregators.basicstats.metric]]
-        groups = ["*"]
-        measurement_name = "datadog_cluster_collection_done"
-        aggregation_method = ""
-        fields = [""]
-
-    ## Openshift Prometheus integration: aggregator ##
-    [[aggregators.basicstats]]
-      grace = "2m"
-      period = "1m"
-      drop_original = true
-      # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
-      traverse_all_rules = false
-      # By default, data adapter send all the metrics through basicstats
-      namepass = ["openshift_prometheus_cluster_collection_done"]
-      # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
-      namedrop = []
-      [[aggregators.basicstats.metric]]
-        groups = ["*"]
-        measurement_name = "openshift_prometheus_cluster_collection_done"
-        aggregation_method = ""
-        fields = [""]
-
-    ## Federation Prometheus/Prometheus integration: aggregator ##
-    [[aggregators.basicstats]]
-      grace = "2m"
-      period = "1m"
-      drop_original = true
-      # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
-      traverse_all_rules = false
-      # By default, data adapter send all the metrics through basicstats
-      namepass = ["prometheus_cluster_collection_done"]
-      # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
-      namedrop = []
-      [[aggregators.basicstats.metric]]
-        groups = ["*"]
-        measurement_name = "prometheus_cluster_collection_done"
-        aggregation_method = ""
-        fields = [""]
-
-    ## Sysdig integration: aggregator ##
-    [[aggregators.basicstats]]
-      grace = "2m"
-      period = "1m"
-      drop_original = true
-      # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
-      traverse_all_rules = false
-      # By default, data adapter send all the metrics through basicstats
-      namepass = ["sysdig_cluster_collection_done"]
-      # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
-      namedrop = []
-      [[aggregators.basicstats.metric]]
-        groups = ["*"]
-        measurement_name = "sysdig_cluster_collection_done"
-        aggregation_method = ""
-        fields = [""]
-
-    ### VMware integration: aggregator ##
-    #[[aggregators.basicstats]]
-    #  grace = "5m"
-    #  period = "1m"
-    #  drop_original = true
-    #  # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
-    #  traverse_all_rules = false
-    #  # By default, data adapter send all the metrics through basicstats
-    #  namepass = ["vmware_cluster_collection_done"]
-    #  # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
-    #  namedrop = []
-
-    #  [[aggregators.basicstats.metric]]
-    #    groups = ["*"]
-    #    measurement_name = "vmware_cluster_collection_done"
-    #    aggregation_method = ""
-    #    fields = [""]
-
-    # AWS Cloudwatch metrics
-    [[aggregators.basicstats]]
-      period = "1m"
-      drop_original = true
-      # Set traverse_all_rules to true if we want to generate more than one metrics from different aggreagtor rule
-      traverse_all_rules = false
-      # By default, data adapter send all the metrics through basicstats
-      namepass = ["aws_cloudwatch_cluster_collection_done"]
-      # Add the metric name to namedrop if data adapter aggregate the metrics in other aggregator
-      namedrop = []
-
-      [[aggregators.basicstats.metric]]
-        groups = ["*"]
-        measurement_name = "aws_cloudwatch_cluster_collection_done"
-        aggregation_method = ""
-        fields = [""]
-
     ##################
     ### Processors ###
     ##################
 
     [[processors.filter_out]]
       order = 1
-      namepass = ["kafka_topic_partition_current_offset", "kafka_consumer_group_current_offset", "node_disk_io_util", "sysdig_kafka_topic_partition_current_offset", "sysdig_kafka_consumergroup_current_offset", "openshift_prometheus_kube_pod_owner", "prometheus_kube_pod_owner", "openshift_prometheus_kube_replicationcontroller_spec_replicas", "openshift_prometheus_kube_replicationcontroller_status_available_replicas", "datadog_node_pod_phase"]
+      namepass = ["kafka_topic_partition_current_offset", "kafka_consumer_group_current_offset", "node_disk_io_util", "sysdig_kafka_topic_partition_current_offset", "sysdig_kafka_consumergroup_current_offset", "prometheus_kube_pod_owner", "prometheus_kube_replicationcontroller_spec_replicas", "prometheus_kube_replicationcontroller_status_available_replicas", "prometheus_controller_replicas", "datadog_node_pod_phase"]
       [[processors.filter_out.metric]]
         measurement_name = "sysdig_kafka_topic_partition_current_offset"
         fields = ["kafka_topic_partition_current_offset"]
@@ -256,34 +154,25 @@ data:
         [processors.filter_out.metric.condition]
           owner_kind = "ReplicationController"
       [[processors.filter_out.metric]]
-        measurement_name = "openshift_prometheus_kube_pod_owner"
-        fields = ["owner_name"]
-        aggregation_method = "trim_last_index"
-        match_string = "-"
-        [processors.filter_out.metric.condition]
-          owner_kind = "ReplicaSet"
-      [[processors.filter_out.metric]]
-        measurement_name = "openshift_prometheus_kube_pod_owner"
-        fields = ["owner_name"]
-        aggregation_method = "trim_last_index"
-        match_string = "-"
-        [processors.filter_out.metric.condition]
-          owner_kind = "ReplicationController"
-      [[processors.filter_out.metric]]
-        measurement_name = "openshift_prometheus_kube_replicationcontroller_spec_replicas"
+        measurement_name = "prometheus_kube_replicationcontroller_spec_replicas"
         fields = ["value"]
         aggregation_method = "drop_zero_value"
       [[processors.filter_out.metric]]
-        measurement_name = "openshift_prometheus_kube_replicationcontroller_status_available_replicas"
+        measurement_name = "prometheus_kube_replicationcontroller_status_available_replicas"
         fields = ["value"]
         aggregation_method = "drop_zero_value"
       [[processors.filter_out.metric]]
-        measurement_name = "openshift_prometheus_kube_replicationcontroller_spec_replicas"
+        measurement_name = "prometheus_kube_replicationcontroller_spec_replicas"
         fields = ["replicationcontroller"]
         aggregation_method = "trim_last_index"
         match_string = "-"
       [[processors.filter_out.metric]]
-        measurement_name = "openshift_prometheus_kube_replicationcontroller_status_available_replicas"
+        measurement_name = "prometheus_kube_replicationcontroller_status_available_replicas"
+        fields = ["replicationcontroller"]
+        aggregation_method = "trim_last_index"
+        match_string = "-"
+      [[processors.filter_out.metric]]
+        measurement_name = "prometheus_controller_replicas"
         fields = ["replicationcontroller"]
         aggregation_method = "trim_last_index"
         match_string = "-"
@@ -305,44 +194,19 @@ data:
       namepass = ["datadog_namespace_*"]
       schema_file = "/etc/telegraf/schema/datadog_post_metric_decorator.json"
 
-    [[processors.schema_mapping]]
+    [[processors.aggregator]]
       order = 5
+      namepass = ["datadog_*"]
+      concurrent_job = 3
+      schema_file = "/etc/telegraf/schema/datadog_aggregator_schema.json"
+      config_file = "/etc/telegraf/schema/aggregator_config.json"
+
+    [[processors.schema_mapping]]
+      order = 6
       datasource = "datadog"
       aggregator_processor = true
       namepass = ["datadog_*", "alameda_*"]
       schema_file = "/etc/telegraf/schema/datadog_schema.json"
-      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
-      ## Set default cloud information ifneeded
-      enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
-      default_provider = "$DEFAULT_PROVIDER"
-      default_region = "$DEFAULT_REGION"
-      default_instance_type = "$DEFAULT_INSTANCE_TYPE"
-      default_instance_id = "$DEFAULT_INSTANCE_ID"
-      default_zone = "$DEFAULT_ZONE"
-
-    ## Openshift Prometheus integration: processors ##
-    [[processors.metrics_decorator]]
-      order = 2
-      namepass = ["openshift_prometheus_*", "alameda_*"]
-      schema_file = "/etc/telegraf/schema/openshift_prometheus_pre_metric_decorator.json"
-
-    [[processors.metrics_grouping]]
-      order = 3
-      namepass = ["openshift_prometheus_*", "alameda_*"]
-      namedrop = ["openshift_prometheus_historical_collection_done"]
-      schema_file = "/etc/telegraf/schema/openshift_prometheus_grouping_rules.json"
-
-    [[processors.metrics_decorator]]
-      order = 4
-      namepass = ["openshift_prometheus_alameda_config_cluster_namespace", "openshift_prometheus_node_cpu_usage_seconds_total", "openshift_prometheus_node_memory_usage_bytes", "openshift_prometheus_kube_node_status_capacity_cpu_cores", "openshift_prometheus_namespace_*"]
-      schema_file = "/etc/telegraf/schema/openshift_prometheus_post_metric_decorator.json"
-
-    [[processors.schema_mapping]]
-      order = 5
-      datasource = "prometheus"
-      aggregator_processor = true
-      namepass = ["openshift_prometheus_*", "alameda_*"]
-      schema_file = "/etc/telegraf/schema/openshift_prometheus_schema.json"
       cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
       ## Set default cloud information ifneeded
       enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
@@ -369,8 +233,15 @@ data:
       namepass = ["prometheus_alameda_config_cluster_namespace", "prometheus_node_cpu_usage_seconds_total", "prometheus_node_memory_usage_bytes", "prometheus_kube_node_status_capacity_cpu_cores", "prometheus_namespace_*"]
       schema_file = "/etc/telegraf/schema/prometheus_post_metric_decorator.json"
 
-    [[processors.schema_mapping]]
+    [[processors.aggregator]]
       order = 5
+      namepass = ["prometheus_*"]
+      concurrent_job = 3
+      schema_file = "/etc/telegraf/schema/prometheus_aggregator_schema.json"
+      config_file = "/etc/telegraf/schema/aggregator_config.json"
+
+    [[processors.schema_mapping]]
+      order = 6
       datasource = "prometheus"
       aggregator_processor = true
       namepass = ["prometheus_*", "alameda_*"]
@@ -401,8 +272,15 @@ data:
       namepass = ["sysdig_alameda_config_cluster_namespace", "sysdig_namespace_*", "sysdig_kube_container_resource_limits_cpu_cores", "sysdig_kube_container_resource_requests_cpu_cores", "sysdig_alameda_config_namespace_metric_instance_config_info"]
       schema_file = "/etc/telegraf/schema/sysdig_post_metric_decorator.json"
 
-    [[processors.schema_mapping]]
+    [[processors.aggregator]]
       order = 5
+      namepass = ["sysdig_*"]
+      concurrent_job = 3
+      schema_file = "/etc/telegraf/schema/sysdig_aggregator_schema.json"
+      config_file = "/etc/telegraf/schema/aggregator_config.json"
+
+    [[processors.schema_mapping]]
+      order = 6
       datasource = "sysdig"
       aggregator_processor = true
       namepass = ["sysdig_*", "alameda_*"]
@@ -416,7 +294,7 @@ data:
       default_instance_id = "$DEFAULT_INSTANCE_ID"
       default_zone = "$DEFAULT_ZONE"
 
-    ### VMware integration: processors
+    ## VMware integration: processors
     #[[processors.metrics_decorator]]
     #  order = 2
     #  namepass = ["vmware_*", "alameda_*"]
@@ -433,8 +311,15 @@ data:
     #  namepass = [""]
     #  schema_file = "/etc/telegraf/schema/vmware_post_metric_decorator.json"
 
-    #[[processors.schema_mapping]]
+    #[[processors.aggregator]]
     #  order = 5
+    #  namepass = ["vmware_*"]
+    #  concurrent_job = 3
+    #  schema_file = "/etc/telegraf/schema/vmware_aggregator_schema.json"
+    #  config_file = "/etc/telegraf/schema/aggregator_config.json"
+
+    #[[processors.schema_mapping]]
+    #  order = 6
     #  datasource = "vmware"
     #  aggregator_processor = true
     #  namepass = ["vmware_*", "alameda_*"]
@@ -465,8 +350,15 @@ data:
       namepass = ["aws_cloudwatch_alameda_config_cluster_vm", "aws_cloudwatch_node_group_*"]
       schema_file = "/etc/telegraf/schema/aws_post_metric_decorator.json"
 
-    [[processors.schema_mapping]]
+    [[processors.aggregator]]
       order = 5
+      namepass = ["aws_cloudwatch_*"]
+      concurrent_job = 3
+      schema_file = "/etc/telegraf/schema/aws_aggregator_schema.json"
+      config_file = "/etc/telegraf/schema/aggregator_config.json"
+
+    [[processors.schema_mapping]]
+      order = 6
       datasource = "aws"
       aggregator_processor = true
       namepass = ["aws_cloudwatch_*", "alameda_*"]
@@ -480,76 +372,83 @@ data:
       default_instance_id = "$DEFAULT_INSTANCE_ID"
       default_zone = "$DEFAULT_ZONE"
 
-    ##############################
-    ### Aggregator Federatorai ###
-    ##############################
+    ## Azure integration: processors
+    [[processors.metrics_decorator]]
+      order = 2
+      namepass = ["azure_*", "alameda_*"]
+      schema_file = "/etc/telegraf/schema/azure_pre_metric_decorator.json"
 
-    [[aggregators.federatorai]]
-      period = "1m"
-      drop_original = true
-      concurrent_job = 3
-      schema_file = "/etc/telegraf/schema/basic_aggregator_schema.json"
-      namepass = [""]
+    [[processors.metrics_grouping]]
+      order = 3
+      namepass = ["azure_*", "alameda_*"]
+      namedrop = ["azure_historical_collection_done"]
+      schema_file = "/etc/telegraf/schema/azure_grouping_rules.json"
 
-    ## Datadog metrics ##
-    [[aggregators.federatorai]]
-      grace = "3m"
-      period = "1m"
-      drop_original = true
+    [[processors.metrics_decorator]]
+      order = 4
+      namepass = ["azure_alameda_config_cluster_vm", "azure_alameda_config_cluster_scale_set_vm", "azure_node_group_*"]
+      schema_file = "/etc/telegraf/schema/azure_post_metric_decorator.json"
+
+    [[processors.aggregator]]
+      order = 5
+      namepass = ["azure_*"]
       concurrent_job = 3
-      schema_file = "/etc/telegraf/schema/datadog_aggregator_schema.json"
+      schema_file = "/etc/telegraf/schema/azure_aggregator_schema.json"
       config_file = "/etc/telegraf/schema/aggregator_config.json"
-      namepass = ["datadog_*"]
 
-    ## Openshift Prometheus integration: aggregator ##
-    [[aggregators.federatorai]]
-      grace = "3m"
-      period = "1m"
-      drop_original = true
+    [[processors.schema_mapping]]
+      order = 6
+      datasource = "azure"
+      aggregator_processor = true
+      namepass = ["azure_*", "alameda_*"]
+      schema_file = "/etc/telegraf/schema/azure_schema.json"
+      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+      ## Set default cloud information ifneeded
+      enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+      default_provider = "$DEFAULT_PROVIDER"
+      default_region = "$DEFAULT_REGION"
+      default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+      default_instance_id = "$DEFAULT_INSTANCE_ID"
+      default_zone = "$DEFAULT_ZONE"
+
+    ## GCP integration: processors
+    [[processors.metrics_decorator]]
+      order = 2
+      namepass = ["gcp_*", "alameda_*"]
+      schema_file = "/etc/telegraf/schema/gcp_pre_metric_decorator.json"
+
+    [[processors.metrics_grouping]]
+      order = 3
+      namepass = ["gcp_*", "alameda_*"]
+      namedrop = ["gcp_historical_collection_done"]
+      schema_file = "/etc/telegraf/schema/gcp_grouping_rules.json"
+
+    [[processors.metrics_decorator]]
+      order = 4
+      namepass = ["gcp_alameda_config_cluster_vm", "gcp_node_group_*"]
+      schema_file = "/etc/telegraf/schema/gcp_post_metric_decorator.json"
+
+    [[processors.aggregator]]
+      order = 5
+      namepass = ["gcp_*"]
       concurrent_job = 3
-      schema_file = "/etc/telegraf/schema/openshift_prometheus_aggregator_schema.json"
+      schema_file = "/etc/telegraf/schema/gcp_aggregator_schema.json"
       config_file = "/etc/telegraf/schema/aggregator_config.json"
-      namepass = ["openshift_prometheus_*"]
 
-    ## Federation Prometheus/Prometheus integration: aggregator ##
-    [[aggregators.federatorai]]
-      grace = "3m"
-      period = "1m"
-      drop_original = true
-      concurrent_job = 3
-      schema_file = "/etc/telegraf/schema/prometheus_aggregator_schema.json"
-      config_file = "/etc/telegraf/schema/aggregator_config.json"
-      namepass = ["prometheus_*"]
-
-    ## Sysdig integration: aggregator ##
-    [[aggregators.federatorai]]
-      grace = "3m"
-      period = "1m"
-      drop_original = true
-      concurrent_job = 3
-      schema_file = "/etc/telegraf/schema/sysdig_aggregator_schema.json"
-      config_file = "/etc/telegraf/schema/aggregator_config.json"
-      namepass = ["sysdig_*"]
-
-    ### VMware integration: aggregator ##
-    #[[aggregators.federatorai]]
-    #  grace = "5m"
-    #  period = "1m"
-    #  drop_original = true
-    #  concurrent_job = 3
-    #  schema_file = "/etc/telegraf/schema/vmware_aggregator_schema.json"
-    #  config_file = "/etc/telegraf/schema/aggregator_config.json"
-    #  namepass = ["vmware_*"]
-
-    ## AWS Cloudwatch metrics ##
-    [[aggregators.federatorai]]
-      grace = "2m"
-      period = "1m"
-      drop_original = true
-      concurrent_job = 3
-      schema_file = "/etc/telegraf/schema/aws_aggregator_schema.json"
-      config_file = "/etc/telegraf/schema/aggregator_config.json"
-      namepass = ["aws_cloudwatch_*"]
+    [[processors.schema_mapping]]
+      order = 6
+      datasource = "gcp"
+      aggregator_processor = true
+      namepass = ["gcp_*", "alameda_*"]
+      schema_file = "/etc/telegraf/schema/gcp_schema.json"
+      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+      ## Set default cloud information ifneeded
+      enable_set_default_cloud_info_if_empty = $ENABLE_SET_DEFAULT_CLOUD_INFO_IF_EMPTY
+      default_provider = "$DEFAULT_PROVIDER"
+      default_region = "$DEFAULT_REGION"
+      default_instance_type = "$DEFAULT_INSTANCE_TYPE"
+      default_instance_id = "$DEFAULT_INSTANCE_ID"
+      default_zone = "$DEFAULT_ZONE"
 
     ############################
     ### Input/Output Plugins ###
@@ -557,6 +456,7 @@ data:
 
     ## Alameda Configuration: inputs.data_collector ##
     [[inputs.data_collector]]
+      alias = "alameda_configuration_collector"
       query_start_time_offset = "-1m"
       query_end_time_offset = "0h" #Support s(second),m(minute),h(hour)
       collection_jitter = "0s"
@@ -585,37 +485,13 @@ data:
       node_uids = []
       group_names = []
 
-    ## Openshift Prometheus integration: inputs.data_collector ##
-    [[inputs.data_collector]]
-      query_start_time_offset = "-1m"
-      query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
-      ## data source type from which to query data
-      ## accept values: prometheus
-      source = "prometheus"
-      ## which collector to handle the data collection
-      collector = "prometheus"
-      ## authenticated token path
-      token= "/var/run/secrets/kubernetes.io/serviceaccount/token"
-      ## TLS Insecure skip verify
-      insecure_skip_verify = true
-      ## one URL from which to read formatted metrics
-      url = "http://prometheus-prometheus-oper-prometheus.default.svc:9090"
-      ## metrics schema path
-      metric_path = ["/etc/telegraf/schema/openshift_prometheus_historical_metrics.json"]
-      config_file = "/etc/telegraf/schema/collector_prometheus_config.json"
-      target_label = ""
-      cluster_name = "default"
-      discover_path = ""
-      controller_name = []
-      node_uids = []
-      group_names = []
-      historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
-      handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
-
     ## Federation Prometheus integration: inputs.data_collector ##
     [[inputs.data_collector]]
+      alias = "federation_prometheus_collector"
       query_start_time_offset = "-1m"
       query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
       ## data source type from which to query data
       ## accept values: prometheus
       source = "prometheus"
@@ -640,11 +516,15 @@ data:
       group_names = []
       historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
       handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
     ## Rancher Prometheus integration: inputs.data_collector ##
     [[inputs.data_collector]]
+      alias = "rancher_prometheus_collector"
       query_start_time_offset = "-1m"
       query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
       ## data source type from which to query data
       ## accept values: prometheus
       source = "prometheus"
@@ -669,11 +549,15 @@ data:
       group_names = []
       historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
       handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
     ## Prometheus integration: inputs.data_collector ##
     [[inputs.data_collector]]
+      alias = "prometheus_collector"
       query_start_time_offset = "-1m"
       query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
       ## data source type from which to query data
       ## accept values: prometheus
       source = "prometheus"
@@ -698,11 +582,15 @@ data:
       group_names = []
       historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
       handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
     ## Datadog integration: inputs.data_collector
     [[inputs.data_collector]]
+      alias = "datadog_collector"
       query_start_time_offset = "-1m"
       query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
       ## data source type from which to query data
       ## accept values: prometheus, datadog, sysdig
       source = "datadog"
@@ -724,11 +612,15 @@ data:
       cluster_name = "default"
       historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
       handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
     ## Sysdig integration: inputs.data_collector ##
     [[inputs.data_collector]]
+      alias = "sysdig_collector"
       query_start_time_offset = "-1m"
       query_end_time_offset = "0m"
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
       ## data source type from which to query data
       ## accept values: sysdig
       source = "sysdig"
@@ -753,12 +645,16 @@ data:
       group_names = []
       historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
       handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
-    ### VMware integration: inputs.data_collector ##
+    ## VMware integration: inputs.data_collector ##
     #[[inputs.data_collector]]
-    #  interval = "5m"
+    #  alias = "vmware_metrics_collector"
+    #  #interval = "5m"
     #  query_start_time_offset = "-5m"
     #  query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+    #  retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+    #  max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
     #  ## data source type from which to query data
     #  ## accept values: vmware
     #  source = "vmware"
@@ -773,7 +669,7 @@ data:
     #  ## one URL from which to read formatted metrics
     #  url = "${VMWARE_API_URL}"
     #  ## metrics schema path
-    #  metric_path = ["/etc/telegraf/schema/vmware_metrics.json"]
+    #  metric_path = ["/etc/telegraf/schema/vmware_historical_metrics.json"]
     #  config_file = "/etc/telegraf/schema/collector_vmware_config.json"
     #  target_label = ""
     #  cluster_name = "${CLUSTER_NAME}"
@@ -786,9 +682,12 @@ data:
 
     ## AWS Cloudwatch integration: inputs.data_collector
     [[inputs.data_collector]]
+      alias = "aws_metrics_collector"
       #interval = "5m"
       query_start_time_offset = "-30m"
       query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
       ## data source type from which to query data
       ## accept values: vmware
       source = "aws"
@@ -812,15 +711,73 @@ data:
       group_names = []
       historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
       handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
-    ## Openshift Prometheus integration: outputs.alameda_datahub ##
-    [[outputs.alameda_datahub]]
-      namepass = ["openshift_prometheus_*"]
-      metric_prefix = "openshift_prometheus_"
-      datasource = "prometheus"
-      concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
-      schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
-      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+    ## Azure integration: inputs.data_collector
+    [[inputs.data_collector]]
+      alias = "azure_metrics_collector"
+      #interval = "5m"
+      query_start_time_offset = "-10m"
+      query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_METRICS_MAX_RETRY_TIMES
+      ## data source type from which to query data
+      ## accept values: vmware
+      source = "azure"
+      ## which collector to handle the data collection
+      collector = "azure"
+      ## account name
+      account = ""
+      ## authenticated token path
+      token= ""
+      ## TLS Insecure skip verify
+      insecure_skip_verify = true
+      ## one URL from which to read formatted metrics
+      url = ""
+      ## metrics schema path
+      metric_path = ["/etc/telegraf/schema/azure_historical_metrics.json"]
+      config_file = "/etc/telegraf/schema/collector_azure_config.json"
+      cluster_name = "${CLUSTER_NAME}"
+      discover_path = ""
+      controller_name = []
+      node_uids = []
+      group_names = []
+      historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
+      handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
+
+    ## GCP integration: inputs.data_collector
+    [[inputs.data_collector]]
+      alias = "gcp_metrics_collector"
+      #interval = "5m"
+      query_start_time_offset = "-10m"
+      query_end_time_offset = "0m" #Support s(second),m(minute),h(hour)
+      retry_interval = "$DATASOURCE_GCP_METRICS_RETRY_INTERVAL"
+      max_retry_times = $DATASOURCE_GCP_METRICS_MAX_RETRY_TIMES
+      ## data source type from which to query data
+      ## accept values: vmware
+      source = "gcp"
+      ## which collector to handle the data collection
+      collector = "gcp"
+      ## account name
+      account = ""
+      ## authenticated token path
+      token= ""
+      ## TLS Insecure skip verify
+      insecure_skip_verify = true
+      ## one URL from which to read formatted metrics
+      url = ""
+      ## metrics schema path
+      metric_path = ["/etc/telegraf/schema/gcp_historical_metrics.json"]
+      config_file = "/etc/telegraf/schema/collector_gcp_config.json"
+      cluster_name = "${CLUSTER_NAME}"
+      discover_path = ""
+      controller_name = []
+      node_uids = []
+      group_names = []
+      historical_data_restart_limit = $HISTORICAL_DATA_RESTART_LIMIT
+      handle_missing_data_times = $HANDLE_MISSING_DATA_TIMES
+      stop_when_no_data = $STOP_WHEN_NO_DATA
 
     ## Federation Prometheus/Prometheus integration: outputs.alameda_datahub ##
     [[outputs.alameda_datahub]]
@@ -849,20 +806,38 @@ data:
       schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
       cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
 
-    ### VMware integration: outputs.alameda_datahub ##
-    #[[outputs.alameda_datahub]]
-    #  namepass = ["vmware_*"]
-    #  metric_prefix = "vmware_"
-    #  datasource = "vmware"
-    #  concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
-    #  schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
-    #  cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+    ## VMware integration: outputs.alameda_datahub ##
+    [[outputs.alameda_datahub]]
+      namepass = ["vmware_*"]
+      metric_prefix = "vmware_"
+      datasource = "vmware"
+      concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+      schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
+      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
 
     ## AWS Cloudwatch integration: outputs.alameda_datahub
     [[outputs.alameda_datahub]]
       namepass = ["aws_cloudwatch_*"]
       metric_prefix = "aws_cloudwatch_"
       datasource = "aws"
+      concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+      schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
+      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+    ## Azure integration: outputs.alameda_datahub
+    [[outputs.alameda_datahub]]
+      namepass = ["azure_*"]
+      metric_prefix = "azure_"
+      datasource = "azure"
+      concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
+      schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
+      cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"
+
+    ## GCP integration: outputs.alameda_datahub
+    [[outputs.alameda_datahub]]
+      namepass = ["gcp_*"]
+      metric_prefix = "gcp_"
+      datasource = "gcp"
       concurrent_job = $WRITE_DATAHUB_CONCURRENT_JOB
       schema_file = "/etc/telegraf/schema/datahub_historical_schema.json"
       cluster_collection_done_schema_file = "/etc/telegraf/schema/cluster_collection_done_schema.json"

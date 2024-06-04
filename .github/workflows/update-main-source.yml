@@ -1,0 +1,45 @@
+name: Auto-update charts on main-source branch
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  update:
+    permissions:
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Get rancher/partner-charts secrets out of vault
+      uses: rancher-eio/read-vault-secrets@main
+      with:
+        secrets: |
+          secret/data/github/repo/rancher/partner-charts/github/app-credentials appId | APP_ID ;
+          secret/data/github/repo/rancher/partner-charts/github/app-credentials privateKey | PRIVATE_KEY
+
+    - name: Generate short-lived github app token
+      uses: actions/create-github-app-token@v1
+      id: app-token
+      with:
+        app-id: ${{ env.APP_ID }}
+        private-key: ${{ env.PRIVATE_KEY }}
+
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ steps.app-token.outputs.token }}
+
+    - name: Update main-source branch
+      run: |
+        scripts/pull-ci-scripts
+        bin/partner-charts-ci auto --icons
+
+        # exit if there are no changes
+        git diff --quiet origin/main-source main-source && exit 0
+
+        git push origin main-source

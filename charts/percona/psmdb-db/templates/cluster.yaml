@@ -5,6 +5,7 @@ metadata:
     kubectl.kubernetes.io/last-applied-configuration: |
       {"apiVersion":"psmdb.percona.com/v1","kind":"PerconaServerMongoDB"}
   name: {{ include "psmdb-database.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "psmdb-database.labels" . | indent 4 }}
   finalizers:
@@ -24,8 +25,9 @@ spec:
   {{- end }}
   image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
   imagePullPolicy: "{{ .Values.imagePullPolicy }}"
-  {{- if .Values.allowUnsafeConfigurations }}
-  allowUnsafeConfigurations: true
+  {{- if .Values.unsafeFlags }}
+  unsafeFlags:
+{{ .Values.unsafeFlags | toYaml | indent 4 }}
   {{- end }}
   {{- if .Values.ignoreAnnotations }}
   ignoreAnnotations:
@@ -75,9 +77,16 @@ spec:
     image: "{{ .Values.pmm.image.repository }}:{{ .Values.pmm.image.tag }}"
     serverHost: {{ .Values.pmm.serverHost }}
   replsets:
-  {{- range $replset := .Values.replsets }}
+  {{- range $k,$replset := .Values.replsets }}
+  {{- if $replset.name }}
   - name: {{ $replset.name }}
+  {{- else }}
+  - name: {{ $k }}
+  {{- end }}
     size: {{ $replset.size }}
+    {{- if $replset.terminationGracePeriodSeconds }}
+    terminationGracePeriodSeconds: {{ $replset.terminationGracePeriodSeconds }}
+    {{- end }}
     {{- if $replset.externalNodes }}
     externalNodes:
 {{ $replset.externalNodes | toYaml | indent 6 }}
@@ -86,8 +95,17 @@ spec:
     configuration: |
 {{ $replset.configuration | indent 6 }}
     {{- end }}
+    {{- if $replset.topologySpreadConstraints }}
+    topologySpreadConstraints:
+{{ $replset.topologySpreadConstraints | toYaml | indent 6 }}
+    {{- end }}
+    {{- if $replset.serviceAccountName }}
+    serviceAccountName: {{ $replset.serviceAccountName }}
+    {{- end }}
+    {{- if $replset.affinity }}
     affinity:
 {{ $replset.affinity | toYaml | indent 6 }}
+    {{- end }}
     {{- if $replset.priorityClass }}
     priorityClassName: {{ $replset.priorityClass }}
     {{- end }}
@@ -150,6 +168,10 @@ spec:
       minAvailable: {{ $replset.podDisruptionBudget.minAvailable }}
       {{- end }}
     {{- end }}
+    {{- if $replset.splitHorizons }}
+    splitHorizons:
+{{ $replset.splitHorizons | toYaml | indent 6 }}
+    {{- end }}
     {{- if $replset.expose }}
     expose:
       enabled: {{ $replset.expose.enabled }}
@@ -167,6 +189,34 @@ spec:
 {{ $replset.expose.serviceLabels | toYaml | indent 8 }}
       {{- end }}
     {{- end }}
+    {{- if $replset.schedulerName }}
+    schedulerName: {{ $replset.schedulerName }}
+    {{- end }}
+    resources:
+    {{- if $replset.resources }}
+{{ $replset.resources | toYaml | indent 6 }}
+    {{- end }}
+    volumeSpec:
+    {{- if $replset.volumeSpec }}
+      {{- if $replset.volumeSpec.hostPath }}
+      hostPath:
+        path: {{ $replset.volumeSpec.hostPath.path }}
+        {{- if $replset.volumeSpec.hostPath.type }}
+        type: {{ $replset.volumeSpec.hostPath.type }}
+        {{- else }}
+        type: Directory
+        {{- end }}
+      {{- else if $replset.volumeSpec.pvc }}
+      persistentVolumeClaim:
+{{ $replset.volumeSpec.pvc | toYaml | indent 8 }}
+      {{- else }}
+      emptyDir: {}
+      {{- end }}
+    {{- end }}
+    {{- if $replset.hostAliases }}
+    hostAliases:
+{{ $replset.hostAliases | toYaml | indent 6 }}
+    {{- end }}
     {{- if $replset.nonvoting }}
     nonvoting:
       enabled: {{ $replset.nonvoting.enabled }}
@@ -175,8 +225,13 @@ spec:
       configuration: |
 {{ $replset.nonvoting.configuration | indent 8 }}
       {{- end }}
+      {{- if $replset.nonvoting.serviceAccountName }}
+      serviceAccountName: {{ $replset.nonvoting.serviceAccountName }}
+      {{- end }}
       affinity:
+      {{- if $replset.nonvoting.affinity }}
 {{ $replset.nonvoting.affinity | toYaml | indent 8 }}
+      {{- end }}
       {{- if $replset.nonvoting.priorityClass }}
       priorityClassName: {{ $replset.nonvoting.priorityClass }}
       {{- end }}
@@ -212,14 +267,20 @@ spec:
         minAvailable: {{ $replset.nonvoting.podDisruptionBudget.minAvailable }}
         {{- end }}
       {{- end }}
+      {{- if $replset.nonvoting.resources }}
       resources:
 {{ $replset.nonvoting.resources | toYaml | indent 8 }}
+      {{- end }}
       {{- if $replset.nonvoting.volumeSpec }}
       volumeSpec:
         {{- if $replset.nonvoting.volumeSpec.hostPath }}
         hostPath:
-          path: {{ $replset.nonvoting.volumeSpec.hostPath }}
+          path: {{ $replset.nonvoting.volumeSpec.hostPath.path }}
+          {{- if $replset.nonvoting.volumeSpec.hostPath.type }}
+          type: {{ $replset.nonvoting.volumeSpec.hostPath.type }}
+          {{- else }}
           type: Directory
+          {{- end }}
         {{- else if $replset.nonvoting.volumeSpec.pvc }}
         persistentVolumeClaim:
 {{ $replset.nonvoting.volumeSpec.pvc | toYaml | indent 10 }}
@@ -232,8 +293,13 @@ spec:
     arbiter:
       enabled: {{ $replset.arbiter.enabled }}
       size: {{ $replset.arbiter.size }}
+      {{- if $replset.arbiter.serviceAccountName }}
+      serviceAccountName: {{ $replset.arbiter.serviceAccountName }}
+      {{- end }}
+      {{- if $replset.affinity }}
       affinity:
 {{ $replset.arbiter.affinity | toYaml | indent 8 }}
+      {{- end }}
       {{- if $replset.arbiter.priorityClass }}
       priorityClassName: {{ $replset.arbiter.priorityClass }}
       {{- end }}
@@ -254,31 +320,18 @@ spec:
 {{ $replset.arbiter.tolerations | toYaml | indent 8 }}
       {{- end }}
     {{- end }}
-    {{- if $replset.schedulerName }}
-    schedulerName: {{ $replset.schedulerName }}
-    {{- end }}
-    resources:
-{{ $replset.resources | toYaml | indent 6 }}
-    {{- if $replset.volumeSpec }}
-    volumeSpec:
-      {{- if $replset.volumeSpec.hostPath }}
-      hostPath:
-        path: {{ $replset.volumeSpec.hostPath }}
-        type: Directory
-      {{- else if $replset.volumeSpec.pvc }}
-      persistentVolumeClaim:
-{{ $replset.volumeSpec.pvc | toYaml | indent 8 }}
-      {{- else }}
-      emptyDir: {}
-      {{- end }}
-    {{- end }}
   {{- end }}
 
   sharding:
     enabled: {{ .Values.sharding.enabled }}
+    balancer:
+      enabled: {{ .Values.sharding.balancer.enabled }}
 
     configsvrReplSet:
       size: {{ .Values.sharding.configrs.size }}
+      {{- if .Values.sharding.configrs.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.sharding.configrs.terminationGracePeriodSeconds }}
+      {{- end }}
       {{- if .Values.sharding.configrs.externalNodes }}
       externalNodes:
 {{ .Values.sharding.configrs.externalNodes | toYaml | indent 8 }}
@@ -286,6 +339,13 @@ spec:
       {{- if .Values.sharding.configrs.configuration }}
       configuration: |
 {{ .Values.sharding.configrs.configuration | indent 8 }}
+      {{- end }}
+      {{- if .Values.sharding.configrs.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ .Values.sharding.configrs.topologySpreadConstraints | toYaml | indent 8 }}
+      {{- end }}
+      {{- if .Values.sharding.configrs.serviceAccountName }}
+      serviceAccountName: {{ .Values.sharding.configrs.serviceAccountName }}
       {{- end }}
       affinity:
 {{ .Values.sharding.configrs.affinity | toYaml | indent 8 }}
@@ -343,12 +403,14 @@ spec:
       sidecarPVCs:
 {{ .Values.sharding.configrs.sidecarPVCs | toYaml | indent 8 }}
       {{- end }}
+      {{- if .Values.sharding.configrs.podDisruptionBudget }}
       podDisruptionBudget:
         {{- if .Values.sharding.configrs.podDisruptionBudget.maxUnavailable }}
         maxUnavailable: {{ .Values.sharding.configrs.podDisruptionBudget.maxUnavailable }}
         {{- else }}
         minAvailable: {{ .Values.sharding.configrs.podDisruptionBudget.minAvailable }}
         {{- end }}
+      {{- end }}
       {{- if .Values.sharding.configrs.expose }}
       expose:
         enabled: {{ .Values.sharding.configrs.expose.enabled }}
@@ -376,20 +438,38 @@ spec:
       volumeSpec:
         {{- if .Values.sharding.configrs.volumeSpec.hostPath }}
         hostPath:
-          path: {{ .Values.sharding.configrs.volumeSpec.hostPath }}
+          path: {{ .Values.sharding.configrs.volumeSpec.hostPath.path }}
+          {{- if .Values.sharding.configrs.volumeSpec.hostPath.type }}
+          type: {{ .Values.sharding.configrs.volumeSpec.hostPath.type }}
+          {{- else }}
           type: Directory
+          {{- end }}
         {{- else if .Values.sharding.configrs.volumeSpec.pvc }}
         persistentVolumeClaim:
 {{ .Values.sharding.configrs.volumeSpec.pvc | toYaml | indent 10 }}
         {{- else }}
         emptyDir: {}
         {{- end }}
+      {{- if .Values.sharding.configrs.hostAliases }}
+      hostAliases:
+{{ .Values.sharding.configrs.hostAliases | toYaml | indent 8 }}
+      {{- end }}
 
     mongos:
       size: {{ .Values.sharding.mongos.size }}
+      {{- if .Values.sharding.mongos.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.sharding.mongos.terminationGracePeriodSeconds }}
+      {{- end }}
       {{- if .Values.sharding.mongos.configuration }}
       configuration: |
 {{ .Values.sharding.mongos.configuration | indent 8 }}
+      {{- end }}
+      {{- if .Values.sharding.mongos.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ .Values.sharding.mongos.topologySpreadConstraints | toYaml | indent 8 }}
+      {{- end }}
+      {{- if .Values.sharding.mongos.serviceAccountName }}
+      serviceAccountName: {{ .Values.sharding.mongos.serviceAccountName }}
       {{- end }}
       affinity:
 {{ .Values.sharding.mongos.affinity | toYaml | indent 8 }}
@@ -443,12 +523,14 @@ spec:
       sidecarPVCs:
 {{ .Values.sharding.mongos.sidecarPVCs | toYaml | indent 8 }}
       {{- end }}
+      {{- if .Values.sharding.mongos.podDisruptionBudget }}
       podDisruptionBudget:
         {{- if .Values.sharding.mongos.podDisruptionBudget.maxUnavailable }}
         maxUnavailable: {{ .Values.sharding.mongos.podDisruptionBudget.maxUnavailable }}
         {{- else }}
         minAvailable: {{ .Values.sharding.mongos.podDisruptionBudget.minAvailable }}
         {{- end }}
+      {{- end }}
       resources:
         limits:
           cpu: {{ .Values.sharding.mongos.resources.limits.cpu }}
@@ -473,9 +555,16 @@ spec:
         serviceLabels:
 {{ .Values.sharding.mongos.expose.serviceLabels | toYaml | indent 10 }}
         {{- end }}
+        {{- if .Values.sharding.mongos.expose.nodePort }}
+        nodePort: {{ .Values.sharding.mongos.expose.nodePort }}
+        {{- end }}
       {{- if .Values.sharding.mongos.auditLog }}
       auditLog:
 {{ .Values.sharding.mongos.auditLog | toYaml | indent 8 }}
+      {{- end }}
+      {{- if .Values.sharding.mongos.hostAliases }}
+      hostAliases:
+{{ .Values.sharding.mongos.hostAliases | toYaml | indent 8 }}
       {{- end }}
 
   backup:
@@ -484,8 +573,15 @@ spec:
     annotations:
 {{ .Values.backup.annotations | toYaml | indent 6 }}
     {{- end }}
+    {{- if .Values.backup.podSecurityContext }}
+    podSecurityContext:
+{{ .Values.backup.podSecurityContext | toYaml | indent 6 }}
+    {{- end }}
+    {{- if .Values.backup.containerSecurityContext }}
+    containerSecurityContext:
+{{ .Values.backup.containerSecurityContext | toYaml | indent 6 }}
+    {{- end }}
     image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
-    serviceAccountName: {{ .Values.backup.serviceAccountName }}
     {{- if .Values.backup.resources }}
     resources:
 {{ .Values.backup.resources | toYaml | indent 6 }}
@@ -495,6 +591,9 @@ spec:
     pitr:
     {{- if and .Values.backup.enabled .Values.backup.pitr.enabled }}
       enabled: true
+      {{- if .Values.backup.pitr.oplogOnly }}
+      oplogOnly: {{ .Values.backup.pitr.oplogOnly }}
+      {{- end }}
       {{- if .Values.backup.pitr.oplogSpanMin }}
       oplogSpanMin: {{ .Values.backup.pitr.oplogSpanMin }}
       {{- end }}
@@ -506,6 +605,10 @@ spec:
       {{- end }}
     {{- else }}
       enabled: false
+    {{- end }}
+    {{- if .Values.backup.configuration }}
+    configuration:
+{{ .Values.backup.configuration | toYaml | indent 6 }}
     {{- end }}
     tasks:
 {{ .Values.backup.tasks | toYaml | indent 6 }}

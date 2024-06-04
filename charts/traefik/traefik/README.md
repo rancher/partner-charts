@@ -5,8 +5,13 @@ microservices with ease.
 
 ## Introduction
 
-This chart bootstraps Traefik version 2 as a Kubernetes ingress controller,
-using Custom Resources `IngressRoute`: <https://docs.traefik.io/providers/kubernetes-crd/>.
+Starting with v28.x, this chart now bootstraps Traefik Proxy version 3 as a Kubernetes ingress controller,
+using Custom Resources `IngressRoute`: <https://doc.traefik.io/traefik/v3.0/routing/providers/kubernetes-crd/>.
+
+It's possible to use this chart with Traefik Proxy v2 using v27.x
+This chart support policy is aligned with [upstream support policy](https://doc.traefik.io/traefik/deprecation/releases/) of Traefik Proxy.
+
+See [Migration guide from v2 to v3](https://doc.traefik.io/traefik/v3.0/migration/v2-to-v3/) and upgrading section of this chart on CRDs.
 
 ### Philosophy
 
@@ -20,7 +25,9 @@ Accordingly, the encouraged approach to fulfill your needs:
 1. Override the default Traefik configuration values ([yaml file or cli](https://helm.sh/docs/chart_template_guide/values_files/))
 2. Append your own configurations (`kubectl apply -f myconf.yaml`)
 
-If needed, one may use [extraObjects](./traefik/tests/values/extra.yaml) or extend this HelmChart [as a Subchart](https://helm.sh/docs/chart_template_guide/subcharts_and_globals/)
+[Examples](https://github.com/traefik/traefik-helm-chart/blob/master/EXAMPLES.md) of common usage are provided.
+
+If needed, one may use [extraObjects](./traefik/tests/values/extra.yaml) or extend this HelmChart [as a Subchart](https://helm.sh/docs/chart_template_guide/subcharts_and_globals/).
 
 ## Installing
 
@@ -38,6 +45,16 @@ Due to changes in CRD version support, the following versions of the chart are u
 | Chart v9.20.2 and below | [x]                         | [x]                    |                            |
 | Chart v10.0.0 and above |                             | [x]                    | [x]                        |
 | Chart v22.0.0 and above |                             |                        | [x]                        |
+
+### CRDs Support of Traefik Proxy
+
+Due to changes in API Group of Traefik CRDs from `containo.us` to `traefik.io`, this Chart install CRDs needed by default Traefik Proxy version, following this table:
+
+|                         |  `containo.us`              | `traefik.io`           |
+|-------------------------|-----------------------------|------------------------|
+| Chart v22.0.0 and below |  [x]                        |                        |
+| Chart v23.0.0 and above |  [x]                        | [x]                    |
+| Chart v28.0.0 and above |                             | [x]                    |
 
 ### Deploying Traefik
 
@@ -58,23 +75,29 @@ helm install -f myvalues.yaml traefik traefik/traefik
 
 One can check what has changed in the [Changelog](./traefik/Changelog.md).
 
+:information_source: With Helm v3, CRDs created by this chart can not be updated, cf. the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions).
+
+:warning: Please read carefully release notes of this chart before upgrading CRDs.
+
 ```bash
 # Update repository
 helm repo update
 # See current Chart & Traefik version
 helm search repo traefik/traefik
+# Update CRDs (Traefik Proxy v3 CRDs)
+kubectl apply --server-side --force-conflicts -k https://github.com/traefik/traefik-helm-chart/traefik/crds/
 # Upgrade Traefik
 helm upgrade traefik traefik/traefik
 ```
 
 New major version indicates that there is an incompatible breaking change.
 
-### Upgrading CRDs
+#### Upgrade up to 27.X
 
-With Helm v3, CRDs created by this chart can not be updated, cf the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions). Please read carefully release notes of this chart before upgrading CRDs.
+When upgrading on Traefik Proxy v2 version, one need to stay at Traefik Helm Chart v27.x. The command to upgrade to the latest Traefik Proxy v2 CRD is:
 
 ```bash
-kubectl apply --server-side --force-conflicts -k https://github.com/traefik/traefik-helm-chart/traefik/crds/
+kubectl apply --server-side --force-conflicts -k https://github.com/traefik/traefik-helm-chart/traefik/crds/?ref=v27
 ```
 
 ### Upgrading after 18.X+

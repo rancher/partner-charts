@@ -2,13 +2,13 @@
 
 ## Prerequisites 
 - KubeSlice Controller needs to be installed
-- Create and configure the worker cluster following instructions in prerequisites and "registering the worker cluster" sections [documentation](https://docs.avesha.io/documentation/enterprise/1.0.0/deployment-partners/deploying-kubeslice-on-rancher/installing-the-worker-operator-on-rancher)
-- Copy the chart version from the upper right hand section of this page [VERSION parameter need during install and upgrade]
-- Click on the download link from the upper right hand section of this page, save it to location available from command prompt <LOCATION OF DOWNLOADED CHART.tgz>
+- Create and configure the worker cluster following instructions in the prerequisites and "registering the worker cluster" sections [documentation](https://docs.avesha.io/documentation/enterprise/1.3.0/install-kubeslice/rancher/rancher-install-kubeslice#kubeslice-worker-clusters)
+- Copy the chart version from the upper right hand section of this page [VERSION parameter needed during install and upgrade]
+- Click on the download link from the upper right hand section of this page, and save it to the location available from the command prompt <LOCATION OF DOWNLOADED CHART.tgz>
 - Untar the chart to get the values.yaml file and edit the following fields 
   - controllerSecret: namespace, endpoint, ca.crt, token 
   - cluster: name, nodeIp, endpoint 
-  - imagePullSecrets: username, passowrd and email [use the same info from KubeSlice Controller install]
+  - imagePullSecrets: username, password, and email [use the same info from KubeSlice Controller install]
 
 
 # Installation
@@ -34,7 +34,7 @@ helm upgrade --history-max=5 --namespace=kubeslice-system kubeslice-worker kubes
 ```
 
 ### Uninstall Kubeslice Worker
-- Follow instructions [documentation](https://docs.avesha.io/documentation/enterprise/1.0.0/getting-started-with-cloud-clusters/uninstalling-kubeslice/deregistering-the-worker-cluster)
+-  Refer to the [documentation](https://docs.avesha.io/documentation/enterprise/1.3.0/uninstall-kubeslice/) for instructions.
   
 ```console
 export KUBECONFIG=<WORKER CLUSTER KUBECONFIG>

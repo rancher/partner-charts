@@ -60,6 +60,9 @@ agent:
     # If you want no imagePullSecrets to be specified in the agent pod, you can just pass an empty array to agent.image.pullSecrets
     # pullSecrets: []
 
+  # The minimum number of seconds for which a newly created Pod should be ready without any of its containers crashing, for it to be considered available
+  minReadySeconds: 0
+
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -88,7 +91,7 @@ agent:
     #   regardless of the kubernetes.deployment.enabled setting
     requests:
       # agent.pod.requests.memory is the requested memory allocation in MiB for the agent pods.
-      memory: 512Mi
+      memory: 768Mi
       # agent.pod.requests.cpu are the requested CPU units allocation for the agent pods.
       cpu: 0.5
     limits:
@@ -182,7 +185,7 @@ leaderElector:
     # leaderElector.image.digest is the digest (a.k.a. Image ID) of the leader elector container image; if specified, it has priority over leaderElector.image.digest, which will be ignored.
     #digest:
     # leaderElector.image.tag is the tag name of the agent container image; if leaderElector.image.digest is specified, this property is ignored.
-    tag: 0.5.18
+    tag: 0.5.19
   port: 42655
 
 # openshift specifies whether the cluster role should include openshift permissions and other tweaks to the YAML.
@@ -215,6 +218,8 @@ serviceAccount:
   # The name of the ServiceAccount to use.
   # If not set and `create` is true, a name is generated using the fullname template
   # name: instana-agent
+  # Annotations to add to the service account
+  annotations: {}
 
 podSecurityPolicy:
   # Specifies whether a PodSecurityPolicy should be authorized for the Instana Agent pods.
@@ -255,6 +260,25 @@ k8s_sensor:
         memory: 1536Mi
         # k8s_sensor.deployment.pod.limits.cpu sets the CPU units allocation limits for the agent pods.
         cpu: 500m
+      affinity:
+        podAntiAffinity:
+          # Soft anti-affinity policy: try not to schedule multiple kubernetes-sensor pods on the same node.
+          # If the policy is set to "requiredDuringSchedulingIgnoredDuringExecution", if the cluster has
+          # fewer nodes than the amount of desired replicas, `helm install/upgrade --wait` will not return.
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: instana/agent-mode
+                  operator: In
+                  values: [ KUBERNETES ]
+              topologyKey: "kubernetes.io/hostname"
+    # The minimum number of seconds for which a newly created Pod should be ready without any of its containers crashing, for it to be considered available
+    minReadySeconds: 0
+  podDisruptionBudget:
+    # Specifies whether or not to setup a pod disruption budget for the k8sensor deployment
+    enabled: false
 
 kubernetes:
   # Configures use of a Deployment for the Kubernetes sensor rather than as a potential member of the DaemonSet. Is only accepted if k8s_sensor.deployment.enabled=false
@@ -263,7 +287,8 @@ kubernetes:
     enabled: false
     # Use a single replica, the impact will generally be low and we need to address a host of other concerns where clusters are large.
     replicas: 1
-
+    # The minimum number of seconds for which a newly created Pod should be ready without any of its containers crashing, for it to be considered available
+    minReadySeconds: 0
     # kubernetes.deployment.pod adjusts the resource assignments for the agent independently of the DaemonSet agent when kubernetes.deployment.enabled=true
     pod:
       requests:

@@ -45,7 +45,7 @@ data:
   {{- end }}
   {{ if or (eq .Values.global.configSecretAdapter "aws") (eq .Values.global.configAdapterName "aws") }}
   # [aws_envs] Envs related to using AWS
-  {{- if .Values.configmap.cnAwsSecretsEndpointUrl }}  
+  {{- if .Values.configmap.cnAwsSecretsEndpointUrl }}
   CN_AWS_SECRETS_ENDPOINT_URL: {{ .Values.configmap.cnAwsSecretsEndpointUrl }}
   {{- end }}
   CN_AWS_SECRETS_PREFIX: {{ .Values.configmap.cnAwsSecretsNamePrefix }}
@@ -55,6 +55,18 @@ data:
   AWS_CONFIG_FILE: {{ .Values.global.cnAwsConfigFile }}
   #AWS_PROFILE
   # [aws_envs] END
+  {{- end }}
+  # [vault_envs] Envs related to Hashicorp vault
+  {{ if eq .Values.global.configSecretAdapter "vault" }}
+  CN_SECRET_VAULT_ADDR: {{ .Values.configmap.cnVaultAddr | quote }}
+  CN_SECRET_VAULT_VERIFY: {{ .Values.configmap.cnVaultVerify | quote }}
+  CN_SECRET_VAULT_ROLE_ID_FILE: {{ .Values.configmap.cnVaultRoleIdFile | quote }}
+  CN_SECRET_VAULT_SECRET_ID_FILE: {{ .Values.configmap.cnVaultSecretIdFile | quote }}
+  CN_SECRET_VAULT_NAMESPACE: {{ .Values.configmap.cnVaultNamespace | quote }}
+  CN_SECRET_VAULT_KV_PATH: {{ .Values.configmap.cnVaultKvPath | quote }}
+  CN_SECRET_VAULT_PREFIX: {{ .Values.configmap.cnVaultPrefix | quote }}
+  CN_SECRET_VAULT_APPROLE_PATH: {{ .Values.configmap.cnVaultAppRolePath | quote }}
+  # [vault_envs] END
   {{- end }}
   CN_SQL_DB_SCHEMA: {{ .Values.configmap.cnSqlDbSchema | quote }}
   CN_SQL_DB_DIALECT: {{ .Values.configmap.cnSqlDbDialect }}
@@ -146,12 +158,10 @@ data:
   CN_HYBRID_MAPPING: {{ .Values.configmap.cnPersistenceHybridMapping | quote }}
   {{- end }}
   # Auto enable installation of some services
-  CN_PASSPORT_ENABLED: {{ .Values.global.oxpassport.enabled | quote }}
-  {{- if .Values.global.oxshibboleth.enabled }}
-  CN_SAML_ENABLED: {{ .Values.global.oxshibboleth.enabled | quote }}
+  {{ if or (eq .Values.configmap.cnCacheType "REDIS") (eq .Values.configmap.cnMessageType "REDIS") }}
+  CN_REDIS_URL: {{ .Values.configmap.cnRedisUrl | quote }}
   {{- end }}
   {{ if eq .Values.configmap.cnCacheType "REDIS" }}
-  CN_REDIS_URL: {{ .Values.configmap.cnRedisUrl | quote }}
   CN_REDIS_TYPE: {{ .Values.configmap.cnRedisType | quote }}
   CN_REDIS_USE_SSL: {{ .Values.configmap.cnRedisUseSsl | quote }}
   CN_REDIS_SSL_TRUSTSTORE: {{ .Values.configmap.cnRedisSslTruststore | quote }}
@@ -198,7 +208,6 @@ data:
   {{- if index .Values "global" "admin-ui" "enabled" }}
   # ADMIN-UI
   ADMIN_UI_JWKS: {{ cat "http://" ( index .Values "global" "auth-server" "authServerServiceName" ) ":8080/jans-auth/restv1/jwks" | quote | nospace }}
-  CN_CONFIG_API_PLUGINS: "admin-ui,scim,fido2,user-mgt"
   CN_ADMIN_UI_PLUGIN_LOGGERS: {{ index .Values "global" "config-api" "adminUiAppLoggers"
   | toJson
   | replace "adminUiLogTarget" "admin_ui_log_target"
@@ -209,9 +218,8 @@ data:
   | squote
   }}
   {{- end }}
-  {{- if .Values.global.casa.enabled }}
-  # CASA
-  GLUU_CASA_APP_LOGGERS: {{ .Values.global.casa
+  {{- if .Values.global.casa.enabled}}  # CASA
+  CN_CASA_APP_LOGGERS: {{ .Values.global.casa.appLoggers
   | toJson
   | replace "casaLogTarget" "casa_log_target"
   | replace "casaLogLevel" "casa_log_level"
@@ -221,6 +229,35 @@ data:
   | squote
   }}
   {{- end }}
+  # delete Duo script (https://github.com/GluuFederation/flex/issues/1120) by disabling the feature
+  CN_DUO_ENABLED: "false"
+  CN_SQL_PASSWORD_FILE: {{ .Values.global.cnSqlPasswordFile }}
+  CN_COUCHBASE_PASSWORD_FILE: {{ .Values.global.cnCouchbasePasswordFile }}
+  CN_COUCHBASE_SUPERUSER_PASSWORD_FILE: {{ .Values.global.cnCouchbaseSuperuserPasswordFile }}
+  CN_LDAP_PASSWORD_FILE: {{ .Values.global.cnLdapPasswordFile }}
+  CN_LDAP_TRUSTSTORE_PASSWORD_FILE: {{ .Values.global.cnLdapTruststorePasswordFile }}
+  CN_LDAP_CERT_FILE: {{ .Values.global.cnLdapCertFile }}
+  CN_LDAP_KEY_FILE: {{ .Values.global.cnLdapKeyFile }}
+  CN_LDAP_CACERT_FILE: {{ .Values.global.cnLdapCacertFile }}
+  CN_LDAP_TRUSTSTORE_FILE: {{ .Values.global.cnLdapTruststoreFile }}
+  CN_CONFIG_API_PLUGINS: {{ index .Values "global" "config-api" "plugins" | quote  }}
+  {{- if .Values.global.saml.enabled }}
+  QUARKUS_TRANSACTION_MANAGER_ENABLE_RECOVERY: {{ .Values.configmap.quarkusTransactionEnableRecovery | quote }}
+  KC_LOG_LEVEL: {{ .Values.configmap.kcLogLevel | quote }}
+  KC_PROXY: {{ .Values.configmap.kcProxy | quote }}
+  KC_DB: {{ .Values.configmap.kcDbVendor | quote }}
+  KC_DB_USERNAME: {{ .Values.configmap.kcDbUsername | quote }}
+  KC_DB_SCHEMA: {{ .Values.configmap.kcDbSchema | quote }}
+  KC_DB_URL_HOST: {{ .Values.configmap.kcDbUrlHost | quote }}
+  KC_DB_URL_PORT: {{ .Values.configmap.kcDbUrlPort | quote }}
+  KC_DB_URL_DATABASE: {{ .Values.configmap.kcDbUrlDatabase | quote }}
+  KC_DB_URL_PROPERTIES: {{ .Values.configmap.kcDbUrlProperties | quote }}
+  CN_SAML_KC_DB_PASSWORD_FILE: {{ .Values.global.kcDbPasswordFile | quote }}
+  CN_SAML_KC_ADMIN_CREDENTIALS_FILE: {{ .Values.global.kcAdminCredentialsFile | quote }}
+  {{- end }}
+  CN_LOCK_ENABLED: {{ index .Values "global" "auth-server" "lockEnabled" | quote }}
+  CN_OPA_URL: {{ .Values.configmap.cnOpaUrl | quote }}
+  CN_MESSAGE_TYPE: {{ .Values.configmap.cnMessageType | quote }}
 ---
 
 apiVersion: v1
@@ -228,6 +265,9 @@ data:
   tls_generator.py: |-
     from kubernetes import config, client
     import logging
+    import base64
+
+    from jans.pycloudlib import get_manager
 
     log_format = '%(asctime)s - %(name)8s - %(levelname)5s - %(message)s'
     logging.basicConfig(format=log_format, level=logging.INFO)
@@ -284,12 +324,20 @@ data:
         :param namespace:
         :return:  ssl cert and key from gluu secrets
         """
-        ssl_cert = None
-        ssl_key = None
-        if core_cli.read_namespaced_secret(secret_name, namespace):
-            ssl_cert = core_cli.read_namespaced_secret(secret_name, namespace).data['ssl_cert']
-            ssl_key = core_cli.read_namespaced_secret(secret_name, namespace).data['ssl_key']
+        def b64encode(value):
+            return base64.b64encode(value.encode()).decode()
 
+        manager = get_manager()
+
+        # returns empty string if not found
+        ssl_cert = manager.secret.get("ssl_cert")
+        if ssl_cert:
+            ssl_cert = b64encode(ssl_cert)
+
+        # returns empty string if not found
+        ssl_key = manager.secret.get("ssl_key")
+        if ssl_key:
+            ssl_key = b64encode(ssl_key)
         return ssl_cert, ssl_key
 
 
@@ -305,7 +353,7 @@ data:
         namespace = {{.Values.global.istio.namespace | quote}}
         {{- end}}
 
-        if cert and key:
+        if cert or key:
             patch_or_create_namespaced_secret(name=name,
                                               namespace=namespace,
                                               literal="tls.crt",
@@ -314,7 +362,11 @@ data:
                                               second_literal="tls.key",
                                               value_of_second_literal=key)
         else:
-            logger.error("No certificate or key was found in secrets.")
+            logger.error(
+                "No certificate or key was found in secrets."
+                "This can happen when the ssl certificate for the domain is able to be pulled."
+                "In that scenario the ssl_cert will be pulled from the domain provided"
+            )
 
     if __name__ == "__main__":
         main()

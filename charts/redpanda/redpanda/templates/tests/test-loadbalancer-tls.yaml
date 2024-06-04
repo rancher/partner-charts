@@ -14,9 +14,8 @@
   See the License for the specific language governing permissions and
   limitations under the License.
   */}}
-{{- if and .Values.tls.enabled ( eq .Values.external.type "LoadBalancer" ) -}}
+{{- if and .Values.tests.enabled .Values.tls.enabled ( eq .Values.external.type "LoadBalancer" ) -}}
   {{- $values := .Values }}
-  {{- $root := deepCopy . }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -32,9 +31,7 @@ metadata:
 spec:
   serviceAccountName: test-loadbalancer-tls-redpanda
   restartPolicy: Never
-  securityContext:
-    runAsUser: 65535
-    runAsGroup: 65535
+  securityContext: {{ include "pod-security-context" . | nindent 4 }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets: {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -95,7 +92,7 @@ spec:
           done
       {{- end }}
 
-    {{- if (include "redpanda-22-2-x-without-sasl" $root | fromJson).bool }}
+    {{- if (include "redpanda-22-2-x-without-sasl" $ | fromJson).bool }}
       {{- if eq $values.listeners.schemaRegistry.external.default.tls.cert $name }}
           echo "-----> testing external tls: schema registry"
           {{- $port := ( first $values.listeners.schemaRegistry.external.default.advertisedPorts ) }}
@@ -126,29 +123,9 @@ spec:
     {{- end }}
   {{- end }}
   {{- end }}
-      volumeMounts:
-      {{- range $name, $cert := .Values.tls.certs }}
-      - name: redpanda-{{ $name }}-cert
-        mountPath: {{ printf "/etc/tls/certs/%s" $name }}
-      {{- end }}
-  volumes:
-  {{- range $name, $cert := .Values.tls.certs }}
-  {{- $r :=  set $root "tempCert" ( dict "name" $name "cert" $cert ) }}
-  - name: redpanda-{{ $name }}-cert
-    secret:
-      defaultMode: 420
-      items:
-        - key: tls.key
-          path: tls.key
-        - key: tls.crt
-          path: tls.crt
-        {{- if $cert.caEnabled }}
-        - key: ca.crt
-          path: ca.crt
-        {{- end }}
-      secretName: {{ template "cert-secret-name" $r }}
-  {{- end }}
-
+      volumeMounts: {{ include "default-mounts" . | nindent 8 }}
+      securityContext: {{ include "container-security-context" . | nindent 8 }}
+  volumes: {{ include "default-volumes" . | nindent 4 }}
 ---
 apiVersion: v1
 kind: ServiceAccount

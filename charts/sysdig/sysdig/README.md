@@ -152,7 +152,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | `image.registry`                                             | Sysdig Agent image registry.                                 | `quay.io`                                                    |
 | `image.repository`                                           | The image repository to pull from.                           | `sysdig/agent`                                               |
-| `image.tag`                                                  | The image tag to pull                                        | `12.15.0`                                                    |
+| `image.tag`                                                  | The image tag to pull                                        | `12.16.0`                                                    |
 | `image.digest`                                               | The image digest to pull.                                    | ` `                                                          |
 | `image.pullPolicy`                                           | The Image pull policy.                                       | `IfNotPresent`                                               |
 | `image.pullSecrets`                                          | Image pull secrets.                                          | `nil`                                                        |
@@ -222,7 +222,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeAnalyzer.pullSecrets`                                   | The image pull secrets for the Node Analyzer containers.     | `nil`                                                        |
 | `nodeAnalyzer.imageAnalyzer.deploy`                          | Deploys the Image Analyzer.                                  | `true    `                                                   |
 | `nodeAnalyzer.imageAnalyzer.image.repository`                | The image repository to pull the Node Image Analyzer from.   | `sysdig/node-image-analyzer`                                 |
-| `nodeAnalyzer.imageAnalyzer.image.tag`                       | The image tag to pull the Node Image Analyzer.               | `0.1.27`                                                     |
+| `nodeAnalyzer.imageAnalyzer.image.tag`                       | The image tag to pull the Node Image Analyzer.               | `0.1.29`                                                     |
 | `nodeAnalyzer.imageAnalyzer.image.digest`                    | The image digest to pull.                                    | ` `                                                          |
 | `nodeAnalyzer.imageAnalyzer.image.pullPolicy`                | The Image pull policy for the Node Image Analyzer.           | `IfNotPresent`                                               |
 | `nodeAnalyzer.imageAnalyzer.dockerSocketPath`                | The Docker socket path.                                      |                                                              |
@@ -237,7 +237,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeAnalyzer.imageAnalyzer.env`                             | The extra environment variables that will be passed onto pods. | `{}`                                                         |
 | `nodeAnalyzer.hostAnalyzer.deploy`                           | Deploys the Host Analyzer.                                   | `true    `                                                   |
 | `nodeAnalyzer.hostAnalyzer.image.repository`                 | The image repository to pull the Host Analyzer from.         | `sysdig/host-analyzer`                                       |
-| `nodeAnalyzer.hostAnalyzer.image.tag`                        | The image tag to pull the Host Analyzer.                     | `0.1.16`                                                     |
+| `nodeAnalyzer.hostAnalyzer.image.tag`                        | The image tag to pull the Host Analyzer.                     | `0.1.19`                                                     |
 | `nodeAnalyzer.hostAnalyzer.image.digest`                     | The image digest to pull.                                    | ` `                                                          |
 | `nodeAnalyzer.hostAnalyzer.image.pullPolicy`                 | The Image pull policy for the Host Analyzer.                 | `IfNotPresent`                                               |
 | `nodeAnalyzer.hostAnalyzer.schedule`                         | The scanning schedule specification for the host analyzer expressed as a crontab. | `@dailydefault`                                              |
@@ -262,7 +262,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeAnalyzer.runtimeScanner.deploy`                         | Deploys the Runtime Scanner.                                 | `false`                                                      |
 | `nodeAnalyzer.runtimeScanner.extraMounts`                    | Specifies a container engine custom socket path (docker, containerd, CRI-O). |                                                              |
 | `nodeAnalyzer.runtimeScanner.image.repository`               | The image repository to pull the Runtime Scanner from.       | `sysdig/vuln-runtime-scanner`                                |
-| `nodeAnalyzer.runtimeScanner.image.tag`                      | The image tag to pull the Runtime Scanner.                   | `1.5`                                                        |
+| `nodeAnalyzer.runtimeScanner.image.tag`                      | The image tag to pull the Runtime Scanner.                   | `1.6.6`                                                      |
 | `nodeAnalyzer.runtimeScanner.image.digest`                   | The image digest to pull.                                    | ` `                                                          |
 | `nodeAnalyzer.runtimeScanner.image.pullPolicy`               | The image pull policy for the Runtime Scanner.               | `IfNotPresent`                                               |
 | `nodeAnalyzer.runtimeScanner.resources.requests.cpu`         | Runtime Scanner CPU requests per node.                       | `250m`                                                       |
@@ -323,7 +323,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `nodeImageAnalyzer.settings.httpsProxy`           | The secure proxy configuration variables.                    |                               |
 | `nodeImageAnalyzer.settings.noProxy`              | The no proxy configuration variables.                        |                               |
 | `nodeImageAnalyzer.image.repository`              | The image repository to pull the Node Image Analyzer from.   | `sysdig/node-image-analyzer`  |
-| `nodeImageAnalyzer.image.tag`                     | The image tag to pull the Node Image Analyzer.               | `0.1.27`                      |
+| `nodeImageAnalyzer.image.tag`                     | The image tag to pull the Node Image Analyzer.               | `0.1.30`                      |
 | `nodeImageAnalyzer.imagedigest`                   | The image digest to pull.                                    | ` `                           |
 | `nodeImageAnalyzer.image.pullPolicy`              | The Image pull policy for the Node Image Analyzer.           | `IfNotPresent`                |
 | `nodeImageAnalyzer.image.pullSecrets`             | Image pull secrets for the Node Image Analyzer.              | `nil`                         |

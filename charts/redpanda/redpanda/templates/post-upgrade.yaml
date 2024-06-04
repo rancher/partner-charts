@@ -15,9 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 {{- if .Values.post_upgrade_job.enabled }}
-{{- $rpkFlags := include "rpk-acl-user-flags" . }}
-{{- $sasl := .Values.auth.sasl }}
-{{- $root := deepCopy . }}
+{{- $service := .Values.listeners.admin -}}
+{{- $cert := get .Values.tls.certs $service.tls.cert -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -32,11 +31,15 @@ metadata:
 {{- end }}
   annotations:
     "helm.sh/hook": post-upgrade
-    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-10"
 {{- with .Values.post_upgrade_job.annotations }}
   {{- toYaml . | nindent 4 }}
 {{- end }}
 spec:
+  {{- with .Values.post_upgrade_job.backoffLimit }}
+  backoffLimit: {{ .Values.post_upgrade_job.backoffLimit }}
+  {{- end }}
   template:
     metadata:
       name: "{{ .Release.Name }}"
@@ -51,6 +54,9 @@ spec:
     {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
     {{- end }}
+    {{- with ( include "post-upgrade-job-affinity" . ) }}
+      affinity: {{- . | nindent 8 }}
+    {{- end }}
     {{- with .Values.tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}
     {{- end }}
@@ -63,23 +69,52 @@ spec:
       containers:
       - name: {{ template "redpanda.name" . }}-post-upgrade
         image: {{ .Values.image.repository }}:{{ template "redpanda.tag" . }}
-        command: ["/bin/sh", "-c"]
+        command: ["/bin/bash", "-c"]
         args:
           - |
-            rpk cluster config import -f /tmp/base-config/bootstrap.yaml {{ $rpkFlags }}
+            set -e
 {{- range $key, $value := .Values.config.cluster }}
-  {{- if $value }}
-            rpk cluster config set {{ $key }} {{ $value }} {{ $rpkFlags }}
+  {{- if eq $key "default_topic_replications" }}
+    {{/* "sub (add $i (mod $i 2)) 1" calculates the closest odd number less than or equal to $i: 1=1, 2=1, 3=3, ... */}}
+    {{- $r := $.Values.statefulset.replicas }}
+    {{- $value = min $value (sub (add $r (mod $r 2)) 1) }}
+  {{- end }}
+  {{- if and (typeIs "float64" $value) (eq (floor $value) $value) }}
+    {{- $value = int64 $value }}
+  {{- end }}
+  {{- if and (typeIs "bool" $value ) ( not ( empty $value ) ) }}
+            rpk cluster config set {{ $key }} {{ $value }}
+  {{- else if and (typeIs "[]interface {}" $value ) ( not ( empty $value ) ) }}
+            rpk cluster config set {{ $key }} "[ {{ join "," $value }} ]"
+  {{- else if $value }}
+            rpk cluster config set {{ $key }} {{ $value }}
   {{- end }}
 {{- end }}
 {{- if not (hasKey .Values.config.cluster "storage_min_free_bytes") }}
-            rpk cluster config set storage_min_free_bytes {{ include "storage-min-free-bytes" . }} {{ $rpkFlags }}
+            rpk cluster config set storage_min_free_bytes {{ include "storage-min-free-bytes" . }}
+{{- end }}
+{{- if (include "redpanda-atleast-23-2-1" . | fromJson).bool }}
+            if [ -d "/etc/secrets/users/" ]; then
+                IFS=":" read -r USER_NAME PASSWORD MECHANISM < <(grep "" $(find /etc/secrets/users/* -print))
+                curl -svm3 --fail --retry "120" --retry-max-time "120" --retry-all-errors --ssl-reqd \
+  {{- if and $cert ( dig "caEnabled" false $cert ) }}
+                --cacert /etc/tls/certs/{{ $service.tls.cert }}/ca.crt \
+  {{- end }}
+                -X PUT -u ${USER_NAME}:${PASSWORD} \
+  {{- if (include "admin-internal-tls-enabled" . | fromJson).bool }}
+                https://{{ include "redpanda.internal.domain" . }}:{{ $service.port }}/v1/debug/restart_service?service=schema-registry || true
+  {{- else }}
+                http://{{ include "redpanda.internal.domain" . }}:{{ $service.port }}/v1/debug/restart_service?service=schema-registry || true
+  {{- end }}
+            fi
 {{- end }}
         {{- with .Values.post_upgrade_job.resources }}
         resources:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        securityContext: {{ include "container-security-context" . | nindent 10 }}
+        securityContext:{{- $defaultContext := include "container-security-context" . | fromYaml -}}
+                        {{- $customContext := .Values.post_upgrade_job.securityContext -}}
+                        {{- merge $defaultContext $customContext | toYaml | nindent 10 }}
         {{- if .Values.post_upgrade_job.extraEnv }}
         env:
           {{- include "common.tplvalues.render" (dict "value" .Values.post_upgrade_job.extraEnv "context" $) | nindent 10 }}
@@ -88,50 +123,6 @@ spec:
         envFrom:
           {{- include "common.tplvalues.render" (dict "value" .Values.post_upgrade_job.extraEnvFrom "context" $) | nindent 10 }}
         {{- end }}
-        volumeMounts:
-          - name: {{ template "redpanda.fullname" . }}
-            mountPath: /tmp/base-config
-          - name: config
-            mountPath: /etc/redpanda
-{{- if (include "tls-enabled" . | fromJson).bool }}
-  {{- range $name, $cert := .Values.tls.certs }}
-          - name: redpanda-{{ $name }}-cert
-            mountPath: {{ printf "/etc/tls/certs/%s" $name }}
-  {{- end }}
-{{- end }}
-          {{- if and $sasl.enabled (not (empty $sasl.secretRef )) }}
-          - name: {{ $sasl.secretRef }}
-            mountPath: "/etc/secrets/users"
-            readOnly: true
-          {{- end}}
-      volumes:
-        - name: {{ template "redpanda.fullname" . }}
-          configMap:
-            name: {{ template "redpanda.fullname" . }}
-        - name: config
-          emptyDir: {}
-{{- if (include "tls-enabled" . | fromJson).bool }}
-  {{- range $name, $cert := .Values.tls.certs }}
-    {{- $r :=  set $root "tempCert" ( dict "name" $name "cert" $cert ) }}
-        - name: redpanda-{{ $name }}-cert
-          secret:
-            defaultMode: 420
-            items:
-            - key: tls.key
-              path: tls.key
-            - key: tls.crt
-              path: tls.crt
-    {{- if $cert.caEnabled }}
-            - key: ca.crt
-              path: ca.crt
-    {{- end }}
-            secretName: {{ template "cert-secret-name" $r }}
-  {{- end }}
-{{- end -}}
-        {{- if and $sasl.enabled (not (empty $sasl.secretRef )) }}
-        - name: {{ $sasl.secretRef }}
-          secret:
-            secretName: {{ $sasl.secretRef }}
-            optional: false
-        {{- end }}
+        volumeMounts: {{- include "default-mounts" . | nindent 10 }}
+      volumes: {{ include "default-volumes" . | nindent 8 }}
 {{- end }}

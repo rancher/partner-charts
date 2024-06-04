@@ -84,3 +84,43 @@ Create the name of the service account to use
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "falcon-sensor.priorityClassName" -}}
+{{- printf "%s" .Values.node.daemonset.priorityClassName -}}
+{{- if not .Values.node.daemonset.priorityClassName -}}
+{{- printf "%s" "falcon-helm-node-security-critical" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "falcon-sensor.daemonsetResources" -}}
+{{- if .Values.node.gke.autopilot -}}
+resources:
+  {{- if (.Values.node.daemonset.resources | default dict ).limits }}
+  limits:
+    cpu: {{ (.Values.node.daemonset.resources.limits | default dict ).cpu | default "750m" }}
+    memory: {{ (.Values.node.daemonset.resources.limits | default dict ).memory | default "1.5Gi" }}
+    ephemeral-storage: {{  (index (.Values.node.daemonset.resources.limits | default dict ) "ephemeral-storage") |  default "100Mi" }}
+  {{- else }}
+  limits:
+    cpu: 750m
+    memory: 1.5Gi
+    ephemeral-storage: 100Mi
+  {{- end }}
+  {{- if (.Values.node.daemonset.resources | default dict ).requests }}
+  requests:
+    cpu: {{ (.Values.node.daemonset.resources.requests | default dict ).cpu | default "750m" }}
+    ephemeral-storage: {{  (index (.Values.node.daemonset.resources.requests | default dict ) "ephemeral-storage") |  default "100Mi" }}
+    memory: {{ (.Values.node.daemonset.resources.requests | default dict ).memory | default "1.5Gi" }}
+  {{- else }}
+  requests:
+    cpu: 750m
+    memory: 1.5Gi
+    ephemeral-storage: 100Mi
+  {{- end }}
+ {{- else -}}
+{{- if .Values.node.daemonset.resources -}}
+resources:
+{{- toYaml .Values.node.daemonset.resources | trim | nindent 2 -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

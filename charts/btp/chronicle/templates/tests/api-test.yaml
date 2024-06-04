@@ -1,4 +1,4 @@
-{{- if .Values.test.enabled }}
+{{- if .Values.test.api.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -16,8 +16,9 @@ spec:
       serviceAccountName:  {{ include "lib.serviceAccountName" . }}
       automountServiceAccountToken: true
       {{- if .Values.auth.required }}
+      {{ if not .Values.test.auth.token }}
       {{ if not .Values.devIdProvider.enabled }}
-      {{ required "If 'auth.required' when using the test suite 'devIdProvider.enabled' must be set to 'true'!" .Values.devIdProvider.enabled }}
+      {{ required "If 'auth.required' when using the api-test 'test.auth.token' must be provided or 'devIdProvider.enabled' must be set to 'true'!" .Values.devIdProvider.enabled }}
       {{ end }}
       initContainers:
         - name: wait-for-id-provider
@@ -57,7 +58,7 @@ spec:
                 echo "Id-provider is ready. Exiting."
                 exit 0
               else
-                echo "Timeout occurred. Please check if the correct JWKS URL has been provided."
+                echo "Timeout occurred. Please check if the correct URL has been provided."
                 exit 1
               fi
         - name: token-loader
@@ -73,6 +74,7 @@ spec:
           volumeMounts:
             - name: shared-data
               mountPath: /shared-data
+      {{ end }}
       {{- end }}
       containers:
         - name: test
@@ -80,12 +82,24 @@ spec:
           command: [ "sh", "-ec" ]
           args:
             - |
+              {{ if not .Values.test.auth.token }}
+              {{ if or .Values.auth.jwks.url .Values.auth.userinfo.url }}
+              echo "Auth endpoints provided but no token provided."
+              echo "Please provide 'test.auth.token' in the values.yaml file."
+              exit 1
+              {{ end }}
+              {{ end }}
+
               API={{ include "chronicle.api.service" . }}
               export PORT={{ .Values.port }}
               echo "Waiting for API to be ready ..."
               wait-for-it $API:$PORT --timeout=0
               echo "Getting IP address for API ..."
               getent hosts $API | cut -f 1 -d \ | head -n 1 > /shared-data/api-ip || exit 1
+
+              {{- if .Values.test.auth.token }}
+              echo "{{ .Values.test.auth.token }}" > /shared-data/jwks-token
+              {{- end }}
 
               if [ -f "/shared-data/jwks-token" ]; then
                 echo "Found token."

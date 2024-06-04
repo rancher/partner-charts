@@ -10,6 +10,9 @@ artifactory:
       limits:
         memory: "6Gi"
         cpu: "4"
+    javaOpts:
+      xms: "4g"
+      xmx: "4g"
   node:
     resources:
       requests:
@@ -18,13 +21,10 @@ artifactory:
       limits:
         memory: "6Gi"
         cpu: "4"
-  javaOpts:
-    xms: "4g"
-    xmx: "4g"
   customInitContainersBegin: |
    - name: "custom-init-begin-local"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      command:
        - 'sh'
        - '-c'
@@ -34,8 +34,8 @@ artifactory:
          name: volume
   customInitContainers: |
    - name: "custom-init-local"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      command:
        - 'sh'
        - '-c'
@@ -55,8 +55,8 @@ artifactory:
   # Add custom sidecar containers
   customSidecarContainers: |
    - name: "sidecar-list-local"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      securityContext:
        allowPrivilegeEscalation: false
        capabilities:
@@ -84,8 +84,8 @@ global:
   joinKey: EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
   customInitContainersBegin: |
    - name: "custom-init-begin-global"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      command:
        - 'sh'
        - '-c'
@@ -95,8 +95,8 @@ global:
          name: volume
   customInitContainers: |
    - name: "custom-init-global"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      command:
        - 'sh'
        - '-c'
@@ -116,8 +116,8 @@ global:
   # Add custom sidecar containers
   customSidecarContainers: |
    - name: "sidecar-list-global"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      securityContext:
        allowPrivilegeEscalation: false
        capabilities:
@@ -138,8 +138,8 @@ global:
 nginx:
   customInitContainers: |
    - name: "custom-init-begin-nginx"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      command:
        - 'sh'
        - '-c'
@@ -149,8 +149,8 @@ nginx:
          name: custom-script-local
   customSidecarContainers: |
    - name: "sidecar-list-nginx"
-     image: "{{ .Values.initContainerImage }}"
-     imagePullPolicy: "{{ .Values.artifactory.image.pullPolicy }}"
+     image: {{ include "artifactory-ha.getImageInfoByValue" (list . "initContainers") }}
+     imagePullPolicy: {{ .Values.initContainers.image.pullPolicy }}
      securityContext:
        allowPrivilegeEscalation: false
        capabilities:
@@ -231,7 +231,7 @@ nginx:
         proxy_set_header    X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header    Host              $http_host;
         proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
-        add_header Strict-Transport-Security always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
         location /artifactory/ {
           if ( $request_uri ~ ^/artifactory/(.*)$ ) {

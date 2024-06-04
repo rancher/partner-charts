@@ -16,7 +16,7 @@
 Selector labels
 */}}
 {{- define "dynatrace-operator.futureSelectorLabels" -}}
-app.kubernetes.io/name: {{ .Release.Name }}
+app.kubernetes.io/name: dynatrace-operator
 {{- if not (.Values).manifests }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -32,6 +32,9 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 {{- if not (.Values).manifests }}
 helm.sh/chart: {{ include "dynatrace-operator.chart" . }}
+{{- end -}}
+{{- if eq (include "dynatrace-operator.platform" .) "azure-marketplace" }}
+azure-extensions-usage-release-identifier: {{ .Release.Name | quote }}
 {{- end -}}
 {{- end -}}
 

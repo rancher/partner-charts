@@ -1,7 +1,20 @@
 # JFrog Container Registry Chart Changelog
 All changes to this chart will be documented in this file.
 
-## [107.59.11] - Aug 25, 2022
+## [107.84.12] - Feb 20, 2024
+* Updated `artifactory.installerInfo` content
+
+## [107.80.0] - Feb 1, 2024
+* Updated README.md to create a namespace using `--create-namespace` as part of helm install
+
+## [107.74.0] - Nov 23, 2023
+* **IMPORTANT**
+* Added min kubeVersion ">= 1.19.0-0" in chart.yaml
+
+## [107.66.0] - Jul 20, 2023
+* Disabled federation services when splitServicesToContainers=true
+
+## [107.45.0] - Aug 25, 2022
 * Included event service as mandatory and remove the flag from values.yaml
 
 ## [107.41.0] - Jul 22, 2022

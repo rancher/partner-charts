@@ -32,7 +32,7 @@ app.kubernetes.io/instance: "{{ .Release.Name }}"
 app.kubernetes.io/managed-by: "{{ .Release.Service }}"
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- range $key, $value := .Values.extraLabels }}
-{{ $key }}: {{ $value | quote }}
+{{ $key }}: {{ include "kong.renderTpl" (dict "value" $value "context" $) | quote }}
 {{- end }}
 {{- end -}}
 
@@ -78,7 +78,7 @@ Create Ingress resource for a Kong service
 {{- $path := .ingress.path -}}
 {{- $hostname := .ingress.hostname -}}
 {{- $pathType := .ingress.pathType -}}
-apiVersion: {{ .ingressVersion }}
+apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .fullName }}-{{ .serviceName }}
@@ -95,33 +95,74 @@ metadata:
     {{- end }}
   {{- end }}
 spec:
-{{- if (and (not (eq .ingressVersion "extensions/v1beta1")) .ingress.ingressClassName) }}
+{{- if .ingress.ingressClassName }}
   ingressClassName: {{ .ingress.ingressClassName }}
 {{- end }}
   rules:
-  - host: {{ $hostname | quote }}
-    http:
+  {{- if ( not (or $hostname .ingress.hosts)) }}
+  - http:
       paths:
         - backend:
-          {{- if (not (eq .ingressVersion "networking.k8s.io/v1")) }}
-            serviceName: {{ .fullName }}-{{ .serviceName }}
-            servicePort: {{ $servicePort }}
-          {{- else }}
             service:
               name: {{ .fullName }}-{{ .serviceName }}
               port:
                 number: {{ $servicePort }}
-            {{- end }}
           path: {{ $path }}
-          {{- if (not (eq .ingressVersion "extensions/v1beta1")) }}
           pathType: {{ $pathType }}
+  {{- else if $hostname }}
+  - host: {{ $hostname | quote }}
+    http:
+      paths:
+        - backend:
+            service:
+              name: {{ .fullName }}-{{ .serviceName }}
+              port:
+                number: {{ $servicePort }}
+          path: {{ $path }}
+          pathType: {{ $pathType }}
+  {{- end }}
+  {{- range .ingress.hosts }}
+  - host: {{ .host | quote }}
+    http:
+      paths:
+        {{- range .paths }}
+        - backend:
+          {{- if .backend -}}
+            {{ .backend | toYaml | nindent 12 }}
+          {{- else }}
+            service:
+              name: {{ $.fullName }}-{{ $.serviceName }}
+              port:
+                number: {{ $servicePort }}
           {{- end }}
+          {{- if (and $hostname (and (eq $path .path))) }}
+          {{- fail "duplication of specified ingress path" }}
+          {{- end }}
+          path: {{ .path }}
+          pathType: {{ .pathType }}
+        {{- end }}
+  {{- end }}
   {{- if (hasKey .ingress "tls") }}
   tls:
-  - hosts:
-    - {{ $hostname | quote }}
-    secretName: {{ .ingress.tls }}
-  {{- end -}}
+  {{- if (kindIs "string" .ingress.tls) }}
+    - hosts:
+      {{- range .ingress.hosts }}
+        - {{ .host | quote }}
+      {{- end }}
+      {{- if $hostname }}
+        - {{ $hostname | quote }}
+      {{- end }}
+      secretName: {{ .ingress.tls }}
+  {{- else if (kindIs "slice" .ingress.tls) }}
+    {{- range .ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
 {{- end -}}
 
 {{/*
@@ -172,6 +213,9 @@ spec:
   - name: kong-{{ .serviceName }}
     port: {{ .http.servicePort }}
     targetPort: {{ .http.containerPort }}
+  {{- if .http.appProtocol }}
+    appProtocol: {{ .http.appProtocol }}
+  {{- end }}
   {{- if (and (or (eq .type "LoadBalancer") (eq .type "NodePort")) (not (empty .http.nodePort))) }}
     nodePort: {{ .http.nodePort }}
   {{- end }}
@@ -182,6 +226,9 @@ spec:
   - name: kong-{{ .serviceName }}-tls
     port: {{ .tls.servicePort }}
     targetPort: {{ .tls.overrideServiceTargetPort | default .tls.containerPort }}
+  {{- if .tls.appProtocol }}
+    appProtocol: {{ .tls.appProtocol }}
+  {{- end }}
   {{- if (and (or (eq .type "LoadBalancer") (eq .type "NodePort")) (not (empty .tls.nodePort))) }}
     nodePort: {{ .tls.nodePort }}
   {{- end }}
@@ -211,7 +258,9 @@ spec:
   externalTrafficPolicy: {{ .externalTrafficPolicy }}
   {{- end }}
   {{- if .clusterIP }}
+  {{- if (or (not (eq .clusterIP "None")) (and (eq .type "ClusterIP") (eq .clusterIP "None"))) }}
   clusterIP: {{ .clusterIP }}
+  {{- end }}
   {{- end }}
   selector:
     {{- .selectorLabels | nindent 4 }}
@@ -224,6 +273,7 @@ Generic tool for creating KONG_PROXY_LISTEN, KONG_ADMIN_LISTEN, etc.
 */}}
 {{- define "kong.listen" -}}
   {{- $unifiedListen := list -}}
+  {{- $defaultAddrs := (list "0.0.0.0" "[::]") -}}
 
   {{/* Some services do not support these blocks at all, so these checks are a
        two-stage "is it safe to evaluate this?" and then "should we evaluate
@@ -233,9 +283,12 @@ Generic tool for creating KONG_PROXY_LISTEN, KONG_ADMIN_LISTEN, etc.
     {{- if .http.enabled -}}
       {{- $listenConfig := dict -}}
       {{- $listenConfig := merge $listenConfig .http -}}
-      {{- $_ := set $listenConfig "address" (default "0.0.0.0" .address) -}}
-      {{- $httpListen := (include "kong.singleListen" $listenConfig) -}}
-      {{- $unifiedListen = append $unifiedListen $httpListen -}}
+      {{- $addresses := (default $defaultAddrs .addresses) -}}
+      {{- range $addresses -}}
+        {{- $_ := set $listenConfig "address" . -}}
+        {{- $httpListen := (include "kong.singleListen" $listenConfig) -}}
+        {{- $unifiedListen = append $unifiedListen $httpListen -}}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
 
@@ -252,9 +305,12 @@ Generic tool for creating KONG_PROXY_LISTEN, KONG_ADMIN_LISTEN, etc.
       {{- $listenConfig := merge $listenConfig .tls -}}
       {{- $parameters := append .tls.parameters "ssl" -}}
       {{- $_ := set $listenConfig "parameters" $parameters -}}
-      {{- $_ := set $listenConfig "address" (default "0.0.0.0" .address) -}}
-      {{- $tlsListen := (include "kong.singleListen" $listenConfig) -}}
-      {{- $unifiedListen = append $unifiedListen $tlsListen -}}
+      {{- $addresses := (default $defaultAddrs .addresses) -}}
+      {{- range $addresses -}}
+        {{- $_ := set $listenConfig "address" . -}}
+        {{- $tlsListen := (include "kong.singleListen" $listenConfig) -}}
+        {{- $unifiedListen = append $unifiedListen $tlsListen -}}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
 
@@ -289,18 +345,22 @@ Create KONG_STREAM_LISTEN string
 */}}
 {{- define "kong.streamListen" -}}
   {{- $unifiedListen := list -}}
+  {{- $defaultAddrs := (list "0.0.0.0" "[::]") -}}
   {{- range .stream -}}
     {{- $listenConfig := dict -}}
     {{- $listenConfig := merge $listenConfig . -}}
-    {{- $_ := set $listenConfig "address" "0.0.0.0" -}}
-    {{/* You set NGINX stream listens to UDP using a parameter due to historical reasons.
-         Our configuration is dual-purpose, for both the Service and listen string, so we
-         forcibly inject this parameter if that's the Service protocol. The default handles
-         configs that predate the addition of the protocol field, where we only supported TCP. */}}
-    {{- if (eq (default "TCP" .protocol) "UDP") -}}
-      {{- $_ := set $listenConfig "parameters" (append (default (list) .parameters) "udp") -}}
+    {{- $addresses := (default $defaultAddrs .addresses) -}}
+    {{- range $addresses -}}
+      {{- $_ := set $listenConfig "address" . -}}
+      {{/* You set NGINX stream listens to UDP using a parameter due to historical reasons.
+           Our configuration is dual-purpose, for both the Service and listen string, so we
+           forcibly inject this parameter if that's the Service protocol. The default handles
+           configs that predate the addition of the protocol field, where we only supported TCP. */}}
+      {{- if (eq (default "TCP" $listenConfig.protocol) "UDP") -}}
+        {{- $_ := set $listenConfig "parameters" (append (default (list) $listenConfig.parameters) "udp") -}}
+      {{- end -}}
+      {{- $unifiedListen = append $unifiedListen (include "kong.singleListen" $listenConfig ) -}}
     {{- end -}}
-    {{- $unifiedListen = append $unifiedListen (include "kong.singleListen" $listenConfig ) -}}
   {{- end -}}
 
   {{- $listenString := ($unifiedListen | join ", ") -}}
@@ -329,7 +389,18 @@ Return the admin API service name for service discovery
 {{- $gatewayDiscovery := .Values.ingressController.gatewayDiscovery -}}
 {{- if $gatewayDiscovery.enabled -}}
   {{- $adminApiService := $gatewayDiscovery.adminApiService -}}
-  {{- $_ := required ".ingressController.gatewayDiscovery.adminApiService has to be provided when .Values.ingressController.gatewayDiscovery.enabled is set to true"  $adminApiService -}}
+  {{- $adminApiServiceName := $gatewayDiscovery.adminApiService.name -}}
+  {{- $generateAdminApiService := $gatewayDiscovery.generateAdminApiService -}}
+
+  {{- if and $generateAdminApiService $adminApiService.name -}}
+    {{- fail (printf ".Values.ingressController.gatewayDiscovery.adminApiService and .Values.ingressController.gatewayDiscovery.generateAdminApiService must not be provided at the same time")  -}}
+  {{- end -}}
+
+  {{- if $generateAdminApiService -}}
+    {{- $adminApiServiceName = (printf "%s-%s" .Release.Name "gateway-admin") -}}
+  {{- else }}
+    {{- $_ := required ".ingressController.gatewayDiscovery.adminApiService.name has to be provided when .Values.ingressController.gatewayDiscovery.enabled is set to true"  $adminApiServiceName -}}
+  {{- end }}
 
   {{- if (semverCompare "< 2.9.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
   {{- fail (printf "Gateway discovery is available in controller versions 2.9 and up. Detected %s" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
@@ -340,9 +411,7 @@ Return the admin API service name for service discovery
   {{- end }}
 
   {{- $namespace := $adminApiService.namespace | default ( include "kong.namespace" . ) -}}
-  {{- $name := $adminApiService.name -}}
-  {{- $_ := required ".ingressController.gatewayDiscovery.adminApiService.name has to be provided when .Values.ingressController.gatewayDiscovery.enabled is set to true"  $name -}}
-  {{- printf "%s/%s" $namespace $name -}}
+  {{- printf "%s/%s" $namespace $adminApiServiceName -}}
 {{- else -}}
   {{- fail "Can't use gateway discovery when .Values.ingressController.gatewayDiscovery.enabled is set to false." -}}
 {{- end -}}
@@ -396,19 +465,34 @@ The name of the service used for the ingress controller's validation webhook
 {{ include "kong.fullname" . }}-validation-webhook
 {{- end -}}
 
+
+{{/*
+The name of the Service which will be used by the controller to update the Ingress status field.
+*/}}
+
+{{- define "kong.controller-publish-service" -}}
+{{- $proxyOverride := "" -}}
+  {{- if .Values.proxy.nameOverride -}}
+    {{- $proxyOverride = ( tpl .Values.proxy.nameOverride . ) -}}
+  {{- end -}}
+{{- (printf "%s/%s" ( include "kong.namespace" . ) ( default ( printf "%s-proxy" (include "kong.fullname" . )) $proxyOverride )) -}}
+{{- end -}}
+
 {{- define "kong.ingressController.env" -}}
 {{/*
     ====== AUTO-GENERATED ENVIRONMENT VARIABLES ======
 */}}
 
+
 {{- $autoEnv := dict -}}
   {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_TLS_SKIP_VERIFY" true -}}
-  {{- $_ := set $autoEnv "CONTROLLER_PUBLISH_SERVICE" (printf "%s/%s" ( include "kong.namespace" . ) ( .Values.proxy.nameOverride | default ( printf "%s-proxy" (include "kong.fullname" . )))) -}}
+  {{- $_ := set $autoEnv "CONTROLLER_PUBLISH_SERVICE" ( include "kong.controller-publish-service" . ) -}}
   {{- $_ := set $autoEnv "CONTROLLER_INGRESS_CLASS" .Values.ingressController.ingressClass -}}
   {{- $_ := set $autoEnv "CONTROLLER_ELECTION_ID" (printf "kong-ingress-controller-leader-%s" .Values.ingressController.ingressClass) -}}
 
   {{- if .Values.ingressController.admissionWebhook.enabled }}
-    {{- $_ := set $autoEnv "CONTROLLER_ADMISSION_WEBHOOK_LISTEN" (printf "0.0.0.0:%d" (int64 .Values.ingressController.admissionWebhook.port)) -}}
+    {{- $address := (default "0.0.0.0" .Values.ingressController.admissionWebhook.address) -}}
+    {{- $_ := set $autoEnv "CONTROLLER_ADMISSION_WEBHOOK_LISTEN" (printf "%s:%d" $address (int64 .Values.ingressController.admissionWebhook.port)) -}}
   {{- end }}
   {{- if (not (eq (len .Values.ingressController.watchNamespaces) 0)) }}
     {{- $_ := set $autoEnv "CONTROLLER_WATCH_NAMESPACE" (.Values.ingressController.watchNamespaces | join ",") -}}
@@ -502,6 +586,41 @@ The name of the service used for the ingress controller's validation webhook
 - name: {{ template "kong.fullname" . }}-tmp
   emptyDir:
     sizeLimit: {{ .Values.deployment.tmpDir.sizeLimit }}
+{{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
+- name: {{ template "kong.serviceAccountTokenName" . }}
+  {{- /* Due to GKE versions (e.g. v1.23.15-gke.1900) we need to handle pre-release part of the version as well.
+  See the related documentation of semver module that Helm depends on for semverCompare:
+  https://github.com/Masterminds/semver#working-with-prerelease-versions
+  Related Helm issue: https://github.com/helm/helm/issues/3810 */}}
+  {{- if semverCompare ">=1.20.0-0" .Capabilities.KubeVersion.Version }}
+  projected:
+    sources:
+    - serviceAccountToken:
+        expirationSeconds: 3607
+        path: token
+    - configMap:
+        items:
+        - key: ca.crt
+          path: ca.crt
+        name: kube-root-ca.crt
+    - downwardAPI:
+        items:
+        - fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.namespace
+          path: namespace
+  {{- else }}
+  secret:
+    secretName: {{ template "kong.serviceAccountTokenName" . }}
+    items:
+    - key: token
+      path: token
+    - key: ca.crt
+      path: ca.crt
+    - key: namespace
+      path: namespace
+  {{- end }}
+{{- end }}
 {{- if and ( .Capabilities.APIVersions.Has "cert-manager.io/v1" ) .Values.certificates.enabled -}}
 {{- if .Values.certificates.cluster.enabled }}
 - name: {{ include "kong.fullname" . }}-cluster-cert
@@ -724,6 +843,7 @@ The name of the service used for the ingress controller's validation webhook
   {{ toYaml .Values.containerSecurityContext | nindent 4 }}
   env:
   {{- include "kong.env" . | nindent 2 }}
+  {{- include "kong.envFrom" .Values.envFrom | nindent 2 }}
 {{/* TODO the prefix override is to work around https://github.com/Kong/charts/issues/295
      Note that we use args instead of command here to /not/ override the standard image entrypoint. */}}
   args: [ "/bin/bash", "-c", "export KONG_NGINX_DAEMON=on KONG_PREFIX=`mktemp -d` KONG_KEYRING_ENABLED=off; until kong start; do echo 'waiting for db'; sleep 1; done; kong stop"]
@@ -736,10 +856,22 @@ The name of the service used for the ingress controller's validation webhook
 
 {{/* effectiveVersion takes an image dict from values.yaml. if .effectiveSemver is set, it returns that, else it returns .tag */}}
 {{- define "kong.effectiveVersion" -}}
+{{- /* Because Kong Gateway enterprise uses versions with 4 segments and not 3 */ -}}
+{{- /* as semver does, we need to account for that here by extracting */ -}}
+{{- /* first 3 segments for comparison */ -}}
 {{- if .effectiveSemver -}}
-{{- .effectiveSemver -}}
+  {{- if regexMatch "^[0-9]+.[0-9]+.[0-9]+" .effectiveSemver -}}
+  {{- regexFind "^[0-9]+.[0-9]+.[0-9]+" .effectiveSemver -}}
+  {{- else -}}
+  {{- .effectiveSemver -}}
+  {{- end -}}
 {{- else -}}
-{{- (trimSuffix "-redhat" .tag) -}}
+  {{- $tag := (trimSuffix "-redhat" .tag) -}}
+  {{- if regexMatch "^[0-9]+.[0-9]+.[0-9]+" .tag -}}
+  {{- regexFind "^[0-9]+.[0-9]+.[0-9]+" .tag -}}
+  {{- else -}}
+  {{- .tag -}}
+  {{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -764,6 +896,9 @@ The name of the service used for the ingress controller's validation webhook
     containerPort: 10255
     protocol: TCP
   {{- end }}
+  - name: cstatus
+    containerPort: 10254
+    protocol: TCP
   env:
   - name: POD_NAME
     valueFrom:
@@ -776,6 +911,7 @@ The name of the service used for the ingress controller's validation webhook
         apiVersion: v1
         fieldPath: metadata.namespace
 {{- include "kong.ingressController.env" .  | indent 2 }}
+{{ include "kong.envFrom" .Values.ingressController.envFrom | indent 2 }}
   image: {{ include "kong.getRepoTag" .Values.ingressController.image }}
   imagePullPolicy: {{ .Values.image.pullPolicy }}
 {{/* disableReadiness is a hidden setting to drop this block entirely for use with a debugger
@@ -852,13 +988,11 @@ the template that it itself is using form the above sections.
 {{- end -}}
 
 {{- with .Values.admin -}}
-  {{- $address := "0.0.0.0" -}}
-  {{- if (not .enabled) -}}
-    {{- $address = "127.0.0.1" -}}
-  {{- end -}}
   {{- $listenConfig := dict -}}
   {{- $listenConfig := merge $listenConfig . -}}
-  {{- $_ := set $listenConfig "address" $address -}}
+  {{- if (and (not (hasKey . "addresses")) (not .enabled)) -}}
+    {{- $_ := set $listenConfig "addresses" (list "127.0.0.1" "[::1]") -}}
+  {{- end -}}
   {{- $_ := set $autoEnv "KONG_ADMIN_LISTEN" (include "kong.listen" $listenConfig) -}}
 
   {{- if or .tls.client.secretName .tls.client.caBundle -}}
@@ -902,6 +1036,7 @@ the template that it itself is using form the above sections.
 {{- end -}}
 
 {{- if .Values.admin.ingress.enabled }}
+  {{- $_ := set $autoEnv "KONG_ADMIN_GUI_API_URL" (include "kong.ingress.serviceUrl" .Values.admin.ingress) -}}
   {{- $_ := set $autoEnv "KONG_ADMIN_API_URI" (include "kong.ingress.serviceUrl" .Values.admin.ingress) -}}
 {{- end -}}
 
@@ -1029,7 +1164,9 @@ the template that it itself is using form the above sections.
 {{- end }}
 {{- end }}
 
+{{- if (.Values.plugins) }}
 {{- $_ := set $autoEnv "KONG_PLUGINS" (include "kong.plugins" .) -}}
+{{- end }}
 
 {{/*
     ====== USER-SET ENVIRONMENT VARIABLES ======
@@ -1106,6 +1243,7 @@ Environment variables are sorted alphabetically
   imagePullPolicy: {{ .Values.waitImage.pullPolicy }}
   env:
   {{- include "kong.no_daemon_env" . | nindent 2 }}
+  {{- include "kong.envFrom" .Values.envFrom | nindent 2 }}
   command: [ "bash", "/wait_postgres/wait.sh" ]
   volumeMounts:
   - name: {{ template "kong.fullname" . }}-bash-wait-for-postgres
@@ -1139,7 +1277,6 @@ Kubernetes namespace-scoped resources it uses to build Kong configuration.
 
 Collectively, these are built from:
 kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac?ref=main
-kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac/knative?ref=main
 kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac/gateway?ref=main
 
 However, there is no way to generate the split between cluster and namespaced
@@ -1147,6 +1284,61 @@ role sets used in the charts. Updating these requires separating out cluster
 resource roles into their separate templates.
 */}}
 {{- define "kong.kubernetesRBACRules" -}}
+{{- if and (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image))
+           (contains (print .Values.ingressController.env.feature_gates) "KongServiceFacade=true") }}
+- apiGroups:
+  - incubator.ingress-controller.konghq.com
+  resources:
+  - kongservicefacades
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - incubator.ingress-controller.konghq.com
+  resources:
+  - kongservicefacades/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
+{{- if (semverCompare ">= 3.0.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongupstreampolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongupstreampolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
+{{- if (semverCompare ">= 2.11.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongconsumergroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongconsumergroups/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 {{- if (semverCompare "< 2.10.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
 - apiGroups:
   - ""
@@ -1305,7 +1497,7 @@ resource roles into their separate templates.
   - get
   - patch
   - update
-{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") }}
+{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1")}}
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
@@ -1455,6 +1647,24 @@ resource roles into their separate templates.
   - get
   - list
   - watch
+{{- if (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - konglicenses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - konglicenses/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -1463,6 +1673,24 @@ of a Role or ClusterRole) that provide the ingress controller access to the
 Kubernetes Cluster-scoped resources it uses to build Kong configuration.
 */}}
 {{- define "kong.kubernetesRBACClusterRules" -}}
+{{- if (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongvaults
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongvaults/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 - apiGroups:
   - configuration.konghq.com
   resources:
@@ -1488,7 +1716,7 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   - list
   - watch
 {{- end }}
-{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") }}
+{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1")}}
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
@@ -1504,6 +1732,14 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   verbs:
   - get
   - update
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 - apiGroups:
   - networking.k8s.io
@@ -1515,22 +1751,56 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   - watch
 {{- end -}}
 
+{{- define "kong.autoscalingVersion" -}}
+{{- if (.Capabilities.APIVersions.Has "autoscaling/v2") -}}
+autoscaling/v2
+{{- else if (.Capabilities.APIVersions.Has "autoscaling/v2beta2") -}}
+autoscaling/v2beta2
+{{- else -}}
+autoscaling/v1
+{{- end -}}
+{{- end -}}
+
+{{- define "kong.policyVersion" -}}
+{{- if (.Capabilities.APIVersions.Has "policy/v1beta1" ) -}}
+policy/v1beta1
+{{- else -}}
+{{- fail (printf "Cluster doesn't have policy/v1beta1 API." ) }}
+{{- end -}}
+{{- end -}}
+
+{{- define "kong.renderTpl" -}}
+    {{- if typeIs "string" .value }}
+{{- tpl .value .context }}
+    {{- else }}
+{{- tpl (.value | toYaml) .context }}
+    {{- end }}
+{{- end -}}
+
 {{- define "kong.ingressVersion" -}}
-{{- if (.Capabilities.APIVersions.Has "networking.k8s.io/v1/Ingress") -}}
+{{- if (.Capabilities.APIVersions.Has "networking.k8s.io/v1") -}}
 networking.k8s.io/v1
-{{- else if (.Capabilities.APIVersions.Has "networking.k8s.io/v1beta1/Ingress") -}}
+{{- else if (.Capabilities.APIVersions.Has "networking.k8s.io/v1beta1") -}}
 networking.k8s.io/v1beta1
 {{- else -}}
 extensions/v1beta1
 {{- end -}}
 {{- end -}}
 
-{{- define "kong.autoscalingVersion" -}}
-{{- if (.Capabilities.APIVersions.Has "autoscaling/v2/HorizontalPodAutoscaler") -}}
-autoscaling/v2
-{{- else if (.Capabilities.APIVersions.Has "autoscaling/v2beta2/HorizontalPodAutoscaler") -}}
-autoscaling/v2beta2
-{{- else -}}
-autoscaling/v1
+{{- define "kong.proxy.compatibleReadiness" -}}
+{{- $proxyReadiness := .Values.readinessProbe -}}
+{{- if (or (semverCompare "< 3.3.0" (include "kong.effectiveVersion" .Values.image)) (and .Values.ingressController.enabled (semverCompare "< 2.11.0" (include "kong.effectiveVersion" .Values.ingressController.image)))) -}}
+    {{- if (eq $proxyReadiness.httpGet.path "/status/ready") -}}
+        {{- $_ := set $proxyReadiness.httpGet "path" "/status" -}}
+    {{- end -}}
 {{- end -}}
+{{- (toYaml $proxyReadiness) -}}
+{{- end -}}
+
+{{- define "kong.envFrom" -}}
+  {{- if (gt (len .) 0) -}}
+envFrom:
+{{- toYaml . | nindent 2 -}}
+  {{- else -}}
+  {{- end -}}
 {{- end -}}

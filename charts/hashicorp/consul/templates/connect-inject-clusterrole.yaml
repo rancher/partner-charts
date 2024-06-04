@@ -28,11 +28,16 @@ rules:
   - meshservices
   - samenessgroups
   - controlplanerequestlimits
+  - routeretryfilters
+  - routetimeoutfilters
+  - routeauthfilters
+  - gatewaypolicies
   {{- if .Values.global.peering.enabled }}
   - peeringacceptors
   - peeringdialers
   {{- end }}
   - jwtproviders
+  - routeauthfilters
   verbs:
   - create
   - delete
@@ -61,10 +66,92 @@ rules:
   - peeringdialers/status
   {{- end }}
   - jwtproviders/status
+  - routeauthfilters/status
+  - gatewaypolicies/status
   verbs:
   - get
   - patch
   - update
+{{- if (mustHas "resource-apis" .Values.global.experiments) }}
+- apiGroups:
+    - auth.consul.hashicorp.com
+  resources:
+    - trafficpermissions
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - auth.consul.hashicorp.com
+  resources:
+    - trafficpermissions/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
+    - mesh.consul.hashicorp.com
+  resources:
+    - gatewayclassconfigs
+    - gatewayclasses
+    - meshconfigurations
+    - grpcroutes
+    - httproutes
+    - meshgateways
+    - tcproutes
+    - proxyconfigurations
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - mesh.consul.hashicorp.com
+  resources:
+    - gatewayclassconfigs/status
+    - gatewayclasses/status
+    - meshconfigurations/status
+    - grpcroutes/status
+    - httproutes/status
+    - meshgateways/status
+    - tcproutes/status
+    - proxyconfigurations/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
+    - multicluster.consul.hashicorp.com
+  resources:
+    - exportedservices
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - multicluster.consul.hashicorp.com
+  resources:
+    - exportedservices/status
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+{{- end }}
 - apiGroups: [ "" ]
   resources: [ "secrets", "serviceaccounts", "endpoints", "services", "namespaces", "nodes" ]
   verbs:
@@ -105,6 +192,7 @@ rules:
   - admissionregistration.k8s.io
   resources:
   - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
   verbs:
   - get
   - list
@@ -186,4 +274,14 @@ rules:
     - "get"
     - "list"
     - "watch"
+{{- if .Values.global.openshift.enabled }}
+- apiGroups:
+    - security.openshift.io
+  resources:
+    - securitycontextconstraints
+  resourceNames:
+    - {{ .Values.connectInject.apiGateway.managedGatewayClass.openshiftSCCName }}
+  verbs:
+    - use
+  {{- end }}
 {{- end }}

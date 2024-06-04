@@ -10,6 +10,95 @@ Manual edits are supported only below '## Change Log' and should be used
 exclusively to fix incorrect entries and not to add new ones.
 
 ## Change Log
+# v1.16.25
+### New Features
+* **sysdig,hostAnalyzer** [a8e1124b](https://github.com/sysdiglabs/charts/commit/a8e1124bfb668e9f9d04095c26d6ada0235cda04): Update legacy engine HostAnalyzer to v0.1.19 components with security updates ([#1601](https://github.com/sysdiglabs/charts/issues/1601))
+# v1.16.24
+### Chores
+* **sysdig, node-analyzer** [4a1a9a1d](https://github.com/sysdiglabs/charts/commit/4a1a9a1d7feaeb4ee04b2c17e4b84d8440cf6901): bump sysdig/vuln-runtime-scanner to v1.6.6 ([#1526](https://github.com/sysdiglabs/charts/issues/1526))
+# v1.16.23
+### New Features
+* **sysdig** [048837fc](https://github.com/sysdiglabs/charts/commit/048837fcb04b48c5dc584d13f5a005fdb75fd230): Update legacy engine NIA component with security updates ([#1489](https://github.com/sysdiglabs/charts/issues/1489))
+# v1.16.22
+### Chores
+* **sysdig** [d9d16526](https://github.com/sysdiglabs/charts/commit/d9d165266542cc04e9aaccfdbf5242bd8562b49f): Update HostAnalyzer to 0.1.18 components with security updates ([#1486](https://github.com/sysdiglabs/charts/issues/1486))
+# v1.16.21
+### Chores
+* **sysdig, node-analyzer** [6c7c27bf](https://github.com/sysdiglabs/charts/commit/6c7c27bf845b30af0eb5a4cb8f5fe330923d564f): bump sysdig/vuln-runtime-scanner to v1.6.4 [SSPROD-3285] ([#1477](https://github.com/sysdiglabs/charts/issues/1477))
+# v1.16.20
+### Bug Fixes
+* **agent,kspm-collector,node-analyzer,sysdig** [f378d192](https://github.com/sysdiglabs/charts/commit/f378d1922d0f21f5936c6ed872e6538536ccf1f2): whitespace errors ([#1436](https://github.com/sysdiglabs/charts/issues/1436))
+# v1.16.19
+### New Features
+* [629c5f06](https://github.com/sysdiglabs/charts/commit/629c5f06ccab168b9460ec1fa6564aed1a54c015): release agent 12.17.1 ([#1430](https://github.com/sysdiglabs/charts/issues/1430))
+# v1.16.18
+### Chores
+* **sysdig, node-analyzer** [2c6d3d0b](https://github.com/sysdiglabs/charts/commit/2c6d3d0bd9d1750d6f34c0bd7b3e2689482515b6): bump sysdig/vuln-runtime-scanner to v1.6.3 ([#1428](https://github.com/sysdiglabs/charts/issues/1428))
+# v1.16.17
+### New Features
+* [eda0e7cd](https://github.com/sysdiglabs/charts/commit/eda0e7cdf12c0b40f0bb77c0a16e0fd5f0173256): release agent 12.17.0 ([#1410](https://github.com/sysdiglabs/charts/issues/1410))
+# v1.16.16
+### Chores
+* **sysdig, node-analyzer** [84cfe9a5](https://github.com/sysdiglabs/charts/commit/84cfe9a5e6f989a9a42b14b3d16597436f23b4b1): update legacy nodeImageAnalyzer (0.1.29) and hostImageAnalyzer (0.1.17) ([#1407](https://github.com/sysdiglabs/charts/issues/1407))
+# v1.16.15
+### New Features
+* [9fc9ddd4](https://github.com/sysdiglabs/charts/commit/9fc9ddd48e6cb2c3ea334bfc10048ffc15646fd2): release agent 12.16.3 ([#1395](https://github.com/sysdiglabs/charts/issues/1395))
+# v1.16.14
+### New Features
+* [45e2f7a9](https://github.com/sysdiglabs/charts/commit/45e2f7a96c565bfe0687acaacf350e81f94a23bb): release agent 12.16.2 ([#1381](https://github.com/sysdiglabs/charts/issues/1381))
+# v1.16.13
+### Chores
+* **sysdig, nodel-analyzer** [44e1c6a3](https://github.com/sysdiglabs/charts/commit/44e1c6a385faf3bdcdd0cb8427254338c68254c7): bump sysdig/vuln-runtime-scanner to v1.5.7 ([#1361](https://github.com/sysdiglabs/charts/issues/1361))
+# v1.16.12
+### New Features
+* [b2146b31](https://github.com/sysdiglabs/charts/commit/b2146b31e56eb00a6dc270bbb9bb530a3ee69f4c): release agent 12.16.1 ([#1353](https://github.com/sysdiglabs/charts/issues/1353))
+# v1.16.11
+### New Features
+* **agent,sysdig** [8aff7e6a](https://github.com/sysdiglabs/charts/commit/8aff7e6adcccd7ebbebabff7f7d89e5125fb8f46): use `updatecli` for agent version bumps during release ([#1338](https://github.com/sysdiglabs/charts/issues/1338))
+# v1.16.10
+### Chores
+* **sysdig, node-analyzer** [6b2c2efd](https://github.com/sysdiglabs/charts/commit/6b2c2efd7eccb16ad74df29d75daef664e2df9f7): bump sysdig/vuln-runtime-scanner to v1.5.6 ([#1331](https://github.com/sysdiglabs/charts/issues/1331))
+# v1.16.9
+### Chores
+* **sysdig, node-analyzer** [0ba5baa3](https://github.com/sysdiglabs/charts/commit/0ba5baa3e690be1c2c3a92c4928558efffb33539): bump sysdig/vuln-runtime-scanner to v1.5.5 ([#1320](https://github.com/sysdiglabs/charts/issues/1320))
+
+    * * Runtime Scanner bumped to 1.5.5
+     * Fixed a bug that could cause the Runtime Scanner to perform unneeded rescans
+# v1.16.8
+### Chores
+* **sysdig, node-analyzer** [17d2e503](https://github.com/sysdiglabs/charts/commit/17d2e50326f587b154f43beb706627416ca6a4b6): bump sysdig/vuln-runtime-scanner to v1.5.4 ([#1305](https://github.com/sysdiglabs/charts/issues/1305))
+
+    * * Runtime Scanner bumped to 1.5.4
+     * Fixed a misbehavior of the image layer analyzer, which could lead to non-existing software artifacts being reported in the SBOM as a result of incorrect handling of opaque directories (ESC-3511).
+# v1.16.7
+### Chores
+* **sysdig** [b38bf394](https://github.com/sysdiglabs/charts/commit/b38bf394fc121bffe546def326a5aaf019f0ebd7): bump agent version to 12.16.0 ([#1291](https://github.com/sysdiglabs/charts/issues/1291))
+# v1.16.6
+### New Features
+* **node-analyzer** [0ad8696a](https://github.com/sysdiglabs/charts/commit/0ad8696a0b38d2564121e6e798589f568e3547a8): Release eveconnector 1.1.2 ([#1280](https://github.com/sysdiglabs/charts/issues/1280))
+# v1.16.5
+### Chores
+* **sysdig,node-analyzer** [00316d04](https://github.com/sysdiglabs/charts/commit/00316d042378fa75ac0ed9277b547236766ce816): bumped RuntimeScanner to 1.5.2 version ([#1275](https://github.com/sysdiglabs/charts/issues/1275))
+
+    * * Added env var flag for internal timeout on scheduled operations
+* Added fallback when connection to detected container runtime fails
+* Security updates (July 2023). Fixed CVE
+  *  CVE-2023-33199
+# v1.16.4
+# v1.16.3
+### New Features
+* **sysdig** [ec78a545](https://github.com/sysdiglabs/charts/commit/ec78a545637a86aa98c5cef41010c8012bccdfc7): updated legacy engine NIA compoment with latest release. ([#1266](https://github.com/sysdiglabs/charts/issues/1266))
+
+    * * Resolves possible compatibility issues with Kubernetes 1.26+ (CRI-O container runtime)
+* Security updates (July 2023). Fixed CVEs
+  *  CVE-2020-24736
+  *  CVE-2023-1667
+  *  CVE-2023-1667
+  *  CVE-2023-2283
+  *  CVE-2023-2283
+  *  CVE-2023-26604
+  *  CVE-2023-26604
+  *  CVE-2023-26604
 # v1.16.2
 ### Chores
 * **sysdig** [f32bc89b](https://github.com/sysdiglabs/charts/commit/f32bc89be0587f6337a41b56cc5f7de715447d7d): bump agent version to 12.15.0 ([#1199](https://github.com/sysdiglabs/charts/issues/1199))

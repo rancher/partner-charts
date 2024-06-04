@@ -8,7 +8,7 @@ the helm chart is installed.
 
 ## Prerequisites
 
-- Kubernetes 1.16+
+- Kubernetes 1.20+
 - Helm 3+
 - Appropriate [network and firewall configuration](https://docs.speedscale.com/reference/networking) for Speedscale cloud and webhook traffic
 
@@ -101,42 +101,6 @@ _See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documen
 A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an
 incompatible breaking change needing manual actions.
 
-### Upgrade to 1.3.18
-
-```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.3.18/templates/crds/trafficreplays.yaml
-```
-
-### Upgrade to 1.1.0
-
-BEFORE UPGRADE:
-
-```bash
-kubectl -n speedscale delete secret speedscale-gcrcreds speedscale-apikey
-kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io speedscale-operator
-kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io speedscale-operator
-```
-
-```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.1.0/templates/crds/trafficreplays.yaml
-```
-
-### Upgrade to 1.0.0
-
-```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/1.0.0/templates/crds/trafficreplays.yaml
-```
-
-### Upgrade to 0.12.3
-
-```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/speedscale/operator-helm/main/0.12.3/templates/crds/trafficreplays.yaml
-```
-
-### From version below 0.12.0 to 0.12.x
-This upgrades speedscale-operator to v0.12.x.
-
-Uninstall the previous release and install the chart from scratch.
 
 ## Help
 

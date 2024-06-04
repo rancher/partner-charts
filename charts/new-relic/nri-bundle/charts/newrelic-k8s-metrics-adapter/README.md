@@ -71,7 +71,7 @@ config:
 Then, to install this chart, run the following command:
 
 ```sh
-helm upgrade --install [release-name] newrelic/newrelic-k8s-metrics-adapter --values [values file path]
+helm upgrade --install [release-name] newrelic-k8s-metrics-adapter/newrelic-k8s-metrics-adapter --values [values file path]
 ```
 
 Once deployed the metric `nginx_average_requests` will be available to use by any HPA. This is and example of an HPA yaml using this metric:
@@ -134,12 +134,6 @@ resources:
 
 ## Maintainers
 
-* [nserrino](https://github.com/nserrino)
-* [philkuz](https://github.com/philkuz)
-* [htroisi](https://github.com/htroisi)
 * [juanjjaramillo](https://github.com/juanjjaramillo)
-* [svetlanabrennan](https://github.com/svetlanabrennan)
-* [nrepai](https://github.com/nrepai)
 * [csongnr](https://github.com/csongnr)
-* [vuqtran88](https://github.com/vuqtran88)
-* [xqi-nr](https://github.com/xqi-nr)
+* [dbudziwojskiNR](https://github.com/dbudziwojskiNR)

@@ -58,11 +58,14 @@ rules:
     verbs:
       - get
       - list
-  - apiGroups: ["spiffeid.spiffe.io"]
-    resources: ["spiffeids"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["list", "delete"]
+  - apiGroups: ["spire.spiffe.io"]
+    resources: ["clusterspiffeids"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-  - apiGroups: ["spiffeid.spiffe.io"]
-    resources: ["spiffeids/status"]
+  - apiGroups: ["spire.spiffe.io"]
+    resources: ["clusterspiffeids/status"]
     verbs: ["get", "patch", "update"]
 
 ---
@@ -92,12 +95,14 @@ data:
           continue
       fi
       echo "finding and removing spiffeids in namespace $ns ..."
-      for item in $(kubectl get spiffeid.spiffeid.spiffe.io -n $ns -o name); do
+      for item in $(kubectl get clusterspiffeids.spire.spiffe.io -n $ns -o name); do
         echo "removing item $item"
         kubectl patch $item -p '{"metadata":{"finalizers":null}}' --type=merge -n $ns
         kubectl delete $item --ignore-not-found -n $ns
       done
     done
+    echo "Deleting services from kubeslice-system namespace"
+    kubectl delete svc --all --ignore-not-found -n kubeslice-system
 
 ---
 apiVersion: batch/v1

@@ -4,6 +4,10 @@ metadata:
   name: {{ include "kuma.name" . }}-control-plane
   namespace: {{ .Release.Namespace }}
   labels: {{ include "kuma.cpLabels" . | nindent 4 }}
+{{- with .Values.controlPlane.serviceAccountAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
 {{- with .Values.global.imagePullSecrets }}
 imagePullSecrets:
   {{- range . }}
@@ -25,13 +29,20 @@ rules:
       - pods
       - configmaps
       - nodes
-  {{- if .Values.experimental.gatewayAPI }}
+{{- if .Values.controlPlane.supportGatewaySecretsInAllNamespaces }}
       - secrets
-  {{- end }}
+{{- end }}
     verbs:
       - get
       - list
       - watch
+  - apiGroups:
+    - ""
+    resources:
+      - secrets
+    verbs:
+    - list
+    - watch
   - apiGroups:
       - "apps"
     resources:
@@ -140,11 +151,16 @@ rules:
       - meshgateways
       - meshgatewayroutes
       - meshgatewayinstances
-  {{- if .Values.experimental.gatewayAPI }}
       - meshgatewayconfigs
-  {{- end }}
-  {{- range $policy, $empty := .Values.plugins.policies }}
+  {{- range $policy, $v := .Values.plugins.policies }}
+  {{- if $v }}
       - {{ $policy }}
+  {{- end}}
+  {{- end}}
+  {{- range $policy, $v := .Values.plugins.resources }}
+  {{- if $v }}
+      - {{ $policy }}
+  {{- end}}
   {{- end}}
     verbs:
       - get
@@ -192,7 +208,6 @@ rules:
       - get
       - list
       - watch
-  {{- if not .Values.legacy.cni.enabled }}
   - apiGroups:
       - ""
     resources:
@@ -205,7 +220,6 @@ rules:
       - pods
     verbs:
       - list
-  {{- end }}
   {{- end }}
   # validate k8s token before issuing mTLS cert
   - apiGroups:

@@ -50,6 +50,7 @@ serviceMonitor:
   endpoints:
     - port: http
       path: /api-server/actuator/prometheus
+      honorLabels: true
       relabelings:
         - sourceLabels: [job]
           regex: "{{.Release.Name}}-server"
@@ -87,6 +88,18 @@ serviceMonitor:
 ## all of the Asserts Services independent of your Prometheus.
 ##
 selfScrape: true
+
+## Asserts License File Secret
+##
+## When this is set, Asserts is assumed to be running
+## in airgapped mode. This references a Secret in the cluster
+## which contains the license file to be mounted
+##
+## to create the secret run this before setting licenseFileSecret and installing:
+##
+## kubectl create secret generic asserts-license --from-file=AssertsActivationFile.skm
+##
+licenseFileSecret: ""
 
 ## Asserts Url
 ##
@@ -142,7 +155,7 @@ server:
     repository: asserts/asserts-server
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.2.670
+    tag: v0.2.769-1
 
   resources:
     requests:
@@ -239,6 +252,8 @@ server:
     ## When set, will use the existing PVC for persistence
     existingClaim: ""
 
+  awsExporterEnabled: false
+
 ## Asserts authorization server configuration
 ##
 authorization:
@@ -251,7 +266,7 @@ authorization:
     repository: asserts/authorization
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.2.670
+    tag: v0.2.769
 
   resources:
     requests:
@@ -317,9 +332,11 @@ ui:
     repository: asserts/asserts-ui
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v0.1.1251
+    tag: v0.1.1280
 
   imagePullSecrets: []
+
+  containerPort: 8080
 
   service:
     type: ClusterIP
@@ -408,7 +425,7 @@ grafana:
     repository: asserts/grafana
     pullPolicy: IfNotPresent
     ## Overrides the image tag whose default is the chart appVersion.
-    tag: v1.0.230
+    tag: v1.0.235
 
   resources:
     requests:
@@ -421,6 +438,10 @@ grafana:
     type: RollingUpdate
     rollingUpdate: {}
 
+  containerSecurityContext:
+    enabled: true
+    allowPrivilegeEscalation: false
+
   extraContainers:
     - name: custom-dashboards-sidecar
       image: kiwigrid/k8s-sidecar:1.21.0
@@ -430,6 +451,8 @@ grafana:
           value: custom-grafana-dashboards
         - name: FOLDER
           value: /var/lib/grafana/dashboards/custom
+      securityContext:
+        allowPrivilegeEscalation: false
       volumeMounts:
         - name: custom-dashboards
           mountPath: /var/lib/grafana/dashboards/custom
@@ -812,12 +835,16 @@ redisgraph:
       requests:
         cpu: 20m
         memory: 128Mi
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
 
   sentinel:
     enabled: false
 
   metrics:
     enabled: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
 
 
 ## RedisSearch configuration
@@ -850,12 +877,16 @@ redisearch:
       requests:
         cpu: 10m
         memory: 50Mi
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
 
   sentinel:
     enabled: false
 
   metrics:
     enabled: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
 
 
 ## Alertmanager configuration
@@ -884,9 +915,17 @@ alertmanager:
       - ReadWriteOnce
     size: 100Mi
 
+  securityContext:
+    allowPrivilegeEscalation: false
+
   extraArgs:
     cluster.listen-address: null
 
+  # When it is desired to use a custom Alertmanager configmap
+  # set useAssertsDefaultConfig to false and existinConfigmap to
+  # the name of the configmap to be used. Leaving the default values
+  # will use the templated configuration seen in templates/config/alertmanager-configmap.yaml
+  useAssertsDefaultConfig: true
   existingConfigMap: asserts-alertmanager
 
   configmapReload:
@@ -1043,9 +1082,13 @@ postgres:
           create extension IF NOT EXISTS pg_stat_statements;
           select * FROM pg_extension;
           EOF
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
 
   metrics:
     enabled: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
 
 ## eBPF probe configuration
 ## ref: https://github.com/asserts/helm-charts/blob/master/charts/ebpf-probe/values.yaml
@@ -1081,3 +1124,6 @@ ebpfProbe:
     includeOnly:
 
     includeExternal: false
+    reportObserved: true
+    reportActive: false
+    inactiveSeconds: 300

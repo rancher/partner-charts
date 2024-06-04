@@ -1,4 +1,5 @@
-{{- if .Values.rbac.enabled -}}
+{{- if and .Values.rbac.enabled (or .Values.providers.kubernetesIngress.enabled (not .Values.rbac.namespaced)) -}}
+{{- if not (and .Values.rbac.namespaced .Values.providers.kubernetesIngress.disableIngressClassLookup) -}}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -28,7 +29,17 @@ rules:
     resources:
       - services
       - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
       - secrets
+    {{- if gt (len .Values.rbac.secretResourceNames) 0 }}
+    resourceNames: {{ .Values.rbac.secretResourceNames }}
+    {{- end }}
     verbs:
       - get
       - list
@@ -45,17 +56,17 @@ rules:
 {{- if .Values.providers.kubernetesCRD.enabled }}
   - apiGroups:
       - traefik.io
-      - traefik.containo.us
     resources:
       - ingressroutes
       - ingressroutetcps
       - ingressrouteudps
       - middlewares
       - middlewaretcps
+      - serverstransports
+      - serverstransporttcps
       - tlsoptions
       - tlsstores
       - traefikservices
-      - serverstransports
     verbs:
       - get
       - list
@@ -85,6 +96,7 @@ rules:
       - gatewayclasses
       - gateways
       - httproutes
+      - referencegrants
       - tcproutes
       - tlsroutes
     verbs:
@@ -103,4 +115,97 @@ rules:
       - update
 {{- end -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.hub.token }}
+  - apiGroups:
+      - hub.traefik.io
+    resources:
+      - accesscontrolpolicies
+      - apiaccesses
+      - apiportals
+      - apiratelimits
+      - apis
+      - apiversions
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - pods
+    verbs:
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - pods
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - create
+      - delete
+      - deletecollection
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
 {{- end -}}

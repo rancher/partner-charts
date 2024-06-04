@@ -60,6 +60,11 @@ deployment:
   # Use a DaemonSet controller instead of a Deployment controller
   daemonset: false
   hostNetwork: false
+  # Set the Deployment's spec.template.hostname field.
+  # This propagates to Kong API endpoints that report
+  # the hostname, such as the admin API root and hybrid mode
+  # /clustering/data-planes endpoint
+  hostname: ""
   # kong_prefix empty dir size
   prefixDir:
     sizeLimit: 256Mi
@@ -86,7 +91,7 @@ env:
   database: "off"
   # the chart uses the traditional router (for Kong 3.x+) because the ingress
   # controller generates traditional routes. if you do not use the controller,
-  # you may set this to "traditional_compatible" or "expression" to use the new
+  # you may set this to "traditional_compatible" or "expressions" to use the new
   # DSL-based router
   router_flavor: "traditional"
   nginx_worker_processes: "2"
@@ -115,17 +120,23 @@ env:
 #         name: api_key
 #   client_name: testClient
 
+# Load all ConfigMap or Secret keys as environment variables:
+# https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+envFrom: []
+
 # This section can be used to configure some extra labels that will be added to each Kubernetes object generated.
 extraLabels: {}
 
 # Specify Kong's Docker image and repository details here
 image:
   repository: kong
-  tag: "3.3"
+  tag: "3.6"
   # Kong Enterprise
   # repository: kong/kong-gateway
-  # tag: "3.3"
+  # tag: "3.5"
 
+  # Specify a semver version if your image tag is not one (e.g. "nightly")
+  effectiveSemver:
   pullPolicy: IfNotPresent
   ## Optionally specify an array of imagePullSecrets.
   ## Secrets must be manually created in the namespace.
@@ -306,6 +317,10 @@ proxy:
     parameters:
     - http2
 
+    # Specify the Service's TLS port's appProtocol. This can be useful when integrating with
+    # external load balancers that require the `appProtocol` field to be set (e.g. GCP).
+    appProtocol: ""
+
   # Define stream (TCP) listen
   # To enable, remove "[]", uncomment the section below, and select your desired
   # ports and parameters. Listens are dynamically named after their containerPort,
@@ -334,18 +349,46 @@ proxy:
     # Enable/disable exposure using ingress.
     enabled: false
     ingressClassName:
-    # Ingress hostname
-    # TLS secret name.
-    # tls: kong-proxy.example.com-tls
-    hostname:
     # To specify annotations or labels for the ingress, add them to the respective
     # "annotations" or "labels" dictionaries below.
     annotations: {}
     labels: {}
-    # Ingress path.
+    # Ingress hostname
+    hostname:
+    # Ingress path (when used with hostname above).
     path: /
-    # Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
+    # Each path in an Ingress is required to have a corresponding path type (when used with hostname above). (ImplementationSpecific/Exact/Prefix)
     pathType: ImplementationSpecific
+    # Ingress hosts. Use this instead of or in combination with hostname to specify multiple ingress host configurations
+    hosts: []
+    # - host: kong-proxy.example.com
+    #   paths:
+    #   # Ingress path.
+    #   - path: /*
+    #   # Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
+    #     pathType: ImplementationSpecific
+    # - host: kong-proxy-other.example.com
+    #   paths:
+    #   # Ingress path.
+    #   - path: /other
+    #   # Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
+    #     pathType: ImplementationSpecific
+    #     backend:
+    #       service:
+    #         name: kong-other-proxy
+    #         port:
+    #           number: 80
+    #
+    # TLS secret(s)
+    # tls: kong-proxy.example.com-tls
+    # Or if multiple hosts/secrets needs to be configured:
+    # tls:
+    # - secretName: kong-proxy.example.com-tls
+    #   hosts:
+    #   - kong-proxy.example.com
+    # - secretName: kong-proxy-other.example.com-tls
+    #   hosts:
+    #   - kong-proxy-other.example.com
 
   # Optionally specify a static load balancer IP.
   # loadBalancerIP:
@@ -480,13 +523,13 @@ dblessConfig:
 # -----------------------------------------------------------------------------
 
 # Kong Ingress Controller's primary purpose is to satisfy Ingress resources
-# created in k8s.  It uses CRDs for more fine grained control over routing and
+# created in k8s. It uses CRDs for more fine grained control over routing and
 # for Kong specific configuration.
 ingressController:
   enabled: true
   image:
     repository: kong/kubernetes-ingress-controller
-    tag: "2.10"
+    tag: "3.1"
     # Optionally set a semantic version for version-gated features. This can normally
     # be left unset. You only need to set this if your tag is not a semver string,
     # such as when you are using a "next" tag. Set this to the effective semantic
@@ -497,6 +540,7 @@ ingressController:
 
   gatewayDiscovery:
     enabled: false
+    generateAdminApiService: false
     adminApiService:
       namespace: ""
       name: ""
@@ -529,6 +573,10 @@ ingressController:
   # customEnv:
   #   TZ: "Europe/Berlin"
 
+  # Load all ConfigMap or Secret keys as environment variables:
+  # https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+  envFrom: []
+
   admissionWebhook:
     enabled: true
     failurePolicy: Ignore
@@ -545,6 +593,8 @@ ingressController:
     service:
       # Specify custom labels for the validation webhook service.
       labels: {}
+    # Tune the default Kubernetes timeoutSeconds of 10 seconds
+    # timeoutSeconds: 10
 
   ingressClass: kong
   # annotations for IngressClass resource (Kubernetes 1.18+)
@@ -663,7 +713,7 @@ postgresql:
   image:
     # use postgres < 14 until is https://github.com/Kong/kong/issues/8533 resolved and released
     # enterprise (kong-gateway) supports postgres 14
-    tag: 13.6.0-debian-10-r52
+    tag: 13.11.0-debian-11-r20
   service:
     ports:
       postgresql: "5432"
@@ -771,7 +821,7 @@ resources: {}
 # readinessProbe for Kong pods
 readinessProbe:
   httpGet:
-    path: "/status"
+    path: "/status/ready"
     port: status
     scheme: HTTP
   initialDelaySeconds: 5
@@ -915,6 +965,14 @@ securityContext: {}
 # securityContext for containers.
 containerSecurityContext:
   readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsUser: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+    - ALL
 
 ## Optional DNS configuration for Kong pods
 # dnsPolicy: ClusterFirst
@@ -935,7 +993,7 @@ serviceMonitor:
   # If you wish to gather metrics from a Kong instance with the proxy disabled (such as a hybrid control plane), see:
   # https://github.com/Kong/charts/blob/main/charts/kong/README.md#prometheus-operator-integration
   enabled: false
-  # interval: 10s
+  # interval: 30s
   # Specifies namespace, where ServiceMonitor should be installed
   # namespace: monitoring
   # labels:

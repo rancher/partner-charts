@@ -13,6 +13,7 @@ serviceAccount:
 
 scc:
   create: false
+  priority: 15
 
 networkPolicy:
   create: true
@@ -61,11 +62,9 @@ global:
   images:
     admin: ''
     aggregatedapis: ''
-    ambassador: ''
     auth: ''
     bloblifecyclemanager: ''
     catalog: ''
-    cephtool: ''
     configmap-reload: ''
     controllermanager: ''
     crypto: ''
@@ -85,18 +84,13 @@ global:
     metering: ''
     paygo_daemonset: ''
     prometheus: ''
+    repositories: ''
     state: ''
     upgrade: ''
     vbrintegrationapi: ''
     garbagecollector: ''
     metric-sidecar: ''
   imagePullSecret: ''
-  ingress:
-    create: false
-    urlPath: "" #url path for k10 gateway
-  route:
-    enabled: false
-    path: ""
   prometheus:
     external:
       host: '' #FQDN of prometheus-service
@@ -104,7 +98,6 @@ global:
       baseURL: ''
   network:
     enable_ipv6: false
-
 
 ## OpenShift route configuration.
 route:
@@ -130,10 +123,6 @@ route:
     # Where this TLS configuration should terminate
     termination: "edge"
 
-toolsImage:
-  enabled: true
-  pullPolicy: Always
-
 dexImage:
   registry: ghcr.io
   repository: dexidp
@@ -147,12 +136,26 @@ kanisterToolsImage:
 
 ingress:
   create: false
+  name: ""
   tls:
     enabled: false
+    secretName: "" #TLS secret name
   class: "" #Ingress controller type
   host: "" #ingress object host name
   urlPath: "" #url path for k10 gateway
   pathType: "ImplementationSpecific"
+  defaultBackend:
+    service:
+      enabled: false
+      name: ""
+      port:
+        name: ""
+        number: 0
+    resource:
+      enabled: false
+      apiGroup: ""
+      kind: ""
+      name: ""
 
 eula:
   accept: false #true value if EULA accepted
@@ -160,26 +163,18 @@ eula:
 license: "" #base64 encoded string provided by Kasten
 
 cluster:
-  domainName: "cluster.local" #default value is cluster.local
+  domainName: ""
+
+multicluster:
+  enabled: true
+  primary:
+    create: false
+    name: ""
+    ingressURL: ""
 
 prometheus:
-  # Disabling init container
-  # which uses root cmds
-  initChownData:
-    enabled: false
   rbac:
     create: false
-  alertmanager:
-    enabled: false
-  kubeStateMetrics:
-    enabled: false
-  networkPolicy:
-    enabled: true
-  nodeExporter:
-    enabled: false
-  pushgateway:
-    enabled: false
-  scrapeCAdvisor: false
   server:
     # UID and groupid are from prometheus helm chart
     enabled: true
@@ -189,29 +184,11 @@ prometheus:
       runAsGroup: 65534
       fsGroup: 65534
     retention: 30d
-    strategy:
-      rollingUpdate:
-        maxSurge: 100%
-        maxUnavailable: 100%
-      type: RollingUpdate
     persistentVolume:
-      enabled: true
       storageClass: ""
-    configMapOverrideName: k10-prometheus-config
     fullnameOverride: prometheus-server
     baseURL: /k10/prometheus/
     prefixURL: /k10/prometheus
-  serviceAccounts:
-    alertmanager:
-      create: false
-    kubeStateMetrics:
-      create: false
-    nodeExporter:
-      create: false
-    pushgateway:
-      create: false
-    server:
-      create: true
 
 jaeger:
   enabled: false
@@ -227,12 +204,16 @@ secrets:
   awsAccessKeyId: ''
   awsSecretAccessKey: ''
   awsIamRole: ''
+  awsClientSecretName: ''
   googleApiKey: ''
+  googleProjectId: ''
+  googleClientSecretName: ''
   dockerConfig: ''
   dockerConfigPath: ''
   azureTenantId: ''
   azureClientId: ''
   azureClientSecret: ''
+  azureClientSecretName: ''
   azureResourceGroup: ''
   azureSubscriptionID: ''
   azureResourceMgrEndpoint: ''
@@ -242,11 +223,10 @@ secrets:
   apiTlsCrt: ''
   apiTlsKey: ''
   tlsSecret: ''
-  ibmSoftLayerApiKey: ''
-  ibmSoftLayerApiUsername: ''
   vsphereEndpoint: ''
   vsphereUsername: ''
   vspherePassword: ''
+  vsphereClientSecretName: ''
 
 metering:
   reportingKey: "" #[base64-encoded key]
@@ -299,6 +279,7 @@ auth:
     prompt: "select_account" #The prompt type to be requested with the OIDC provider. Default is select_account.
     clientID: "" #ClientID given by the OIDC provider for K10
     clientSecret: "" #ClientSecret given by the OIDC provider for K10
+    clientSecretName: "" #The Kubernetes Secret that contains ClientID and ClientSecret given by the OIDC provider for K10
     usernameClaim: "" #Claim to be used as the username
     usernamePrefix: "" #Prefix that has to be used with the username obtained from the username claim
     groupClaim: "" #Name of a custom OpenID Connect claim for specifying user groups
@@ -307,14 +288,13 @@ auth:
     #OIDC config based existing secret.
     #Must include providerURL, redirectURL, scopes, clientID/secret and logoutURL.
     secretName: ""
-  dex:
-    enabled: false
-    providerURL: ""
-    redirectURL: ""
+    sessionDuration: "1h" #Maximum OIDC session duration. Default value is 1 hour
+    refreshTokenSupport: false #Enable Refresh Token support. Disabled by default
   openshift:
     enabled: false
     serviceAccount: "" #service account used as the OAuth client
     clientSecret: "" #The token from the service account
+    clientSecretName: "" #The secret with the token from the service account
     dashboardURL: "" #The URL for accessing K10's dashboard
     openshiftURL: "" #The URL of the Openshift API server
     insecureCA: false
@@ -378,14 +358,27 @@ injectKanisterSidecar:
   webhookServer:
     port: 8080  # should not conflict with config server port (8000)
 
+genericStorageBackup:
+  token: ""
+
 kanisterPodCustomLabels : ""
 
 kanisterPodCustomAnnotations : ""
+
+features:
+  backgroundMaintenanceRun: true # Key must be deleted to deactivate. Setting to false will not work.
 
 kanisterPodMetricSidecar:
   enabled: true
   metricLifetime: "2m"
   pushGatewayInterval: "30s"
+  resources:
+    requests:
+      memory: ""
+      cpu: ""
+    limits:
+      memory: ""
+      cpu: ""
 
 genericVolumeSnapshot:
   resources:
@@ -399,12 +392,13 @@ genericVolumeSnapshot:
 garbagecollector:
   daemonPeriod: 21600
   keepMaxActions: 1000
-  importRunActions:
-    enabled: false
-  retireActions:
+  actions:
     enabled: false
 
 resources: {}
+
+defaultPriorityClassName: ""
+priorityClassName: {}
 
 services:
   executor:
@@ -416,24 +410,40 @@ services:
   dashboardbff:
     hostNetwork: false
   securityContext:
-    runAsUser: 1000
+    runAsUser: 1000 # Will override any USER instruction that a container image set for running the entrypoint and command.
     fsGroup: 1000
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   aggregatedapis:
     hostNetwork: false
+
+siem:
+  logging:
+    cluster:
+      enabled: true
+    cloud:
+      path: k10audit/
+      awsS3:
+        enabled: true
 
 apigateway:
   serviceResolver: dns
 
 limiter:
+  concurrentSnapConversions: 3
   genericVolumeSnapshots: 10
   genericVolumeCopies: 10
   genericVolumeRestores: 10
   csiSnapshots: 10
   providerSnapshots: 10
+  imageCopies: 10
 
 gateway:
   insecureDisableSSLVerify: false
   exposeAdminPort: true
+  service:
+    externalPort: 80
   resources:
     requests:
       memory: 300Mi
@@ -451,24 +461,16 @@ kanister:
   statsTimeout: 20
   efsPostRestoreTimeout: 45
   podReadyWaitTimeout: 15
+  managedDataServicesBlueprintsEnabled: true
 
 awsConfig:
   assumeRoleDuration: ""
   efsBackupVaultName: "k10vault"
 
-excludedApps: []
+excludedApps: ["kube-system", "kube-ingress", "kube-node-lease", "kube-public", "kube-rook-ceph"]
 
 grafana:
   enabled: true
-  prometheusName: prometheus-server
-  prometheusPrefixURL: /k10/prometheus
-  rbac:
-    namespaced: true
-    pspEnabled: false
-  extraLabels:
-    component: grafana
-  podLabels:
-    component: grafana
 
 encryption:
   primaryKey: # primaryKey is used for enabling encryption of K10 primary key
@@ -481,6 +483,13 @@ vmWare:
 
 azure:
   useDefaultMSI: false
+
+google:
+  workloadIdentityFederation:
+    enabled: false
+    idp:
+      type: ""
+      aud: ""
 
 vault:
   role: ""                                             # Role that was bound to the service account name and namespace from cluster
@@ -497,3 +506,17 @@ reporting:
   pdfReports: true
 
 maxJobWaitDuration: ""
+
+forceRootInKanisterHooks: true
+
+ephemeralPVCOverhead: 0.1
+
+datastore:
+  parallelUploads: 8
+
+kastenDisasterRecovery:
+  quickMode:
+    enabled: false
+
+fips:
+  enabled: false

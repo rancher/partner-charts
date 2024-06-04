@@ -31,12 +31,14 @@ spec:
         {{- end }}
       annotations:
         "consul.hashicorp.com/connect-inject": "false"
+        "consul.hashicorp.com/mesh-inject": "false"
     spec:
       restartPolicy: Never
       serviceAccountName: {{ template "consul.fullname" . }}-gateway-cleanup
       containers:
         - name: gateway-cleanup
           image: {{ .Values.global.imageK8S }}
+          {{- include "consul.restrictedSecurityContext" . | nindent 10 }}
           command:
             - consul-k8s-control-plane
           args:
@@ -50,12 +52,16 @@ spec:
             limits:
               memory: "50Mi"
               cpu: "50m"
+          volumeMounts:
+            - name: config
+              mountPath: /consul/config
+              readOnly: true
       {{- if .Values.global.acls.tolerations }}
       tolerations:
         {{ tpl .Values.global.acls.tolerations . | indent 8 | trim }}
       {{- end }}
-      {{- if .Values.global.acls.nodeSelector }}
-      nodeSelector:
-        {{ tpl .Values.global.acls.nodeSelector . | indent 8 | trim }}
-      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ template "consul.fullname" . }}-gateway-resources-config
 {{- end }}

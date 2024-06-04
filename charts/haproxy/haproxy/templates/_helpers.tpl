@@ -152,4 +152,18 @@ Create a FQDN for the Service metrics.
 {{- printf "%s-%s" (include "kubernetes-ingress.fullname" . | trunc 56 | trimSuffix "-") "metrics" }}
 {{- end -}}
 
+{{/*
+Create a default fully qualified unique CRD job name.
+*/}}
+{{- define "kubernetes-ingress.crdjob.fullname" -}}
+{{- printf "%s-%s-%d" (include "kubernetes-ingress.fullname" .) "crdjob" .Release.Revision | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Create a FQDN for the proxy pods.
+*/}}
+{{- define "kubernetes-ingress.serviceProxyName" -}}
+{{- printf "%s-%s" (include "kubernetes-ingress.fullname" . | trunc 58 | trimSuffix "-") "proxy" }}
+{{- end -}}
+
 {{/* vim: set filetype=mustache: */}}

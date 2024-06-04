@@ -1,14 +1,17 @@
 {{- if .Values.experimental.kubernetesGateway.enabled }}
-{{- if .Values.experimental.kubernetesGateway.gateway.enabled }}
 ---
+{{- if semverCompare ">=3.0.0-rc1" (default $.Chart.AppVersion $.Values.image.tag)}}
+apiVersion: gateway.networking.k8s.io/v1
+{{- else }}
 apiVersion: gateway.networking.k8s.io/v1alpha2
+{{- end }}
 kind: Gateway
 metadata:
   name: traefik-gateway
   namespace: {{ default (include "traefik.namespace" .) .Values.experimental.kubernetesGateway.namespace }}
   labels:
     {{- include "traefik.labels" . | nindent 4 }}
-  {{- with .Values.experimental.kubernetesGateway.gateway.annotations }}
+  {{- with .Values.experimental.kubernetesGateway.annotations }}
   annotations:
   {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -18,16 +21,24 @@ spec:
     - name: web
       port: {{ .Values.ports.web.port }}
       protocol: HTTP
-
+      {{- with .Values.experimental.kubernetesGateway.namespacePolicy }}
+      allowedRoutes:
+        namespaces:
+          from: {{ . }}
+      {{- end }}
     {{- if .Values.experimental.kubernetesGateway.certificate }}
     - name: websecure
       port: {{ $.Values.ports.websecure.port }}
       protocol: HTTPS
+      {{- with .Values.experimental.kubernetesGateway.namespacePolicy }}
+      allowedRoutes:
+        namespaces:
+          from: {{ . }}
+      {{- end }}
       tls:
         certificateRefs:
           - name: {{ .Values.experimental.kubernetesGateway.certificate.name }}
             group: {{ .Values.experimental.kubernetesGateway.certificate.group }}
             kind: {{ .Values.experimental.kubernetesGateway.certificate.kind }}
     {{- end }}
-{{- end }}
 {{- end }}

@@ -45,7 +45,7 @@ As described by the [Install Using the Helm Chart](https://www.instana.com/docs/
 * `agent.endpointPort`
 * `agent.key`
 
-_Note:_ You can find the options mentioned in the [configuration section below](#Configuration-Reference)
+_Note:_ You can find the options mentioned in the [configuration section below](#configuration-reference)
 
 If your agents report into a self-managed Instana unit (also known as "on-prem"), you will also need to configure a "download key", which allows the agent to fetch its components from the Instana repository.
 The download key is set via the following value:
@@ -77,7 +77,7 @@ The following table lists the configurable parameters of the Instana chart and t
 
 | Parameter                                           | Description                                                                                                                                                                                                                                                                                                            | Default                                                                                                                                 |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent.configuration_yaml`                          | Custom content for the agent configuration.yaml file                                                                                                                                                                                                                                                                   | `nil` See [below](#Agent-Configuration) for more details                                                                                |
+| `agent.configuration_yaml`                          | Custom content for the agent configuration.yaml file                                                                                                                                                                                                                                                                   | `nil` See [below](#agent-configuration) for more details                                                                                |
 | `agent.configuration.autoMountConfigEntries`        | (Experimental, needs Helm 3.1+) Automatically look up the entries of the default `instana-agent` ConfigMap, and mount as agent configuration files in the `instana-agent` container under the `/opt/instana/agent/etc/instana` directory all ConfigMap entries with keys that match the `configuration-*.yaml` scheme. | `false`                                                                                                                                 |
 | `agent.configuration.hotreloadEnabled`              | Enables hot-reload of a configuration.yaml upon changes in the `instana-agent` ConfigMap without requiring a restart of a pod                                                                                                                                                                                          | `false`                                                                                                                                 |
 | `agent.endpointHost`                                | Instana Agent backend endpoint host                                                                                                                                                                                                                                                                                    | `ingress-red-saas.instana.io` (US and ROW). If in Europe, please override with `ingress-blue-saas.instana.io`                           |
@@ -99,8 +99,9 @@ The following table lists the configurable parameters of the Instana chart and t
 | `agent.instanaMvnRepoUrl`                           | Override for the Maven repository URL when the Agent needs to connect to a locally provided Maven repository 'proxy'                                                                                                                                                                                                   | `nil` Usually not required                                                                                                              |
 | `agent.instanaMvnRepoFeaturesPath`                  | Override for the Maven repository features path the Agent needs to connect to a locally provided Maven repository 'proxy'                                                                                                                                                                                              | `nil` Usually not required                                                                                                              |
 | `agent.instanaMvnRepoSharedPath`                    | Override for the Maven repository shared path when the Agent needs to connect to a locally provided Maven repository 'proxy'                                                                                                                                                                                           | `nil` Usually not required                                                                                                              |
-| `agent.updateStrategy.type`                         | [DaemonSet update strategy type](https://kubernetes.io/docs/tasks/manage-daemon/update-daemon-set/); valid values are `OnDelete` and `RollingUpdate`                                                                                                                                                                    | `RollingUpdate`                                                                                                                         |
+| `agent.updateStrategy.type`                         | [DaemonSet update strategy type](https://kubernetes.io/docs/tasks/manage-daemon/update-daemon-set/); valid values are `OnDelete` and `RollingUpdate`                                                                                                                                                                   | `RollingUpdate`                                                                                                                         |
 | `agent.updateStrategy.rollingUpdate.maxUnavailable` | How many agent pods can be updated at once; this value is ignored if `agent.updateStrategy.type` is different than `RollingUpdate`                                                                                                                                                                                     | `1`                                                                                                                                     |
+| `agent.minReadySeconds`                             | The minimum number of seconds for which a newly created Pod should be ready without any of its containers crashing, for it to be considered available                                                                                                                                                                  | `0`                                                                                                                                     |
 | `agent.pod.annotations`                             | Additional annotations to apply to the pod                                                                                                                                                                                                                                                                             | `{}`                                                                                                                                    |
 | `agent.pod.labels`                                  | Additional labels to apply to the Agent pod                                                                                                                                                                                                                                                                            | `{}`                                                                                                                                    |
 | `agent.pod.priorityClassName`                       | Name of an _existing_ PriorityClass that should be set on the agent pods                                                                                                                                                                                                                                               | `nil`                                                                                                                                   |
@@ -113,24 +114,25 @@ The following table lists the configurable parameters of the Instana chart and t
 | `agent.pod.limits.cpu`                              | Container cpu limits in cpu cores                                                                                                                                                                                                                                                                                      | `1.5`                                                                                                                                   |
 | `agent.pod.limits.memory`                           | Container memory limits in MiB                                                                                                                                                                                                                                                                                         | `768Mi`                                                                                                                                 |
 | `agent.pod.requests.cpu`                            | Container cpu requests in cpu cores                                                                                                                                                                                                                                                                                    | `0.5`                                                                                                                                   |
-| `agent.pod.requests.memory`                         | Container memory requests in MiB                                                                                                                                                                                                                                                                                       | `512Mi`                                                                                                                                 |
+| `agent.pod.requests.memory`                         | Container memory requests in MiB                                                                                                                                                                                                                                                                                       | `768Mi`                                                                                                                                 |
 | `agent.pod.tolerations`                             | Tolerations for pod assignment                                                                                                                                                                                                                                                                                         | `[]`                                                                                                                                    |
 | `agent.pod.affinity`                                | Affinity for pod assignment                                                                                                                                                                                                                                                                                            | `{}`                                                                                                                                    |
 | `agent.env`                                         | Additional environment variables for the agent                                                                                                                                                                                                                                                                         | `{}`                                                                                                                                    |
 | `agent.redactKubernetesSecrets`                     | Enable additional secrets redaction for selected Kubernetes resources                                                                                                                                                                                                                                                  | `nil` See [Kubernetes secrets](https://docs.instana.io/setup_and_manage/host_agent/on/kubernetes/#secrets) for more details.            |
 | `cluster.name`                                      | Display name of the monitored cluster                                                                                                                                                                                                                                                                                  | Value of `zone.name`                                                                                                                    |
 | `leaderElector.port`                                | Instana leader elector sidecar port                                                                                                                                                                                                                                                                                    | `42655`                                                                                                                                 |
-| `leaderElector.image.name`                          | The elector image name to pull                                                                                                                                                                                                                                                                                         | `instana/leader-elector`                                                                                                                |
-| `leaderElector.image.digest`                        | The image digest to pull; if specified, it causes `leaderElector.image.tag` to be ignored                                                                                                                                                                                                                              | `nil`                                                                                                                                   |
-| `leaderElector.image.tag`                           | The image tag to pull; this property is ignored if `leaderElector.image.digest` is specified                                                                                                                                                                                                                           | `latest`                                                                                                                                |
-| `k8s_sensor.deployment.enabled`                     | Isolate k8sensor with a deployment                                                                                                                                                                                                                                                                      | `true`                                                                                                                                 |
+| `leaderElector.image.name`                          | The elector image name to pull. _Note: leader-elector is deprecated and will no longer be updated._                                                                                                                                                                                                                    | `instana/leader-elector`                                                                                                                |
+| `leaderElector.image.digest`                        | The image digest to pull; if specified, it causes `leaderElector.image.tag` to be ignored.  _Note: leader-elector is deprecated and will no longer be updated._                                                                                                                                                        | `nil`                                                                                                                                   |
+| `leaderElector.image.tag`                           | The image tag to pull; this property is ignored if `leaderElector.image.digest` is specified.  _Note: leader-elector is deprecated and will no longer be updated._                                                                                                                                                     | `latest`                                                                                                                                |
+| `k8s_sensor.deployment.enabled`                     | Isolate k8sensor with a deployment                                                                                                                                                                                                                                                                                     |
+| `k8s_sensor.deployment.minReadySeconds`             | The minimum number of seconds for which a newly created Pod should be ready without any of its containers crashing, for it to be considered available                                                                                                                                                                  | `0`                                                                                                                                     | `true` |
 | `k8s_sensor.image.name`                             | The k8sensor image name to pull                                                                                                                                                                                                                                                                                        | `gcr.io/instana/k8sensor`                                                                                                               |
 | `k8s_sensor.image.digest`                           | The image digest to pull; if specified, it causes `k8s_sensor.image.tag` to be ignored                                                                                                                                                                                                                                 | `nil`                                                                                                                                   |
 | `k8s_sensor.image.tag`                              | The image tag to pull; this property is ignored if `k8s_sensor.image.digest` is specified                                                                                                                                                                                                                              | `latest`                                                                                                                                |
-| `k8s_sensor.deployment.pod.limits.cpu`              | CPU request for the `k8sensor` pods                                                                                                                                                                                                                                                                     | `4`                                                                                                                                     |
-| `k8s_sensor.deployment.pod.limits.memory`           | Memory request limits for the `k8sensor` pods                                                                                                                                                                                                                                                           | `6144Mi`                                                                                                                                |
-| `k8s_sensor.deployment.pod.requests.cpu`            | CPU limit for the `k8sensor` pods                                                                                                                                                                                                                                                                       | `1.5`                                                                                                                                   |
-| `k8s_sensor.deployment.pod.requests.memory`         | Memory limit for the `k8sensor` pods                                                                                                                                                                                                                                                                    | `1024Mi`                                                                                                                                |
+| `k8s_sensor.deployment.pod.limits.cpu`              | CPU request for the `k8sensor` pods                                                                                                                                                                                                                                                                                    | `4`                                                                                                                                     |
+| `k8s_sensor.deployment.pod.limits.memory`           | Memory request limits for the `k8sensor` pods                                                                                                                                                                                                                                                                          | `6144Mi`                                                                                                                                |
+| `k8s_sensor.deployment.pod.requests.cpu`            | CPU limit for the `k8sensor` pods                                                                                                                                                                                                                                                                                      | `1.5`                                                                                                                                   |
+| `k8s_sensor.deployment.pod.requests.memory`         | Memory limit for the `k8sensor` pods                                                                                                                                                                                                                                                                                   | `1024Mi`                                                                                                                                |
 | `podSecurityPolicy.enable`                          | Whether a PodSecurityPolicy should be authorized for the Instana Agent pods. Requires `rbac.create` to be `true` as well and it is available until Kubernetes version v1.25.                                                                                                                                           | `false` See [PodSecurityPolicy](https://docs.instana.io/setup_and_manage/host_agent/on/kubernetes/#podsecuritypolicy) for more details. |
 | `podSecurityPolicy.name`                            | Name of an _existing_ PodSecurityPolicy to authorize for the Instana Agent pods. If not provided and `podSecurityPolicy.enable` is `true`, a PodSecurityPolicy will be created for you.                                                                                                                                | `nil`                                                                                                                                   |
 | `rbac.create`                                       | Whether RBAC resources should be created                                                                                                                                                                                                                                                                               | `true`                                                                                                                                  |
@@ -141,8 +143,11 @@ The following table lists the configurable parameters of the Instana chart and t
 | `service.create`                                    | Whether to create a service that exposes the agents' Prometheus, OpenTelemetry and other APIs inside the cluster. Requires Kubernetes 1.21+, as it relies on `internalTrafficPolicy`. The `ServiceInternalTrafficPolicy` feature gate needs to be enabled (default: enabled).                                          | `true`                                                                                                                                  |
 | `serviceAccount.create`                             | Whether a ServiceAccount should be created                                                                                                                                                                                                                                                                             | `true`                                                                                                                                  |
 | `serviceAccount.name`                               | Name of the ServiceAccount to use                                                                                                                                                                                                                                                                                      | `instana-agent`                                                                                                                         |
-| `zone.name`                                         | Zone that detected technologies will be assigned to                                                                                                                                                                                                                                                                    | `nil` You must provide either `zone.name` or `cluster.name`, see [above](#Installation) for details                                     |
+| `serviceAccount.annotations`                        | Annotations to add to the service account                                                                                                                                                                                                                                                                              | `{}`                                                                                                                                    |
+| `zone.name`                                         | Zone that detected technologies will be assigned to                                                                                                                                                                                                                                                                    | `nil` You must provide either `zone.name` or `cluster.name`, see [above](#installation) for details                                     |
 | `zones`                                             | Multi-zone daemonset configuration.                                                                                                                                                                                                                                                                                    | `nil` see [below](#multiple-zones) for details                                                                                          |
+| `k8s_sensor.podDisruptionBudget.enabled`            | Whether to create DisruptionBudget for k8sensor to limit the number of concurrent disruptions                                                                                                                                                                                                                          | `false`                                                                                                                                 |
+| `k8s_sensor.deployment.pod.affinity`                | `k8sensor` deployment affinity format                                                                                                                                                                                                                                                                                  | `podAntiAffinity` defined in `values.yaml`                                                                                              |
 
 ### Agent Modes
 
@@ -227,12 +232,32 @@ _Note:_ There is no hard limitation on the number of backends an Instana agent c
 
 If your infrastructure uses a proxy, you should ensure that you set values for:
 
-* `agent.pod.proxyHost`
+* `agent.proxyHost`
 * `agent.pod.proxyPort`
 * `agent.pod.proxyProtocol`
 * `agent.pod.proxyUser`
 * `agent.pod.proxyPassword`
 * `agent.pod.proxyUseDNS`
+
+#### Same Proxy for Repository and the Instana backend
+
+If the same proxy is utilized for both backend and repository, configure only the 'Agent' proxy settings  using the following parameter:
+ ```
+  --set agent.proxyHost='<Hostname/address of a proxy>' 
+ ```
+
+#### Separate Proxies for Repository and the Instana backend
+
+In scenarios where distinct proxy settings are employed for the backend and repository, both proxies must be configured separately. The key is to ensure that `INSTANA_REPOSITORY_PROXY_ENABLED=true` is set.
+
+To use this variant, execute helm install with the following additional parameters:
+
+```
+--set agent.proxyHost='Hostname/address of a proxy'
+--set agent.env.INSTANA_REPOSITORY_PROXY_ENABLED='true'
+--set agent.env.INSTANA_REPOSITORY_PROXY_HOST='Hostname/address of a proxy'
+```
+Make sure to replace 'Hostname/address of a proxy' with the actual hostname or address of your proxy.
 
 ### Configuring which Networks the Instana Agent should listen on
 
@@ -275,6 +300,8 @@ These options will be rarely used outside of development or debugging of the age
 
 ### Kubernetes Sensor Deployment
 
+ _Note: leader-elector and kubernetes sensor is deprecated and will no longer be updated. Instead, k8s_sensor should be used._
+
 The data about Kubernetes resources is collected by the Kubernetes sensor in the Instana agent.
 With default configurations, only one Instana agent at any one time is capturing the bulk of Kubernetes data.
 Which agent gets the task is coordinated by a leader elector mechanism running inside the `leader-elector` container of the `instana-agent` pods.
@@ -290,19 +317,25 @@ It is advised to use the `k8s_sensor.deployment.enabled=true` mode on clusters o
 The `k8s_sensor.deployment.pod.requests.cpu`, `k8s_sensor.deployment.pod.requests.memory`, `k8s_sensor.deployment.pod.limits.cpu` and `k8s_sensor.deployment.pod.limits.memory` settings, on the other hand, allows you to change the sizing of the `k8sensor` pods.
 
 #### Determine Special Mode Enabled
+
 To determine if Kubernetes sensor is running in a decidated `k8sensor` deployment, list deployments in the `instana-agent` namespace.
+
 ```
 kubectl get deployments -n instana-agent
 ```
+
 If it shows `k8sensor` in the list, then the special mode is enabled
 
 #### Upgrade Kubernetes Sensor
+
 To upgrade the kubernetes sensor to the lastest version, perform a rolling restart of the `k8sensor` deployment using the following command:
+
 ```
 kubectl rollout restart deployment k8sensor -n instana-agent
 ```
 
 ### Multiple Zones
+
 You can list zones to use affinities and tolerations as the basis to associate a specific daemonset per tainted node pool. Each zone will have the following data:
 
 * `name` (required) - zone name.
@@ -333,19 +366,67 @@ zones:
 
 ## Changelog
 
+### 1.2.70
+
+* Allow the configuration of `minReadySeconds` for the agent daemonset and deployment
+
+### 1.2.69
+
+* Add possibility to set annotations for the serviceAccount.
+
+### 1.2.68
+
+* Add leader elector configuration back to allow for proper deprecation
+
+### 1.2.67
+
+* Fix variable name in the K8s deployment
+
+### 1.2.66
+
+* Allign the default Memory requests to 768Mi for the Agent container.
+
+### 1.2.65
+
+* Ensure we have appropriate SCC when running with new K8s sensor.
+
+### 1.2.64
+
+* Remove RBAC not required by agent when kubernetes-sensor is disabed.
+* Add settings override for k8s-sensor affinity
+* Add optional pod disruption budget for k8s-sensor
+
+### 1.2.63
+
+* Add RBAC required to allow access to /metrics end-points.
+
+### 1.2.62
+
+* Include k8s-sensor resources in the default static YAML definitions
+
+### 1.2.61
+
+* Increase timeout and initialDelay for the Agent container
+* Add OTLP ports to headless service
+
 ### 1.2.60
+
 * Enable the k8s_sensor by default
 
 ### 1.2.59
+
 * Introduce unique selectorLabels and commonLabels for k8s-sensor deployment
 
 ### 1.2.58
+
 * Default to `internalTrafficPolicy` instead of `topologyKeys` for rendering of static YAMLs
 
 ### 1.2.57
+
 * Fix vulnerability in the leader-elector image
 
 ### 1.2.49
+
 * Add zone name to label `io.instana/zone` in daemonset
 
 ### 1.2.48

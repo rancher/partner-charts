@@ -27,13 +27,15 @@
 fluentBit:
   logLevel: "info"
   path: "/var/log/containers/*.log"
+  linuxMountPath: /var
   windowsPath: "C:\\var\\log\\containers\\*.log"
   db: "/var/log/flb_kube.db"
   windowsDb: "C:\\var\\log\\flb_kube.db"
-  criEnabled: false
+  criEnabled: true
   k8sBufferSize: "32k"
   k8sLoggingExclude: "Off"
   retryLimit: 5
+  sendMetrics: false
   extraEnv: []
   # extraEnv:
   # - name: HTTPS_PROXY
@@ -43,10 +45,44 @@ fluentBit:
   #     fieldRef:
   #       fieldPath: metadata.name
 
+  # Indicates how fluent-bit database is persisted
+  persistence:
+    # Define the persistent mode for fluent-bit db, allowed options are `hostPath` (default), `none`, `persistentVolume`.
+    # - `hostPath` will use hostPath to store the db file on the node disk.
+    # - `none` will disable the fluent-bit db file, this could cause log duplication or data loss in case fluent-bit gets restarted.
+    # - `persistentVolume` will use a ReadWriteMany persistent volume to store the db file. This will override `fluentBit.db` path and use `/db/${NODE_NAME}-fb.db` file instead.
+    mode: "hostPath"
+
+    # In case persistence.mode is set to persistentVolume this will be needed
+    persistentVolume:
+      # The storage class should allow ReadWriteMany mode
+      storageClass:
+      # Volume and claim size.
+      size: 10Gi
+      # If dynamicProvisioning is enabled the chart will create only the PersistentVolumeClaim
+      dynamicProvisioning: true
+      # If an existingVolume is provided, we'll use it instead creating a new one
+      existingVolume:
+      # If an existingVolumeClaim is provided, we'll use it instead creating a new one
+      existingVolumeClaim:
+      # In case you need to add annotations to the created volume or claim
+      annotations:
+        volume: {}
+        claim: {}
+      # In case you need to specify any other option to your volume or claim
+      extra:
+        volume:
+        #  nfs:
+        #    path: /tmp/
+        #    server: 1.1.1.1
+        claim: {}
+
+
   # New Relic default configuration for fluent-bit.conf (service, inputs, filters, outputs)
   # and parsers.conf (parsers). The configuration below is not configured for lowDataMode and will
   # send all attributes.  If custom configuration is required, update these variables.
   config:
+    # Note that Prometheus metric collection needs the HTTP server to be online at port 2020 (see fluentBit.config.metricInstrumentation)
     service: |
       [SERVICE]
           Flush         1
@@ -60,9 +96,10 @@ fluentBit:
     inputs: |
       [INPUT]
           Name              tail
+          Alias             pod-logs-tailer
           Tag               kube.*
           Path              ${PATH}
-          Parser            ${LOG_PARSER}
+          multiline.parser  ${LOG_PARSER}
           DB                ${FB_DB}
           Mem_Buf_Limit     7MB
           Skip_Long_Lines   On
@@ -76,6 +113,7 @@ fluentBit:
     filters: |
       [FILTER]
           Name                kubernetes
+          Alias               kubernetes-enricher
           Match               kube.*
           # We need the full DNS suffix as Windows only supports resolving names with this suffix
           # See: https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
@@ -85,8 +123,9 @@ fluentBit:
 
       [FILTER]
           Name           record_modifier
+          Alias          node-attributes-enricher
           Match          *
-          Record         cluster_name ${CLUSTER_NAME}
+          Record         cluster_name "${CLUSTER_NAME}"
 
 #    extraFilters: |
 #      [FILTER]
@@ -98,6 +137,7 @@ fluentBit:
       [FILTER]
           Name           kubernetes
           Match          kube.*
+          Alias          kubernetes-enricher
           # We need the full DNS suffix as Windows only supports resolving names with this suffix
           # See: https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
           Kube_URL       https://kubernetes.default.svc.cluster.local:443
@@ -109,13 +149,15 @@ fluentBit:
       [FILTER]
           Name           nest
           Match          *
+          Alias          kubernetes-attribute-lifter
           Operation      lift
           Nested_under   kubernetes
 
       [FILTER]
           Name           record_modifier
           Match          *
-          Record         cluster_name ${CLUSTER_NAME}
+          Alias          node-attributes-enricher-filter
+          Record         cluster_name "${CLUSTER_NAME}"
           Allowlist_key  container_name
           Allowlist_key  namespace_name
           Allowlist_key  pod_name
@@ -127,9 +169,11 @@ fluentBit:
       [OUTPUT]
           Name           newrelic
           Match          *
+          Alias          newrelic-logs-forwarder
           licenseKey     ${LICENSE_KEY}
           endpoint       ${ENDPOINT}
           lowDataMode    ${LOW_DATA_MODE}
+          sendMetrics    ${SEND_OUTPUT_PLUGIN_METRICS}
           Retry_Limit    ${RETRY_LIMIT}
 
 #    extraOutputs: |
@@ -137,28 +181,49 @@ fluentBit:
 #          Name null
 #          Match *
 
-    parsers: |
-      [PARSER]
-          Name         docker
-          Format       json
-          Time_Key     time
-          Time_Format  %Y-%m-%dT%H:%M:%S.%L
-          Time_Keep    On
+#    parsers: |
+#      [PARSER]
+#          Name         my_custom_parser
+#          Format       json
+#          Time_Key     time
+#          Time_Format  %Y-%m-%dT%H:%M:%S.%L
+#          Time_Keep    On
+    metricInstrumentation: |
+      [INPUT]
+          name prometheus_scrape
+          Alias fb-metrics-collector
+          host 127.0.0.1
+          port 2020
+          tag fb_metrics
+          metrics_path /api/v2/metrics/prometheus
+          scrape_interval 10s
 
-      [PARSER]
-          Name cri
-          Format regex
-          Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
-          Time_Key    time
-          Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+      [OUTPUT]
+          Name                 prometheus_remote_write
+          Match                fb_metrics
+          Alias                fb-metrics-forwarder
+          Host                 ${METRICS_HOST}
+          Port                 443
+          Uri                  /prometheus/v1/write?prometheus_server=${CLUSTER_NAME}
+          Header               Authorization Bearer ${LICENSE_KEY}
+          Tls                  On
+          # Windows pods using prometheus_remote_write currently have issues if TLS verify is On
+          Tls.verify           Off
+          # User-defined labels
+          add_label            app fluent-bit
+          add_label            cluster_name "${CLUSTER_NAME}"
+          add_label            pod_name ${HOSTNAME}
+          add_label            node_name ${NODE_NAME}
+          add_label            source kubernetes
 
 image:
   repository: newrelic/newrelic-fluentbit-output
+#  registry: my_registry
   tag: ""
   pullPolicy: IfNotPresent
   ## See https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod
-  # pullSecrets:
-    # - name: regsecret
+  pullSecrets: []
+#    - name: regsecret
 
 # By default, the Linux DaemonSet will always be deployed, while the Windows DaemonSet(s) won't.
 enableLinux: true
@@ -287,3 +352,6 @@ windows:
 #    - name: init
 #       image: ...
 #       command: [...]
+
+# -- Sets pod dnsConfig. Can also be configured with `global.dnsConfig`
+dnsConfig: {}

@@ -25,6 +25,16 @@
         args:
         - "--secure-port={{ .Values.service.aggregatedApiPort }}"
         - "--cert-dir=/tmp/apiserver.local.config/certificates/"
+        {{- if include "k10.siemEnabled" . }}
+        - "--audit-policy-file=/etc/kubernetes/{{ include "k10.aggAuditPolicyFile" .}}"
+        {{/* SIEM cloud logging */}}
+        - "--enable-k10-audit-cloud-aws-s3={{ .Values.siem.logging.cloud.awsS3.enabled }}"
+        - "--audit-cloud-path={{ .Values.siem.logging.cloud.path }}"
+        {{/* SIEM cluster logging */}}
+        - "--enable-k10-audit-cluster={{ .Values.siem.logging.cluster.enabled }}"
+        - "--audit-log-file={{ include "k10.siemLoggingClusterFile" . | default (include "k10.siemAuditLogFilePath" .) }}"
+        - "--audit-log-file-size={{ include "k10.siemLoggingClusterFileSize" . | default (include "k10.siemAuditLogFileSize" .) }}"
+        {{- end }}
 {{- if .Values.useNamespacedAPI }}
         - "--k10-api-domain={{  template "apiDomain" . }}"
 {{- end }}{{/* .Values.useNamespacedAPI */}}
@@ -37,7 +47,7 @@ stating that types are not same for the equality check
           - "--port={{ $externalPort }}"
           - "--host=0.0.0.0"
 {{- end }}{{/* eq $service "aggregatedapis" */}}
-{{- $podName := (printf "%s-svc" $service) }}
+{{- $podName := (printf "%s-svc" $pod) }}
 {{- $containerName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" $containerName  | include "k10.resource.request" | indent 8}}
         ports:
@@ -55,6 +65,11 @@ stating that types are not same for the equality check
         - containerPort: 24225
           protocol: TCP
 {{- end }}
+        securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+                drop: ["ALL"]
         livenessProbe:
 {{- if eq $service "aggregatedapis" }}
           tcpSocket:
@@ -79,23 +94,49 @@ stating that types are not same for the equality check
           - name: {{ include "k10.disabledServicesEnvVar" . }}
             value: {{ include "get.disabledServices" . | quote }}
 {{- end -}}
-{{- if eq (include "check.googlecreds" .) "true" }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "kanister" | has $service}}
+{{- if not (eq (include "check.googleproject" . ) "true") -}}
+    {{- fail "secrets.googleApiKey field is required when using secrets.googleProjectId" -}}
+{{- end -}}
+{{- $gkeSecret := default "google-secret" .Values.secrets.googleClientSecretName }}
+{{- $gkeProjectId := "kasten-gke-project" }}
+{{- $gkeApiKey :=  "/var/run/secrets/kasten.io/kasten-gke-sa.json"}}
+{{- if eq (include "check.googleCredsSecret" .) "true" }}
+    {{- $gkeProjectId = "google-project-id" }}
+    {{- $gkeApiKey =  "/var/run/secrets/kasten.io/google-api-key" }}
+{{- end }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true" }}
           - name: GOOGLE_APPLICATION_CREDENTIALS
-            value: "/var/run/secrets/kasten.io/kasten-gke-sa.json"
+            value: {{ $gkeApiKey }}
 {{- end }}
-{{- if eq (include "check.ibmslcreds" .) "true" }}
-          - name: IBM_SL_API_KEY
+{{- if eq (include "check.googleCredsOrSecret" .) "true"  }}
+          - name: projectID
             valueFrom:
               secretKeyRef:
-                name: ibmsl-secret
-                key: ibm_sl_key
-          - name: IBM_SL_API_USERNAME
+                name: {{ $gkeSecret }}
+                key: {{ $gkeProjectId }}
+                optional: true
+{{- end }}
+{{- end }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "kanister" | has $service}}
+{{- if or  (eq (include "check.azuresecret" .) "true") (eq (include "check.azurecreds" .) "true" )  }}
+{{- if eq (include "check.azuresecret" .) "true" }}
+          - name: AZURE_CLIENT_ID
             valueFrom:
               secretKeyRef:
-                name: ibmsl-secret
-                key: ibm_sl_username
-{{- end }}
-{{- if eq (include "check.azurecreds" .) "true" }}
+                name: {{ .Values.secrets.azureClientSecretName }}
+                key: azure_client_id
+          - name: AZURE_TENANT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.azureClientSecretName }}
+                key: azure_tenant_id
+          - name: AZURE_CLIENT_SECRET
+            valueFrom:
+             secretKeyRef:
+               name: {{ .Values.secrets.azureClientSecretName }}
+               key: azure_client_secret
+{{- else }}
 {{- if or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureClientSecretCreds" .) "true") }}
           - name: AZURE_CLIENT_ID
             valueFrom:
@@ -114,6 +155,7 @@ stating that types are not same for the equality check
               secretKeyRef:
                 name: azure-creds
                 key: azure_client_secret
+{{- end }}
 {{- end }}
 {{- if .Values.secrets.azureResourceGroup }}
           - name: AZURE_RESOURCE_GROUP
@@ -162,26 +204,61 @@ stating that types are not same for the equality check
             value: "{{ .Values.azure.useDefaultMSI }}"
 {{- end }}
 {{- end }}
-{{- if eq (include "check.awscreds" .) "true" }}
+{{- end }}
+
+{{- /*
+There are 3 valid states of the secret provided by customer:
+1. Only role set
+2. Both aws_access_key_id and aws_secret_access_key are set
+3. All of role, aws_access_key_id and aws_secret_access_key are set.
+*/}}
+{{- if eq (include "check.awsSecretName" .) "true"  }}
+    {{- $customerSecret := (lookup "v1" "Secret" .Release.Namespace .Values.secrets.awsClientSecretName )}}
+    {{- if $customerSecret }}
+        {{- if and (not $customerSecret.data.role) (not $customerSecret.data.aws_access_key_id) (not $customerSecret.data.aws_secret_access_key) }}
+                {{ fail "Provided secret must contain at least AWS IAM Role or AWS access key ID together with AWS secret access key"}}
+        {{- end }}
+        {{- if not (or (and $customerSecret.data.aws_access_key_id $customerSecret.data.aws_secret_access_key) (and (not $customerSecret.data.aws_access_key_id) (not $customerSecret.data.aws_secret_access_key))) }}
+            {{ fail "Provided secret lacks aws_access_key_id or aws_secret_access_key" }}
+        {{- end }}
+    {{- end }}
+{{- end }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "metering" "kanister" | has $service}}
+{{- $awsSecretName := default "aws-creds" .Values.secrets.awsClientSecretName }}
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
-                name: aws-creds
+                name: {{ $awsSecretName }}
                 key: aws_access_key_id
+                optional: true
           - name: AWS_SECRET_ACCESS_KEY
             valueFrom:
               secretKeyRef:
-                name: aws-creds
+                name: {{ $awsSecretName }}
                 key: aws_secret_access_key
-{{- if .Values.secrets.awsIamRole }}
+                optional: true
           - name: K10_AWS_IAM_ROLE
             valueFrom:
               secretKeyRef:
-                name: aws-creds
+                name: {{ $awsSecretName }}
                 key: role
+                optional: true
 {{- end }}
+{{- if list "controllermanager" "executor" "catalog" | has $service}}
+{{- if eq (include "check.gwifenabled" .) "true"}}
+          - name: GOOGLE_WORKLOAD_IDENTITY_FEDERATION_ENABLED
+            value: "true"
+{{- if eq (include "check.gwifidptype" .) "true"}}
+          - name: GOOGLE_WORKLOAD_IDENTITY_FEDERATION_IDP
+            value: {{ .Values.google.workloadIdentityFederation.idp.type }}
 {{- end }}
-{{- if or (eq $service "crypto") (eq $service "executor") (eq $service "dashboardbff") }}
+{{- if eq (include "check.gwifidpaud" .) "true"}}
+          - name: GOOGLE_WORKLOAD_IDENTITY_FEDERATION_AUD
+            value: {{ .Values.google.workloadIdentityFederation.idp.aud }}
+{{- end }}
+{{- end }} {{/* if eq (include "check.gwifenabled" .) "true" */}}
+{{- end }} {{/* list "controllermanager" "executor" "catalog" | has $service */}}
+{{- if or (eq $service "crypto") (eq $service "executor") (eq $service "dashboardbff") (eq $service "repositories") }}
 {{- if eq (include "check.vaultcreds" .) "true" }}
           - name: VAULT_ADDR
             value: {{ .Values.vault.address }}
@@ -200,22 +277,25 @@ stating that types are not same for the equality check
 {{- end }}
 {{- end }}
 {{- end }}
-{{- if eq (include "check.vspherecreds" .) "true" }}
+{{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" | has $service}}
+{{- if or (eq (include "check.vspherecreds" .) "true") (eq (include "check.vsphereClientSecret" .) "true") }}
+{{- $vsphereSecretName := default "vsphere-creds" .Values.secrets.vsphereClientSecretName }}
           - name: VSPHERE_ENDPOINT
             valueFrom:
               secretKeyRef:
-                name: vsphere-creds
+                name: {{ $vsphereSecretName }}
                 key: vsphere_endpoint
           - name: VSPHERE_USERNAME
             valueFrom:
               secretKeyRef:
-                name: vsphere-creds
+                name: {{ $vsphereSecretName }}
                 key: vsphere_username
           - name: VSPHERE_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: vsphere-creds
+                name: {{ $vsphereSecretName }}
                 key: vsphere_password
+{{- end }}
 {{- end }}
           - name: VERSION
             valueFrom:
@@ -229,6 +309,19 @@ stating that types are not same for the equality check
                 name: k10-config
                 key: clustername
 {{- end }}
+{{- if .Values.fips.enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
+{{- end }}
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
+          - name: K10_HOST_SVC
+            value: {{ $pod }}
 {{- if eq $service "controllermanager" }}
           - name: K10_STATEFUL
             value: "{{ .Values.global.persistence.enabled }}"
@@ -239,6 +332,19 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: kubeVirtVMsUnFreezeTimeout
+{{- end }}
+{{- if eq $service "executor" }}
+          - name: QUICK_DISASTER_RECOVERY_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: quickDisasterRecoveryEnabled
+{{- end }}
+{{- if or (eq $service "executor") (eq $service "controllermanager") }}
+{{- if or  .Values.global.imagePullSecret (or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath)  }}
+          - name: IMAGE_PULL_SECRET_NAMES
+            value: {{  (trimSuffix " " (include "k10.imagePullSecretNames" .)) | toJson }}
+{{- end }}
 {{- end }}
           - name: MODEL_STORE_DIR
 {{- if or (eq $service "state") (not .Values.global.persistence.enabled) }}
@@ -257,34 +363,18 @@ stating that types are not same for the equality check
             value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/datamover:" }}
             {{- end }}{{/* if .Values.global.airgapped.repository */}}
 
-          - name: K10_KANISTER_POD_METRICS_IMAGE
-            {{- if not .Values.global.rhMarketPlace }}
-            {{- if .Values.global.airgapped.repository }}
-            value: {{ (include "get.k10ImageTag" .)  | print .Values.global.airgapped.repository "/metric-sidecar:" }}
-            {{- else }}
-            value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/metric-sidecar:" }}
-            {{- end }}{{/* if .Values.global.airgapped.repository */}}
-            {{- else }}
-            value: {{ index .Values.global.images "metric-sidecar" }}
-            {{- end }}{{/* if not .Values.global.rhMarketPlace */}}
-
-          - name: KANISTER_POD_READY_WAIT_TIMEOUT
+{{- end }}
+{{- if eq $service "executor"}}
+          - name: DATA_STORE_LOG_LEVEL
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: KanisterPodReadyWaitTimeout
-
-          - name: K10_KANISTER_POD_METRICS_ENABLED
+                key: DataStoreLogLevel
+          - name: DATA_STORE_FILE_LOG_LEVEL
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: KanisterPodMetricSidecarEnabled
-          - name: PUSHGATEWAY_METRICS_INTERVAL
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: KanisterPodPushgatewayMetricsInterval
-
+                key: DataStoreFileLogLevel
 {{- end }}
           - name: LOG_LEVEL
             valueFrom:
@@ -369,12 +459,86 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: K10LimiterProviderSnapshots
+          - name: K10_LIMITER_IMAGE_COPIES
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10LimiterImageCopies
+          - name: K10_EPHEMERAL_PVC_OVERHEAD
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10EphemeralPVCOverhead
           - name: AWS_ASSUME_ROLE_DURATION
             valueFrom:
               configMapKeyRef:
                 name: k10-config
                 key: AWSAssumeRoleDuration
-{{- if (list "dashboardbff" "catalog" | has $service) }}
+{{- if (list "kanister" "executor" "repositories" | has $service) }}
+          - name: K10_DATA_STORE_DISABLE_COMPRESSION
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: k10DataStoreDisableCompression
+
+          - name: K10_KANISTER_POD_METRICS_IMAGE
+            {{- if not .Values.global.rhMarketPlace }}
+            {{- if .Values.global.airgapped.repository }}
+            value: {{ (include "get.k10ImageTag" .)  | print .Values.global.airgapped.repository "/metric-sidecar:" }}
+            {{- else }}
+            value: {{ (include "get.k10ImageTag" .) | print .Values.global.image.registry "/metric-sidecar:" }}
+            {{- end }}{{/* if .Values.global.airgapped.repository */}}
+            {{- else }}
+            value: {{ index .Values.global.images "metric-sidecar" }}
+            {{- end }}{{/* if not .Values.global.rhMarketPlace */}}
+
+          - name: KANISTER_POD_READY_WAIT_TIMEOUT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodReadyWaitTimeout
+
+          - name: K10_KANISTER_POD_METRICS_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarEnabled
+          - name: PUSHGATEWAY_METRICS_INTERVAL
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodPushgatewayMetricsInterval
+        {{- if .Values.kanisterPodMetricSidecar.resources.requests.memory }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_REQUEST
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMemoryRequest
+        {{- end }}
+        {{- if .Values.kanisterPodMetricSidecar.resources.requests.cpu }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_REQUEST
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarCPURequest
+        {{- end }}
+        {{- if .Values.kanisterPodMetricSidecar.resources.limits.memory }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_MEMORY_LIMIT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarMemoryLimit
+        {{- end }}
+        {{- if .Values.kanisterPodMetricSidecar.resources.limits.cpu }}
+          - name: K10_KANISTER_POD_METRIC_SIDECAR_CPU_LIMIT
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterPodMetricSidecarCPULimit
+        {{- end }}
+
+{{- end }}
+{{- if (list "dashboardbff" "catalog" "executor" "crypto" | has $service) }}
     {{- if .Values.metering.mode }}
           - name: K10REPORTMODE
             value: {{ .Values.metering.mode }}
@@ -391,16 +555,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: K10GCKeepMaxActions
-          - name: K10_GC_IMPORT_RUN_ACTIONS_ENABLED
+          - name: K10_GC_ACTIONS_ENABLED
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: K10GCImportRunActionsEnabled
-          - name: K10_GC_RETIRE_ACTIONS_ENABLED
-            valueFrom:
-              configMapKeyRef:
-                name: k10-config
-                key: K10GCRetireActionsEnabled
+                key: K10GCActionsEnabled
 {{- end }}
 {{- if (eq $service "executor") }}
           - name: K10_EXECUTOR_WORKER_COUNT
@@ -458,6 +617,11 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: KanisterEFSPostRestoreTimeout
+          - name: KANISTER_MANAGED_DATA_SERVICES_BLUEPRINTS_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: KanisterManagedDataServicesBlueprintsEnabled
 {{- if .Values.maxJobWaitDuration }}
           - name: K10_JOB_MAX_WAIT_DURATION
             valueFrom:
@@ -465,6 +629,11 @@ stating that types are not same for the equality check
                 name: k10-config
                 key: k10JobMaxWaitDuration
 {{- end }}
+          - name: K10_FORCE_ROOT_IN_KANISTER_HOOKS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: k10ForceRootInKanisterHooks
 {{- end }}
 {{- if and (eq $service "executor") (.Values.awsConfig.efsBackupVaultName) }}
           - name: EFS_BACKUP_VAULT_NAME
@@ -472,6 +641,20 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: efsBackupVaultName
+{{- end }}
+{{- if and (eq $service "executor") (.Values.genericStorageBackup.token) }}
+          - name: K10_GVS_ACTIVATION_TOKEN
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: GVSActivationToken
+{{- end }}
+{{- if and (eq $service "executor") (.Values.genericStorageBackup.overridepubkey) }}
+          - name: OVERRIDE_GVS_TOKEN_VERIFICATION_KEY
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: overridePublicKeyForGVS
 {{- end }}
 {{- if and (eq $service "executor") (.Values.vmWare.taskTimeoutMin) }}
           - name: VMWARE_GOM_TIMEOUT_MIN
@@ -498,13 +681,11 @@ stating that types are not same for the equality check
                 name: k10-token-auth
                 key: auth
 {{- end }}
-{{- if eq "true" (include "overwite.kanisterToolsImage" .) }}
           - name: KANISTER_TOOLS
             valueFrom:
               configMapKeyRef:
                 name: k10-config
-                key: overwriteKanisterTools
-{{- end }}
+                key: KanisterToolsImage
 {{- if eq (include "check.cacertconfigmap" .) "true" }}
           - name: CACERT_CONFIGMAP_NAME
             value: {{ .Values.cacertconfigmap.name }}
@@ -516,12 +697,6 @@ stating that types are not same for the equality check
               configMapKeyRef:
                 name: k10-config
                 key: kanisterFunctionVersion
-{{- if and (eq $service "controllermanager") (.Values.global.airgapped.repository) }}
-          - name: K10_AIRGAPPED_INSTALL
-            value: "true"
-          - name: K10_IMAGE_PULL_SECRET
-            value: {{ .Values.global.imagePullSecret }}  
-{{- end }}
 {{- if and (eq $service "controllermanager") (.Values.injectKanisterSidecar.enabled) }}
           - name: K10_MUTATING_WEBHOOK_ENABLED
             value: "true"
@@ -533,7 +708,12 @@ stating that types are not same for the equality check
           - name: K10_MUTATING_WEBHOOK_PORT
             value: {{ .Values.injectKanisterSidecar.webhookServer.port | quote }}
 {{- end }}
-{{- if (list "controllermanager" "kanister" "executor" "dashboardbff"  | has $service) }}
+{{- if (list "controllermanager" "kanister" "executor" "dashboardbff" "repositories" | has $service) }}
+          - name: K10_DEFAULT_PRIORITY_CLASS_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10DefaultPriorityClassName
 {{- if .Values.genericVolumeSnapshot.resources.requests.memory }}
           - name: KANISTER_TOOLS_MEMORY_REQUESTS
             valueFrom:
@@ -581,10 +761,37 @@ stating that types are not same for the equality check
             value: {{ .Values.global.prometheus.external.baseURL }}
         {{- end -}}
     {{- end }}
-          - name: K10_GRAFANA_ENABLED
-            value: {{ .Values.grafana.enabled | quote }}
+        {{- if .Values.grafana.enabled }}
+          - name: GRAFANA_URL
+            value: {{ include "k10.prefixPath" . }}/grafana/
+        {{- end }}
 {{- end }}
-{{- if or $.stateful (or (eq (include "check.googlecreds" .) "true") (eq $service "auth" "logging")) }}
+{{- if eq $service "dashboardbff" }}
+    {{- if ne .Values.global.persistence.diskSpaceAlertPercent nil }}
+          - name: K10_DISK_SPACE_ALERT_PERCENT
+            value: {{ .Values.global.persistence.diskSpaceAlertPercent | quote }}
+    {{- end -}}
+{{- end -}}
+{{- if eq $service "controllermanager" }}
+    {{- if .Values.multicluster.primary.create }}
+        {{- if not .Values.multicluster.enabled }}
+            {{- fail "Cannot setup cluster as primary without enabling feature with multicluster.enabled=true" -}}
+        {{- end }}
+        {{- if not .Values.multicluster.primary.name }}
+            {{- fail "Cannot setup cluster as primary without setting cluster name with multicluster.primary.name" -}}
+        {{- end }}
+        {{- if not .Values.multicluster.primary.ingressURL }}
+            {{- fail "Cannot setup cluster as primary without providing an ingress with multicluster.primary.ingressURL" -}}
+        {{- end }}
+          - name: K10_MC_CREATE_PRIMARY
+            value: "true"
+          - name: K10_MC_PRIMARY_NAME
+            value: {{ .Values.multicluster.primary.name | quote }}
+          - name: K10_MC_PRIMARY_INGRESS_URL
+            value: {{ .Values.multicluster.primary.ingressURL | quote }}
+    {{- end }}
+{{- end -}}
+{{- if or $.stateful (or (eq (include "check.googleCredsOrSecret" .) "true") (eq $service "auth" "logging")) }}
         volumeMounts:
 {{- else if  or (or (eq (include "basicauth.check" .) "true") (or .Values.auth.oidcAuth.enabled (eq (include "check.dexAuth" .) "true"))) .Values.features }}
         volumeMounts:
@@ -593,6 +800,10 @@ stating that types are not same for the equality check
 {{- else if eq (include "check.cacertconfigmap" .) "true" }}
         volumeMounts:
 {{- else if eq $service "frontend" }}
+        volumeMounts:
+{{- else if and (list "controllermanager" "executor" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
+        volumeMounts:
+{{- else if and (eq $service "aggregatedapis") (include "k10.siemEnabled" .) }}
         volumeMounts:
 {{- end }}
 {{- if $.stateful }}
@@ -612,6 +823,7 @@ stating that types are not same for the equality check
           mountPath: /etc/ssl/certs/webhook
           readOnly: true
 {{- end }}
+{{- if list "dashboardbff" "auth" "controllermanager" | has $service}}
 {{- if eq (include "basicauth.check" .) "true" }}
         - name: k10-basic-auth
           mountPath: "/var/run/secrets/kasten.io/k10-basic-auth"
@@ -621,10 +833,21 @@ stating that types are not same for the equality check
         - name: k10-oidc-auth
           mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth"
           readOnly: true
+{{- if .Values.auth.oidcAuth.clientSecretName }}
+        - name: k10-oidc-auth-creds
+          mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth-creds"
+          readOnly: true
 {{- end }}
-{{- if eq (include "check.googlecreds" .) "true" }}
+{{- end }}
+{{- end }}
+{{- if eq (include "check.googleCredsOrSecret" .) "true"}}
         - name: service-account
           mountPath: "/var/run/secrets/kasten.io"
+{{- end }}
+{{- if and (list "controllermanager" "executor" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
+        - name: bound-sa-token
+          mountPath: "/var/run/secrets/kasten.io/serviceaccount/GWIF"
+          readOnly: true
 {{- end }}
 {{- if eq (include "check.cacertconfigmap" .) "true" }}
         - name: {{ .Values.cacertconfigmap.name }}
@@ -641,21 +864,29 @@ stating that types are not same for the equality check
           subPath: frontend.conf
           readOnly: true
 {{- end}}
-{{- if .Values.toolsImage.enabled }}
-{{- if eq $service "executor" }}
-      - name: tools
-        {{- dict "main" . "k10_service" "cephtool" | include "serviceImage" | indent 8 }}
-        imagePullPolicy: {{ .Values.toolsImage.pullPolicy }}
-{{- $podName := (printf "%s-svc" $service) }}
-{{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "tools"  | include "k10.resource.request" | indent 8}}
-{{- end }}
-{{- end }} {{/* .Values.toolsImage.enabled */}}
+{{- if and (eq $service "aggregatedapis") (include "k10.siemEnabled" .) }}
+        - name: aggauditpolicy-config
+          mountPath: /etc/kubernetes/{{ include "k10.aggAuditPolicyFile" .}}
+          subPath: {{ include "k10.aggAuditPolicyFile" .}}
+          readOnly: true
+{{- end}}
 {{- if and (eq $service "catalog") $.stateful }}
       - name: kanister-sidecar
         image: {{ include "get.kanisterToolsImage" .}}
         imagePullPolicy: {{ .Values.kanisterToolsImage.pullPolicy }}
-{{- $podName := (printf "%s-svc" $service) }}
 {{- dict "main" . "k10_service_pod_name" $podName "k10_service_container_name" "kanister-sidecar"  | include "k10.resource.request" | indent 8}}
+        env:
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
+{{- if .Values.fips.enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
+{{- end }}
         volumeMounts:
         - name: {{ $service }}-persistent-storage
           mountPath: {{ .Values.global.persistence.mountPath | quote }}
@@ -664,14 +895,45 @@ stating that types are not same for the equality check
           mountPath: "/etc/ssl/certs/custom-ca-bundle.pem"
           subPath: custom-ca-bundle.pem
 {{- end }}
+{{- if eq (include "check.projectSAToken" .) "true" }}
+        - name: bound-sa-token
+          mountPath: "/var/run/secrets/kasten.io/serviceaccount/GWIF"
+          readOnly: true
+{{- end }}
 {{- end }} {{/* and (eq $service "catalog") $.stateful */}}
-{{- if and ( eq $service "auth" ) ( or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true")) }}
+{{- if and ( eq $service "auth" ) ( eq (include "check.dexAuth" .) "true" ) }}
       - name: dex
         image: {{ include "get.dexImage" . }}
 {{- if .Values.auth.ldap.enabled }}
         command: ["/usr/local/bin/dex", "serve", "/dex-config/config.yaml"]
+{{- if .Values.fips.enabled }}
+        env:
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | nindent 10 }}
+{{- end }}
+{{- else if .Values.auth.openshift.enabled }}
+        {{- /*
+        In the case of OpenShift, a template config is used instead of a plain config for Dex.
+        It requires a different command to be processed correctly.
+        */}}
+        command: ["/usr/local/bin/docker-entrypoint", "dex", "serve", "/etc/dex/cfg/config.yaml"]
+        env:
+          - name: {{ include "k10.openShiftClientSecretEnvVar" . }}
+{{- if and (not .Values.auth.openshift.clientSecretName) (not .Values.auth.openshift.clientSecret) }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "get.openshiftServiceAccountSecretName" . }}
+                key: token
+{{- else if .Values.auth.openshift.clientSecretName }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.auth.openshift.clientSecretName }}
+                key: token
 {{- else }}
-        command: ["/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"]
+            value: {{ .Values.auth.openshift.clientSecret }}
+{{- end }}
+{{- if .Values.fips.enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
+{{- end }}
 {{- end }}
         ports:
         - name: http
@@ -717,6 +979,7 @@ stating that types are not same for the equality check
 
 {{- define "k10-init-container" }}
 {{- $pod := .k10_pod }}
+{{- $podName := (printf "%s-svc" $pod) }}
 {{- with .main }}
 {{- $main_context := . }}
 {{- $containerList := (dict "main" $main_context "k10_service_pod" $pod | include "get.serviceContainersInPod" | splitList " ") }}
@@ -732,6 +995,7 @@ stating that types are not same for the equality check
         - --new-config-path=/dex-config/config.yaml
         - --secret-field=bindPW
         {{- dict "main" $main_context "k10_service" $service | include "serviceImage" | indent 8 }}
+        {{- dict "main" $main_context "k10_service_pod_name" $podName "k10_service_container_name" "dex-init" | include "k10.resource.request" | indent 8}}
         volumeMounts:
         - mountPath: /etc/dex/cfg
           name: config
@@ -751,6 +1015,7 @@ stating that types are not same for the equality check
             allowPrivilegeEscalation: false
         {{- dict "main" $main_context "k10_service" "upgrade" | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ $main_context.Values.global.image.pullPolicy }}
+        {{- dict "main" $main_context "k10_service_pod_name" $podName "k10_service_container_name" "upgrade-init" | include "k10.resource.request" | indent 8}}
         env:
           - name: MODEL_STORE_DIR
             valueFrom:
@@ -764,6 +1029,7 @@ stating that types are not same for the equality check
       - name: schema-upgrade-check
         {{- dict "main" $main_context "k10_service" $service | include "serviceImage" | indent 8 }}
         imagePullPolicy: {{ $main_context.Values.global.image.pullPolicy }}
+        {{- dict "main" $main_context "k10_service_pod_name" $podName "k10_service_container_name" "schema-upgrade-check" | include "k10.resource.request" | indent 8}}
         env:
 {{- if $main_context.Values.clusterName }}
           - name: CLUSTER_NAME

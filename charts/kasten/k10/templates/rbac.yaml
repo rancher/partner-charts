@@ -71,14 +71,36 @@ metadata:
   namespace: {{ .Release.Namespace }}
 rules:
 - apiGroups:
-  - ""
   - "apps"
   resources:
   - deployments
+  verbs:
+  - get
+  - update
+  - watch
+  - list
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - get
+  - create
+  - delete
   - list
+- apiGroups:
+  - "apik10.kasten.io"
+  resources:
+  - k10s
+  verbs:
+  - list
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:
@@ -94,12 +116,40 @@ rules:
   resources:
   - configmaps
   verbs:
+  - create
+  - delete
   - get
+  - list
+  - update
 - apiGroups:
   - "batch"
   resources:
   - jobs
   verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - get
+  - delete
+- apiGroups:
+  - "networking.k8s.io"
+  resources:
+  - networkpolicies
+  verbs:
+  - get
+  - create
+  - list
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  verbs:
+  - list
   - get
 ---
 kind: ClusterRole
@@ -145,6 +195,8 @@ rules:
   - {{ include "k10.exportActions" $main}}
   - {{ include "k10.exportActionsDetails" $main}}
   - {{ include "k10.cancelActions" $main}}
+  - {{ include "k10.runActions" $main}}
+  - {{ include "k10.runActionsDetails" $main}}
   verbs:
    - "*"
 - apiGroups:
@@ -186,11 +238,14 @@ rules:
   - {{ . }}.{{ $apiDomain }}
 {{- end }}
   resources:
+  - {{ include "k10.auditconfigs" $main}}
   - {{ include "k10.profiles" $main}}
   - {{ include "k10.policies" $main}}
   - {{ include "k10.policypresets" $main}}
   - {{ include "k10.transformsets" $main}}
   - {{ include "k10.blueprintbindings" $main}}
+  - {{ include "k10.storagesecuritycontexts" $main}}
+  - {{ include "k10.storagesecuritycontextbindings" $main}}
   verbs:
   - get
   - list
@@ -244,6 +299,31 @@ subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: Group
   name: {{ . }}
+{{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: {{ .Release.Namespace }}-{{ template "serviceAccountName" . }}-mc-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name:  {{ .Release.Name }}-mc-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: k10:admins
+{{- range .Values.auth.k10AdminUsers }}
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: {{ . }}
+{{- end }}
+{{- range default .Values.auth.groupAllowList .Values.auth.k10AdminGroups }}
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ . }}
 {{- end }}
 {{- end }}
 {{- if and .Values.rbac.create (not .Values.prometheus.rbac.create) }}

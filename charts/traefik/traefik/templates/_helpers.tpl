@@ -108,10 +108,10 @@ Users can provide an override for an explicit service they want bound via `.Valu
 Construct a comma-separated list of whitelisted namespaces
 */}}
 {{- define "providers.kubernetesIngress.namespaces" -}}
-{{- default .Release.Namespace (join "," .Values.providers.kubernetesIngress.namespaces) }}
+{{- default (include "traefik.namespace" .) (join "," .Values.providers.kubernetesIngress.namespaces) }}
 {{- end -}}
 {{- define "providers.kubernetesCRD.namespaces" -}}
-{{- default .Release.Namespace (join "," .Values.providers.kubernetesCRD.namespaces) }}
+{{- default (include "traefik.namespace" .) (join "," .Values.providers.kubernetesCRD.namespaces) }}
 {{- end -}}
 
 {{/*
@@ -123,4 +123,24 @@ Renders a complete tree, even values that contains template.
   {{ else }}
     {{- tpl (.value | toYaml) .context }}
   {{- end }}
+{{- end -}}
+
+{{- define "imageVersion" -}}
+{{ (split "@" (default $.Chart.AppVersion $.Values.image.tag))._0 | replace "latest-" "" }}
+{{- end -}}
+
+{{/* Generate/load self-signed certificate for admission webhooks */}}
+{{- define "traefik-hub.webhook_cert" -}}
+{{- $cert := lookup "v1" "Secret" .Release.Namespace "hub-agent-cert" -}}
+{{- if $cert -}}
+{{/* reusing value of existing cert */}}
+Cert: {{ index $cert.data "tls.crt" }}
+Key: {{ index $cert.data "tls.key" }}
+{{- else -}}
+{{/* generate a new one */}}
+{{- $altNames := list ( printf "admission.%s.svc" .Release.Namespace ) -}}
+{{- $cert := genSelfSignedCert ( printf "admission.%s.svc" .Release.Namespace ) (list) $altNames 3650 -}}
+Cert: {{ $cert.Cert | b64enc }}
+Key: {{ $cert.Key | b64enc }}
+{{- end -}}
 {{- end -}}

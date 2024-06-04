@@ -31,7 +31,7 @@ spec:
               access-k10-services: allowed
       ports:
         - protocol: TCP
-          port: {{ .Values.service.externalPort }}
+          port: {{ .Values.service.internalPort }}
 ---
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
@@ -51,7 +51,7 @@ spec:
             release: {{ .Release.Name }}
       ports:
         - protocol: TCP
-          port: {{ .Values.service.externalPort }}
+          port: {{ .Values.service.internalPort }}
 ---
 {{/* TODO: Consider a flag to turn this off. */}}
 kind: NetworkPolicy
@@ -116,7 +116,7 @@ spec:
   - from: []
     ports:
     - protocol: TCP
-      port: 8000
+      port: {{ .Values.gateway.service.internalPort | default 8000 }}
 ---
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
@@ -181,7 +181,7 @@ spec:
           createdBy: kanister
     ports:
     - protocol: TCP
-      port: {{ .Values.service.externalPort }}
+      port: {{ .Values.service.internalPort }}
 {{- end -}}
 {{- if .Values.injectKanisterSidecar.enabled }}
 ---
@@ -203,7 +203,7 @@ spec:
     - protocol: TCP
       port: {{ $mutating_webhook_port }}
 {{- end -}}
-{{- if or .Values.auth.dex.enabled (eq (include "check.dexAuth" .) "true") }}
+{{- if eq (include "check.dexAuth" .) "true" }}
 ---
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
@@ -222,6 +222,28 @@ spec:
     - podSelector:
         matchLabels:
           service: gateway
+          release: {{ .Release.Name }}
+    ports:
+    - protocol: TCP
+      port: 8080
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: auth-dex-allow
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: auth-svc
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          run: auth-svc
           release: {{ .Release.Name }}
     ports:
     - protocol: TCP

@@ -1,20 +1,28 @@
-# Value to control if grafana installation
-enabled: true
+global:
+  # -- Overrides the Docker registry globally for all images
+  imageRegistry: null
 
-# Values for prometheus datasource
-prometheusName: prometheus-server
-prometheusPrefixURL: /k10/prometheus
-
-k10image:
-  registry: gcr.io
-  repository: kasten-images
+  # To help compatibility with other charts which use global.imagePullSecrets.
+  # Allow either an array of {name: pullSecret} maps (k8s-style), or an array of strings (more common helm-style).
+  # Can be tempalted.
+  # global:
+  #   imagePullSecrets:
+  #   - name: pullSecret1
+  #   - name: pullSecret2
+  # or
+  # global:
+  #   imagePullSecrets:
+  #   - pullSecret1
+  #   - pullSecret2
+  imagePullSecrets: []
 
 rbac:
   create: true
   ## Use an existing ClusterRole/Role (depending on rbac.namespaced false/true)
-  # useExistingRole: name-of-some-(cluster)role
-  pspEnabled: true
-  pspUseAppArmor: true
+  # useExistingRole: name-of-some-role
+  # useExistingClusterRole: name-of-some-clusterRole
+  pspEnabled: false
+  pspUseAppArmor: false
   namespaced: false
   extraRoleRules: []
   # - apiGroups: []
@@ -28,10 +36,12 @@ serviceAccount:
   create: true
   name:
   nameTest:
+  ## ServiceAccount labels.
+  labels: {}
 ## Service account annotations. Can be templated.
 #  annotations:
 #    eks.amazonaws.com/role-arn: arn:aws:iam::123456789000:role/iam-role-name-here
-  autoMount: true
+  autoMount: false
 
 replicas: 1
 
@@ -42,28 +52,23 @@ headlessService: false
 #
 autoscaling:
   enabled: false
-#   minReplicas: 1
-#   maxReplicas: 10
-#   metrics:
-#   - type: Resource
-#     resource:
-#       name: cpu
-#       targetAverageUtilization: 60
-#   - type: Resource
-#     resource:
-#       name: memory
-#       targetAverageUtilization: 60
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPU: "60"
+  targetMemory: ""
+  behavior: {}
 
 ## See `kubectl explain poddisruptionbudget.spec` for more
 ## ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
 podDisruptionBudget: {}
+#  apiVersion: ""
 #  minAvailable: 1
 #  maxUnavailable: 1
 
 ## See `kubectl explain deployment.spec.strategy` for more
 ## ref: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
 deploymentStrategy:
-  type: Recreate
+  type: RollingUpdate
 
 readinessProbe:
   httpGet:
@@ -84,6 +89,9 @@ livenessProbe:
 # schedulerName: "default-scheduler"
 
 image:
+  # -- The Docker registry
+  registry: docker.io
+  # -- Docker image repository
   repository: grafana/grafana
   # Overrides the Grafana image tag whose default is the chart appVersion
   tag: ""
@@ -95,23 +103,42 @@ image:
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
   ## Can be templated.
   ##
-  # pullSecrets:
+  pullSecrets: []
   #   - myRegistrKeySecretName
 
 testFramework:
-  enabled: false
-  image: "bats/bats"
-  tag: "v1.4.1"
+  enabled: true
+  image:
+    # -- The Docker registry
+    registry: docker.io
+    repository: bats/bats
+    tag: "v1.4.1"
   imagePullPolicy: IfNotPresent
   securityContext: {}
 
+# dns configuration for pod
+dnsPolicy: ~
+dnsConfig: {}
+  # nameservers:
+  #   - 8.8.8.8
+  #   options:
+  #   - name: ndots
+  #     value: "2"
+  #   - name: edns0
+
 securityContext:
+  runAsNonRoot: true
   runAsUser: 472
   runAsGroup: 472
   fsGroup: 472
 
 containerSecurityContext:
-  {}
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 # Enable creating the grafana configmap
 createConfigmap: true
@@ -138,8 +165,10 @@ extraLabels: {}
 # priorityClassName:
 
 downloadDashboardsImage:
+  # -- The Docker registry
+  registry: docker.io
   repository: curlimages/curl
-  tag: 7.73.0
+  tag: 7.85.0
   sha: ""
   pullPolicy: IfNotPresent
 
@@ -147,6 +176,18 @@ downloadDashboards:
   env: {}
   envFromSecret: ""
   resources: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  envValueFrom: {}
+  #  ENV_NAME:
+  #    configMapKeyRef:
+  #      name: configmap-name
+  #      key: value_key
 
 ## Pod Annotations
 # podAnnotations: {}
@@ -155,7 +196,7 @@ downloadDashboards:
 # podLabels: {}
 
 podPortName: grafana
-
+gossipPortName: gossip
 ## Deployment annotations
 # annotations: {}
 
@@ -166,12 +207,18 @@ podPortName: grafana
 service:
   enabled: true
   type: ClusterIP
+  loadBalancerIP: ""
+  loadBalancerClass: ""
+  loadBalancerSourceRanges: []
   port: 80
   targetPort: 3000
     # targetPort: 4181 To be used with a proxy extraContainer
+  ## Service annotations. Can be templated.
   annotations: {}
   labels: {}
   portName: service
+  # Adds the appProtocol field to the service. This allows to work with istio protocol selection. Ex: "http" or "tcp"
+  appProtocol: ""
 
 serviceMonitor:
   ## If true, a ServiceMonitor CRD is created for a prometheus operator
@@ -181,17 +228,18 @@ serviceMonitor:
   path: /metrics
   #  namespace: monitoring  (defaults to use the namespace this chart is deployed to)
   labels: {}
-  interval: 1m
+  interval: 30s
   scheme: http
   tlsConfig: {}
   scrapeTimeout: 30s
   relabelings: []
+  metricRelabelings: []
+  targetLabels: []
 
 extraExposePorts: []
  # - name: keycloak
  #   port: 8080
  #   targetPort: 8080
- #   type: ClusterIP
 
 # overrides pod.spec.hostAliases in the grafana deployment's pods
 hostAliases: []
@@ -260,6 +308,11 @@ tolerations: []
 ##
 affinity: {}
 
+## Topology Spread Constraints
+## ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+##
+topologySpreadConstraints: []
+
 ## Additional init containers (evaluated as template)
 ## ref: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
 ##
@@ -309,6 +362,8 @@ persistence:
   # subPath: ""
   ## Name of an existing PVC. Can be templated.
   # existingClaim:
+  ## Extra labels to apply to a PVC.
+  extraPvcLabels: {}
 
   ## If persistence is not enabled, this allows to mount the
   ## local storage in-memory to improve performance
@@ -323,17 +378,19 @@ persistence:
 
 initChownData:
   ## If false, data ownership will not be reset at startup
-  ## This allows the prometheus-server to be run with an arbitrary user
+  ## This allows the grafana-server to be run with an arbitrary user
   ##
   enabled: true
 
   ## initChownData container image
   ##
   image:
+    # -- The Docker registry
+    registry: docker.io
+    repository: library/busybox
+    tag: "1.31.1"
+    sha: ""
     pullPolicy: IfNotPresent
-#     repository: busybox
-#     tag: "1.31.1"
-#     sha: ""
 
   ## initChownData resource requests and limits
   ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
@@ -345,7 +402,14 @@ initChownData:
   #  requests:
   #    cpu: 100m
   #    memory: 128Mi
-
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      add:
+        - CHOWN
 
 # Administrator credentials when not using an existing secret (see below)
 adminUser: admin
@@ -365,10 +429,13 @@ admin:
 # - "sh"
 # - "/run.sh"
 
-## Use an alternate scheduler, e.g. "stork".
-## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
-##
-# schedulerName:
+## Optionally define args if command is used
+## Needed if using `hashicorp/envconsul` to manage secrets
+## By default no arguments are set
+# args:
+# - "-secret"
+# - "secret/grafana"
+# - "./grafana"
 
 ## Extra environment variables that will be pass onto deployment pods
 ##
@@ -413,7 +480,9 @@ envValueFrom: {}
 envFromSecret: ""
 
 ## Sensible environment variables that will be rendered as new secret object
-## This can be useful for auth tokens, etc
+## This can be useful for auth tokens, etc.
+## If the secret values contains "{{", they'll need to be properly escaped so that they are not interpreted by Helm
+## ref: https://helm.sh/docs/howto/charts_tips_and_tricks/#using-the-tpl-function
 envRenderSecret: {}
 
 ## The names of secrets in the same kubernetes namespace which contain values to be added to the environment
@@ -421,6 +490,7 @@ envRenderSecret: {}
 ## Name is templated.
 envFromSecrets: []
 ## - name: secret-name
+##   prefix: prefix
 ##   optional: true
 
 ## The names of conifgmaps in the same kubernetes namespace which contain values to be added to the environment
@@ -429,6 +499,7 @@ envFromSecrets: []
 ## ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#configmapenvsource-v1-core
 envFromConfigMaps: []
 ## - name: configmap-name
+##   prefix: prefix
 ##   optional: true
 
 # Inject Kubernetes services as environment variables.
@@ -474,11 +545,26 @@ extraVolumeMounts: []
   # - name: extra-volume-0
   #   mountPath: /mnt/volume0
   #   readOnly: true
-  #   existingClaim: volume-claim
   # - name: extra-volume-1
   #   mountPath: /mnt/volume1
   #   readOnly: true
-  #   hostPath: /usr/shared/
+  # - name: grafana-secrets
+  #   mountPath: /mnt/volume2
+
+## Additional Grafana server volumes
+extraVolumes: []
+  # - name: extra-volume-0
+  #   existingClaim: volume-claim
+  # - name: extra-volume-1
+  #   hostPath:
+  #     path: /usr/shared/
+  #     type: ""
+  # - name: grafana-secrets
+  #   csi:
+  #     driver: secrets-store.csi.k8s.io
+  #     readOnly: true
+  #     volumeAttributes:
+  #       secretProviderClass: "grafana-env-spc"
 
 ## Container Lifecycle Hooks. Execute a specific bash command or make an HTTP request
 lifecycleHooks: {}
@@ -491,6 +577,9 @@ lifecycleHooks: {}
 plugins: []
   # - digrich-bubblechart-panel
   # - grafana-clock-panel
+  ## You can also use other plugin download URL, as long as they are valid zip files,
+  ## and specify the name of the plugin after the semicolon. Like this:
+  # - https://grafana.com/api/plugins/marcusolsson-json-datasource/versions/1.3.2/download;marcusolsson-json-datasource
 
 ## Configure grafana datasources
 ## ref: http://docs.grafana.org/administration/provisioning/#datasources
@@ -512,6 +601,74 @@ datasources: {}
 #      jsonData:
 #        authType: default
 #        defaultRegion: us-east-1
+#    deleteDatasources: []
+#    - name: Prometheus
+
+## Configure grafana alerting (can be templated)
+## ref: http://docs.grafana.org/administration/provisioning/#alerting
+##
+alerting: {}
+  # rules.yaml:
+  #   apiVersion: 1
+  #   groups:
+  #     - orgId: 1
+  #       name: '{{ .Chart.Name }}_my_rule_group'
+  #       folder: my_first_folder
+  #       interval: 60s
+  #       rules:
+  #         - uid: my_id_1
+  #           title: my_first_rule
+  #           condition: A
+  #           data:
+  #             - refId: A
+  #               datasourceUid: '-100'
+  #               model:
+  #                 conditions:
+  #                   - evaluator:
+  #                       params:
+  #                         - 3
+  #                       type: gt
+  #                     operator:
+  #                       type: and
+  #                     query:
+  #                       params:
+  #                         - A
+  #                     reducer:
+  #                       type: last
+  #                     type: query
+  #                 datasource:
+  #                   type: __expr__
+  #                   uid: '-100'
+  #                 expression: 1==0
+  #                 intervalMs: 1000
+  #                 maxDataPoints: 43200
+  #                 refId: A
+  #                 type: math
+  #           dashboardUid: my_dashboard
+  #           panelId: 123
+  #           noDataState: Alerting
+  #           for: 60s
+  #           annotations:
+  #             some_key: some_value
+  #           labels:
+  #             team: sre_team_1
+  # contactpoints.yaml:
+  #   secret:
+  #     apiVersion: 1
+  #     contactPoints:
+  #       - orgId: 1
+  #         name: cp_1
+  #         receivers:
+  #           - uid: first_uid
+  #             type: pagerduty
+  #             settings:
+  #               integrationKey: XXX
+  #               severity: critical
+  #               class: ping failure
+  #               component: Grafana
+  #               group: app-stack
+  #               summary: |
+  #                 {{ `{{ include "default.message" . }}` }}
 
 ## Configure notifiers
 ## ref: http://docs.grafana.org/administration/provisioning/#alert-notification-channels
@@ -536,18 +693,18 @@ notifiers: {}
 ##
 ## `path` must be /var/lib/grafana/dashboards/<provider_name>
 ##
-dashboardProviders:
-  dashboardproviders.yaml:
-    apiVersion: 1
-    providers:
-    - name: 'default'
-      orgId: 1
-      folder: ''
-      type: file
-      disableDeletion: true
-      editable: false
-      options:
-        path: /var/lib/grafana/dashboards
+dashboardProviders: {}
+#  dashboardproviders.yaml:
+#    apiVersion: 1
+#    providers:
+#    - name: 'default'
+#      orgId: 1
+#      folder: ''
+#      type: file
+#      disableDeletion: false
+#      editable: true
+#      options:
+#        path: /var/lib/grafana/dashboards/default
 
 ## Configure grafana dashboard to import
 ## NOTE: To use dashboards you must also enable/configure dashboardProviders
@@ -555,4603 +712,11 @@ dashboardProviders:
 ##
 ## dashboards per provider, use provider name as key.
 ##
-dashboards:
-   default:
-     default:
-       json: |
-         {
-           "annotations": {
-             "list": [
-               {
-                 "builtIn": 1,
-                 "datasource": "-- Grafana --",
-                 "enable": true,
-                 "hide": true,
-                 "iconColor": "rgba(0, 211, 255, 1)",
-                 "name": "Annotations & Alerts",
-                 "target": {
-                   "limit": 100,
-                   "matchAny": false,
-                   "tags": [],
-                   "type": "dashboard"
-                 },
-                 "type": "dashboard"
-               }
-             ]
-           },
-           "editable": true,
-           "fiscalYearStartMonth": 0,
-           "graphTooltip": 0,
-           "id": 12,
-           "links": [],
-           "liveNow": false,
-           "panels": [
-             {
-               "collapsed": false,
-               "datasource": "Prometheus",
-               "gridPos": {
-                 "h": 1,
-                 "w": 24,
-                 "x": 0,
-                 "y": 0
-               },
-               "id": 53,
-               "panels": [],
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "refId": "A"
-                 }
-               ],
-               "title": "K10 System Resource Usage",
-               "type": "row"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "palette-classic"
-                   },
-                   "custom": {
-                     "axisCenteredZero": false,
-                     "axisColorMode": "text",
-                     "axisLabel": "",
-                     "axisPlacement": "auto",
-                     "barAlignment": 0,
-                     "drawStyle": "line",
-                     "fillOpacity": 0,
-                     "gradientMode": "none",
-                     "hideFrom": {
-                       "legend": false,
-                       "tooltip": false,
-                       "viz": false
-                     },
-                     "lineInterpolation": "linear",
-                     "lineWidth": 1,
-                     "pointSize": 5,
-                     "scaleDistribution": {
-                       "type": "linear"
-                     },
-                     "showPoints": "auto",
-                     "spanNulls": false,
-                     "stacking": {
-                       "group": "A",
-                       "mode": "none"
-                     },
-                     "thresholdsStyle": {
-                       "mode": "off"
-                     }
-                   },
-                   "mappings": [],
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 80
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 8,
-                 "w": 12,
-                 "x": 0,
-                 "y": 1
-               },
-               "id": 55,
-               "options": {
-                 "legend": {
-                   "calcs": [],
-                   "displayMode": "list",
-                   "placement": "bottom",
-                   "showLegend": true
-                 },
-                 "tooltip": {
-                   "mode": "single",
-                   "sort": "none"
-                 }
-               },
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(rate(process_cpu_seconds_total[5m]))",
-                   "legendFormat": "Total CPU seconds",
-                   "range": true,
-                   "refId": "A"
-                 }
-               ],
-               "title": "K10 CPU total seconds ",
-               "type": "timeseries"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "palette-classic"
-                   },
-                   "custom": {
-                     "axisCenteredZero": false,
-                     "axisColorMode": "text",
-                     "axisLabel": "",
-                     "axisPlacement": "auto",
-                     "barAlignment": 0,
-                     "drawStyle": "line",
-                     "fillOpacity": 0,
-                     "gradientMode": "none",
-                     "hideFrom": {
-                       "legend": false,
-                       "tooltip": false,
-                       "viz": false
-                     },
-                     "lineInterpolation": "linear",
-                     "lineWidth": 1,
-                     "pointSize": 5,
-                     "scaleDistribution": {
-                       "type": "linear"
-                     },
-                     "showPoints": "auto",
-                     "spanNulls": false,
-                     "stacking": {
-                       "group": "A",
-                       "mode": "none"
-                     },
-                     "thresholdsStyle": {
-                       "mode": "off"
-                     }
-                   },
-                   "mappings": [],
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 80
-                       }
-                     ]
-                   },
-                   "unit": "decbytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 8,
-                 "w": 12,
-                 "x": 12,
-                 "y": 1
-               },
-               "id": 57,
-               "options": {
-                 "legend": {
-                   "calcs": [],
-                   "displayMode": "list",
-                   "placement": "bottom",
-                   "showLegend": true
-                 },
-                 "tooltip": {
-                   "mode": "single",
-                   "sort": "none"
-                 }
-               },
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(process_virtual_memory_bytes)",
-                   "hide": false,
-                   "legendFormat": "Total memory consumption",
-                   "range": true,
-                   "refId": "C"
-                 }
-               ],
-               "title": "K10 total memory consumption",
-               "type": "timeseries"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "palette-classic"
-                   },
-                   "custom": {
-                     "axisCenteredZero": false,
-                     "axisColorMode": "text",
-                     "axisLabel": "",
-                     "axisPlacement": "auto",
-                     "barAlignment": 0,
-                     "drawStyle": "line",
-                     "fillOpacity": 0,
-                     "gradientMode": "none",
-                     "hideFrom": {
-                       "legend": false,
-                       "tooltip": false,
-                       "viz": false
-                     },
-                     "lineInterpolation": "linear",
-                     "lineWidth": 1,
-                     "pointSize": 5,
-                     "scaleDistribution": {
-                       "type": "linear"
-                     },
-                     "showPoints": "auto",
-                     "spanNulls": false,
-                     "stacking": {
-                       "group": "A",
-                       "mode": "none"
-                     },
-                     "thresholdsStyle": {
-                       "mode": "off"
-                     }
-                   },
-                   "mappings": [],
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 80
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 8,
-                 "w": 12,
-                 "x": 0,
-                 "y": 9
-               },
-               "id": 81,
-               "options": {
-                 "legend": {
-                   "calcs": [],
-                   "displayMode": "list",
-                   "placement": "bottom",
-                   "showLegend": true
-                 },
-                 "tooltip": {
-                   "mode": "single",
-                   "sort": "none"
-                 }
-               },
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "rate(process_cpu_seconds_total{job=\"httpServiceDiscovery\"}[5m])",
-                   "legendFormat": "{{service}}",
-                   "range": true,
-                   "refId": "A"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(rate(process_cpu_seconds_total{job=\"k10-pods\"}[5m]))",
-                   "hide": false,
-                   "legendFormat": "executor",
-                   "range": true,
-                   "refId": "B"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(rate(process_cpu_seconds_total{job=\"pushAggregator\"}[5m]))",
-                   "hide": false,
-                   "legendFormat": "ephemeral pods",
-                   "range": true,
-                   "refId": "C"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(rate(process_cpu_seconds_total{job=\"prometheus\"}[5m]))",
-                   "hide": false,
-                   "legendFormat": "prometheus",
-                   "range": true,
-                   "refId": "D"
-                 }
-               ],
-               "title": "CPU total seconds per service",
-               "type": "timeseries"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "palette-classic"
-                   },
-                   "custom": {
-                     "axisCenteredZero": false,
-                     "axisColorMode": "text",
-                     "axisLabel": "",
-                     "axisPlacement": "auto",
-                     "barAlignment": 0,
-                     "drawStyle": "line",
-                     "fillOpacity": 0,
-                     "gradientMode": "none",
-                     "hideFrom": {
-                       "legend": false,
-                       "tooltip": false,
-                       "viz": false
-                     },
-                     "lineInterpolation": "linear",
-                     "lineWidth": 1,
-                     "pointSize": 5,
-                     "scaleDistribution": {
-                       "type": "linear"
-                     },
-                     "showPoints": "auto",
-                     "spanNulls": false,
-                     "stacking": {
-                       "group": "A",
-                       "mode": "none"
-                     },
-                     "thresholdsStyle": {
-                       "mode": "off"
-                     }
-                   },
-                   "mappings": [],
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 80
-                       }
-                     ]
-                   },
-                   "unit": "decbytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 8,
-                 "w": 12,
-                 "x": 12,
-                 "y": 9
-               },
-               "id": 82,
-               "options": {
-                 "legend": {
-                   "calcs": [],
-                   "displayMode": "list",
-                   "placement": "bottom",
-                   "showLegend": true
-                 },
-                 "tooltip": {
-                   "mode": "single",
-                   "sort": "none"
-                 }
-               },
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "process_virtual_memory_bytes{job=\"pushAggregator\"}",
-                   "hide": false,
-                   "legendFormat": "ephemeral pods",
-                   "range": true,
-                   "refId": "C"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "process_virtual_memory_bytes{job=\"httpServiceDiscovery\"}",
-                   "hide": false,
-                   "legendFormat": "{{service}}",
-                   "range": true,
-                   "refId": "A"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(process_virtual_memory_bytes{job=\"k10-pods\"})",
-                   "hide": false,
-                   "legendFormat": "executor",
-                   "range": true,
-                   "refId": "B"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "editorMode": "builder",
-                   "expr": "sum(process_virtual_memory_bytes{job=\"prometheus\"})",
-                   "hide": false,
-                   "legendFormat": "executor",
-                   "range": true,
-                   "refId": "D"
-                 }
-               ],
-               "title": "Memory consumption by service",
-               "type": "timeseries"
-             },
-             {
-               "collapsed": false,
-               "datasource": "Prometheus",
-               "gridPos": {
-                 "h": 1,
-                 "w": 24,
-                 "x": 0,
-                 "y": 17
-               },
-               "id": 18,
-               "panels": [],
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Applications",
-               "type": "row"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "yellow",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 5,
-                 "x": 0,
-                 "y": 18
-               },
-               "id": 24,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_backup_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Backups Completed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 5,
-                 "y": 18
-               },
-               "id": 33,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_backup_ended_overall{cluster=\"$cluster\", state=~\"failed|cancelled\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Backups Failed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "#EAB839",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 8,
-                 "y": 18
-               },
-               "id": 34,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_backup_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Backups Skipped",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 5,
-                 "x": 13,
-                 "y": 18
-               },
-               "id": 35,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_restore_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Restores Completed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 18,
-                 "y": 18
-               },
-               "id": 36,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_restore_ended_overall{cluster=\"$cluster\", state=~\"failed|cancelled\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Restores Failed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "#EAB839",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 21,
-                 "y": 18
-               },
-               "id": 23,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_restore_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Restores Skipped",
-               "type": "stat"
-             },
-             {
-               "collapsed": false,
-               "datasource": "Prometheus",
-               "gridPos": {
-                 "h": 1,
-                 "w": 24,
-                 "x": 0,
-                 "y": 25
-               },
-               "id": 16,
-               "panels": [],
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Cluster",
-               "type": "row"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "yellow",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 5,
-                 "x": 0,
-                 "y": 26
-               },
-               "id": 10,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_backup_cluster_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Cluster Backups Completed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 5,
-                 "y": 26
-               },
-               "id": 19,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_backup_cluster_ended_overall{cluster=\"$cluster\", state=~\"failed|cancelled\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Cluster Backups Failed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "#EAB839",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 8,
-                 "y": 26
-               },
-               "id": 28,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_backup_cluster_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Cluster Backups Skipped",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 5,
-                 "x": 13,
-                 "y": 26
-               },
-               "id": 21,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_restore_cluster_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Cluster Restores Completed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 18,
-                 "y": 26
-               },
-               "id": 22,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_restore_cluster_ended_overall{cluster=\"$cluster\", state=~\"failed|cancelled\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Cluster Restores Failed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "#EAB839",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 7,
-                 "w": 3,
-                 "x": 21,
-                 "y": 26
-               },
-               "id": 25,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_restore_cluster_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Cluster Restores Skipped",
-               "type": "stat"
-             },
-             {
-               "collapsed": false,
-               "datasource": "Prometheus",
-               "gridPos": {
-                 "h": 1,
-                 "w": 24,
-                 "x": 0,
-                 "y": 33
-               },
-               "id": 31,
-               "panels": [],
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Backup Exports",
-               "type": "row"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 5,
-                 "x": 0,
-                 "y": 34
-               },
-               "id": 38,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_export_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Exports Completed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 5,
-                 "y": 34
-               },
-               "id": 29,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_export_ended_overall{cluster=\"$cluster\", state=~\"failed|cancelled\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Exports Failed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "#EAB839",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 8,
-                 "y": 34
-               },
-               "id": 20,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_export_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Exports Skipped",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 5,
-                 "x": 13,
-                 "y": 34
-               },
-               "id": 27,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_import_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Imports Completed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 18,
-                 "y": 34
-               },
-               "id": 39,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_import_ended_overall{cluster=\"$cluster\", state=~\"failed|cancelled\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Imports Failed",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "#EAB839",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 21,
-                 "y": 34
-               },
-               "id": 37,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_import_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Imports Skipped",
-               "type": "stat"
-             },
-             {
-               "collapsed": false,
-               "datasource": "Prometheus",
-               "gridPos": {
-                 "h": 1,
-                 "w": 24,
-                 "x": 0,
-                 "y": 40
-               },
-               "id": 14,
-               "panels": [],
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "refId": "A"
-                 }
-               ],
-               "title": "System",
-               "type": "row"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   },
-                   "unit": "runs"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 0,
-                 "y": 41
-               },
-               "id": 12,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_run_ended_overall{cluster=\"$cluster\", state=\"succeeded\"}[$__range])))",
-                   "format": "time_series",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Policy Runs",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [
-                     {
-                       "options": {
-                         "0": {
-                           "index": 0,
-                           "text": "-"
-                         }
-                       },
-                       "type": "value"
-                     }
-                   ],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "yellow",
-                         "value": 1
-                       }
-                     ]
-                   },
-                   "unit": "runs"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 3,
-                 "y": 41
-               },
-               "id": 40,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "sum(round(increase(action_run_skipped_overall{cluster=\"$cluster\"}[$__range])))",
-                   "format": "time_series",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Policy Runs Skipped",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 6,
-                 "y": 41
-               },
-               "id": 6,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "catalog_persistent_volume_disk_space_used_bytes{cluster=\"$cluster\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Catalog Volume Used",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "max": 100,
-                   "min": 0,
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "yellow",
-                         "value": 70
-                       },
-                       {
-                         "color": "orange",
-                         "value": 80
-                       },
-                       {
-                         "color": "red",
-                         "value": 90
-                       }
-                     ]
-                   },
-                   "unit": "percent"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 9,
-                 "y": 41
-               },
-               "id": 2,
-               "options": {
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "showThresholdLabels": false,
-                 "showThresholdMarkers": true,
-                 "text": {}
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "100-catalog_persistent_volume_free_space_percent{cluster=\"$cluster\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Catalog Volume Used Space",
-               "type": "gauge"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 12,
-                 "y": 41
-               },
-               "id": 8,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "jobs_persistent_volume_disk_space_used_bytes{cluster=\"$cluster\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Jobs Volume Used",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "max": 100,
-                   "min": 0,
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "yellow",
-                         "value": 70
-                       },
-                       {
-                         "color": "orange",
-                         "value": 80
-                       },
-                       {
-                         "color": "red",
-                         "value": 90
-                       }
-                     ]
-                   },
-                   "unit": "percent"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 15,
-                 "y": 41
-               },
-               "id": 4,
-               "options": {
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "showThresholdLabels": false,
-                 "showThresholdMarkers": true,
-                 "text": {}
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "100-jobs_persistent_volume_free_space_percent{cluster=\"$cluster\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Jobs Volume Used Space",
-               "type": "gauge"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 18,
-                 "y": 41
-               },
-               "id": 7,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "logging_persistent_volume_disk_space_used_bytes{cluster=\"$cluster\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Logging Volume Used",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "max": 100,
-                   "min": 0,
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "yellow",
-                         "value": 70
-                       },
-                       {
-                         "color": "orange",
-                         "value": 80
-                       },
-                       {
-                         "color": "red",
-                         "value": 90
-                       }
-                     ]
-                   },
-                   "unit": "percent"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 21,
-                 "y": 41
-               },
-               "id": 3,
-               "options": {
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "showThresholdLabels": false,
-                 "showThresholdMarkers": true,
-                 "text": {}
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "100-logging_persistent_volume_free_space_percent{cluster=\"$cluster\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Logging Volume Used Space",
-               "type": "gauge"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "text",
-                         "value": null
-                       },
-                       {
-                         "color": "green",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 0,
-                 "y": 47
-               },
-               "id": 41,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "compliance_count{state=\"Compliant\"}",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Compliant Applications",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 3,
-                 "y": 47
-               },
-               "id": 42,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "compliance_count{state=\"NotCompliant\"}",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Non-Compliant Applications",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "0",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "green",
-                         "value": null
-                       },
-                       {
-                         "color": "red",
-                         "value": 1
-                       }
-                     ]
-                   }
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 6,
-                 "y": 47
-               },
-               "id": 43,
-               "interval": "1m",
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "none",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "last"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": false,
-                   "expr": "compliance_count{state=\"Unmanaged\"}",
-                   "hide": false,
-                   "interval": "",
-                   "legendFormat": "",
-                   "refId": "B"
-                 }
-               ],
-               "title": "Unmanaged Applications",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 12,
-                 "y": 47
-               },
-               "id": 44,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "snapshot_storage_size_bytes{cluster=\"$cluster\", type=\"physical\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Snapshot Size (Physical)",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 15,
-                 "y": 47
-               },
-               "id": 45,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "snapshot_storage_size_bytes{cluster=\"$cluster\", type=\"logical\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Snapshot Size (Logical)",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 18,
-                 "y": 47
-               },
-               "id": 46,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "export_storage_size_bytes{cluster=\"$cluster\", type=\"physical\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Export Size (Physical)",
-               "type": "stat"
-             },
-             {
-               "datasource": "Prometheus",
-               "description": "",
-               "fieldConfig": {
-                 "defaults": {
-                   "color": {
-                     "mode": "thresholds"
-                   },
-                   "mappings": [],
-                   "noValue": "-",
-                   "thresholds": {
-                     "mode": "absolute",
-                     "steps": [
-                       {
-                         "color": "#ccccdc",
-                         "value": null
-                       }
-                     ]
-                   },
-                   "unit": "bytes"
-                 },
-                 "overrides": []
-               },
-               "gridPos": {
-                 "h": 6,
-                 "w": 3,
-                 "x": 21,
-                 "y": 47
-               },
-               "id": 47,
-               "options": {
-                 "colorMode": "value",
-                 "graphMode": "area",
-                 "justifyMode": "auto",
-                 "orientation": "auto",
-                 "reduceOptions": {
-                   "calcs": [
-                     "lastNotNull"
-                   ],
-                   "fields": "",
-                   "values": false
-                 },
-                 "text": {},
-                 "textMode": "auto"
-               },
-               "pluginVersion": "9.1.5",
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "exemplar": true,
-                   "expr": "export_storage_size_bytes{cluster=\"$cluster\", type=\"logical\"}",
-                   "interval": "",
-                   "legendFormat": "",
-                   "queryType": "randomWalk",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Export Size (Logical)",
-               "type": "stat"
-             },
-             {
-               "collapsed": true,
-               "datasource": "Prometheus",
-               "gridPos": {
-                 "h": 1,
-                 "w": 24,
-                 "x": 0,
-                 "y": 53
-               },
-               "id": 49,
-               "panels": [
-                 {
-                   "datasource": "Prometheus",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "fixedColor": "red",
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       }
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "Worker Count"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 12,
-                     "x": 0,
-                     "y": 54
-                   },
-                   "id": 57,
-                   "interval": "5s",
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(exec_executor_worker_count)",
-                       "legendFormat": "Worker Count",
-                       "range": true,
-                       "refId": "A"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(exec_active_job_count) OR on() vector(0)",
-                       "hide": false,
-                       "legendFormat": "Worker Load",
-                       "range": true,
-                       "refId": "B"
-                     }
-                   ],
-                   "title": "Executor Worker Load",
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineStyle": {
-                           "fill": "solid"
-                         },
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "s"
-                     },
-                     "overrides": []
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 12,
-                     "x": 12,
-                     "y": 54
-                   },
-                   "id": 68,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_backup_duration_seconds_sum_overall[5m])) / sum(rate(action_backup_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Backup",
-                       "range": true,
-                       "refId": "A"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_backup_cluster_duration_seconds_overall_sum[5m])) / sum(rate(action_backup_cluster_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Backup Cluster",
-                       "range": true,
-                       "refId": "B"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_export_duration_seconds_sum_overall[5m])) / sum(rate(action_export_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Export",
-                       "range": true,
-                       "refId": "C"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_import_duration_seconds_sum_overall[5m])) / sum(rate(action_import_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Import",
-                       "range": true,
-                       "refId": "D"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_report_duration_seconds_sum_overall[5m])) / sum(rate(action_report_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Report",
-                       "range": true,
-                       "refId": "E"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_retire_duration_seconds_sum_overall[5m])) / sum(rate(action_retire_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Retire",
-                       "range": true,
-                       "refId": "F"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_restore_duration_seconds_sum_overall[5m])) / sum(rate(action_restore_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Restore",
-                       "range": true,
-                       "refId": "G"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(action_restore_cluster_duration_seconds_sum_overall[5m])) / sum(rate(action_restore_cluster_ended_overall[5m]))",
-                       "hide": false,
-                       "legendFormat": "Restore Cluster",
-                       "range": true,
-                       "refId": "H"
-                     }
-                   ],
-                   "title": "Average Action Duration",
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 0,
-                     "y": 61
-                   },
-                   "id": 74,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_backup_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Backups",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 6,
-                     "y": 61
-                   },
-                   "id": 69,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_backup_cluster_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Cluster Backups",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 12,
-                     "y": 61
-                   },
-                   "id": 75,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_export_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Exports",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 18,
-                     "y": 61
-                   },
-                   "id": 76,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_import_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Imports",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 0,
-                     "y": 68
-                   },
-                   "id": 77,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_report_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Reports",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 6,
-                     "y": 68
-                   },
-                   "id": 79,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_retire_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Retires",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 12,
-                     "y": 68
-                   },
-                   "id": 80,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_restore_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Restores",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "description": "",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "axisSoftMax": 0,
-                         "axisSoftMin": 0,
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "decimals": 0,
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "none"
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "succeeded"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "failed"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "cancelled"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-orange",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "skipped"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "semi-dark-blue",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 6,
-                     "x": 18,
-                     "y": 68
-                   },
-                   "id": 78,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(round(increase(action_restore_cluster_ended_overall[1m:10s]))) by (state)",
-                       "hide": false,
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Finished Cluster Restores",
-                   "transformations": [],
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       },
-                       "unit": "s"
-                     },
-                     "overrides": []
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 24,
-                     "x": 0,
-                     "y": 75
-                   },
-                   "id": 63,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "sum(rate(limiter_request_seconds_sum{stage=\"hold\"}[5m])) by (operation) / sum(rate(limiter_request_seconds_count{stage=\"hold\"}[5m])) by (operation) ",
-                       "legendFormat": "__auto",
-                       "range": true,
-                       "refId": "A"
-                     }
-                   ],
-                   "title": "Rate Limiter - avg operation duration",
-                   "type": "timeseries"
-                 },
-                 {
-                   "datasource": "Prometheus",
-                   "fieldConfig": {
-                     "defaults": {
-                       "color": {
-                         "fixedColor": "red",
-                         "mode": "palette-classic"
-                       },
-                       "custom": {
-                         "axisCenteredZero": false,
-                         "axisColorMode": "text",
-                         "axisLabel": "",
-                         "axisPlacement": "auto",
-                         "barAlignment": 0,
-                         "drawStyle": "line",
-                         "fillOpacity": 0,
-                         "gradientMode": "none",
-                         "hideFrom": {
-                           "legend": false,
-                           "tooltip": false,
-                           "viz": false
-                         },
-                         "lineInterpolation": "linear",
-                         "lineWidth": 1,
-                         "pointSize": 5,
-                         "scaleDistribution": {
-                           "type": "linear"
-                         },
-                         "showPoints": "auto",
-                         "spanNulls": false,
-                         "stacking": {
-                           "group": "A",
-                           "mode": "none"
-                         },
-                         "thresholdsStyle": {
-                           "mode": "off"
-                         }
-                       },
-                       "mappings": [],
-                       "thresholds": {
-                         "mode": "absolute",
-                         "steps": [
-                           {
-                             "color": "green",
-                             "value": null
-                           },
-                           {
-                             "color": "red",
-                             "value": 80
-                           }
-                         ]
-                       }
-                     },
-                     "overrides": [
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "Limit"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "dark-red",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "inflight"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "green",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       },
-                       {
-                         "matcher": {
-                           "id": "byName",
-                           "options": "pending"
-                         },
-                         "properties": [
-                           {
-                             "id": "color",
-                             "value": {
-                               "fixedColor": "yellow",
-                               "mode": "fixed"
-                             }
-                           }
-                         ]
-                       }
-                     ]
-                   },
-                   "gridPos": {
-                     "h": 7,
-                     "w": 4.8,
-                     "x": 0,
-                     "y": 82
-                   },
-                   "id": 51,
-                   "maxPerRow": 6,
-                   "options": {
-                     "legend": {
-                       "calcs": [],
-                       "displayMode": "list",
-                       "placement": "bottom",
-                       "showLegend": true
-                     },
-                     "tooltip": {
-                       "mode": "single",
-                       "sort": "none"
-                     }
-                   },
-                   "repeat": "operation",
-                   "repeatDirection": "h",
-                   "targets": [
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "limiter_inflight_count{operation=\"$operation\"}",
-                       "legendFormat": "Inflight",
-                       "range": true,
-                       "refId": "A"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "limiter_pending_count{operation=\"$operation\"}",
-                       "hide": false,
-                       "legendFormat": "Pending",
-                       "range": true,
-                       "refId": "B"
-                     },
-                     {
-                       "datasource": "Prometheus",
-                       "editorMode": "code",
-                       "expr": "limiter_inflight_limit_value{operation=\"$operation\"}",
-                       "hide": false,
-                       "legendFormat": "Limit",
-                       "range": true,
-                       "refId": "C"
-                     }
-                   ],
-                   "title": "Rate Limiter - $operation",
-                   "type": "timeseries"
-                 }
-               ],
-               "targets": [
-                 {
-                   "datasource": "Prometheus",
-                   "refId": "A"
-                 }
-               ],
-               "title": "Execution Control",
-               "type": "row"
-             }
-           ],
-           "schemaVersion": 37,
-           "style": "dark",
-           "tags": [],
-           "templating": {
-             "list": [
-               {
-                 "hide": 2,
-                 "label": "Cluster",
-                 "name": "cluster",
-                 "query": "",
-                 "skipUrlSync": false,
-                 "type": "constant"
-               },
-               {
-                 "current": {
-                   "selected": false,
-                   "text": "All",
-                   "value": "$__all"
-                 },
-                 "datasource": "Prometheus",
-                 "definition": "limiter_pending_count",
-                 "description": "",
-                 "hide": 2,
-                 "includeAll": true,
-                 "label": "operation",
-                 "multi": false,
-                 "name": "operation",
-                 "options": [],
-                 "query": {
-                   "query": "limiter_pending_count",
-                   "refId": "StandardVariableQuery"
-                 },
-                 "refresh": 1,
-                 "regex": "/operation=\\\"([\\w]+)\\\"/",
-                 "skipUrlSync": false,
-                 "sort": 0,
-                 "type": "query"
-               }
-             ]
-           },
-           "time": {
-             "from": "now-24h",
-             "to": "now"
-           },
-           "timepicker": {},
-           "timezone": "",
-           "title": "K10 Dashboard",
-           "uid": "8Ebb3xS7k",
-           "version": 1
-         }
-
+dashboards: {}
+  # default:
+  #   some-dashboard:
+  #     json: |
+  #       $RAW_JSON
   #   custom-dashboard:
   #     file: dashboards/custom-dashboard.json
   #   prometheus-stats:
@@ -5165,6 +730,16 @@ dashboards:
   #     url: https://example.com/repository/test-b64.json
   #     token: ''
   #     b64content: true
+  #   local-dashboard-gitlab:
+  #     url: https://example.com/repository/test-gitlab.json
+  #     gitlabToken: ''
+  #   local-dashboard-bitbucket:
+  #     url: https://example.com/repository/test-bitbucket.json
+  #     bearerToken: ''
+  #   local-dashboard-azure:
+  #     url: https://example.com/repository/test-azure.json
+  #     basic: ''
+  #     acceptHeader: '*/*'
 
 ## Reference to external ConfigMap per provider. Use provider name as key and ConfigMap name as value.
 ## A provider dashboards must be defined either by external ConfigMaps or in values.yaml, not in both.
@@ -5193,24 +768,12 @@ grafana.ini:
     mode: console
   grafana_net:
     url: https://grafana.net
-  dashboards:
-    default_home_dashboard_path: /var/lib/grafana/dashboards/default/default.json
+  server:
+    domain: "{{ if (and .Values.ingress.enabled .Values.ingress.hosts) }}{{ .Values.ingress.hosts | first }}{{ else }}''{{ end }}"
 ## grafana Authentication can be enabled with the following values on grafana.ini
  # server:
       # The full public facing url you use in browser, used for redirects and emails
  #    root_url:
-
-  auth:
-    disable_login_form: true
-    disable_signout_menu: true
-
-  auth.basic:
-    enabled: false
-
-  auth.anonymous:
-    enabled: true
-    org_name: Main Org.
-    org_role: Admin
  # https://grafana.com/docs/grafana/latest/auth/github/#enable-github-in-grafana
  # auth.github:
  #    enabled: false
@@ -5267,8 +830,10 @@ smtp:
 ## Requires at least Grafana 5 to work and can't be used together with parameters dashboardProviders, datasources and dashboards
 sidecar:
   image:
-    repository: quay.io/kiwigrid/k8s-sidecar
-    tag: 1.19.2
+    # -- The Docker registry
+    registry: quay.io
+    repository: kiwigrid/k8s-sidecar
+    tag: 1.25.2
     sha: ""
   imagePullPolicy: IfNotPresent
   resources: {}
@@ -5278,21 +843,75 @@ sidecar:
 #   requests:
 #     cpu: 50m
 #     memory: 50Mi
-  securityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
   # skipTlsVerify Set to true to skip tls verification for kube api calls
   # skipTlsVerify: true
   enableUniqueFilenames: false
   readinessProbe: {}
   livenessProbe: {}
-  # Log level. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL.
-  logLevel: INFO
+  # Log level default for all sidecars. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL. Defaults to INFO
+  # logLevel: INFO
+  alerts:
+    enabled: false
+    # Additional environment variables for the alerts sidecar
+    env: {}
+    # Do not reprocess already processed unchanged resources on k8s API reconnect.
+    # ignoreAlreadyProcessed: true
+    # label that the configmaps with alert are marked with
+    label: grafana_alert
+    # value of label that the configmaps with alert are set to
+    labelValue: ""
+    # Log level. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL.
+    # logLevel: INFO
+    # If specified, the sidecar will search for alert config-maps inside this namespace.
+    # Otherwise the namespace in which the sidecar is running will be used.
+    # It's also possible to specify ALL to search in all namespaces
+    searchNamespace: null
+    # Method to use to detect ConfigMap changes. With WATCH the sidecar will do a WATCH requests, with SLEEP it will list all ConfigMaps, then sleep for 60 seconds.
+    watchMethod: WATCH
+    # search in configmap, secret or both
+    resource: both
+    # watchServerTimeout: request to the server, asking it to cleanly close the connection after that.
+    # defaults to 60sec; much higher values like 3600 seconds (1h) are feasible for non-Azure K8S
+    # watchServerTimeout: 3600
+    #
+    # watchClientTimeout: is a client-side timeout, configuring your local socket.
+    # If you have a network outage dropping all packets with no RST/FIN,
+    # this is how long your client waits before realizing & dropping the connection.
+    # defaults to 66sec (sic!)
+    # watchClientTimeout: 60
+    #
+    # Endpoint to send request to reload alerts
+    reloadURL: "http://localhost:3000/api/admin/provisioning/alerting/reload"
+    # Absolute path to shell script to execute after a alert got reloaded
+    script: null
+    skipReload: false
+    # This is needed if skipReload is true, to load any alerts defined at startup time.
+    # Deploy the alert sidecar as an initContainer.
+    initAlerts: false
+    # Additional alert sidecar volume mounts
+    extraMounts: []
+    # Sets the size limit of the alert sidecar emptyDir volume
+    sizeLimit: {}
   dashboards:
     enabled: false
+    # Additional environment variables for the dashboards sidecar
+    env: {}
+    # Do not reprocess already processed unchanged resources on k8s API reconnect.
+    # ignoreAlreadyProcessed: true
     SCProvider: true
     # label that the configmaps with dashboards are marked with
     label: grafana_dashboard
     # value of label that the configmaps with dashboards are set to
     labelValue: ""
+    # Log level. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL.
+    # logLevel: INFO
     # folder in the pod that should hold the collected dashboards (unless `defaultFolderName` is set)
     folder: /tmp/dashboards
     # The default folder name, it will create a subfolder under the `folder` and put dashboards in there instead
@@ -5308,8 +927,11 @@ sidecar:
     # If specified, the sidecar will look for annotation with this name to create folder and put graph here.
     # You can use this parameter together with `provider.foldersFromFilesStructure`to annotate configmaps and create folder structure.
     folderAnnotation: null
+    # Endpoint to send request to reload alerts
+    reloadURL: "http://localhost:3000/api/admin/provisioning/dashboards/reload"
     # Absolute path to shell script to execute after a configmap got reloaded
     script: null
+    skipReload: false
     # watchServerTimeout: request to the server, asking it to cleanly close the connection after that.
     # defaults to 60sec; much higher values like 3600 seconds (1h) are feasible for non-Azure K8S
     # watchServerTimeout: 3600
@@ -5342,10 +964,17 @@ sidecar:
     sizeLimit: {}
   datasources:
     enabled: false
+    # Additional environment variables for the datasourcessidecar
+    env: {}
+    envValueFrom: {}
+    # Do not reprocess already processed unchanged resources on k8s API reconnect.
+    # ignoreAlreadyProcessed: true
     # label that the configmaps with datasources are marked with
     label: grafana_datasource
     # value of label that the configmaps with datasources are set to
     labelValue: ""
+    # Log level. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL.
+    # logLevel: INFO
     # If specified, the sidecar will search for datasource config-maps inside this namespace.
     # Otherwise the namespace in which the sidecar is running will be used.
     # It's also possible to specify ALL to search in all namespaces
@@ -5354,20 +983,38 @@ sidecar:
     watchMethod: WATCH
     # search in configmap, secret or both
     resource: both
+    # watchServerTimeout: request to the server, asking it to cleanly close the connection after that.
+    # defaults to 60sec; much higher values like 3600 seconds (1h) are feasible for non-Azure K8S
+    # watchServerTimeout: 3600
+    #
+    # watchClientTimeout: is a client-side timeout, configuring your local socket.
+    # If you have a network outage dropping all packets with no RST/FIN,
+    # this is how long your client waits before realizing & dropping the connection.
+    # defaults to 66sec (sic!)
+    # watchClientTimeout: 60
+    #
     # Endpoint to send request to reload datasources
     reloadURL: "http://localhost:3000/api/admin/provisioning/datasources/reload"
+    # Absolute path to shell script to execute after a datasource got reloaded
+    script: null
     skipReload: false
-    # Deploy the datasource sidecar as an initContainer in addition to a container.
     # This is needed if skipReload is true, to load any datasources defined at startup time.
+    # Deploy the datasources sidecar as an initContainer.
     initDatasources: false
     # Sets the size limit of the datasource sidecar emptyDir volume
     sizeLimit: {}
   plugins:
     enabled: false
+    # Additional environment variables for the plugins sidecar
+    env: {}
+    # Do not reprocess already processed unchanged resources on k8s API reconnect.
+    # ignoreAlreadyProcessed: true
     # label that the configmaps with plugins are marked with
     label: grafana_plugin
     # value of label that the configmaps with plugins are set to
     labelValue: ""
+    # Log level. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL.
+    # logLevel: INFO
     # If specified, the sidecar will search for plugin config-maps inside this namespace.
     # Otherwise the namespace in which the sidecar is running will be used.
     # It's also possible to specify ALL to search in all namespaces
@@ -5376,8 +1023,20 @@ sidecar:
     watchMethod: WATCH
     # search in configmap, secret or both
     resource: both
+    # watchServerTimeout: request to the server, asking it to cleanly close the connection after that.
+    # defaults to 60sec; much higher values like 3600 seconds (1h) are feasible for non-Azure K8S
+    # watchServerTimeout: 3600
+    #
+    # watchClientTimeout: is a client-side timeout, configuring your local socket.
+    # If you have a network outage dropping all packets with no RST/FIN,
+    # this is how long your client waits before realizing & dropping the connection.
+    # defaults to 66sec (sic!)
+    # watchClientTimeout: 60
+    #
     # Endpoint to send request to reload plugins
     reloadURL: "http://localhost:3000/api/admin/provisioning/plugins/reload"
+    # Absolute path to shell script to execute after a plugin got reloaded
+    script: null
     skipReload: false
     # Deploy the datasource sidecar as an initContainer in addition to a container.
     # This is needed if skipReload is true, to load any plugins defined at startup time.
@@ -5386,14 +1045,42 @@ sidecar:
     sizeLimit: {}
   notifiers:
     enabled: false
+    # Additional environment variables for the notifierssidecar
+    env: {}
+    # Do not reprocess already processed unchanged resources on k8s API reconnect.
+    # ignoreAlreadyProcessed: true
     # label that the configmaps with notifiers are marked with
     label: grafana_notifier
+    # value of label that the configmaps with notifiers are set to
+    labelValue: ""
+    # Log level. Can be one of: DEBUG, INFO, WARN, ERROR, CRITICAL.
+    # logLevel: INFO
     # If specified, the sidecar will search for notifier config-maps inside this namespace.
     # Otherwise the namespace in which the sidecar is running will be used.
     # It's also possible to specify ALL to search in all namespaces
     searchNamespace: null
+    # Method to use to detect ConfigMap changes. With WATCH the sidecar will do a WATCH requests, with SLEEP it will list all ConfigMaps, then sleep for 60 seconds.
+    watchMethod: WATCH
     # search in configmap, secret or both
     resource: both
+    # watchServerTimeout: request to the server, asking it to cleanly close the connection after that.
+    # defaults to 60sec; much higher values like 3600 seconds (1h) are feasible for non-Azure K8S
+    # watchServerTimeout: 3600
+    #
+    # watchClientTimeout: is a client-side timeout, configuring your local socket.
+    # If you have a network outage dropping all packets with no RST/FIN,
+    # this is how long your client waits before realizing & dropping the connection.
+    # defaults to 66sec (sic!)
+    # watchClientTimeout: 60
+    #
+    # Endpoint to send request to reload notifiers
+    reloadURL: "http://localhost:3000/api/admin/provisioning/notifications/reload"
+    # Absolute path to shell script to execute after a notifier got reloaded
+    script: null
+    skipReload: false
+    # Deploy the notifier sidecar as an initContainer in addition to a container.
+    # This is needed if skipReload is true, to load any notifiers defined at startup time.
+    initNotifiers: false
     # Sets the size limit of the notifier sidecar emptyDir volume
     sizeLimit: {}
 
@@ -5407,10 +1094,20 @@ revisionHistoryLimit: 10
 
 ## Add a seperate remote image renderer deployment/service
 imageRenderer:
+  deploymentStrategy: {}
   # Enable the image-renderer deployment & service
   enabled: false
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPU: "60"
+    targetMemory: ""
+    behavior: {}
   image:
+    # -- The Docker registry
+    registry: docker.io
     # image-renderer Image repository
     repository: grafana/grafana-image-renderer
     # image-renderer Image tag
@@ -5425,10 +1122,35 @@ imageRenderer:
     # RENDERING_ARGS: --no-sandbox,--disable-gpu,--window-size=1280x758
     # RENDERING_MODE: clustered
     # IGNORE_HTTPS_ERRORS: true
+
+  ## "valueFrom" environment variable references that will be added to deployment pods. Name is templated.
+  ## ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#envvarsource-v1-core
+  ## Renders in container spec as:
+  ##   env:
+  ##     ...
+  ##     - name: <key>
+  ##       valueFrom:
+  ##         <value rendered as YAML>
+  envValueFrom: {}
+    #  ENV_NAME:
+    #    configMapKeyRef:
+    #      name: configmap-name
+    #      key: value_key
+
   # image-renderer deployment serviceAccount
   serviceAccountName: ""
   # image-renderer deployment securityContext
   securityContext: {}
+  # image-renderer deployment container securityContext
+  containerSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ['ALL']
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  ## image-renderer pod annotation
+  podAnnotations: {}
   # image-renderer deployment Host Aliases
   hostAliases: []
   # image-renderer deployment priority class
@@ -5441,6 +1163,25 @@ imageRenderer:
     # image-renderer service port used by both service and deployment
     port: 8081
     targetPort: 8081
+    # Adds the appProtocol field to the image-renderer service. This allows to work with istio protocol selection. Ex: "http" or "tcp"
+    appProtocol: ""
+  serviceMonitor:
+    ## If true, a ServiceMonitor CRD is created for a prometheus operator
+    ## https://github.com/coreos/prometheus-operator
+    ##
+    enabled: false
+    path: /metrics
+    #  namespace: monitoring  (defaults to use the namespace this chart is deployed to)
+    labels: {}
+    interval: 1m
+    scheme: http
+    tlsConfig: {}
+    scrapeTimeout: 30s
+    relabelings: []
+    # See: https://doc.crds.dev/github.com/prometheus-operator/kube-prometheus/monitoring.coreos.com/ServiceMonitor/v1@v0.11.0#spec-targetLabels
+    targetLabels: []
+      # - targetLabel1
+      # - targetLabel2
   # If https is enabled in Grafana, this needs to be set as 'https' to correctly configure the callback used in Grafana
   grafanaProtocol: http
   # In case a sub_path is used this needs to be added to the image renderer callback
@@ -5454,6 +1195,8 @@ imageRenderer:
     limitIngress: true
     # Enable a NetworkPolicy to limit outbound traffic to only the created grafana pods
     limitEgress: false
+    # Allow additional services to access image-renderer (eg. Prometheus operator when ServiceMonitor is enabled)
+    extraIngressSelectors: []
   resources: {}
 #   limits:
 #     cpu: 100m
@@ -5475,6 +1218,11 @@ imageRenderer:
   ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
   ##
   affinity: {}
+
+  ## Use an alternate scheduler, e.g. "stork".
+  ## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+  ##
+  # schedulerName: "default-scheduler"
 
 networkPolicy:
   ## @param networkPolicy.enabled Enable creation of NetworkPolicy resources. Only Ingress traffic is filtered for now.
@@ -5516,14 +1264,25 @@ networkPolicy:
     ## created allowing grafana to connect to external data sources from kubernetes cluster.
     enabled: false
     ##
+    ## @param networkPolicy.egress.blockDNSResolution When enabled, DNS resolution will be blocked
+    ## for all pods in the grafana namespace.
+    blockDNSResolution: false
+    ##
     ## @param networkPolicy.egress.ports Add individual ports to be allowed by the egress
     ports: []
     ## Add ports to the egress by specifying - port: <port number>
     ## E.X.
-    ## ports:
-      ## - port: 80
-      ## - port: 443
-  ##
+    ## - port: 80
+    ## - port: 443
+    ##
+    ## @param networkPolicy.egress.to Allow egress traffic to specific destinations
+    to: []
+    ## Add destinations to the egress by specifying - ipBlock: <CIDR>
+    ## E.X.
+    ## to:
+    ##  - namespaceSelector:
+    ##    matchExpressions:
+  ##    - {key: role, operator: In, values: [grafana]}
   ##
   ##
   ##
@@ -5544,3 +1303,13 @@ extraObjects: []
   #     data:
   #       - key: grafana-admin-password
   #         name: adminPassword
+
+# assertNoLeakedSecrets is a helper function defined in _helpers.tpl that checks if secret
+# values are not exposed in the rendered grafana.ini configmap. It is enabled by default.
+#
+# To pass values into grafana.ini without exposing them in a configmap, use variable expansion:
+# https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#variable-expansion
+#
+# Alternatively, if you wish to allow secret values to be exposed in the rendered grafana.ini configmap,
+# you can disable this check by setting assertNoLeakedSecrets to false.
+assertNoLeakedSecrets: true

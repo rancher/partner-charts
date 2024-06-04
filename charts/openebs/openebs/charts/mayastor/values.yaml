@@ -4,7 +4,7 @@ image:
   # -- Image registry's namespace
   repo: openebs
   # -- Release tag for our images
-  tag: v2.2.0
+  tag: v2.5.0
   repoTags:
     # Note: Below image tag configuration is optional and typically should never be
     #       used. Setting specific image tags for the different repositories proves useful
@@ -160,6 +160,11 @@ agents:
         # -- Same as the `volumeCommitment` argument, but applicable only when creating replicas
         # for a new volume.
         volumeCommitmentInitial: "40%"
+        # -- When creating snapshots for an existing volume, each replica pool must have at least
+        # this much free space percentage of the volume size.
+        # Example: if this value is 40, the pool has 40GiB free, then the max volume size allowed
+        # to be snapped on the pool is 100GiB.
+        snapshotCommitment: "40%"
     resources:
       limits:
         # -- Cpu limits for core agents
@@ -260,11 +265,15 @@ csi:
     # -- imagePullPolicy for all CSI Sidecar images
     pullPolicy: IfNotPresent
     # -- csi-provisioner image release tag
-    provisionerTag: v2.2.1
+    provisionerTag: v3.5.0
     # -- csi-attacher image release tag
-    attacherTag: v3.2.1
+    attacherTag: v4.3.0
+    # -- csi-snapshotter image release tag
+    snapshotterTag: v6.3.1
+    # -- csi-snapshot-controller image release tag
+    snapshotControllerTag: v6.3.1
     # -- csi-node-driver-registrar image release tag
-    registrarTag: v2.1.0
+    registrarTag: v2.9.0
 
   controller:
     # -- Log level for the csi controller
@@ -284,6 +293,8 @@ csi:
     tolerations: []
     # -- Set PriorityClass, overrides global
     priorityClassName: ""
+    # -- Prevent modifying the volume mode when creating a PVC from an existing VolumeSnapshot
+    preventVolumeModeConversion: true
   node:
     logLevel: info
     topology:
@@ -303,8 +314,10 @@ csi:
         # -- Memory requests for csi node plugin
         memory: "64Mi"
     nvme:
-      # -- The nvme_core module io timeout in seconds
-      io_timeout: "30"
+      # The nvme_core module and nvme block io timeout in humantime
+      # By default it uses the "io_engine.nvme.ioTimeout" + 10s
+      # Do not modify this unless you're really sure about its effects
+      io_timeout: ""
       # -- The ctrl_loss_tmo (controller loss timeout) in seconds
       ctrl_loss_tmo: "1980"
       # Kato (keep alive timeout) in seconds
@@ -328,6 +341,27 @@ io_engine:
       iface: ""
       # -- Reservations Persist Through Power Loss State
       ptpl: true
+      # NVMF target Command Retry Delay for volume target initiators
+      hostCmdRetryDelay:
+        # A command retry delay in milliseconds. A value of 0 means no delay, host may retry immediately
+        crdt1: 30
+  nvme:
+    # -- Timeout for IOs
+    # The default here is exaggerated for local disks but we've observed that in
+    # shared virtual environments having a higher timeout value is beneficial.
+    # In certain cases, you may have to set this to an even higher value. For example,
+    # in Hetzner we've had better results setting it to 300s.
+    # Please adjust this according to your hardware and needs.
+    ioTimeout: "110s"
+    # Timeout for admin commands
+    adminTimeout: "30s"
+    # Timeout for keep alives
+    keepAliveTimeout: "10s"
+    tcp:
+      # -- Max size setting (both initiator and target) for an NVMe queue
+      # -- You may need to increase this for a higher outstanding IOs per volume
+      maxQueueDepth: "32"
+
   # -- Pass additional arguments to the Environment Abstraction Layer.
   # Example: --set {product}.envcontext=iova-mode=pa
   envcontext: ""
@@ -365,6 +399,16 @@ io_engine:
   priorityClassName: ""
 
 etcd:
+  # Configuration for etcd's localpv hostpath storage class.
+  localpvScConfig:
+    # Name of etcd's localpv hostpath storage class.
+    name: "mayastor-etcd-localpv"
+    # -- Host path where local etcd data is stored in.
+    basePath: "/var/local/{{ .Release.Name }}/localpv-hostpath/etcd"
+    # -- ReclaimPolicy of etcd's localpv hostpath storage class.
+    reclaimPolicy: Delete
+    # -- VolumeBindingMode of etcd's localpv hostpath storage class.
+    volumeBindingMode: WaitForFirstConsumer
   # Pod labels; okay to remove the openebs logging label if required
   podLabels:
     app: etcd
@@ -385,10 +429,10 @@ etcd:
   persistence:
     # -- If true, use a Persistent Volume Claim. If false, use emptyDir.
     enabled: true
-    # -- Will define which storageClass to use in etcd's StatefulSets
-    # a `manual` storageClass will provision a hostpath PV on the same node
-    # an empty storageClass will use the default StorageClass on the cluster
-    storageClass: ""
+    # -- Will define which storageClass to use in etcd's StatefulSets. Options:
+    # <p> - `"manual"` - Will provision a hostpath PV on the same node. <br>
+    # - `""` (empty) - Will use the default StorageClass on the cluster. </p>
+    storageClass: "mayastor-etcd-localpv"
     # -- Volume size
     size: 2Gi
     # -- PVC's reclaimPolicy
@@ -455,6 +499,16 @@ etcd:
 loki-stack:
   # -- Enable loki log collection for our components
   enabled: true
+  # Configuration for loki's localpv hostpath storage class.
+  localpvScConfig:
+    # Name of loki's localpv hostpath storage class.
+    name: "mayastor-loki-localpv"
+    # -- Host path where local etcd data is stored in.
+    basePath: "/var/local/{{ .Release.Name }}/localpv-hostpath/loki"
+    # -- ReclaimPolicy of loki's localpv hostpath storage class.
+    reclaimPolicy: Delete
+    # -- VolumeBindingMode of loki's localpv hostpath storage class.
+    volumeBindingMode: WaitForFirstConsumer
   loki:
     rbac:
       # -- Create rbac roles for loki
@@ -466,9 +520,10 @@ loki-stack:
     persistence:
       # -- Enable persistence storage for the logs
       enabled: true
-      # -- StorageClass for Loki's centralised log storage
-      # empty storageClass implies cluster default storageClass & `manual` creates a static hostpath PV
-      storageClassName: ""
+      # -- StorageClass for Loki's centralised log storage. Options:
+      # <p> - `"manual"` - Will provision a hostpath PV on the same node. <br>
+      # - `""` (empty) - Will use the default StorageClass on the cluster. </p>
+      storageClassName: "mayastor-loki-localpv"
       # -- PVC's ReclaimPolicy, can be Delete or Retain
       reclaimPolicy: "Delete"
       # -- Size of Loki's persistence storage
@@ -549,6 +604,15 @@ loki-stack:
           - job_name: {{ .Release.Name }}-pods-name
             pipeline_stages:
               - docker: {}
+              - replace:
+                  expression: '(\n)'
+                  replace: ''
+              - multiline:
+                  firstline: '^  \x1b\[2m(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}).(\d{6})Z'
+                  max_wait_time: 3s
+              - multiline:
+                  firstline: '^  (\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}).(\d{6})Z'
+                  max_wait_time: 3s
             kubernetes_sd_configs:
             - role: pod
             relabel_configs:
@@ -583,12 +647,42 @@ loki-stack:
               - __meta_kubernetes_pod_uid
               - __meta_kubernetes_pod_container_name
               target_label: __path__
+
+# Eventing which enables or disables eventing-related components.
+eventing:
+  enabled: true
+
+# Configuration for the nats message-bus. This is an eventing component, and is enabled when
+# 'eventing.enabled' is set to 'true'.
+nats:
+  nats:
+    image:
+      pullPolicy: IfNotPresent
+      # Defaults to docker.io
+      registry: ""
+    jetstream:
+      enabled: true
+      memStorage:
+        enabled: true
+        # Size of nats message is around 0.3 KB, so it can store around 10K messages.
+        size: "5Mi"
+      fileStorage:
+        enabled: false
+  cluster:
+    enabled: true
+    replicas: 3
+  # The nats box can be installed for debugging, by default its enabled.
+  natsbox:
+    enabled: false
+
+
 obs:
   callhome:
     # -- Enable callhome
     enabled: true
     # -- Log level for callhome
     logLevel: "info"
+    sendReport: true
     resources:
       limits:
         # -- Cpu limits for callhome
@@ -604,3 +698,47 @@ obs:
     tolerations: []
     # -- Set PriorityClass, overrides global
     priorityClassName: ""
+  # Eventing component enabled/disabled based on obs.callhome.enabled value
+  stats:
+    # -- Log level for stats
+    logLevel: "info"
+    resources:
+      limits:
+        # -- Cpu limits for stats
+        cpu: "100m"
+        # -- Memory limits for stats
+        memory: "32Mi"
+      requests:
+        # -- Cpu requests for stats
+        cpu: "50m"
+        # -- Memory requests for stats
+        memory: "16Mi"
+    service:
+      # -- Rest K8s service type
+      type: ClusterIP
+      # Ports from where rest endpoints are accessible from outside the cluster, only valid if type is NodePort
+      nodePorts:
+        # NodePort associated with http port
+        http: 90011
+        # NodePort associated with https port
+        https: 90010
+
+storageClass:
+  enabled: true
+  nameSuffix: single-replica
+  default: false
+  parameters:
+    protocol: nvmf
+    repl: 1
+
+localpv-provisioner:
+  # -- Enables the openebs dynamic-localpv provisioner. If disabled, modify etcd and loki-stack storage class accordingly.
+  enabled: true
+  # Enable/disable the openebs NDM sub-chart. It's recommended to keep this disabled.
+  openebsNDM:
+    enabled: false
+  # Enable/disable the creation of the openebs-device StorageClass. It's recommended to keep this disabled.
+  deviceClass:
+    enabled: false
+  hostpathClass:
+    enabled: false

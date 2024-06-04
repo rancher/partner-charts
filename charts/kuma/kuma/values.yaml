@@ -17,6 +17,12 @@ installCrdsOnUpgrade:
   # This field will be deprecated in a future release, please use .global.imagePullSecrets
   imagePullSecrets: []
 
+# -- Whether to disable all helm hooks
+noHelmHooks: false
+
+# -- Whether to restart control-plane by calculating a new checksum for the secret
+restartOnSecretChange: true
+
 controlPlane:
   # -- Environment that control plane is run in, useful when running universal global control plane on k8s
   environment: "kubernetes"
@@ -30,8 +36,8 @@ controlPlane:
   # -- Kuma CP log output path: Defaults to /dev/stdout
   logOutputPath: ""
 
-  # -- Kuma CP modes: one of standalone,zone,global
-  mode: "standalone"
+  # -- Kuma CP modes: one of zone,global
+  mode: "zone"
 
   # -- (string) Kuma CP zone, if running multizone
   zone:
@@ -42,7 +48,13 @@ controlPlane:
   # -- Number of replicas of the Kuma CP. Ignored when autoscaling is enabled
   replicas: 1
 
-  # -- Control Plane Pod Annotations
+  # -- Minimum number of seconds for which a newly created pod should be ready for it to be considered available.
+  minReadySeconds: 0
+
+  # -- Annotations applied only to the `Deployment` resource
+  deploymentAnnotations: {}
+
+  # -- Annotations applied only to the `Pod` resource
   podAnnotations: {}
 
   # Horizontal Pod Autoscaling configuration
@@ -128,8 +140,10 @@ controlPlane:
     # -- Service type of the Kuma Control Plane
     type: ClusterIP
 
-    # -- Additional annotations to put on the Kuma Control Plane
-    annotations: { }
+    # -- Annotations to put on the Kuma Control Plane
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "5680"
 
   # Kuma API and GUI ingress settings. Useful if you want to expose the
   # API and GUI of Kuma outside the k8s cluster.
@@ -146,6 +160,8 @@ controlPlane:
     path: /
     # -- Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
     pathType: ImplementationSpecific
+    # -- Port from kuma-cp to use to expose API and GUI. Switch to 5682 to expose TLS port
+    servicePort: 5681
 
   globalZoneSyncService:
     # -- Whether to create a k8s service for the global zone sync
@@ -156,6 +172,8 @@ controlPlane:
     type: LoadBalancer
     # -- (string) Optionally specify IP to be used by cloud provider when configuring load balancer
     loadBalancerIP:
+    # -- Optionally specify allowed source ranges that can access the load balancer
+    loadBalancerSourceRanges: []
     # -- Additional annotations to put on the Global Zone Sync Service
     annotations: { }
     # -- Port on which Global Zone Sync Service is exposed on Node for service of type NodePort
@@ -238,6 +256,9 @@ controlPlane:
       # -- If true, TLS cert of the server is not verified.
       skipVerify: false
 
+  # -- Annotations to add for Control Plane's Service Account
+  serviceAccountAnnotations: { }
+
   image:
     # -- Kuma CP ImagePullPolicy
     pullPolicy: IfNotPresent
@@ -299,6 +320,10 @@ controlPlane:
   # -- Security context at the container level for control plane.
   containerSecurityContext:
     readOnlyRootFilesystem: true
+
+  # -- If true, then control plane can support TLS secrets for builtin gateway outside of mesh system namespace.
+  # The downside is that control plane requires permission to read Secrets in all namespaces.
+  supportGatewaySecretsInAllNamespaces: false
 
 cni:
   # -- Install Kuma with CNI instead of proxy init container
@@ -362,6 +387,8 @@ cni:
     runAsGroup: 0
 
 dataPlane:
+  # -- If true, then turn on CoreDNS query logging
+  dnsLogging: false
   image:
     # -- The Kuma DP image repository
     repository: "kuma-dp"
@@ -388,6 +415,9 @@ ingress:
 
   # -- Number of replicas of the Ingress. Ignored when autoscaling is enabled.
   replicas: 1
+
+  # -- Log level for ingress (available values: off|info|debug)
+  logLevel: info
 
   # -- Define the resources to allocate to mesh ingress
   resources:
@@ -492,7 +522,12 @@ ingress:
 
   # -- Security context at the container level for ingress
   containerSecurityContext:
-   readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: true
+
+  # -- Annotations to add for Control Plane's Service Account
+  serviceAccountAnnotations: { }
+  # -- Whether to automountServiceAccountToken for cp. Optionally set to false
+  automountServiceAccountToken: true
 
 egress:
   # -- If true, it deploys Egress for cross cluster communication
@@ -503,6 +538,9 @@ egress:
   drainTime: 30s
   # -- Number of replicas of the Egress. Ignored when autoscaling is enabled.
   replicas: 1
+
+  # -- Log level for egress (available values: off|info|debug)
+  logLevel: info
 
   # Horizontal Pod Autoscaling configuration
   autoscaling:
@@ -596,7 +634,12 @@ egress:
 
   # -- Security context at the container level for egress
   containerSecurityContext:
-   readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: true
+
+  # -- Annotations to add for Control Plane's Service Account
+  serviceAccountAnnotations: { }
+  # -- Whether to automountServiceAccountToken for cp. Optionally set to false
+  automountServiceAccountToken: true
 
 kumactl:
   image:
@@ -606,15 +649,13 @@ kumactl:
     tag:
 
 kubectl:
-  # kuma image that support v1.20.15 image */ } }
-  # see: https://hub.docker.com/r/kumahq/kubectl */ } }
   image:
     # -- The kubectl image registry
-    registry: kumahq
+    registry: docker.io
     # -- The kubectl image repository
-    repository: kubectl
+    repository: bitnami/kubectl
     # -- The kubectl image tag
-    tag: "v1.20.15"
+    tag: "1.27.5"
 hooks:
   # -- Node selector for the HELM hooks
   nodeSelector:
@@ -641,8 +682,6 @@ hooks:
       readOnlyRootFilesystem: false
 
 experimental:
-  # -- If true, it installs experimental Gateway API support
-  gatewayAPI: false
   # Configuration for the experimental ebpf mode for transparent proxy
   ebpf:
     # -- If true, ebpf will be used instead of using iptables to install/configure transparent proxy
@@ -656,23 +695,12 @@ experimental:
     # -- Name of the network interface which TC programs should be attached to, we'll try to automatically determine it if empty
     tcAttachIface: ""
     # -- Path where compiled eBPF programs which will be installed can be found
-    programsSourcePath: /kuma/ebpf
-  # -- If true, it uses new API for resource synchronization
-  deltaKds: false
-
-legacy:
-  # -- If true, use the legacy transparent proxy engine
-  transparentProxy: false
-  cni:
-    # -- If true, it installs legacy version of the CNI
-    enabled: false
-    image:
-      # -- CNI v1 image registry
-      registry: "docker.io/kumahq"
-      # -- CNI v1 image repository
-      repository: "install-cni"
-      # -- CNI v1 image tag
-      tag: "0.0.10"
+    programsSourcePath: /tmp/kuma-ebpf
+  # -- If false, it uses legacy API for resource synchronization
+  deltaKds: true
+  # -- If true, enable native Kubernetes sidecars. This requires at least
+  # Kubernetes v1.29
+  sidecarContainers: false
 
 # Postgres' settings for universal control plane on k8s
 postgres:
@@ -698,17 +726,20 @@ postgres:
 
 # @ignored for helm-docs
 plugins:
+  resources:
+    meshservices: true
   policies:
-    meshaccesslogs: {}
-    meshcircuitbreakers: {}
-    meshfaultinjections: {}
-    meshhealthchecks: {}
-    meshhttproutes: {}
-    meshloadbalancingstrategies: {}
-    meshproxypatches: {}
-    meshratelimits: {}
-    meshretries: {}
-    meshtcproutes: {}
-    meshtimeouts: {}
-    meshtraces: {}
-    meshtrafficpermissions: {}
+    meshaccesslogs: true
+    meshcircuitbreakers: true
+    meshfaultinjections: true
+    meshhealthchecks: true
+    meshhttproutes: true
+    meshloadbalancingstrategies: true
+    meshmetrics: true
+    meshproxypatches: true
+    meshratelimits: true
+    meshretries: true
+    meshtcproutes: true
+    meshtimeouts: true
+    meshtraces: true
+    meshtrafficpermissions: true

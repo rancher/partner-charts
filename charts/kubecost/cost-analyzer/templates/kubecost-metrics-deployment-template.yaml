@@ -32,12 +32,10 @@ spec:
 {{- with .Values.kubecostMetrics.exporter.labels }}
 {{ toYaml . | indent 8 }}
 {{- end }}
-{{- if .Values.global.podAnnotations }}
+      {{- with .Values.global.podAnnotations}}
       annotations:
-{{- with .Values.global.podAnnotations }}
-{{ toYaml . | indent 8 }}
-{{- end }}
-{{- end }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       {{- if .Values.kubecostFrontend.tls }}
       {{- if .Values.kubecostFrontend.tls.enabled }}
@@ -60,7 +58,7 @@ spec:
       volumes:
         {{- if .Values.agent }}
         - name: config-store
-          {{- if .Values.agentCsi.enabled }}
+          {{- if ((.Values.agentCsi).enabled) }}
           csi:
             driver: secrets-store.csi.k8s.io
             readOnly: true
@@ -77,7 +75,7 @@ spec:
           secret:
             secretName: {{ .Values.kubecostProductConfigs.gcpSecretName }}
             items:
-            - key: compute-viewer-kubecost-key.json
+            - key: {{ .Values.kubecostProductConfigs.gcpSecretKeyName | default "compute-viewer-kubecost-key.json" }}
               path: service-key.json
         {{- end }}
         {{- if .Values.kubecostProductConfigs.serviceKeySecretName }}
@@ -105,6 +103,13 @@ spec:
         - name: cloud-integration
           secret:
             secretName: {{ .Values.kubecostProductConfigs.cloudIntegrationSecret }}
+            items:
+              - key: cloud-integration.json
+                path: cloud-integration.json
+        {{- else if or .Values.kubecostProductConfigs.cloudIntegrationJSON  ((.Values.kubecostProductConfigs).athenaBucketName) }}
+        - name: cloud-integration
+          secret:
+            secretName: cloud-integration
             items:
               - key: cloud-integration.json
                 path: cloud-integration.json
@@ -149,6 +154,8 @@ spec:
         - image: {{ .Values.kubecostModel.fullImageName }}
         {{- else if .Values.imageVersion }}
         - image: {{ .Values.kubecostModel.image }}:{{ .Values.imageVersion }}
+        {{- else if eq "development" .Chart.AppVersion }}
+        - image: gcr.io/kubecost1/cost-model-nightly:latest
         {{- else }}
         - image: {{ .Values.kubecostModel.image }}:prod-{{ $.Chart.AppVersion }}
         {{ end }}
@@ -190,7 +197,7 @@ spec:
             - name: azure-storage-config
               mountPath: /var/azure-storage-config
             {{- end }}
-            {{- if .Values.kubecostProductConfigs.cloudIntegrationSecret }}
+            {{- if or (.Values.kubecostProductConfigs.cloudIntegrationSecret) (.Values.kubecostProductConfigs.cloudIntegrationJSON) ((.Values.kubecostProductConfigs).athenaBucketName) }}
             - name: cloud-integration
               mountPath: /var/configs/cloud-integration
             {{- end }}
@@ -274,7 +281,7 @@ spec:
               value: {{ (quote .Values.global.prometheus.insecureSkipVerify) }}
             {{- end }}
             {{- if .Values.cloudAgentClusterId }}
-            - name: CLUSTER_ID 
+            - name: CLUSTER_ID
               value: {{ .Values.cloudAgentClusterId }}
             {{- else if and (.Values.prometheus.server.global.external_labels.cluster_id) (not .Values.prometheus.server.clusterIDConfigmap) }}
             - name: CLUSTER_ID

@@ -38,11 +38,13 @@ You may also run `helm show values` on this chart's dependencies for additional 
 
 |parameter| value |
 |---------|-----------|
-| `hub` | `intel` |
-| `tag` | `` |
+| `image.hub` | `intel` |
+| `image.tag` | `` |
+| `initImage.hub` | `intel` |
+| `initImage.tag` | `` |
 | `dpdkDriver` | `vfio-pci` |
-| `kernelVfDrivers` | `c6xxvf`, `4xxxvf` |
+| `kernelVfDrivers` | `c6xxvf`, `4xxxvf`, `420xxvf` |
 | `maxNumDevices` | `128` |
 | `logLevel` | `4` |
 | `nodeFeatureRule` | `true` |
-
+| `tolerations` | `` |

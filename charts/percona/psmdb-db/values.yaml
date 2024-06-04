@@ -18,10 +18,16 @@ finalizers:
 nameOverride: ""
 fullnameOverride: ""
 
-crVersion: 1.14.0
+crVersion: 1.16.0
 pause: false
 unmanaged: false
-allowUnsafeConfigurations: false
+unsafeFlags:
+  tls: false
+  replsetSize: false
+  mongosSize: false
+  terminationGracePeriod: false
+  backupIfUnhealthy: false
+
 # ignoreAnnotations:
 #   - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 # ignoreLabels:
@@ -38,7 +44,7 @@ upgradeOptions:
 
 image:
   repository: percona/percona-server-mongodb
-  tag: 6.0.4-3
+  tag: 7.0.8-5
 
 imagePullPolicy: Always
 # imagePullSecrets: []
@@ -47,24 +53,35 @@ imagePullPolicy: Always
 #   tag: 1.14.0
 # initContainerSecurityContext: {}
 # tls:
+#   mode: preferTLS
 #   # 90 days in hours
 #   certValidityDuration: 2160h
+#   allowInvalidCertificates: true
+#   issuerConf:
+#     name: special-selfsigned-issuer
+#     kind: ClusterIssuer
+#     group: cert-manager.io
 secrets: {}
   # If you set users secret here the operator will use existing one or generate random values
   # If not set the operator generates the default secret with name <cluster_name>-secrets
   # users: my-cluster-name-secrets
   # encryptionKey: my-cluster-name-mongodb-encryption-key
+  # vault: my-cluster-name-vault
+  # ldapSecret: my-ldap-secret
+  # sse: my-cluster-name-sse
 
 pmm:
   enabled: false
   image:
     repository: percona/pmm-client
-    tag: 2.35.0
+    tag: 2.41.2
   serverHost: monitoring-service
 
 replsets:
-  - name: rs0
+  rs0:
+    name: rs0
     size: 3
+    # terminationGracePeriodSeconds: 300
     # externalNodes:
     # - host: 34.124.76.90
     # - host: 34.124.76.91
@@ -77,6 +94,14 @@ replsets:
     #     mode: slowOp
     #   systemLog:
     #     verbosity: 1
+    # serviceAccountName: percona-server-mongodb-operator
+    # topologySpreadConstraints:
+    #   - labelSelector:
+    #       matchLabels:
+    #         app.kubernetes.io/name: percona-server-mongodb
+    #     maxSkew: 1
+    #     topologyKey: kubernetes.io/hostname
+    #     whenUnsatisfiable: DoNotSchedule
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
       # advanced:
@@ -93,6 +118,8 @@ replsets:
     # priorityClass: ""
     # annotations: {}
     # labels: {}
+    # podSecurityContext: {}
+    # containerSecurityContext: {}
     # nodeSelector: {}
     # livenessProbe:
     #   failureThreshold: 4
@@ -154,6 +181,16 @@ replsets:
     #       - ReadWriteOnce
     podDisruptionBudget:
       maxUnavailable: 1
+    # splitHorizons:
+    #   my-cluster-name-rs0-0:
+    #     external: rs0-0.mycluster.xyz
+    #     external-2: rs0-0.mycluster2.xyz
+    #   my-cluster-name-rs0-1:
+    #     external: rs0-1.mycluster.xyz
+    #     external-2: rs0-1.mycluster2.xyz
+    #   my-cluster-name-rs0-2:
+    #     external: rs0-2.mycluster.xyz
+    #     external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
       exposeType: ClusterIP
@@ -161,8 +198,36 @@ replsets:
       #   - 10.0.0.0/8
       # serviceAnnotations:
       #   service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-      # serviceLabels: 
+      # serviceLabels:
       #   some-label: some-key
+    # schedulerName: ""
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+      # emptyDir: {}
+      # hostPath:
+      #   path: /data
+      #   type: Directory
+      pvc:
+        # annotations:
+        #   volume.beta.kubernetes.io/storage-class: example-hostpath
+        # labels:
+        #   rack: rack-22
+        # storageClassName: standard
+        # accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
+    # hostAliases:
+    # - ip: "10.10.0.2"
+    #   hostnames:
+    #   - "host1"
+    #   - "host2"
     nonvoting:
       enabled: false
       # podSecurityContext: {}
@@ -173,6 +238,7 @@ replsets:
       #     mode: slowOp
       #   systemLog:
       #     verbosity: 1
+      # serviceAccountName: percona-server-mongodb-operator
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
         # advanced:
@@ -203,6 +269,7 @@ replsets:
         # emptyDir: {}
         # hostPath:
         #   path: /data
+        #   type: Directory
         pvc:
           # annotations:
           #   volume.beta.kubernetes.io/storage-class: example-hostpath
@@ -216,6 +283,7 @@ replsets:
     arbiter:
       enabled: false
       size: 1
+      # serviceAccountName: percona-server-mongodb-operator
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
         # advanced:
@@ -233,34 +301,15 @@ replsets:
       # annotations: {}
       # labels: {}
       # nodeSelector: {}
-    # schedulerName: ""
-    resources:
-      limits:
-        cpu: "300m"
-        memory: "0.5G"
-      requests:
-        cpu: "300m"
-        memory: "0.5G"
-    volumeSpec:
-      # emptyDir: {}
-      # hostPath:
-      #   path: /data
-      pvc:
-        # annotations:
-        #   volume.beta.kubernetes.io/storage-class: example-hostpath
-        # labels:
-        #   rack: rack-22
-        # storageClassName: standard
-        # accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: 3Gi
 
 sharding:
   enabled: true
+  balancer:
+    enabled: true
 
   configrs:
     size: 3
+    # terminationGracePeriodSeconds: 300
     # externalNodes:
     # - host: 34.124.76.90
     # - host: 34.124.76.91
@@ -273,6 +322,14 @@ sharding:
     #     mode: slowOp
     #   systemLog:
     #     verbosity: 1
+    # serviceAccountName: percona-server-mongodb-operator
+    # topologySpreadConstraints:
+    #   - labelSelector:
+    #       matchLabels:
+    #         app.kubernetes.io/name: percona-server-mongodb
+    #     maxSkew: 1
+    #     topologyKey: kubernetes.io/hostname
+    #     whenUnsatisfiable: DoNotSchedule
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
       # advanced:
@@ -289,6 +346,8 @@ sharding:
     # priorityClass: ""
     # annotations: {}
     # labels: {}
+    # podSecurityContext: {}
+    # containerSecurityContext: {}
     # nodeSelector: {}
     # livenessProbe: {}
     # readinessProbe: {}
@@ -312,7 +371,7 @@ sharding:
       #   - 10.0.0.0/8
       # serviceAnnotations:
       #   service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-      # serviceLabels: 
+      # serviceLabels:
       #   some-label: some-key
     resources:
       limits:
@@ -336,12 +395,26 @@ sharding:
         resources:
           requests:
             storage: 3Gi
+    # hostAliases:
+    # - ip: "10.10.0.2"
+    #   hostnames:
+    #   - "host1"
+    #   - "host2"
 
   mongos:
     size: 2
+    # terminationGracePeriodSeconds: 300
     # configuration: |
     #   systemLog:
     #     verbosity: 1
+    # serviceAccountName: percona-server-mongodb-operator
+    # topologySpreadConstraints:
+    #   - labelSelector:
+    #       matchLabels:
+    #         app.kubernetes.io/name: percona-server-mongodb
+    #     maxSkew: 1
+    #     topologyKey: kubernetes.io/hostname
+    #     whenUnsatisfiable: DoNotSchedule
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
       # advanced:
@@ -358,6 +431,8 @@ sharding:
     # priorityClass: ""
     # annotations: {}
     # labels: {}
+    # podSecurityContext: {}
+    # containerSecurityContext: {}
     # nodeSelector: {}
     # livenessProbe: {}
     # readinessProbe: {}
@@ -388,21 +463,28 @@ sharding:
       #   - 10.0.0.0/8
       # serviceAnnotations:
       #   service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-      # serviceLabels: 
+      # serviceLabels:
       #   some-label: some-key
+      # nodePort: 32017
     # auditLog:
     #   destination: file
     #   format: BSON
     #   filter: '{}'
+    # hostAliases:
+    # - ip: "10.10.0.2"
+    #   hostnames:
+    #   - "host1"
+    #   - "host2"
 
 backup:
   enabled: true
   image:
     repository: percona/percona-backup-mongodb
-    tag: 2.0.4
-  serviceAccountName: percona-server-mongodb-operator
+    tag: 2.4.1
   # annotations:
   #   iam.amazonaws.com/role: role-arn
+  # podSecurityContext: {}
+  # containerSecurityContext: {}
   # resources:
   #   limits:
   #     cpu: "300m"
@@ -416,6 +498,15 @@ backup:
     #   s3:
     #     bucket: S3-BACKUP-BUCKET-NAME-HERE
     #     credentialsSecret: my-cluster-name-backup-s3
+    #     serverSideEncryption:
+    #       kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
+    #       sseAlgorithm: aws:kms
+    #       sseCustomerAlgorithm: AES256
+    #       sseCustomerKey: Y3VzdG9tZXIta2V5
+    #     retryer:
+    #       numMaxRetries: 3
+    #       minRetryDelay: 30ms
+    #       maxRetryDelay: 5m
     #     region: us-west-2
     #     prefix: ""
     #     uploadPartSize: 10485760
@@ -435,12 +526,32 @@ backup:
     #     azure:
     #       container: CONTAINER-NAME
     #       prefix: PREFIX-NAME
+    #       endpointUrl: https://accountName.blob.core.windows.net
     #       credentialsSecret: SECRET-NAME
   pitr:
     enabled: false
+    oplogOnly: false
     # oplogSpanMin: 10
     # compressionType: gzip
     # compressionLevel: 6
+  # configuration:
+  #   backupOptions:
+  #     priority:
+  #       "localhost:28019": 2.5
+  #       "localhost:27018": 2.5
+  #     timeouts:
+  #       startingStatus: 33
+  #     oplogSpanMin: 10
+  #   restoreOptions:
+  #     batchSize: 500
+  #     numInsertionWorkers: 10
+  #     numDownloadWorkers: 4
+  #     maxDownloadBufferMb: 0
+  #     downloadChunkMb: 32
+  #     mongodLocation: /usr/bin/mongo
+  #     mongodLocationMap:
+  #       "node01:2017": /usr/bin/mongo
+  #       "node03:27017": /usr/bin/mongo
   tasks:
   # - name: daily-s3-us-west
   #   enabled: true

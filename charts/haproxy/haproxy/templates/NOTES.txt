@@ -1,6 +1,6 @@
 HAProxy Kubernetes Ingress Controller has been successfully installed.
 
-Controller image deployed is: "{{ .Values.controller.image.repository }}:{{ tpl .Values.controller.image.tag . }}".
+Controller image deployed is: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag | default .Chart.AppVersion }}".
 Your controller is of a "{{ .Values.controller.kind }}" kind. Your controller service is running as a "{{ .Values.controller.service.type }}" type.
 {{- if .Values.rbac.create}}
 RBAC authorization is enabled.
@@ -23,14 +23,53 @@ Service ports mapped are:
     containerPort: {{ $value }}
     protocol: TCP
 {{- end }}
+{{- if and (semverCompare ">=1.24.0-0" .Capabilities.KubeVersion.Version) .Values.controller.service.enablePorts.quic }}
+  - name: quic
+    containerPort: {{ .Values.controller.containerPort.https }}
+    protocol: UDP
+{{- end }}
+{{- range .Values.controller.service.tcpPorts }}
+  - name: {{ .name }}-tcp
+    containerPort: {{ .targetPort }}
+    protocol: TCP
+{{- end }}
 {{- end }}
 {{- if eq .Values.controller.kind "DaemonSet" }}
+{{- $useHostPort := .Values.controller.daemonset.useHostPort -}}
 {{- $hostPorts := .Values.controller.daemonset.hostPorts -}}
+{{- $hostIP := .Values.controller.daemonset.hostIP -}}
 {{- range $key, $value := .Values.controller.containerPort }}
   - name: {{ $key }}
     containerPort: {{ $value }}
     protocol: TCP
+{{- if $useHostPort }}
     hostPort: {{ index $hostPorts $key | default $value }}
+{{- end }}
+{{- if $hostIP }}
+    hostIP: {{ $hostIP }}
+{{- end }}
+{{- end }}
+{{- if and (semverCompare ">=1.24.0-0" .Capabilities.KubeVersion.Version) .Values.controller.service.enablePorts.quic }}
+  - name: quic
+    containerPort: {{ .Values.controller.containerPort.https }}
+    protocol: UDP
+{{- if $useHostPort }}
+    hostPort: {{ .Values.controller.daemonset.hostPorts.https }}
+{{- end }}
+{{- if $hostIP }}
+    hostIP: {{ $hostIP }}
+{{- end }}
+{{- end }}
+{{- range .Values.controller.service.tcpPorts }}
+  - name: {{ .name }}-tcp
+    containerPort: {{ .port }}
+    protocol: TCP
+{{- if $useHostPort }}
+    hostPort: {{ .port }}
+{{- end }}
+{{- if $hostIP }}
+    hostIP: {{ $hostIP }}
+{{- end }}
 {{- end }}
 {{- end }}
 

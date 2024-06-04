@@ -96,6 +96,8 @@ spec:
       {{- if .Values.podmon.enabled }}
         driver.dellemc.com: dell-storage
       {{- end }}
+      annotations:
+        kubectl.kubernetes.io/default-container: driver
     spec:
       {{ if .Values.node.nodeSelector }}
       nodeSelector:
@@ -105,7 +107,7 @@ spec:
       tolerations:
       {{- toYaml .Values.node.tolerations | nindent 6 }}
       {{ end }}
-      serviceAccountName: {{ .Release.Name }}-node
+      serviceAccount: {{ .Release.Name }}-node
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       hostIPC: true
@@ -118,7 +120,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          image: {{ required "Must provide the podmon container image." .Values.images.podmon }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             {{- toYaml .Values.podmon.node.args | nindent 12 }}
@@ -171,7 +173,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: {{ required "Must provide the Powerstore driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}
+          image: {{ required "Must provide the Powerstore driver image repository." .Values.images.driver }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: [ "/csi-powerstore" ]
           env:
@@ -193,6 +195,8 @@ spec:
               value: {{ .Values.node.nodeNamePrefix }}
             - name: X_CSI_POWERSTORE_NODE_ID_PATH
               value: /node-id
+            - name: X_CSI_POWERSTORE_MAX_VOLUMES_PER_NODE
+              value: "{{ .Values.maxPowerstoreVolumesPerNode }}"
             - name: X_CSI_POWERSTORE_NODE_CHROOT_PATH
               value: /noderoot
             - name: X_CSI_POWERSTORE_TMP_DIR
@@ -201,8 +205,6 @@ spec:
               value: {{ .Values.driverName }}
             - name: X_CSI_FC_PORTS_FILTER_FILE_PATH
               value: {{ .Values.nodeFCPortsFilterFile }}
-            - name: X_CSI_DRIVER_NAME
-              value: {{ .Values.driverName }}
             {{- if eq .Values.connection.enableCHAP  true }}
             - name: X_CSI_POWERSTORE_ENABLE_CHAP
               value: "true"
@@ -264,7 +266,7 @@ spec:
             - name: powerstore-config-params
               mountPath: /powerstore-config-params
         - name: registrar
-          image: {{ required "Must provide the CSI node registrar container image." ( include "csi-powerstore.registrarImage" . ) }}
+          image: {{ required "Must provide the CSI node registrar container image." .Values.images.registrar }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - "--v=5"

@@ -85,10 +85,15 @@ spec:
         runAsNonRoot: true
         runAsUser:  1000
         runAsGroup: 1000
+{{- if .Values.controller.allowPrivilegedPorts }}
+        sysctls:
+         - name: net.ipv4.ip_unprivileged_port_start
+           value: "0"
+{{- end }}
 {{- end }}
       containers:
         - name: {{ include "kubernetes-ingress.name" . }}-{{ .Values.controller.name }}
-          image: "{{ .Values.controller.image.repository }}:{{ tpl .Values.controller.image.tag . }}"
+          image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
           args:
 {{- if .Values.controller.defaultTLSSecret.enabled -}}
@@ -101,6 +106,10 @@ spec:
           - --configmap={{ include "kubernetes-ingress.namespace" . }}/{{ include "kubernetes-ingress.fullname" . }}
           - --http-bind-port={{ .Values.controller.containerPort.http }}
           - --https-bind-port={{ .Values.controller.containerPort.https }}
+{{- if and (semverCompare ">=1.24.0-0" .Capabilities.KubeVersion.Version) .Values.controller.service.enablePorts.quic }}
+          - --quic-bind-port={{ .Values.controller.containerPort.https }}
+          - --quic-announce-port={{ .Values.controller.service.ports.https }}
+{{- end }}
 {{- if .Values.controller.ingressClass }}
           - --ingress.class={{ .Values.controller.ingressClass }}
 {{- end }}
@@ -113,6 +122,20 @@ spec:
 {{- if .Values.controller.logging.level }}
           - --log={{ .Values.controller.logging.level }}
 {{- end }}
+{{- if .Values.controller.service.enablePorts.prometheus }}
+          - --prometheus
+{{- end }}
+{{- if eq .Values.controller.sync.mode "fetch" }}
+  {{- if .Values.controller.sync.fetchParams.period }}
+          - --proxy-k8s-fetch-period={{ .Values.controller.sync.fetchParams.period }}
+  {{- end }}
+  {{- if eq .Values.controller.sync.fetchParams.source "k8s" }}
+          - --k8s-api-sync-type=k8s
+  {{- else if eq .Values.controller.sync.fetchParams.source "proxy" }}
+          - --k8s-api-sync-type=proxy
+          - --proxy-svc-label-selector={{ .Values.controller.sync.proxyParams.proxySvcLabelSelector }}
+  {{- end }}
+{{- end }}
 {{- range .Values.controller.extraArgs }}
           - {{ . }}
 {{- end }}
@@ -121,7 +144,7 @@ spec:
             runAsNonRoot: true
             runAsUser:  1000
             runAsGroup: 1000
-            allowPrivilegeEscalation: true
+            allowPrivilegeEscalation: {{ .Values.controller.allowPrivilegeEscalation }}
             capabilities:
               drop:
                 - ALL
@@ -137,6 +160,11 @@ spec:
             - name: {{ $key }}
               containerPort: {{ $value }}
               protocol: TCP
+          {{- end }}
+          {{- if and (semverCompare ">=1.24.0-0" .Capabilities.KubeVersion.Version) .Values.controller.service.enablePorts.quic }}
+            - name: quic
+              containerPort: {{ .Values.controller.containerPort.https }}
+              protocol: UDP
           {{- end }}
           {{- range .Values.controller.service.tcpPorts }}
             - name: {{ .name }}-tcp
@@ -190,8 +218,13 @@ spec:
 {{ toYaml .Values.controller.lifecycle | indent 12 }}
             {{- end }}
           {{- end }}
-          {{- if or .Values.controller.extraVolumeMounts .Values.aws.licenseConfigSecretName }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+              subPath: tmp
+            - name: tmp
+              mountPath: /run
+              subPath: run
             {{- if .Values.aws.licenseConfigSecretName }}
             - name: aws-product-license
               readOnly: true
@@ -202,7 +235,6 @@ spec:
             {{- else if gt (len .Values.controller.extraVolumeMounts) 0 }}
 {{ toYaml .Values.controller.extraVolumeMounts | indent 12 }}
             {{- end }}
-          {{- end}}
         {{- if .Values.controller.extraContainers }}
           {{- if eq "string" (printf "%T" .Values.controller.extraContainers) }}
 {{ tpl .Values.controller.extraContainers . | indent 8 }}
@@ -210,8 +242,15 @@ spec:
 {{ toYaml .Values.controller.extraContainers | indent 8 }}
           {{- end }}
         {{- end }}
-      {{- if or .Values.controller.extraVolumes .Values.aws.licenseConfigSecretName }}
       volumes:
+        - name: tmp
+          {{- if semverCompare ">=1.21.0-0" .Capabilities.KubeVersion.Version }}
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
         {{- if .Values.aws.licenseConfigSecretName }}
         - name: aws-product-license
           secret:
@@ -223,7 +262,6 @@ spec:
         {{- else if gt (len .Values.controller.extraVolumes) 0 }}
 {{ toYaml .Values.controller.extraVolumes | indent 8 }}
         {{- end }}
-      {{- end }}
       {{- with.Values.controller.initContainers }}
       initContainers:
           {{- toYaml . | nindent 8 }}

@@ -29,6 +29,9 @@ spec:
       {{- range $key, $value := .Values.migrations.annotations }}
         {{ $key }}: {{ $value | quote }}
       {{- end }}
+      {{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
+        kuma.io/service-account-token-volume: {{ template "kong.serviceAccountTokenName" . }}
+      {{- end }}
       {{- end }}
     spec:
       {{- if or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name }}
@@ -65,6 +68,7 @@ spec:
         {{ toYaml .Values.containerSecurityContext | nindent 10 }} 
         env:
         {{- include "kong.no_daemon_env" . | nindent 8 }}
+        {{- include "kong.envFrom" .Values.envFrom | nindent 8 }}
         args: [ "kong", "migrations", "finish" ]
         volumeMounts:
         {{- include "kong.volumeMounts" . | nindent 8 }}
@@ -73,6 +77,10 @@ spec:
         {{- toYaml .Values.migrations.resources | nindent 10 }}
       securityContext:
       {{- include "kong.podsecuritycontext" . | nindent 8 }}
+      {{- if .Values.affinity }}
+      affinity:
+      {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector:
       {{- toYaml .Values.nodeSelector | nindent 8 }}

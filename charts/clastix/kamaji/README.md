@@ -1,16 +1,16 @@
 # kamaji
 
-![Version: 0.12.1](https://img.shields.io/badge/Version-0.12.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.3.0](https://img.shields.io/badge/AppVersion-v0.3.0-informational?style=flat-square)
+![Version: 0.15.3](https://img.shields.io/badge/Version-0.15.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.5.1](https://img.shields.io/badge/AppVersion-v0.5.1-informational?style=flat-square)
 
-Kamaji deploys and operates Kubernetes at scale with a fraction of the operational burden. Kamaji turns any Kubernetes cluster into an “admin cluster” to orchestrate other Kubernetes clusters called “tenant clusters”. Kamaji is special because the Control Plane components are running in a single pod instead of dedicated machines. This solution makes running multiple Control Planes cheaper and easier to deploy and operate.
+Kamaji is the Hosted Control Plane Manager for Kubernetes.
 
 ## Maintainers
 
 | Name | Email | Url |
 | ---- | ------ | --- |
-| Dario Tranchitella | <dario@tranchitella.eu> |  |
+| Dario Tranchitella | <dario@tranchitella.eu> | <https://clastix.io> |
 | Massimiliano Giovagnoli | <me@maxgio.it> |  |
-| Adriano Pezzuto | <me@bsctl.io> |  |
+| Adriano Pezzuto | <me@bsctl.io> | <https://clastix.io> |
 
 ## Source Code
 
@@ -66,6 +66,8 @@ Here the values you can override:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Kubernetes affinity rules to apply to Kamaji controller pods |
+| cfssl.image.repository | string | `"cfssl/cfssl"` |  |
+| cfssl.image.tag | string | `"latest"` |  |
 | datastore.basicAuth.passwordSecret.keyPath | string | `nil` | The Secret key where the data is stored. |
 | datastore.basicAuth.passwordSecret.name | string | `nil` | The name of the Secret containing the password used to connect to the relational database. |
 | datastore.basicAuth.passwordSecret.namespace | string | `nil` | The namespace of the Secret containing the password used to connect to the relational database. |
@@ -73,8 +75,9 @@ Here the values you can override:
 | datastore.basicAuth.usernameSecret.name | string | `nil` | The name of the Secret containing the username used to connect to the relational database. |
 | datastore.basicAuth.usernameSecret.namespace | string | `nil` | The namespace of the Secret containing the username used to connect to the relational database. |
 | datastore.driver | string | `"etcd"` | (string) The Kamaji Datastore driver, supported: etcd, MySQL, PostgreSQL (defaults=etcd). |
+| datastore.enabled | bool | `true` | (bool) Enable the Kamaji Datastore creation (default=true) |
 | datastore.endpoints | list | `[]` | (array) List of endpoints of the selected Datastore. When letting the Chart install the etcd datastore, this field is populated automatically. |
-| datastore.nameOverride | string | `nil` | The Datastore name override, if empty defaults to `default` |
+| datastore.nameOverride | string | `nil` | The Datastore name override, if empty and enabled=true defaults to `default`, if enabled=false, this is the name of the Datastore to connect to.  |
 | datastore.tlsConfig.certificateAuthority.certificate.keyPath | string | `nil` | Key of the Secret which contains the content of the certificate. |
 | datastore.tlsConfig.certificateAuthority.certificate.name | string | `nil` | Name of the Secret containing the CA required to establish the mandatory SSL/TLS connection to the datastore. |
 | datastore.tlsConfig.certificateAuthority.certificate.namespace | string | `nil` | Namespace of the Secret containing the CA required to establish the mandatory SSL/TLS connection to the datastore. |
@@ -100,10 +103,11 @@ Here the values you can override:
 | etcd.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | etcd.persistence.customAnnotations | object | `{}` | The custom annotations to add to the PVC |
 | etcd.persistence.size | string | `"10Gi"` |  |
-| etcd.persistence.storageClass | string | `""` |  |
+| etcd.persistence.storageClassName | string | `""` |  |
 | etcd.port | int | `2379` | The client request port. |
 | etcd.serviceAccount.create | bool | `true` | Create a ServiceAccount, required to install and provision the etcd backing storage (default: true) |
 | etcd.serviceAccount.name | string | `""` | Define the ServiceAccount name to use during the setup and provision of the etcd backing storage (default: "") |
+| etcd.tolerations | list | `[]` | (array) Kubernetes affinity rules to apply to Kamaji etcd pods |
 | extraArgs | list | `[]` | A list of extra arguments to add to the kamaji controller default ones |
 | fullnameOverride | string | `""` |  |
 | healthProbeBindAddress | string | `":8081"` | The address the probe endpoint binds to. (default ":8081") |

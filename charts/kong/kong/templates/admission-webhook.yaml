@@ -46,6 +46,9 @@ webhooks:
   namespaceSelector:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.ingressController.admissionWebhook.timeoutSeconds }}
+  timeoutSeconds: {{ . }}
+  {{- end }}
   objectSelector:
     matchExpressions:
     - key: owner
@@ -77,9 +80,40 @@ webhooks:
     apiVersions:
     - 'v1'
     operations:
+{{- if (semverCompare ">= 2.12.1" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+    - CREATE
+{{- end }}
     - UPDATE
     resources:
     - secrets
+{{- if (semverCompare ">= 3.0.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+    - services
+{{- end }}
+{{- if (semverCompare ">= 2.12.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+  - apiGroups:
+    - networking.k8s.io
+    apiVersions:
+      - 'v1'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - ingresses
+  - apiGroups:
+    - gateway.networking.k8s.io
+    apiVersions:
+    - 'v1alpha2'
+    - 'v1beta1'
+{{- if (semverCompare ">= 3.0.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+    - 'v1'
+{{- end }}
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - gateways
+    - httproutes
+{{- end }}
   clientConfig:
     {{- if not .Values.ingressController.admissionWebhook.certificate.provided }}
     caBundle: {{ b64enc $caCert }}

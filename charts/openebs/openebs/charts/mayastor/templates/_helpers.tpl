@@ -142,8 +142,6 @@ Usage:
     {{- print $product.domain -}}
 {{- end -}}
 
-<<<<<<< HEAD
-
 {{/*
 Creates the tolerations based on the global and component wise tolerations, with early eviction
 Usage:
@@ -204,6 +202,33 @@ Usage:
             {{ printf "%s" .template.Values.priorityClassName -}}
         {{- else -}}
             {{ printf "%s-cluster-critical" .template.Release.Name -}}
+        {{- end -}}
+    {{- end -}}
+{{- end -}}
+
+{{/*
+    Generate the default StorageClass parameters.
+    This is required because StorageClass parameters cannot be patched after creation.
+    If the StorageClass already exists, the default StorageClass carries the parameters and values
+    of that StorageClass. Else, it carries the default parameters and values.
+*/}}
+{{- define "storageClass.parameters" -}}
+    {{- $scName := index . 0 -}}
+    {{- $valuesParams := index . 1 -}}
+
+    {{/* Check to see if a default StorageClass already exists */}}
+    {{- $sc := lookup "storage.k8s.io/v1" "StorageClass" "" $scName -}}
+
+    {{- if $sc -}}
+        {{/* Existing defaults */}}
+        {{ range $param, $val := $sc.parameters }}
+{{ $param | quote }}: {{ $val | quote }}
+        {{- end -}}
+
+    {{- else -}}
+        {{/* Current defaults */}}
+        {{ range $param, $val := $valuesParams }}
+{{ $param | quote }}: {{ $val | quote }}
         {{- end -}}
     {{- end -}}
 {{- end -}}

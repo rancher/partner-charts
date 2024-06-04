@@ -30,6 +30,7 @@ spec:
     metadata:
       annotations:
         consul.hashicorp.com/connect-inject: "false"
+        consul.hashicorp.com/mesh-inject: "false"
         {{- if (and .Values.global.secretsBackend.vault.enabled .Values.global.tls.enabled) }}
         "vault.hashicorp.com/agent-init-first": "true"
         "vault.hashicorp.com/agent-inject": "true"
@@ -38,6 +39,9 @@ spec:
         "vault.hashicorp.com/agent-inject-template-serverca.crt": {{ template "consul.serverTLSCATemplate" . }}
         {{- if .Values.global.secretsBackend.vault.agentAnnotations }}
         {{ tpl .Values.global.secretsBackend.vault.agentAnnotations . | nindent 8 | trim }}
+        {{ end }}
+       {{- if (and (.Values.global.secretsBackend.vault.vaultNamespace) (not (hasKey (default "" .Values.global.secretsBackend.vault.agentAnnotations | fromYaml) "vault.hashicorp.com/namespace")))}}
+        "vault.hashicorp.com/namespace": "{{ .Values.global.secretsBackend.vault.vaultNamespace }}"
         {{- end }}
         {{- if and .Values.global.secretsBackend.vault.ca.secretName .Values.global.secretsBackend.vault.ca.secretKey }}
         "vault.hashicorp.com/agent-extra-secret": "{{ .Values.global.secretsBackend.vault.ca.secretName }}"
@@ -139,7 +143,7 @@ spec:
         - "/bin/sh"
         - "-ec"
         - |
-          consul-api-gateway server \
+          exec consul-api-gateway server \
             -sds-server-host {{ template "consul.fullname" . }}-api-gateway-controller.{{ .Release.Namespace }}.svc \
             -k8s-namespace {{ .Release.Namespace }} \
             {{- if .Values.global.enableConsulNamespaces }}
@@ -185,7 +189,7 @@ spec:
         lifecycle:
           preStop:
             exec:
-              command: [ "/bin/sh", "-ec", "/consul-bin/consul logout" ]
+              command: ["/consul-bin/consul", "logout" ]
         {{- end }}
       volumes:
       {{- if .Values.global.acls.manageSystemACLs }}
@@ -271,7 +275,7 @@ spec:
         - "/bin/sh"
         - "-ec"
         - |
-          consul-k8s-control-plane acl-init \
+          exec consul-k8s-control-plane acl-init \
             {{- if and .Values.global.federation.enabled .Values.global.federation.primaryDatacenter }}
             -auth-method-name={{ template "consul.fullname" . }}-k8s-component-auth-method-{{ .Values.global.datacenter }} \
             {{- else }}
