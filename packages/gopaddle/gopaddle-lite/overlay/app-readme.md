@@ -6,9 +6,6 @@
 ## Kubernetes IDE with AI Co-pilot
 gopaddle is a low-code Kubernetes IDE with AI Co-pilot. The low-code IDE has advanced resource filtering, a YAML free form editor, and developer tools like a container terminal and logs. The AI Co-pilot provides interactive troubleshooting.
 
-## Supported AI Models
-ChatGPT models gpt-4o and gpt-4-turbo.
-
 ## Installation 
 
 ### Minimum System Requirements
