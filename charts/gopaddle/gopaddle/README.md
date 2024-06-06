@@ -4,14 +4,21 @@
 [![Slack Channel](https://img.shields.io/badge/Slack-Join-purple)](https://gopaddleio.slack.com/join/shared_invite/zt-1l73p8wfo-vYk1XcbLAZMo9wcV_AChvg#/shared-invite/email/expanded-email-form)
 
 ## Kubernetes IDE with AI Co-pilot
+
 gopaddle is a low-code Kubernetes IDE with AI Co-pilot. The low-code IDE has advanced resource filtering, a YAML free form editor, and developer tools like a container terminal and logs. The AI Co-pilot provides interactive troubleshooting.
+
+## Supported AI Models
+
+ChatGPT models gpt-4o and gpt-4-turbo.
 
 ## Installation 
 
 ### Minimum System Requirements
-gopaddle installation requires a minimum of `8GB RAM` and `4 vCPUs`
+
+gopaddle installation requires a minimum of `4GB RAM` and `2 vCPUs`
 
 ### Firewall Ports
+
 The following incoming firewall ports need to be opened - `30003`.
 
 ### Step to install using Helm Charts
@@ -48,6 +55,5 @@ kubectl get nodes -o wide
 Open the `Ask AI` option, select the LLM Type as `OpenAI`, select a model, and provide the API Key.  
 
 To get the OpenAI API Key, check here: [OpenAI API Key](https://platform.openai.com/api-keys). 
-
 
 
