@@ -168,6 +168,85 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "redpanda.DefaultMounts" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (concat (list (mustMergeOverwrite (dict "name" "" "mountPath" "" ) (dict "name" "config" "mountPath" "/etc/redpanda" ))) (get (fromJson (include "redpanda.CommonMounts" (dict "a" (list $dot) ))) "r"))) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.CommonMounts" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- $values := $dot.Values.AsMap -}}
+{{- $mounts := (list ) -}}
+{{- $sasl_5 := $values.auth.sasl -}}
+{{- if (and $sasl_5.enabled (ne $sasl_5.secretRef "")) -}}
+{{- $mounts = (mustAppend $mounts (mustMergeOverwrite (dict "name" "" "mountPath" "" ) (dict "name" "users" "mountPath" "/etc/secrets/users" "readOnly" true ))) -}}
+{{- end -}}
+{{- if (get (fromJson (include "redpanda.TLSEnabled" (dict "a" (list $dot) ))) "r") -}}
+{{- $certNames := (keys $values.tls.certs) -}}
+{{- $_ := (sortAlpha $certNames) -}}
+{{- range $_, $name := $certNames -}}
+{{- $mounts = (mustAppend $mounts (mustMergeOverwrite (dict "name" "" "mountPath" "" ) (dict "name" (printf "redpanda-%s-cert" $name) "mountPath" (printf "/etc/tls/certs/%s" $name) ))) -}}
+{{- end -}}
+{{- if (get (fromJson (include "redpanda.ClientAuthRequired" (dict "a" (list $dot) ))) "r") -}}
+{{- $mounts = (mustAppend $mounts (mustMergeOverwrite (dict "name" "" "mountPath" "" ) (dict "name" "mtls-client" "mountPath" (printf "/etc/tls/certs/%s-client" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r")) ))) -}}
+{{- end -}}
+{{- end -}}
+{{- (dict "r" $mounts) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.DefaultVolumes" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (concat (list (mustMergeOverwrite (dict "name" "" ) (mustMergeOverwrite (dict ) (dict "configMap" (mustMergeOverwrite (dict ) (mustMergeOverwrite (dict ) (dict "name" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r") )) (dict )) )) (dict "name" "config" ))) (get (fromJson (include "redpanda.CommonVolumes" (dict "a" (list $dot) ))) "r"))) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.CommonVolumes" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- $volumes := (list ) -}}
+{{- $values := $dot.Values.AsMap -}}
+{{- if (get (fromJson (include "redpanda.TLSEnabled" (dict "a" (list $dot) ))) "r") -}}
+{{- $certNames := (keys $values.tls.certs) -}}
+{{- $_ := (sortAlpha $certNames) -}}
+{{- range $_, $name := $certNames -}}
+{{- $cert := (index $values.tls.certs $name) -}}
+{{- $volumes = (mustAppend $volumes (mustMergeOverwrite (dict "name" "" ) (mustMergeOverwrite (dict ) (dict "secret" (mustMergeOverwrite (dict ) (dict "secretName" (get (fromJson (include "redpanda.CertSecretName" (dict "a" (list $dot $name $cert) ))) "r") "defaultMode" 0o440 )) )) (dict "name" (printf "redpanda-%s-cert" $name) ))) -}}
+{{- end -}}
+{{- if (get (fromJson (include "redpanda.ClientAuthRequired" (dict "a" (list $dot) ))) "r") -}}
+{{- $volumes = (mustAppend $volumes (mustMergeOverwrite (dict "name" "" ) (mustMergeOverwrite (dict ) (dict "secret" (mustMergeOverwrite (dict ) (dict "secretName" (printf "%s-client" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r")) "defaultMode" 0o440 )) )) (dict "name" "mtls-client" ))) -}}
+{{- end -}}
+{{- end -}}
+{{- $sasl_6 := $values.auth.sasl -}}
+{{- if (and $sasl_6.enabled (ne $sasl_6.secretRef "")) -}}
+{{- $volumes = (mustAppend $volumes (mustMergeOverwrite (dict "name" "" ) (mustMergeOverwrite (dict ) (dict "secret" (mustMergeOverwrite (dict ) (dict "secretName" $sasl_6.secretRef )) )) (dict "name" "users" ))) -}}
+{{- end -}}
+{{- (dict "r" $volumes) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.CertSecretName" -}}
+{{- $dot := (index .a 0) -}}
+{{- $certName := (index .a 1) -}}
+{{- $cert := (index .a 2) -}}
+{{- range $_ := (list 1) -}}
+{{- if (ne $cert.secretRef (coalesce nil)) -}}
+{{- (dict "r" $cert.secretRef.name) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- (dict "r" (printf "%s-%s-cert" (get (fromJson (include "redpanda.Fullname" (dict "a" (list $dot) ))) "r") $certName)) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "redpanda.PodSecurityContext" -}}
 {{- $dot := (index .a 0) -}}
 {{- range $_ := (list 1) -}}
@@ -184,6 +263,91 @@
 {{- $values := $dot.Values.AsMap -}}
 {{- $sc := (get (fromJson (include "_shims.ptr_Deref" (dict "a" (list $values.statefulset.podSecurityContext $values.statefulset.securityContext) ))) "r") -}}
 {{- (dict "r" (mustMergeOverwrite (dict ) (dict "runAsUser" $sc.runAsUser "runAsGroup" (coalesce $sc.runAsGroup $sc.fsGroup) "allowPrivilegeEscalation" $sc.allowPriviledgeEscalation "runAsNonRoot" $sc.runAsNonRoot ))) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_22_2_0" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=22.2.0-0 || <0.0.1-0") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_22_3_0" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=22.3.0-0 || <0.0.1-0") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_23_1_1" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=23.1.1-0 || <0.0.1-0") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_23_1_2" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=23.1.2-0 || <0.0.1-0") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_22_3_atleast_22_3_13" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=22.3.13-0,<22.4") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_22_2_atleast_22_2_10" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=22.2.10-0,<22.3") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_23_2_1" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=23.2.1-0 || <0.0.1-0") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.RedpandaAtLeast_23_3_0" -}}
+{{- $dot := (index .a 0) -}}
+{{- range $_ := (list 1) -}}
+{{- (dict "r" (get (fromJson (include "redpanda.redpandaAtLeast" (dict "a" (list $dot ">=23.3.0-0 || <0.0.1-0") ))) "r")) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "redpanda.redpandaAtLeast" -}}
+{{- $dot := (index .a 0) -}}
+{{- $constraint := (index .a 1) -}}
+{{- range $_ := (list 1) -}}
+{{- $values := $dot.Values.AsMap -}}
+{{- if (ne $values.image.repository "docker.redpanda.com/redpandadata/redpanda") -}}
+{{- (dict "r" true) | toJson -}}
+{{- break -}}
+{{- end -}}
+{{- $version := (trimPrefix "v" (get (fromJson (include "redpanda.Tag" (dict "a" (list $dot) ))) "r")) -}}
+{{- $tmp_tuple_3 := (get (fromJson (include "_shims.compact" (dict "a" (list (list (semverCompare $constraint $version) nil)) ))) "r") -}}
+{{- $err := $tmp_tuple_3.T2 -}}
+{{- $result := $tmp_tuple_3.T1 -}}
+{{- if (ne $err (coalesce nil)) -}}
+{{- $_ := (fail $err) -}}
+{{- end -}}
+{{- (dict "r" $result) | toJson -}}
 {{- break -}}
 {{- end -}}
 {{- end -}}
