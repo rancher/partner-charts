@@ -210,6 +210,7 @@ spec:
   ports:
   {{- if .http }}
   {{- if .http.enabled }}
+  {{- if ne ( .http.servicePort | toString ) "0" }}
   - name: kong-{{ .serviceName }}
     port: {{ .http.servicePort }}
     targetPort: {{ .http.containerPort }}
@@ -220,6 +221,7 @@ spec:
     nodePort: {{ .http.nodePort }}
   {{- end }}
     protocol: TCP
+  {{- end }}
   {{- end }}
   {{- end }}
   {{- if .tls.enabled }}
@@ -329,7 +331,9 @@ Parameters: takes a service (e.g. .Values.proxy) as its argument and returns KON
   {{- $portMaps := list -}}
 
   {{- if .http.enabled -}}
+  {{- if ne (.http.servicePort | toString ) "0" -}}
         {{- $portMaps = append $portMaps (printf "%d:%d" (int64 .http.servicePort) (int64 .http.containerPort)) -}}
+  {{- end -}}
   {{- end -}}
 
   {{- if .tls.enabled -}}
@@ -1115,8 +1119,10 @@ the template that it itself is using form the above sections.
       {{- $_ := set $autoEnv "KONG_ADMIN_GUI_AUTH_CONF" $guiAuthConf -}}
     {{- end }}
 
-    {{- $guiSessionConf := include "secretkeyref" (dict "name" .Values.enterprise.rbac.session_conf_secret "key" "admin_gui_session_conf") -}}
-    {{- $_ := set $autoEnv "KONG_ADMIN_GUI_SESSION_CONF" $guiSessionConf -}}
+    {{- if .Values.enterprise.rbac.session_conf_secret }}
+      {{- $guiSessionConf := include "secretkeyref" (dict "name" .Values.enterprise.rbac.session_conf_secret "key" "admin_gui_session_conf") -}}
+      {{- $_ := set $autoEnv "KONG_ADMIN_GUI_SESSION_CONF" $guiSessionConf -}}
+    {{- end }}
   {{- end }}
 
   {{- if .Values.enterprise.smtp.enabled }}
@@ -1284,6 +1290,24 @@ role sets used in the charts. Updating these requires separating out cluster
 resource roles into their separate templates.
 */}}
 {{- define "kong.kubernetesRBACRules" -}}
+{{- if (semverCompare ">= 3.2.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongcustomentities
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongcustomentities/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 {{- if and (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image))
            (contains (print .Values.ingressController.env.feature_gates) "KongServiceFacade=true") }}
 - apiGroups:

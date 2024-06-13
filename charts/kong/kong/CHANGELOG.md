@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.39.0
+
+### Changes
+
+* Updated handling of `session_conf_secret` to accommodate Kong 3.6.
+  It can now be omitted [when using OIDC](https://docs.konghq.com/gateway/3.6.x/kong-manager/auth/oidc/migrate/).
+  [#1033](https://github.com/Kong/charts/pull/1033)
+* Setting a Service's `servicePort` to 0 now disables that port on the Service,
+  for use when the external Service and container listens should differ, such
+  as when terminating TLS at a LoadBalancer.
+  [#1021](https://github.com/Kong/charts/pull/1021)
+* Added an `ingressController.admissionWebhook.filterSecrets` option. When
+  enabled, the webhook will only validate Secrets that have one of the
+  recognized KIC labels:
+
+  * `konghq.com/credential: <"key-auth", "jwt", etc. credential types>`
+  * `konghq.com/validate: <"plugin", "custom">`
+
+  Earlier versions checked all Secrets and did not require labels, interfering
+  with non-KIC labels. Requires KIC 3.0+.
+  [#1061](https://github.com/Kong/charts/pull/1061)
+* Add RBAC policy rules for Custom Entities
+  [#1081](https://github.com/Kong/charts/pull/1081)
+* Bumped default `kong/kubernetes-ingress-controller` image tag to 3.2.
+  [#1085](https://github.com/Kong/charts/pull/1085)
+
 ## 2.38.0
 
 ### Changes
