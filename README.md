@@ -1,9 +1,9 @@
 # partner-charts
 
-This repository is reserved for partner charts in the Rancher's v2.5+ catalog. As part of this catalog,
-all charts will benefit of a cloud native packaging system that directly references an upstream chart
-from a Helm repository and automates applying Rancher specific modifications and adding overlay
-files on top of it.
+This repository is reserved for partner charts in Rancher's v2.5+ catalog. Its
+helm charts are based on upstream charts. Rancher-specific modifications are
+applied to these charts, and overlay files may be added as well. These charts
+are then served from this repository so that they are available within Rancher.
 
 ## Requirements
 
@@ -83,11 +83,11 @@ git push origin <your_branch>
 
 
 ## Testing your configuration
-If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-ci-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
+If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
 
 #### 1. Download the binary
 ```bash
-scripts/pull-ci-scripts
+scripts/pull-scripts
 ```
 #### 2. Set the **PACKAGE** environment variable to your chart
 You can confirm the package entry with `bin/partner-charts-ci list` which will list all detected charts with a configuration file.
@@ -107,7 +107,7 @@ bin/partner-charts-ci validate
 #### Testing new chart on Rancher Apps UI
 1. If you haven't done so yet, pull down your new chart files into your local `partner-charts` repository:
 ```bash
-a) Get scripts: scripts/pull-ci-scripts
+a) Get scripts: scripts/pull-scripts
 b) List and find your company name/chart: bin/partner-charts-ci list | grep <vendor>
 c) set PACKAGE variable to your company/chart: export PACKAGE=<vendor>/<chart-name> or export PACKAGE=<vendor>
 d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
