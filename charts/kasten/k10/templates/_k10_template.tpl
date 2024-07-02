@@ -139,24 +139,24 @@ spec:
           secretName: {{ default "k10-basic-auth" .Values.auth.basicAuth.secretName }}
 {{- end }}
 {{- if .Values.auth.oidcAuth.enabled }}
-      - name: k10-oidc-auth
+      - name: {{ include "k10.oidcSecretName" .}}
         secret:
-          secretName: {{ default "k10-oidc-auth" .Values.auth.oidcAuth.secretName }}
+          secretName: {{ default (include "k10.oidcSecretName" .) .Values.auth.oidcAuth.secretName }}
 {{- if .Values.auth.oidcAuth.clientSecretName }}
-      - name: k10-oidc-auth-creds
+      - name: {{ include "k10.oidcCustomerSecretName" . }}
         secret:
           secretName: {{ .Values.auth.oidcAuth.clientSecretName }}
 {{- end }}
 {{- end }}
 {{- if .Values.auth.openshift.enabled }}
-      - name: k10-oidc-auth
+      - name: {{ include "k10.oidcSecretName" .}}
         secret:
-          secretName: {{ default "k10-oidc-auth" .Values.auth.openshift.secretName }}
+          secretName: {{ default (include "k10.oidcSecretName" .) .Values.auth.openshift.secretName }}
 {{- end }}
 {{- if .Values.auth.ldap.enabled }}
-      - name: k10-oidc-auth
+      - name: {{ include "k10.oidcSecretName" .}}
         secret:
-          secretName: {{ default "k10-oidc-auth" .Values.auth.ldap.secretName }}
+          secretName: {{ default (include "k10.oidcSecretName" .) .Values.auth.ldap.secretName }}
       - name: k10-logos-dex
         configMap:
           name: k10-logos-dex

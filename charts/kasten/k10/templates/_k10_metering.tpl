@@ -315,6 +315,10 @@ spec:
         - name: awsmp-product-license
           mountPath: "/var/run/secrets/product-license"
 {{- end }}
+{{- if .Values.features }}
+        - name: k10-features
+          mountPath: "/mnt/k10-features"
+{{- end }}
       volumes:
         - name: meter-config
           configMap:
@@ -324,6 +328,11 @@ spec:
               path: config.yaml
             - key: prometheusTargets
               path: prometheusTargets.yaml
+{{- if .Values.features }}
+        - name: k10-features
+          configMap:
+            name: k10-features
+{{- end }}
 {{- if $.stateful }}
         - name: {{ $service }}-persistent-storage
           persistentVolumeClaim:

@@ -121,36 +121,36 @@ stating that types are not same for the equality check
 {{- if list "dashboardbff" "executor" "garbagecollector" "controllermanager" "kanister" | has $service}}
 {{- if or  (eq (include "check.azuresecret" .) "true") (eq (include "check.azurecreds" .) "true" )  }}
 {{- if eq (include "check.azuresecret" .) "true" }}
-          - name: AZURE_CLIENT_ID
+          - name: {{ include "k10.azureClientIDEnvVar" . }}
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.secrets.azureClientSecretName }}
                 key: azure_client_id
-          - name: AZURE_TENANT_ID
+          - name: {{ include "k10.azureTenantIDEnvVar" . }}
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.secrets.azureClientSecretName }}
                 key: azure_tenant_id
-          - name: AZURE_CLIENT_SECRET
+          - name: {{ include "k10.azureClientSecretEnvVar" . }}
             valueFrom:
              secretKeyRef:
                name: {{ .Values.secrets.azureClientSecretName }}
                key: azure_client_secret
 {{- else }}
 {{- if or (eq (include "check.azureMSIWithClientID" .) "true") (eq (include "check.azureClientSecretCreds" .) "true") }}
-          - name: AZURE_CLIENT_ID
+          - name: {{ include "k10.azureClientIDEnvVar" . }}
             valueFrom:
               secretKeyRef:
                 name: azure-creds
                 key: azure_client_id
 {{- end }}
 {{- if eq (include "check.azureClientSecretCreds" .) "true" }}
-          - name: AZURE_TENANT_ID
+          - name: {{ include "k10.azureTenantIDEnvVar" . }}
             valueFrom:
               secretKeyRef:
                 name: azure-creds
                 key: azure_tenant_id
-          - name: AZURE_CLIENT_SECRET
+          - name: {{ include "k10.azureClientSecretEnvVar" . }}
             valueFrom:
               secretKeyRef:
                 name: azure-creds
@@ -178,19 +178,19 @@ stating that types are not same for the equality check
                 name: azure-creds
                 key: azure_resource_manager_endpoint
 {{- end }}
-{{- if .Values.secrets.azureADEndpoint }}
+{{- if or .Values.secrets.azureADEndpoint .Values.secrets.microsoftEntraIDEndpoint }}
           - name: AZURE_AD_ENDPOINT
             valueFrom:
               secretKeyRef:
                 name: azure-creds
-                key: azure_ad_endpoint
+                key: entra_id_endpoint
 {{- end }}
-{{- if .Values.secrets.azureADResourceID }}
+{{- if or .Values.secrets.azureADResourceID .Values.secrets.microsoftEntraIDResourceID }}
           - name: AZURE_AD_RESOURCE
             valueFrom:
               secretKeyRef:
                 name: azure-creds
-                key: azure_ad_resource_id
+                key: entra_id_resource_id
 {{- end }}
 {{- if .Values.secrets.azureCloudEnvID }}
           - name: AZURE_CLOUD_ENV_ID
@@ -414,6 +414,11 @@ There are 3 valid states of the secret provided by customer:
               configMapKeyRef:
                 name: k10-config
                 key: k10DataStoreParallelUpload
+          - name: K10_DATA_STORE_PARALLEL_DOWNLOAD
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: k10DataStoreParallelDownload
           - name: K10_DATA_STORE_GENERAL_CONTENT_CACHE_SIZE_MB
             valueFrom:
               configMapKeyRef:
@@ -830,19 +835,19 @@ There are 3 valid states of the secret provided by customer:
           readOnly: true
 {{- end }}
 {{- if (or .Values.auth.oidcAuth.enabled (eq (include "check.dexAuth" .) "true")) }}
-        - name: k10-oidc-auth
-          mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth"
+        - name: {{ include "k10.oidcSecretName" .}}
+          mountPath: {{ printf "%s/%s" (include "k10.secretsDir" .) (include "k10.oidcSecretName" .) }}
           readOnly: true
 {{- if .Values.auth.oidcAuth.clientSecretName }}
-        - name: k10-oidc-auth-creds
-          mountPath: "/var/run/secrets/kasten.io/k10-oidc-auth-creds"
+        - name: {{ include "k10.oidcCustomerSecretName" .}}
+          mountPath: {{ printf "%s/%s" (include "k10.secretsDir" .) (include "k10.oidcCustomerSecretName" .) }}
           readOnly: true
 {{- end }}
 {{- end }}
 {{- end }}
 {{- if eq (include "check.googleCredsOrSecret" .) "true"}}
         - name: service-account
-          mountPath: "/var/run/secrets/kasten.io"
+          mountPath: {{ include "k10.secretsDir" .}}
 {{- end }}
 {{- if and (list "controllermanager" "executor" | has $pod) (eq (include "check.projectSAToken" .) "true")}}
         - name: bound-sa-token

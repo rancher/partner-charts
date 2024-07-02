@@ -3,7 +3,7 @@
 Linkerd gives you observability, reliability, and security
 for your microservices — with no code change required.
 
-![Version: 2024.6.2](https://img.shields.io/badge/Version-2024.6.2-informational?style=flat-square)
+![Version: 2024.6.4](https://img.shields.io/badge/Version-2024.6.4-informational?style=flat-square)
 ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 ![AppVersion: edge-XX.X.X](https://img.shields.io/badge/AppVersion-edge--XX.X.X-informational?style=flat-square)
 
@@ -289,12 +289,6 @@ Kubernetes: `>=1.22.0-0`
 | proxyInit.logFormat | string | plain | Log format (`plain` or `json`) for the proxy-init |
 | proxyInit.logLevel | string | info | Log level for the proxy-init |
 | proxyInit.privileged | bool | false | Privileged mode allows the container processes to inherit all security capabilities and bypass any security limitations enforced by the kubelet. When used with 'runAsRoot: true', the container will behave exactly as if it was running as root on the host. May escape cgroup limits and see other processes and devices on the host. |
-| proxyInit.resources.cpu.limit | string | `"100m"` | Maximum amount of CPU units that the proxy-init container can use |
-| proxyInit.resources.cpu.request | string | `"100m"` | Amount of CPU units that the proxy-init container requests |
-| proxyInit.resources.ephemeral-storage.limit | string | `""` | Maximum amount of ephemeral storage that the proxy-init container can use |
-| proxyInit.resources.ephemeral-storage.request | string | `""` | Amount of ephemeral storage that the proxy-init container requests |
-| proxyInit.resources.memory.limit | string | `"20Mi"` | Maximum amount of memory that the proxy-init container can use |
-| proxyInit.resources.memory.request | string | `"20Mi"` | Amount of memory that the proxy-init container requests |
 | proxyInit.runAsGroup | int | `65534` | This value is used only if runAsRoot is false; otherwise runAsGroup will be 0 |
 | proxyInit.runAsRoot | bool | `false` | Allow overriding the runAsNonRoot behaviour (<https://github.com/linkerd/linkerd2/issues/7308>) |
 | proxyInit.runAsUser | int | `65534` | This value is used only if runAsRoot is false; otherwise runAsUser will be 0 |

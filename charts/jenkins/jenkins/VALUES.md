@@ -28,7 +28,7 @@ The following tables list the configurable parameters of the Jenkins chart and t
 | [agent.hostNetworking](./values.yaml#L937) | bool | Enables the agent to use the host network | `false` |
 | [agent.idleMinutes](./values.yaml#L1072) | int | Allows the Pod to remain active for reuse until the configured number of minutes has passed since the last step was executed on it | `0` |
 | [agent.image.repository](./values.yaml#L916) | string | Repository to pull the agent jnlp image from | `"jenkins/inbound-agent"` |
-| [agent.image.tag](./values.yaml#L918) | string | Tag of the image to pull | `"3248.v65ecb_254c298-1"` |
+| [agent.image.tag](./values.yaml#L918) | string | Tag of the image to pull | `"3256.v88a_f6e922152-1"` |
 | [agent.imagePullSecretName](./values.yaml#L925) | string | Name of the secret to be used to pull the image | `nil` |
 | [agent.inheritYamlMergeStrategy](./values.yaml#L1092) | bool | Controls whether the defined yaml merge strategy will be inherited if another defined pod template is configured to inherit from the current one | `false` |
 | [agent.jenkinsTunnel](./values.yaml#L897) | string | Overrides the Kubernetes Jenkins tunnel | `nil` |
@@ -157,7 +157,7 @@ The following tables list the configurable parameters of the Jenkins chart and t
 | [controller.initializeOnce](./values.yaml#L414) | bool | Initialize only on first installation. Ensures plugins do not get updated inadvertently. Requires `persistence.enabled` to be set to `true` | `false` |
 | [controller.installLatestPlugins](./values.yaml#L403) | bool | Download the minimum required version or latest version of all dependencies | `true` |
 | [controller.installLatestSpecifiedPlugins](./values.yaml#L406) | bool | Set to true to download the latest version of any plugin that is requested to have the latest version | `false` |
-| [controller.installPlugins](./values.yaml#L395) | list | List of Jenkins plugins to install. If you don't want to install plugins, set it to `false` | `["kubernetes:4246.v5a_12b_1fe120e","workflow-aggregator:596.v8c21c963d92d","git:5.2.2","configuration-as-code:1810.v9b_c30a_249a_4c"]` |
+| [controller.installPlugins](./values.yaml#L395) | list | List of Jenkins plugins to install. If you don't want to install plugins, set it to `false` | `["kubernetes:4248.vfa_9517757b_b_a_","workflow-aggregator:596.v8c21c963d92d","git:5.2.2","configuration-as-code:1810.v9b_c30a_249a_4c"]` |
 | [controller.javaOpts](./values.yaml#L156) | string | Append to `JAVA_OPTS` env var | `nil` |
 | [controller.jenkinsAdminEmail](./values.yaml#L96) | string | Email address for the administrator of the Jenkins instance | `nil` |
 | [controller.jenkinsHome](./values.yaml#L101) | string | Custom Jenkins home path | `"/var/jenkins_home"` |

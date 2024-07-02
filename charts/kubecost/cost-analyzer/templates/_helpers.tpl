@@ -32,6 +32,15 @@ Set important variables before starting main templates
 {{- end -}}
 
 {{/*
+Kubecost 2.3 notices
+*/}}
+{{- define "kubecostV2-3-notices" -}}
+  {{- if (.Values.kubecostAggregator).env -}}
+    {{- printf "\n\n\nNotice: Issue in values detected.\nKubecost 2.3 has updated the aggregator's environment variables. Please update your Helm values to use the new key pairs.\nFor more information, see: https://docs.kubecost.com/install-and-configure/install/multi-cluster/federated-etl/aggregator#aggregator-optimizations\nIn Kubecost 2.3, kubecostAggregator.env is no longer used in favor of the new key pairs. This was done to prevent unexpected behavior and to simplify the aggregator's configuration." -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
 Kubecost 2.0 preconditions
 */}}
 {{- define "kubecostV2-preconditions" -}}
@@ -164,6 +173,20 @@ ERROR: MISSING EBS-CSI DRIVER WHICH IS REQUIRED ON EKS v1.23+ TO MANAGE PERSISTE
 
 {{- end -}}
 {{- end -}}
+
+{{/*
+Verify a cluster_id is set in the Prometheus global config
+*/}}
+{{- define "clusterIDCheck" -}}
+  {{- if (.Values.kubecostModel).federatedStorageConfigSecret }}
+    {{- if not .Values.prometheus.server.clusterIDConfigmap }}
+      {{- if eq .Values.prometheus.server.global.external_labels.cluster_id "cluster-one" }}
+        {{- fail "\n\nWhen using multi-cluster Kubecost, you must specify a unique `.Values.prometheus.server.global.external_labels.cluster_id` for each cluster.\nNote this must be set even if you are using your own Prometheus or another identifier.\n" -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
 
 {{/*
 Verify the cloud integration secret exists with the expected key when cloud integration is enabled.
@@ -888,7 +911,11 @@ Begin Kubecost 2.0 templates
     periodSeconds: {{ .Values.kubecostAggregator.readinessProbe.periodSeconds }}
     failureThreshold: {{ .Values.kubecostAggregator.readinessProbe.failureThreshold }}
   {{- end }}
+  {{- if .Values.kubecostAggregator.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.kubecostAggregator.imagePullPolicy }}
+  {{- else }}
   imagePullPolicy: Always
+  {{- end }}
   args: ["waterfowl"]
   ports:
     - name: tcp-api
@@ -933,6 +960,10 @@ Begin Kubecost 2.0 templates
     - name: productkey-secret
       mountPath: /var/configs/productkey
     {{- end }}
+    {{- if and ((.Values.kubecostProductConfigs).smtp).secretname (eq (include "aggregator.deployMethod" .) "statefulset") }}
+    - name: smtp-secret
+      mountPath: /var/configs/smtp
+    {{- end }}
     {{- if .Values.saml }}
     {{- if .Values.saml.enabled }}
     {{- if .Values.saml.secretName }}
@@ -969,6 +1000,12 @@ Begin Kubecost 2.0 templates
     {{- end }}
     {{- end }}
     {{- end }}
+    {{- if .Values.global.integrations.postgres.enabled }}
+    - name: postgres-creds
+      mountPath: /var/configs/integrations/postgres-creds
+    - name: postgres-queries
+      mountPath: /var/configs/integrations/postgres-queries
+    {{- end }}
     {{- /* Only adds extraVolumeMounts if aggregator is running as its own pod */}}
     {{- if and .Values.kubecostAggregator.extraVolumeMounts (eq (include "aggregator.deployMethod" .) "statefulset") }}
     {{- toYaml .Values.kubecostAggregator.extraVolumeMounts | nindent 4 }}
@@ -989,6 +1026,14 @@ Begin Kubecost 2.0 templates
     - name: PRODUCT_KEY_MOUNT_PATH
       value: {{ .Values.kubecostProductConfigs.productKey.mountPath }}
     {{- end }}
+    {{- if and ((.Values.kubecostProductConfigs).smtp).mountPath (eq (include "aggregator.deployMethod" .) "statefulset") }}
+    - name: SMTP_CONFIG_MOUNT_PATH
+      value: {{ .Values.kubecostProductConfigs.smtp.mountPath }}
+    {{- end }}
+    {{- if .Values.smtpConfigmapName }}
+    - name: SMTP_CONFIGMAP_NAME
+      value: {{ .Values.smtpConfigmapName }}
+    {{- end }}
     {{- if (gt (int .Values.kubecostAggregator.numDBCopyPartitions) 0) }}
     - name: NUM_DB_COPY_CHUNKS
       value: {{ .Values.kubecostAggregator.numDBCopyPartitions | quote }}
@@ -1003,10 +1048,20 @@ Begin Kubecost 2.0 templates
     - name: ETL_PATH_PREFIX
       value: "/var/db"
     {{- end }}
-    - name: ETL_ENABLED
-      value: "false" # this container should never run KC's concept of "ETL"
     - name: CLOUD_PROVIDER_API_KEY
       value: "AIzaSyDXQPG_MHUEy9neR7stolq6l0ujXmjJlvk" # The GCP Pricing API key.This GCP api key is expected to be here and is limited to accessing google's billing API.'
+    {{- if .Values.global.integrations.postgres.enabled }}
+    - name: AGGREGATOR_ADDRESS
+    {{- if or .Values.saml.enabled .Values.oidc.enabled }}
+      value: localhost:9008
+    {{- else }}
+      value: localhost:9004
+    {{- end }}
+    - name: INT_PG_ENABLED
+      value: "true"
+    - name: INT_PG_RUN_INTERVAL
+      value: {{ quote .Values.global.integrations.postgres.runInterval }}
+    {{- end }}
     - name: READ_ONLY
       value: {{ (quote .Values.readonly) | default (quote false) }}
     {{- if .Values.systemProxy.enabled }}
@@ -1048,10 +1103,26 @@ Begin Kubecost 2.0 templates
       value: "true"
       {{- end }}
     {{- end }}
-    {{- range $key, $value := .Values.kubecostAggregator.env }}
-    - name: {{ $key | quote }}
-      value: {{ $value | quote }}
+    - name: LOG_LEVEL
+      value: {{ .Values.kubecostAggregator.logLevel }}
+    - name: DB_COPY_FULL
+      value: {{ (quote .Values.kubecostAggregator.dbCopyFull) | default (quote true) }}
+    - name: DB_READ_THREADS
+      value: {{ .Values.kubecostAggregator.dbReadThreads | quote }}
+    - name: DB_WRITE_THREADS
+      value: {{ .Values.kubecostAggregator.dbWriteThreads | quote }}
+    - name: DB_CONCURRENT_INGESTION_COUNT
+      value: {{ .Values.kubecostAggregator.dbConcurrentIngestionCount | quote }}
+    {{- if ne .Values.kubecostAggregator.dbMemoryLimit "0GB" }}
+    - name: DB_MEMORY_LIMIT
+      value: {{ .Values.kubecostAggregator.dbMemoryLimit | quote }}
     {{- end }}
+    {{- if ne .Values.kubecostAggregator.dbWriteMemoryLimit "0GB" }}
+    - name: DB_WRITE_MEMORY_LIMIT
+      value: {{ .Values.kubecostAggregator.dbWriteMemoryLimit | quote }}
+    {{- end }}
+    - name: ETL_DAILY_STORE_DURATION_DAYS
+      value: {{ .Values.kubecostAggregator.etlDailyStoreDurationDays | quote }}
     - name: KUBECOST_NAMESPACE
       value: {{ .Release.Namespace }}
     {{- if .Values.oidc.enabled }}
@@ -1152,7 +1223,11 @@ Begin Kubecost 2.0 templates
     periodSeconds: {{ .Values.kubecostAggregator.cloudCost.readinessProbe.periodSeconds }}
     failureThreshold: {{ .Values.kubecostAggregator.cloudCost.readinessProbe.failureThreshold }}
   {{- end }}
+  {{- if .Values.kubecostAggregator.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.kubecostAggregator.imagePullPolicy }}
+  {{- else }}
   imagePullPolicy: Always
+  {{- end }}
   args: ["cloud-cost"]
   ports:
     - name: tcp-api
@@ -1208,7 +1283,7 @@ Begin Kubecost 2.0 templates
       value: "true"
     {{- end}}
     - name: ETL_DAILY_STORE_DURATION_DAYS
-      value: {{ (quote .Values.kubecostModel.etlDailyStoreDurationDays) | default (quote 91) }}
+      value: {{ (quote .Values.kubecostModel.etlDailyStoreDurationDays) }}
     - name: CLOUD_COST_REFRESH_RATE_HOURS
       value: {{ .Values.kubecostAggregator.cloudCost.refreshRateHours | default 6 | quote }}
     - name: CLOUD_COST_QUERY_WINDOW_DAYS
@@ -1217,16 +1292,6 @@ Begin Kubecost 2.0 templates
       value: {{ .Values.kubecostAggregator.cloudCost.runWindowDays | default 3 | quote }}
     - name: CUSTOM_COST_ENABLED
       value: {{ .Values.kubecostModel.plugins.enabled | quote }}
-    {{- with .Values.kubecostModel.cloudCost }}
-    {{- with .labelList }}
-    - name: CLOUD_COST_IS_INCLUDE_LIST
-      value: {{ (quote .IsIncludeList) | default (quote false) }}
-    - name: CLOUD_COST_LABEL_LIST
-      value: {{ (quote .labels) }}
-    {{- end }}
-    - name: CLOUD_COST_TOP_N
-      value: {{ (quote .topNItems) | default (quote 1000) }}
-    {{- end }}
     {{- range $key, $value := .Values.kubecostAggregator.cloudCost.env }}
     - name: {{ $key | quote }}
       value: {{ $value | quote }}
@@ -1371,8 +1436,24 @@ for more information
 {{- end -}}
 {{- end -}}
 
+{{- define "forecastingEnabled" }}
+{{- if (.Values.forecasting).enabled }}
+{{- printf "true" -}}
+{{- else -}}
+{{- printf "false" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "pluginsEnabled" }}
-{{- if ((.Values.kubecostModel.plugins).install).enabled}}
+{{- if (.Values.kubecostModel.plugins).enabled }}
+{{- printf "true" -}}
+{{- else -}}
+{{- printf "false" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "carbonEstimatesEnabled" }}
+{{- if ((.Values.kubecostProductConfigs).carbonEstimates) }}
 {{- printf "true" -}}
 {{- else -}}
 {{- printf "false" -}}

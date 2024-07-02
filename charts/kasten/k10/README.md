@@ -116,6 +116,8 @@ Parameter | Description | Default
 `secrets.azureResourceMgrEndpoint` | Resource management endpoint for the Azure Stack instance | `None`
 `secrets.azureADEndpoint` | Azure Active Directory login endpoint | `None`
 `secrets.azureADResourceID` | Azure Active Directory resource ID to obtain AD tokens | `None`
+`secrets.microsoftEntraIDEndpoint` | Microsoft Entra ID login endpoint | `None`
+`secrets.microsoftEntraIDResourceID` | Microsoft Entra ID resource ID to obtain AD tokens | `None`
 `secrets.azureCloudEnvID` | Azure Cloud Environment ID | `None`
 `secrets.vsphereEndpoint` | vSphere endpoint for login | `None`
 `secrets.vsphereUsername` | vSphere username for login | `None`
@@ -285,6 +287,7 @@ Parameter | Description | Default
 `priorityClassName.<deploymentName>` | Overrides the default [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) name for the specified deployment | `{}`
 `ephemeralPVCOverhead` | Set the percentage increase for the ephemeral Persistent Volume Claim's storage request, e.g. PVC size = (file raw size) * (1 + `ephemeralPVCOverhead`) | `0.1`
 `datastore.parallelUploads` | Specifies how many files can be uploaded in parallel to the data store | `8`
+`datastore.parallelDownloads` | Specifies how many files can be downloaded in parallel from the data store                                                                                                                                                                                                                                                                                                                                                                                                                        | `8`
 `kastenDisasterRecovery.quickMode.enabled` | Enables K10 Quick Disaster Recovery | `false`
 `fips.enabled` | Specifies whether K10 should be run in the FIPS mode of operation | `false`
 ## Helm tips and tricks

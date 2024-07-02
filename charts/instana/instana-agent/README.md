@@ -117,6 +117,7 @@ The following table lists the configurable parameters of the Instana chart and t
 | `agent.pod.requests.memory`                         | Container memory requests in MiB                                                                                                                                                                                                                                                                                       | `768Mi`                                                                                                                                 |
 | `agent.pod.tolerations`                             | Tolerations for pod assignment                                                                                                                                                                                                                                                                                         | `[]`                                                                                                                                    |
 | `agent.pod.affinity`                                | Affinity for pod assignment                                                                                                                                                                                                                                                                                            | `{}`                                                                                                                                    |
+| `agent.serviceMesh.enabled`                         | Activate Instana Agent JVM monitoring service mesh support for Istio or OpenShift ServiceMesh                                                                                                                                                                                                                          | `true`                                                                                                                                  |
 | `agent.env`                                         | Additional environment variables for the agent                                                                                                                                                                                                                                                                         | `{}`                                                                                                                                    |
 | `agent.redactKubernetesSecrets`                     | Enable additional secrets redaction for selected Kubernetes resources                                                                                                                                                                                                                                                  | `nil` See [Kubernetes secrets](https://docs.instana.io/setup_and_manage/host_agent/on/kubernetes/#secrets) for more details.            |
 | `cluster.name`                                      | Display name of the monitored cluster                                                                                                                                                                                                                                                                                  | Value of `zone.name`                                                                                                                    |
@@ -365,6 +366,20 @@ zones:
 ```
 
 ## Changelog
+
+### 1.2.73
+
+* Fix label for `io.instana/zone` to reflect the real agent mode
+* Change the charts flag from ENABLE_AGENT_SOCKET to serviceMesh.enabled
+* Add type: DirectoryOrCreate to DaemonSet definitions to ensure required directories exist
+
+### 1.2.72
+
+* Add minReadySeconds field to agent daemonset yaml
+
+### 1.2.71
+
+* Fix usage of digest for pulling images
 
 ### 1.2.70
 

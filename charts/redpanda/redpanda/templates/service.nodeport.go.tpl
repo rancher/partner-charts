@@ -4,54 +4,54 @@
 {{- $dot := (index .a 0) -}}
 {{- range $_ := (list 1) -}}
 {{- $values := $dot.Values.AsMap -}}
-{{- if (or (not $values.external.enabled) (ne $values.external.type "NodePort")) -}}
+{{- if (or (not $values.external.enabled) (not $values.external.service.enabled)) -}}
 {{- (dict "r" (coalesce nil)) | toJson -}}
 {{- break -}}
 {{- end -}}
-{{- if (or (eq $values.external.service (coalesce nil)) (not $values.external.service.enabled)) -}}
+{{- if (ne $values.external.type "NodePort") -}}
 {{- (dict "r" (coalesce nil)) | toJson -}}
 {{- break -}}
 {{- end -}}
-{{- $ports := (list ) -}}
+{{- $ports := (coalesce nil) -}}
 {{- range $name, $listener := $values.listeners.admin.external -}}
-{{- if (and (ne $listener.enabled (coalesce nil)) (eq $listener.enabled false)) -}}
+{{- if (not (get (fromJson (include "redpanda.AdminExternal.IsEnabled" (dict "a" (list $listener) ))) "r")) -}}
 {{- continue -}}
 {{- end -}}
-{{- $nodePort := $listener.port -}}
-{{- if (gt (int (get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r")) 0) -}}
-{{- $nodePort = (index $listener.advertisedPorts 0) -}}
+{{- $nodePort := ($listener.port | int) -}}
+{{- if (gt ((get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r") | int) (0 | int)) -}}
+{{- $nodePort = (index $listener.advertisedPorts (0 | int)) -}}
 {{- end -}}
-{{- $ports = (mustAppend $ports (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "admin-%s" $name) "protocol" "TCP" "port" $listener.port "nodePort" $nodePort ))) -}}
+{{- $ports = (concat (default (list ) $ports) (list (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "admin-%s" $name) "protocol" "TCP" "port" ($listener.port | int) "nodePort" $nodePort )))) -}}
 {{- end -}}
 {{- range $name, $listener := $values.listeners.kafka.external -}}
-{{- if (and (ne $listener.enabled (coalesce nil)) (eq $listener.enabled false)) -}}
+{{- if (not (get (fromJson (include "redpanda.KafkaExternal.IsEnabled" (dict "a" (list $listener) ))) "r")) -}}
 {{- continue -}}
 {{- end -}}
-{{- $nodePort := $listener.port -}}
-{{- if (gt (int (get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r")) 0) -}}
-{{- $nodePort = (index $listener.advertisedPorts 0) -}}
+{{- $nodePort := ($listener.port | int) -}}
+{{- if (gt ((get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r") | int) (0 | int)) -}}
+{{- $nodePort = (index $listener.advertisedPorts (0 | int)) -}}
 {{- end -}}
-{{- $ports = (mustAppend $ports (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "kafka-%s" $name) "protocol" "TCP" "port" $listener.port "nodePort" $nodePort ))) -}}
+{{- $ports = (concat (default (list ) $ports) (list (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "kafka-%s" $name) "protocol" "TCP" "port" ($listener.port | int) "nodePort" $nodePort )))) -}}
 {{- end -}}
 {{- range $name, $listener := $values.listeners.http.external -}}
-{{- if (and (ne $listener.enabled (coalesce nil)) (eq $listener.enabled false)) -}}
+{{- if (not (get (fromJson (include "redpanda.HTTPExternal.IsEnabled" (dict "a" (list $listener) ))) "r")) -}}
 {{- continue -}}
 {{- end -}}
-{{- $nodePort := $listener.port -}}
-{{- if (gt (int (get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r")) 0) -}}
-{{- $nodePort = (index $listener.advertisedPorts 0) -}}
+{{- $nodePort := ($listener.port | int) -}}
+{{- if (gt ((get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r") | int) (0 | int)) -}}
+{{- $nodePort = (index $listener.advertisedPorts (0 | int)) -}}
 {{- end -}}
-{{- $ports = (mustAppend $ports (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "http-%s" $name) "protocol" "TCP" "port" $listener.port "nodePort" $nodePort ))) -}}
+{{- $ports = (concat (default (list ) $ports) (list (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "http-%s" $name) "protocol" "TCP" "port" ($listener.port | int) "nodePort" $nodePort )))) -}}
 {{- end -}}
 {{- range $name, $listener := $values.listeners.schemaRegistry.external -}}
-{{- if (and (ne $listener.enabled (coalesce nil)) (eq $listener.enabled false)) -}}
+{{- if (not (get (fromJson (include "redpanda.SchemaRegistryExternal.IsEnabled" (dict "a" (list $listener) ))) "r")) -}}
 {{- continue -}}
 {{- end -}}
-{{- $nodePort := $listener.port -}}
-{{- if (gt (int (get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r")) 0) -}}
-{{- $nodePort = (index $listener.advertisedPorts 0) -}}
+{{- $nodePort := ($listener.port | int) -}}
+{{- if (gt ((get (fromJson (include "_shims.len" (dict "a" (list $listener.advertisedPorts) ))) "r") | int) (0 | int)) -}}
+{{- $nodePort = (index $listener.advertisedPorts (0 | int)) -}}
 {{- end -}}
-{{- $ports = (mustAppend $ports (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "schema-%s" $name) "protocol" "TCP" "port" $listener.port "nodePort" $nodePort ))) -}}
+{{- $ports = (concat (default (list ) $ports) (list (mustMergeOverwrite (dict "port" 0 "targetPort" 0 ) (dict "name" (printf "schema-%s" $name) "protocol" "TCP" "port" ($listener.port | int) "nodePort" $nodePort )))) -}}
 {{- end -}}
 {{- $annotations := $values.external.annotations -}}
 {{- if (eq $annotations (coalesce nil)) -}}

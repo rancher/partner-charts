@@ -20,8 +20,6 @@ Auto-detect the platform (if not set), according to the available APIVersions
         {{- printf .Values.platform -}}
     {{- else if .Capabilities.APIVersions.Has "security.openshift.io/v1" }}
         {{- printf "openshift" -}}
-    {{- else if .Capabilities.APIVersions.Has "auto.gke.io/v1" }}
-        {{- printf "gke-autopilot" -}}
     {{- else }}
         {{- printf "kubernetes" -}}
     {{- end -}}
@@ -51,4 +49,38 @@ Enforces that platform is set to a valid one
 */}}
 {{- define "dynatrace-operator.platformRequired" -}}
 {{- $platformIsSet := printf "%s" (required "Platform needs to be set to kubernetes, openshift, google-marketplace, or gke-autopilot" (include "dynatrace-operator.platformIsValid" .))}}
+{{- end -}}
+
+{{- define "dynatrace-operator.nodeAffinity" -}}
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64
+                - arm64
+                - ppc64le
+                - s390x
+            - key: kubernetes.io/os
+              operator: In
+              values:
+                - linux
+{{- end -}}
+
+{{- define "dynatrace-operator.defaultTolerations" -}}
+- key: kubernetes.io/arch
+  value: arm64
+  effect: NoSchedule
+- key: kubernetes.io/arch
+  value: amd64
+  effect: NoSchedule
+- key: kubernetes.io/arch
+  value: ppc64le
+  effect: NoSchedule
+- key: kubernetes.io/arch
+  value: s390x
+  effect: NoSchedule
 {{- end -}}

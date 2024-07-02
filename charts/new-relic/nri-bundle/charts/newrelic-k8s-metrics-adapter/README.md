@@ -15,7 +15,7 @@ A Helm chart to deploy the New Relic Kubernetes Metrics Adapter.
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://helm-charts.newrelic.com | common-library | 1.1.1 |
+| https://helm-charts.newrelic.com | common-library | 1.2.0 |
 
 ## Values
 

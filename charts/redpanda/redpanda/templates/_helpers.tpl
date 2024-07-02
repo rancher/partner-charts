@@ -145,19 +145,6 @@ Use AppVersion if image.tag is not set
 {{- toJson (dict "bool" (dig "enabled" false .Values.auth.sasl)) -}}
 {{- end -}}
 
-{{- define "external-loadbalancer-enabled" -}}
-{{- $values := .Values -}}
-{{- $enabled := and .Values.external.enabled (eq .Values.external.type "LoadBalancer") -}}
-{{- range $listener := .Values.listeners -}}
-  {{- range $external := $listener.external -}}
-    {{- if and (dig "enabled" false $external) (eq (dig "type" $values.external.type $external) "LoadBalancer") -}}
-      {{- $enabled = true -}}
-    {{- end -}}
-  {{- end -}}
-{{- end -}}
-{{- toJson (dict "bool" $enabled) -}}
-{{- end -}}
-
 {{/*
 Returns the value of "resources.cpu.cores" in millicores. And ensures CPU units
 are using known suffix (really only "m") or no suffix at all.
@@ -204,16 +191,7 @@ than 1 core.
 {{- end -}}
 
 {{- define "storage-min-free-bytes" -}}
-{{- $fiveGiB := 5368709120 -}}
-{{- if dig "enabled" false .Values.storage.persistentVolume -}}
-  {{- if typeIs "string" .Values.storage.persistentVolume.size -}}
-    {{- min $fiveGiB (mulf (get ((include "redpanda.SIToBytes" (dict "a" (list .Values.storage.persistentVolume.size))) | fromJson) "r" ) 0.05 | int64) -}}
-  {{- else -}}
-    {{- min $fiveGiB (mulf .Values.storage.persistentVolume.size 0.05 | int64) -}}
-  {{- end -}}
-{{- else -}}
-{{- $fiveGiB -}}
-{{- end -}}
+{{- get ((include "redpanda.Storage.StorageMinFreeBytes" (dict "a" (list .Values.storage))) | fromJson) "r" | int64 -}}
 {{- end -}}
 
 {{- define "tunable" -}}

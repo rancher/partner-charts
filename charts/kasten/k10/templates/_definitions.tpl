@@ -223,3 +223,9 @@ state-svc:
 {{- define "k10.gatewayRequestHeadersVarName" -}}EXTAUTH_REQUEST_HEADERS{{- end -}}
 {{- define "k10.gatewayAuthHeadersVarName" -}}EXTAUTH_AUTH_HEADERS{{- end -}}
 {{- define "k10.gatewayPortVarName" -}}PORT{{- end -}}
+{{- define "k10.azureClientIDEnvVar" -}}AZURE_CLIENT_ID{{- end -}}
+{{- define "k10.azureTenantIDEnvVar" -}}AZURE_TENANT_ID{{- end -}}
+{{- define "k10.azureClientSecretEnvVar" -}}AZURE_CLIENT_SECRET{{- end -}}
+{{- define "k10.oidcSecretName" -}}k10-oidc-auth{{- end -}}
+{{- define "k10.oidcCustomerSecretName" -}}k10-oidc-auth-creds{{- end -}}
+{{- define "k10.secretsDir" -}}/var/run/secrets/kasten.io{{- end -}}

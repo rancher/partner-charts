@@ -251,6 +251,10 @@ Composes a container image from a dict containing a "name" field (required), "ta
 - name: INSTANA_AGENT_HTTP_LISTEN
   value: {{ .Values.agent.listenAddress | quote }}
 {{- end }}
+{{- if .Values.agent.serviceMesh.enabled }}
+- name: ENABLE_AGENT_SOCKET
+  value: {{ .Values.agent.serviceMesh.enabled | quote }}
+{{- end }}
 {{- if .Values.agent.redactKubernetesSecrets }}
 - name: INSTANA_KUBERNETES_REDACT_SECRETS
   value: {{ .Values.agent.redactKubernetesSecrets | quote }}

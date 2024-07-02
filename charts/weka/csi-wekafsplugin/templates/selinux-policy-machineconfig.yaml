@@ -1,0 +1,38 @@
+{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
+{{ range  .Values.machineConfigLabels }}
+kind: MachineConfig
+apiVersion: machineconfiguration.openshift.io/v1
+metadata:
+  name: 50-csi-wekafs-selinux-policy-{{ . }}
+  labels:
+    machineconfiguration.openshift.io/role: {{ . }}
+spec:
+  osImageURL: ''
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+      - filesystem: root
+        path: "/etc/selinux/csi-wekafs-selinux.cil"
+        contents:
+          source: data:text/plain;charset=utf-8;base64,KHR5cGVhbGlhcyB3ZWthZnNfY3NpX3ZvbHVtZV90KQoodHlwZWFsaWFzYWN0dWFsIHdla2Fmc19jc2lfdm9sdW1lX3Qgd2VrYWZzX3QpCih0eXBlYWxpYXMgd2VrYWZzX2ZpbGVzeXN0ZW1fdCkKKHR5cGVhbGlhc2FjdHVhbCB3ZWthZnNfZmlsZXN5c3RlbV90IHdla2Fmc190KQoodHlwZSB3ZWthZnNfdCkKKHJvbGV0eXBlIG9iamVjdF9yIHdla2Fmc190KQoodHlwZWF0dHJpYnV0ZXNldCBjaWxfZ2VuX3JlcXVpcmUgdW5sYWJlbGVkX3QpCih0eXBlYXR0cmlidXRlc2V0IGNpbF9nZW5fcmVxdWlyZSBjb250YWluZXJfdmFyX2xpYl90KQoodHlwZWF0dHJpYnV0ZXNldCBjaWxfZ2VuX3JlcXVpcmUgY29udGFpbmVyX3QpCih0eXBlYXR0cmlidXRlc2V0IGNpbF9nZW5fcmVxdWlyZSBzcG9vbGZpbGUpCih0eXBlYXR0cmlidXRlc2V0IHNwb29sZmlsZSAod2VrYWZzX3QgKSkKKHR5cGVhdHRyaWJ1dGVzZXQgY2lsX2dlbl9yZXF1aXJlIGZpbGVfdHlwZSkKKHR5cGVhdHRyaWJ1dGVzZXQgZmlsZV90eXBlICh3ZWthZnNfdCApKQoodHlwZWF0dHJpYnV0ZXNldCBjaWxfZ2VuX3JlcXVpcmUgbm9uX3NlY3VyaXR5X2ZpbGVfdHlwZSkKKHR5cGVhdHRyaWJ1dGVzZXQgbm9uX3NlY3VyaXR5X2ZpbGVfdHlwZSAod2VrYWZzX3QgKSkKKHR5cGVhdHRyaWJ1dGVzZXQgY2lsX2dlbl9yZXF1aXJlIG5vbl9hdXRoX2ZpbGVfdHlwZSkKKHR5cGVhdHRyaWJ1dGVzZXQgbm9uX2F1dGhfZmlsZV90eXBlICh3ZWthZnNfdCApKQooYWxsb3cgY29udGFpbmVyX3Qgd2VrYWZzX3QgKGRpciAoYWRkX25hbWUgY3JlYXRlIGdldGF0dHIgaW9jdGwgbGluayBsb2NrIG9wZW4gcmVhZCByZW1vdmVfbmFtZSByZW5hbWUgcmVwYXJlbnQgcm1kaXIgc2VhcmNoIHNldGF0dHIgdW5saW5rIHdyaXRlKSkpCihhbGxvdyBjb250YWluZXJfdCB3ZWthZnNfdCAoZmlsZSAoY3JlYXRlIG9wZW4gZ2V0YXR0ciBzZXRhdHRyIHJlYWQgd3JpdGUgYXBwZW5kIHJlbmFtZSBsaW5rIHVubGluayBpb2N0bCBsb2NrKSkpCg==
+          verification: {}
+        mode: 0755
+    systemd:
+      units:
+        - contents: |
+            [Unit]
+            Requires=systemd-udevd.target
+            After=NetworkManager.service
+            Before=sshd.service
+            DefaultDependencies=no
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/sbin/semodule -i /etc/selinux/csi-wekafs-selinux.cil
+            [Install]
+            WantedBy=multi-user.target
+          name: csi-wekafs-selinux-policy.service
+          enabled: true
+{{- end }}
+{{- end }}
