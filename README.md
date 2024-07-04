@@ -1,5 +1,7 @@
 # partner-charts
 
+This is a test change. Please disregard.
+
 This repository is reserved for partner charts in Rancher's v2.5+ catalog. Its
 helm charts are based on upstream charts. Rancher-specific modifications are
 applied to these charts, and overlay files may be added as well. These charts
