@@ -1,0 +1,129 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: fedemeter-api
+  name: fedemeter-api
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: fedemeter-api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: fedemeter-api
+    spec:
+      affinity:
+{{- if .Values.fedemeterApi.affinity }}
+{{- include "render-value" ( dict "value" .Values.fedemeterApi.affinity "context" .) | nindent 8 }}
+{{- end }}
+      containers:
+        - env:
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PRICE_BOOK_UPDATE_POLICY
+              value: auto
+            - name: PRICE_BOOK_REPOSITORY_URL
+              value: https://github.com/prophetstor-ai/public/raw/master/fedemeter-pricebook
+            - name: FEDEMETER_API_INFLUXDB_CACHE
+              value: "8192"
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+          envFrom:
+            - configMapRef:
+                name: fedemeter-config
+          image: {{ .Values.global.imageRegistry }}/fedemeter-api-ubi:{{ .Values.global.imageTag }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - /run.sh liveness
+            failureThreshold: 30
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: fedemeter-api
+          ports:
+            - containerPort: 8888
+              name: gui-fedemeter
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - /run.sh readiness
+            failureThreshold: 10
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.fedemeterApi.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.fedemeterApi.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/log/alameda/fedemeter
+              name: fedemeter-log-storage
+              subPath: alameda/fedemeter
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
+      securityContext:
+        fsGroup: 1001
+{{- if .Values.fedemeterApi.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.fedemeterApi.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
+      serviceAccount: fedemeter-api
+      serviceAccountName: fedemeter-api
+      tolerations:
+{{- if .Values.fedemeterApi.tolerations }}
+{{- include "render-value" ( dict "value" .Values.fedemeterApi.tolerations "context" .) | nindent 6 }}
+{{- end }}
+      volumes:
+        - emptyDir: {}
+          name: fedemeter-data-storage
+        - name: fedemeter-log-storage
+          persistentVolumeClaim:
+            claimName: fedemeter-log.pvc

@@ -1,0 +1,104 @@
+---
+{{- if .Values.federatoraiAgentPreloader.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: federatorai-agent-preloader
+  name: federatorai-agent-preloader
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: federatorai-agent-preloader
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: federatorai-agent-preloader
+    spec:
+      affinity:
+{{- if .Values.federatoraiAgentPreloader.affinity }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAgentPreloader.affinity "context" .) | nindent 8 }}
+{{- end }}
+      containers:
+        - env:
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          name: federatorai-agent-preloader
+{{- if .Values.federatoraiAgentPreloader.image }}
+          image: {{ .Values.federatoraiAgentPreloader.image }}
+{{- else }}
+          image: {{ .Values.global.imageRegistry }}/federatorai-agent-preloader:{{ .Values.global.imageTag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiAgentPreloader.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiAgentPreloader.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/log/alameda
+              name: federatorai-agent-preloader-log-storage
+            - mountPath: /etc/alameda/federatorai-agent/transmitter.toml
+              name: federatorai-agent-preloader-config
+              subPath: transmitter.toml
+            - mountPath: /etc/alameda/federatorai-agent/input/alameda_preloader.toml
+              name: federatorai-agent-preloader-config
+              subPath: alameda_preloader.toml
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
+      securityContext:
+        fsGroup: 1001
+{{- if .Values.federatoraiAgentPreloader.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAgentPreloader.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
+      serviceAccount: federatorai-agent-preloader
+      serviceAccountName: federatorai-agent-preloader
+      tolerations:
+{{- if .Values.federatoraiAgentPreloader.tolerations }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAgentPreloader.tolerations "context" .) | nindent 6 }}
+{{- end }}
+      volumes:
+        - emptyDir: {}
+          name: federatorai-agent-preloader-data-storage
+        - emptyDir: {}
+          name: federatorai-agent-preloader-log-storage
+        - configMap:
+            defaultMode: 420
+            name: federatorai-agent-preloader-config
+          name: federatorai-agent-preloader-config
+{{- end }}

@@ -1,0 +1,129 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-influxdb
+  name: alameda-influxdb
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-influxdb
+  serviceName: ""
+  template:
+    metadata:
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-influxdb
+    spec:
+      affinity:
+{{- if .Values.alamedaInfluxdb.affinity }}
+{{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.affinity "context" .) | nindent 8 }}
+{{- end }}
+      containers:
+        - env:
+            - name: INFLUXDB_REPORTING_DISABLED
+              value: "true"
+            - name: INFLUXDB_HTTP_HTTPS_ENABLED
+              value: "true"
+            - name: INFLUXDB_HTTP_AUTH_ENABLED
+              value: "true"
+            - name: INFLUXDB_ADMIN_USER
+              value: admin
+            - name: INFLUXDB_ADMIN_PASSWORD
+              value: adminpass
+            - name: INFLUXDB_USER
+              value: user
+            - name: INFLUXDB_USER_PASSWORD
+              value: userpass
+            - name: INFLUXDB_LOGGING_LEVEL
+              value: warn
+            - name: INFLUXDB_DATA_MAX_VALUES_PER_TAG
+              value: "0"
+            - name: INFLUXDB_DATA_MAX_SERIES_PER_DATABASE
+              value: "0"
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+{{- if .Values.alamedaInfluxdb.image }}
+          image: {{ .Values.alamedaInfluxdb.image }}
+{{- else }}
+          image: {{ .Values.global.imageRegistry }}/alameda-influxdb:{{ .Values.global.imageTag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - /init.sh liveness
+            failureThreshold: 3
+            initialDelaySeconds: 600
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 30
+          name: influxdb
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - /init.sh readiness
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 30
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/lib/influxdb
+              name: influxdb-data-storage
+              subPath: influxdb
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
+      securityContext:
+        fsGroup: 1001
+{{- if .Values.alamedaInfluxdb.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
+      serviceAccount: alameda-influxdb
+      serviceAccountName: alameda-influxdb
+      tolerations:
+{{- if .Values.alamedaInfluxdb.tolerations }}
+{{- include "render-value" ( dict "value" .Values.alamedaInfluxdb.tolerations "context" .) | nindent 6 }}
+{{- end }}
+      volumes:
+        - name: influxdb-data-storage
+          persistentVolumeClaim:
+            claimName: my-alameda.influxdb-data.pvc
+  updateStrategy:
+    type: RollingUpdate
