@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kubeslice-ui
+  name: kubeslice-ui
+  namespace: kubeslice-controller
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: kubeslice-ui
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeslice-ui
+  namespace: kubeslice-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeslice-ui
+  template:
+    metadata:
+      labels:
+        app: kubeslice-ui
+    spec:
+      containers:
+      - image: '{{ .Values.kubeslice.ui.image }}:{{ .Values.kubeslice.ui.tag }}'
+        imagePullPolicy: '{{ .Values.kubeslice.ui.pullPolicy }}'
+        name: kubeslice-ui
+        env:
+        - name: KUBESLICE_CONTROLLER_PROMETHEUS
+          value: {{ .Values.kubeslice.prometheus.url }}
+        - name: REACT_APP_SOCKET_URL
+          value: 'ws://kubeslice-api-gw.kubeslice-controller.svc.cluster.local:3000'
+        ports:
+        - containerPort: 3000
+        {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
+      imagePullSecrets:
+      - name: kubeslice-ui-image-pull-secret
+        {{- end }}
+      serviceAccountName: kubeslice-api-gw
+      serviceAccount: kubeslice-api-gw
