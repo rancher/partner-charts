@@ -1,0 +1,28 @@
+{{- if .Values.devIdProvider.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "chronicle.id-provider.service" . }}
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: test-id-provider
+spec:
+  selector:
+    matchLabels: {{ include "chronicle.labels.matchLabels" . | nindent 6 }}
+      component: test-id-provider
+  serviceName: {{ include "chronicle.id-provider.service" . }}
+  template:
+    metadata:
+      labels: {{ include "chronicle.labels" . | nindent 8 }}
+        component: test-id-provider
+    spec:
+      serviceAccountName: {{ include "lib.serviceAccountName" . }}
+      affinity: {{ include "lib.safeToYaml" .Values.affinity | nindent 8 }}
+      containers:
+        - name: id-provider
+        {{- include "lib.image" (dict "imageRoot" .Values.devIdProvider.image "global" .Values.global ) | nindent 10 }}
+          ports:
+            - name: jwks
+              containerPort: 8090
+              protocol: TCP
+{{- end }}
