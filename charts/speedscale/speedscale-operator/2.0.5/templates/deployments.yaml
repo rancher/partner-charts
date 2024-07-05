@@ -1,0 +1,132 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    operator.speedscale.com/ignore: "true"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  labels:
+    app: speedscale-operator
+    controlplane.speedscale.com/component: operator
+    {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
+  name: speedscale-operator
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: speedscale-operator
+      controlplane.speedscale.com/component: operator
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
+      labels:
+        app: speedscale-operator
+        controlplane.speedscale.com/component: operator
+        {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 8}}
+        {{- end }}
+    spec:
+      containers:
+      - command:
+        - /operator
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        envFrom:
+        - configMapRef:
+            name: speedscale-operator
+        # https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#container-v1-core
+        # When a key exists in multiple sources, the value associated with the last source will take precedence.
+        # Values defined by an Env with a duplicate key will take precedence.
+        - configMapRef:
+            name: speedscale-operator-override
+            optional: true
+        - secretRef:
+            name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
+            optional: false
+        image: '{{ .Values.image.registry }}/operator:{{ .Values.image.tag }}'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: health-check
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: operator
+        ports:
+        - containerPort: 443
+          name: webhook-server
+        - containerPort: 8081
+          name: health-check
+        readinessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /readyz
+            port: health-check
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources: {{- toYaml .Values.operator.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: false
+          # Run as root to bind 443 https://github.com/kubernetes/kubernetes/issues/56374
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
+        - mountPath: /etc/ssl/speedscale
+          name: speedscale-tls-out
+          readOnly: true
+      hostNetwork: {{ .Values.hostNetwork }}
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: speedscale-operator
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - emptyDir: {}
+        name: tmp
+      - name: webhook-certs
+        secret:
+          secretName: speedscale-webhook-certs
+      - name: speedscale-tls-out
+        secret:
+          secretName: speedscale-certs
+      {{- if .Values.affinity }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
