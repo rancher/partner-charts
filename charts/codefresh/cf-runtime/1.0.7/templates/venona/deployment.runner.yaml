@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cf-runner.fullname" . }}
+  labels: {{- include "cf-runner.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "cf-runner.selectorLabels" . | nindent 6 }}
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels: {{- include "cf-runner.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "cf-runner.fullname" . }}
+      {{- if .Values.runner.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.runner.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.runner.tolerations }}
+      tolerations:
+{{ toYaml .Values.runner.tolerations | indent 8 }}
+      {{- end }}
+      containers:
+        - name: runner
+          env:
+            {{- if .Values.runner.env }}
+            {{- range $key, $value := .Values.runner.env }}
+            - name: {{ $key }}
+              value: "{{ $value}}"
+            {{- end}}
+            {{- end}}
+            - name: SELF_DEPLOYMENT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CODEFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "cf-runner.secretTokenName" . }}
+                  key: codefresh.token
+            - name: CODEFRESH_IN_CLUSTER_RUNTIME
+              value: {{ .Values.global.runtimeName }}
+            - name: CODEFRESH_HOST
+              value: {{ .Values.global.codefreshHost }}
+            - name: AGENT_MODE
+              value: InCluster
+            - name: "AGENT_ID" {{/* agent name */}}
+              value: {{ .Values.global.agentName }}
+            {{- if ne .Values.dockerRegistry "" }}
+            - name: DOCKER_REGISTRY
+              value: {{ .Values.dockerRegistry }}
+            {{- end }}
+            {{- if .Values.newRelicLicense }}
+            - name: NEWRELIC_LICENSE_KEY
+              value: {{ .Values.newRelicLicense }}
+          {{- end }}
+          image: {{ include "cf-runner.docker-image" . }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          imagePullPolicy: Always
+          resources:
+{{ toYaml .Values.runner.resources | indent 12  }}
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      restartPolicy: Always

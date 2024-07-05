@@ -1,0 +1,32 @@
+{{ if .Values.appProxy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "cf-app-proxy.fullname" . }}
+  labels: {{- include "cf-app-proxy.labels" . | nindent 4 }}
+  annotations:
+    {{ range $key, $value := .Values.appProxy.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{ end }}
+spec:
+  {{ if .Values.appProxy.ingress.class }}
+  ingressClassName: {{ .Values.appProxy.ingress.class }}
+  {{ end }}
+  rules:
+    - host: {{ .Values.appProxy.ingress.host }}
+      http:
+        paths:
+          - path: {{ if .Values.appProxy.ingress.pathPrefix }}{{ .Values.appProxy.ingress.pathPrefix }}{{ else }}'/'{{end}}
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: app-proxy
+                port:
+                  number: 80
+  {{ if .Values.appProxy.ingress.tlsSecret }}
+  tls:
+    - hosts:
+        - {{ .Values.appProxy.ingress.host }}
+      secretName: {{ .Values.appProxy.ingress.tlsSecret }}
+  {{ end }}
+{{ end }}

@@ -1,0 +1,29 @@
+{{- if not (eq .Values.storage.backend "local") }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ include "cf-vp.volumeCleanupCronName" . }}
+  labels: {{- include "cf-vp.cleanupLabels" . | nindent 4 }}
+spec:
+  schedule: "0,10,20,30,40,50 * * * *"
+  concurrencyPolicy: Forbid
+  {{- if eq .Values.storage.backend "local" }}
+  suspend: true
+  {{- end }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "cf-vp.fullname" . }}
+          restartPolicy: Never
+          containers:
+            - name: dind-volume-cleanup
+              image: {{ include "cf-vp.docker-image-cleanup-cron" . }}
+              env:
+                - name: PROVISIONED_BY
+                  value: {{ include "cf-vp.volumeProvisionerName" . }}
+          securityContext:
+            fsGroup: 3000
+            runAsGroup: 3000
+            runAsUser: 3000
+  {{- end }}
