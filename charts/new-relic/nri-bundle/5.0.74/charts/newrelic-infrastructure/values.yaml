@@ -1,0 +1,602 @@
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+# -- Name of the Kubernetes cluster monitored. Can be configured also with `global.cluster`
+cluster: ""
+# -- This set this license key to use. Can be configured also with `global.licenseKey`
+licenseKey: ""
+# -- In case you don't want to have the license key in you values, this allows you to point to a user created secret to get the key from there. Can be configured also with `global.customSecretName`
+customSecretName: ""
+# -- In case you don't want to have the license key in you values, this allows you to point to which secret key is the license key located. Can be configured also with `global.customSecretLicenseKey`
+customSecretLicenseKey: ""
+
+# -- Images used by the chart for the integration and agents.
+# @default -- See `values.yaml`
+images:
+  # -- The secrets that are needed to pull images from a custom registry.
+  pullSecrets: []
+  # - name: regsecret
+  # -- Image for the New Relic Infrastructure Agent sidecar.
+  # @default -- See `values.yaml`
+  forwarder:
+    registry: ""
+    repository: newrelic/k8s-events-forwarder
+    tag: 1.52.0
+    pullPolicy: IfNotPresent
+  # -- Image for the New Relic Infrastructure Agent plus integrations.
+  # @default -- See `values.yaml`
+  agent:
+    registry: ""
+    repository: newrelic/infrastructure-bundle
+    tag: 3.2.37
+    pullPolicy: IfNotPresent
+  # -- Image for the New Relic Kubernetes integration.
+  # @default -- See `values.yaml`
+  integration:
+    registry: ""
+    repository: newrelic/nri-kubernetes
+    tag:
+    pullPolicy: IfNotPresent
+
+# -- Config that applies to all instances of the solution: kubelet, ksm, control plane and sidecars.
+# @default -- See `values.yaml`
+common:
+  # Configuration entries that apply to all instances of the integration: kubelet, ksm and control plane.
+  config:
+    # common.config.interval -- (duration) Intervals larger than 40s are not supported and will cause the NR UI to not
+    # behave properly. Any non-nil value will override the `lowDataMode` default.
+    # @default -- `15s` (See [Low data mode](README.md#low-data-mode))
+    interval:
+    # -- Config for filtering ksm and kubelet metrics by namespace.
+    namespaceSelector: {}
+    # If you want to include only namespaces with a given label you could do so by adding:
+    # matchLabels:
+    #   newrelic.com/scrape: true
+    # Otherwise you can build more complex filters and include or exclude certain namespaces by adding one or multiple
+    # expressions that are added, for instance:
+    # matchExpressions:
+    #   - {key: newrelic.com/scrape, operator: NotIn, values: ["false"]}
+
+  # -- Config for the Infrastructure agent.
+  # Will be used by the forwarder sidecars and the agent running integrations.
+  # See: https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/infrastructure-agent-configuration-settings/
+  agentConfig: {}
+
+# lowDataMode -- (bool) Send less data by incrementing the interval from `15s` (the default when `lowDataMode` is `false` or `nil`) to `30s`.
+# Non-nil values of `common.config.interval` will override this value.
+# @default -- `false` (See [Low data mode](README.md#low-data-mode))
+lowDataMode:
+
+# sink - Configuration for the scraper sink.
+sink:
+  http:
+    # -- The amount of time the scraper container to probe infra agent sidecar container before giving up and restarting during pod starts.
+    probeTimeout: 90s
+    # -- The amount of time the scraper container to backoff when it fails to probe infra agent sidecar.
+    probeBackoff: 5s
+
+# kubelet -- Configuration for the DaemonSet that collects metrics from the Kubelet.
+# @default -- See `values.yaml`
+kubelet:
+  # -- Enable kubelet monitoring.
+  # Advanced users only. Setting this to `false` is not supported and will break the New Relic experience.
+  enabled: true
+  annotations: {}
+  # -- Tolerations for the control plane DaemonSet.
+  # @default -- Schedules in all tainted nodes
+  tolerations:
+    - operator: "Exists"
+      effect: "NoSchedule"
+    - operator: "Exists"
+      effect: "NoExecute"
+  nodeSelector: {}
+  # -- (bool) Sets pod's hostNetwork. When set bypasses global/common variable
+  # @default -- Not set
+  hostNetwork:
+  affinity: {}
+  # -- Config for the Infrastructure agent that will forward the metrics to the backend and will run the integrations in this cluster.
+  # It will be merged with the configuration in `.common.agentConfig`. You can see all the agent configurations in
+  # [New Relic docs](https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/infrastructure-agent-configuration-settings/)
+  # e.g. you can set `passthrough_environment` int the [config file](https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/configure-infrastructure-agent/#config-file)
+  # so the agent let use that environment variables to the integrations.
+  agentConfig: {}
+  # passthrough_environment:
+  #   - A_ENVIRONMENT_VARIABLE_SET_IN_extraEnv
+  #   - A_ENVIRONMENT_VARIABLE_SET_IN_A_CONFIG_MAP_SET_IN_entraEnvForm
+
+  # -- Add user environment variables to the agent
+  extraEnv: []
+  # -- Add user environment from configMaps or secrets as variables to the agent
+  extraEnvFrom: []
+  # -- Volumes to mount in the containers
+  extraVolumes: []
+  # -- Defines where to mount volumes specified with `extraVolumes`
+  extraVolumeMounts: []
+  initContainers: []
+  resources:
+    limits:
+      memory: 300M
+    requests:
+      cpu: 100m
+      memory: 150M
+  config:
+    # -- Timeout for the kubelet APIs contacted by the integration
+    timeout: 10s
+    # -- Number of retries after timeout expired
+    retries: 3
+    # -- Max number of scraper rerun when scraper runtime error happens
+    scraperMaxReruns: 4
+  # port:
+  # scheme:
+
+# ksm -- Configuration for the Deployment that collects state metrics from KSM (kube-state-metrics).
+# @default -- See `values.yaml`
+ksm:
+  # -- Enable cluster state monitoring.
+  # Advanced users only. Setting this to `false` is not supported and will break the New Relic experience.
+  enabled: true
+  annotations: {}
+  # -- Tolerations for the KSM Deployment.
+  # @default -- Schedules in all tainted nodes
+  tolerations:
+    - operator: "Exists"
+      effect: "NoSchedule"
+    - operator: "Exists"
+      effect: "NoExecute"
+  nodeSelector: {}
+  # -- (bool) Sets pod's hostNetwork. When set bypasses global/common variable
+  # @default -- Not set
+  hostNetwork:
+  # -- Affinity for the KSM Deployment.
+  # @default -- Deployed in the same node as KSM
+  affinity:
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: kube-state-metrics
+          weight: 100
+  # -- Config for the Infrastructure agent that will forward the metrics to the backend. It will be merged with the configuration in `.common.agentConfig`
+  # See: https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/infrastructure-agent-configuration-settings/
+  agentConfig: {}
+  extraEnv: []
+  extraEnvFrom: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  initContainers: []
+  # -- Resources for the KSM scraper pod.
+  # Keep in mind that sharding is not supported at the moment, so memory usage for this component ramps up quickly on
+  # large clusters.
+  # @default -- 100m/150M -/850M
+  resources:
+    limits:
+      memory: 850M  # Bump me up if KSM pod shows restarts.
+    requests:
+      cpu: 100m
+      memory: 150M
+  config:
+    # -- Timeout for the ksm API contacted by the integration
+    timeout: 10s
+    # -- Number of retries after timeout expired
+    retries: 3
+    # -- if specified autodiscovery is not performed and the specified URL is used
+    # staticUrl: "http://test.io:8080/metrics"
+    # -- Label selector that will be used to automatically discover an instance of kube-state-metrics running in the cluster.
+    selector: "app.kubernetes.io/name=kube-state-metrics"
+    # -- Scheme to use to connect to kube-state-metrics. Supported values are `http` and `https`.
+    scheme: "http"
+    # -- Restrict autodiscovery of the kube-state-metrics endpoint to those using a specific port. If empty or `0`, all endpoints are considered regardless of their port (recommended).
+    # port: 8080
+    # -- Restrict autodiscovery of the kube-state-metrics service to a particular namespace.
+    # @default -- All namespaces are searched (recommended).
+    # namespace: "ksm-namespace"
+
+# controlPlane -- Configuration for the control plane scraper.
+# @default -- See `values.yaml`
+controlPlane:
+  # -- Deploy control plane monitoring component.
+  enabled: true
+  annotations: {}
+  # -- Tolerations for the control plane DaemonSet.
+  # @default -- Schedules in all tainted nodes
+  tolerations:
+    - operator: "Exists"
+      effect: "NoSchedule"
+    - operator: "Exists"
+      effect: "NoExecute"
+  nodeSelector: {}
+  # -- Affinity for the control plane DaemonSet.
+  # @default -- Deployed only in master nodes.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+          - matchExpressions:
+              - key: node-role.kubernetes.io/controlplane
+                operator: Exists
+          - matchExpressions:
+              - key: node-role.kubernetes.io/etcd
+                operator: Exists
+          - matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+  # -- How to deploy the control plane scraper. If autodiscovery is in use, it should be `DaemonSet`.
+  # Advanced users using static endpoints set this to `Deployment` to avoid reporting metrics twice.
+  kind: DaemonSet
+  # -- Run Control Plane scraper with `hostNetwork`.
+  # `hostNetwork` is required for most control plane configurations, as they only accept connections from localhost.
+  hostNetwork: true
+  # -- Config for the Infrastructure agent that will forward the metrics to the backend. It will be merged with the configuration in `.common.agentConfig`
+  # See: https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/infrastructure-agent-configuration-settings/
+  agentConfig: {}
+  extraEnv: []
+  extraEnvFrom: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  initContainers: []
+  resources:
+    limits:
+      memory: 300M
+    requests:
+      cpu: 100m
+      memory: 150M
+  config:
+    # -- Timeout for the Kubernetes APIs contacted by the integration
+    timeout: 10s
+    # -- Number of retries after timeout expired
+    retries: 3
+    # -- etcd monitoring configuration
+    # @default -- Common settings for most K8s distributions.
+    etcd:
+      # -- Enable etcd monitoring. Might require manual configuration in some environments.
+      enabled: true
+      # Discover etcd pods using the following namespaces and selectors.
+      # If a pod matches the selectors, the scraper will attempt to reach it through the `endpoints` defined below.
+      autodiscover:
+        - selector: "tier=control-plane,component=etcd"
+          namespace: kube-system
+          # Set to true to consider only pods sharing the node with the scraper pod.
+          # This should be set to `true` if Kind is Daemonset, `false` otherwise.
+          matchNode: true
+          # Try to reach etcd using the following endpoints.
+          endpoints:
+            - url: https://localhost:4001
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+            - url: http://localhost:2381
+        - selector: "k8s-app=etcd-manager-main"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:4001
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "k8s-app=etcd"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:4001
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+      # Openshift users might want to remove previous autodiscover entries and add this one instead.
+      # Manual steps are required to create a secret containing the required TLS certificates to connect to etcd.
+      # - selector: "app=etcd,etcd=true,k8s-app=etcd"
+      #   namespace: openshift-etcd
+      #   matchNode: true
+      #   endpoints:
+      #     - url: https://localhost:9979
+      #       insecureSkipVerify: true
+      #       auth:
+      #         type: mTLS
+      #         mtls:
+      #           secretName: secret-name
+      #           secretNamespace: secret-namespace
+
+      # -- staticEndpoint configuration.
+      # It is possible to specify static endpoint to scrape. If specified 'autodiscover' section is ignored.
+      # If set the static endpoint should be reachable, otherwise an error will be returned and the integration stops.
+      # Notice that if deployed as a daemonSet and not as a Deployment setting static URLs could lead to duplicate data
+      # staticEndpoint:
+      #   url: https://url:port
+      #   insecureSkipVerify: true
+      #   auth: {}
+
+    # -- Scheduler monitoring configuration
+    # @default -- Common settings for most K8s distributions.
+    scheduler:
+      # -- Enable scheduler monitoring.
+      enabled: true
+      autodiscover:
+        - selector: "tier=control-plane,component=kube-scheduler"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10259
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "k8s-app=kube-scheduler"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10259
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "app=openshift-kube-scheduler,scheduler=true"
+          namespace: openshift-kube-scheduler
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10259
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "app=openshift-kube-scheduler,scheduler=true"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10259
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+      # -- staticEndpoint configuration.
+      # It is possible to specify static endpoint to scrape. If specified 'autodiscover' section is ignored.
+      # If set the static endpoint should be reachable, otherwise an error will be returned and the integration stops.
+      # Notice that if deployed as a daemonSet and not as a Deployment setting static URLs could lead to duplicate data
+      # staticEndpoint:
+      #   url: https://url:port
+      #   insecureSkipVerify: true
+      #   auth: {}
+
+    # -- Controller manager monitoring configuration
+    # @default -- Common settings for most K8s distributions.
+    controllerManager:
+      # -- Enable controller manager monitoring.
+      enabled: true
+      autodiscover:
+        - selector: "tier=control-plane,component=kube-controller-manager"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10257
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "k8s-app=kube-controller-manager"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10257
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "app=kube-controller-manager,kube-controller-manager=true"
+          namespace: openshift-kube-controller-manager
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10257
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "app=kube-controller-manager,kube-controller-manager=true"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10257
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "app=controller-manager,controller-manager=true"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:10257
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+             #  mtls:
+             #    secretName: secret-name
+             #    secretNamespace: secret-namespace
+      # -- staticEndpoint configuration.
+      # It is possible to specify static endpoint to scrape. If specified 'autodiscover' section is ignored.
+      # If set the static endpoint should be reachable, otherwise an error will be returned and the integration stops.
+      # Notice that if deployed as a daemonSet and not as a Deployment setting static URLs could lead to duplicate data
+      # staticEndpoint:
+      #   url: https://url:port
+      #   insecureSkipVerify: true
+      #   auth: {}
+
+    # -- API Server monitoring configuration
+    # @default -- Common settings for most K8s distributions.
+    apiServer:
+      # -- Enable API Server monitoring
+      enabled: true
+      autodiscover:
+        - selector: "tier=control-plane,component=kube-apiserver"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:8443
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+            # Endpoint distributions target: Kind(v1.22.1)
+            - url: https://localhost:6443
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+            - url: http://localhost:8080
+        - selector: "k8s-app=kube-apiserver"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:8443
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+            - url: http://localhost:8080
+        - selector: "app=openshift-kube-apiserver,apiserver=true"
+          namespace: openshift-kube-apiserver
+          matchNode: true
+          endpoints:
+            - url: https://localhost:8443
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+            - url: https://localhost:6443
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+        - selector: "app=openshift-kube-apiserver,apiserver=true"
+          namespace: kube-system
+          matchNode: true
+          endpoints:
+            - url: https://localhost:8443
+              insecureSkipVerify: true
+              auth:
+                type: bearer
+      # -- staticEndpoint configuration.
+      # It is possible to specify static endpoint to scrape. If specified 'autodiscover' section is ignored.
+      # If set the static endpoint should be reachable, otherwise an error will be returned and the integration stops.
+      # Notice that if deployed as a daemonSet and not as a Deployment setting static URLs could lead to duplicate data
+      # staticEndpoint:
+      #   url: https://url:port
+      #   insecureSkipVerify: true
+      #   auth: {}
+
+# -- Update strategy for the deployed DaemonSets.
+# @default -- See `values.yaml`
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# -- Update strategy for the deployed Deployments.
+# @default -- `type: Recreate`
+strategy:
+  type: Recreate
+
+# -- Adds extra attributes to the cluster and all the metrics emitted to the backend. Can be configured also with `global.customAttributes`
+customAttributes: {}
+
+# -- Settings controlling ServiceAccount creation.
+# @default -- See `values.yaml`
+serviceAccount:
+  # -- (bool) Whether the chart should automatically create the ServiceAccount objects required to run.
+  # @default -- `true`
+  create:
+  annotations: {}
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# -- Additional labels for chart objects. Can be configured also with `global.labels`
+labels: {}
+# -- Annotations to be added to all pods created by the integration.
+podAnnotations: {}
+# -- Additional labels for chart pods. Can be configured also with `global.podLabels`
+podLabels: {}
+
+# -- Run the integration with full access to the host filesystem and network.
+# Running in this mode allows reporting fine-grained cpu, memory, process and network metrics for your nodes.
+privileged: true
+# -- Sets pod's priorityClassName. Can be configured also with `global.priorityClassName`
+priorityClassName: ""
+# -- (bool) Sets pod's hostNetwork. Can be configured also with `global.hostNetwork`
+# @default -- `false`
+hostNetwork:
+# -- Sets security context (at pod level). Can be configured also with `global.podSecurityContext`
+podSecurityContext: {}
+# -- Sets security context (at container level). Can be configured also with `global.containerSecurityContext`
+containerSecurityContext: {}
+
+# -- Sets pod's dnsConfig. Can be configured also with `global.dnsConfig`
+dnsConfig: {}
+
+# Settings controlling RBAC objects creation.
+rbac:
+  # rbac.create -- Whether the chart should automatically create the RBAC objects required to run.
+  create: true
+  # rbac.pspEnabled -- Whether the chart should create Pod Security Policy objects.
+  pspEnabled: false
+
+# -- Sets pod/node affinities set almost globally. (See [Affinities and tolerations](README.md#affinities-and-tolerations))
+affinity: {}
+# -- Sets pod's node selector almost globally. (See [Affinities and tolerations](README.md#affinities-and-tolerations))
+nodeSelector: {}
+# -- Sets pod's tolerations to node taints almost globally. (See [Affinities and tolerations](README.md#affinities-and-tolerations))
+tolerations: []
+
+# -- Config files for other New Relic integrations that should run in this cluster.
+integrations: {}
+# If you wish to monitor services running on Kubernetes you can provide integrations
+# configuration under `integrations`. You just need to create a new entry where
+# the key is the filename of the configuration file and the value is the content of
+# the integration configuration.
+# The data is the actual integration configuration as described in the spec here:
+# https://docs.newrelic.com/docs/integrations/integrations-sdk/file-specifications/integration-configuration-file-specifications-agent-v180
+# For example, if you wanted to monitor a Redis instance that has a label "app=sampleapp"
+# you could do so by adding following entry:
+#  nri-redis-sampleapp:
+#    discovery:
+#      command:
+#        # Run NRI Discovery for Kubernetes
+#        # https://github.com/newrelic/nri-discovery-kubernetes
+#        exec: /var/db/newrelic-infra/nri-discovery-kubernetes
+#        match:
+#          label.app: sampleapp
+#    integrations:
+#      - name: nri-redis
+#        env:
+#          # using the discovered IP as the hostname address
+#          HOSTNAME: ${discovery.ip}
+#          PORT: 6379
+#        labels:
+#          env: test
+
+# -- (bool) Collect detailed metrics from processes running in the host.
+# This defaults to true for accounts created before July 20, 2020.
+# ref: https://docs.newrelic.com/docs/release-notes/infrastructure-release-notes/infrastructure-agent-release-notes/new-relic-infrastructure-agent-1120
+# @default -- `false`
+enableProcessMetrics:
+
+# Prefix nodes display name with cluster to reduce chances of collisions
+# prefixDisplayNameWithCluster: false
+
+# 'true' will use the node name as the name for the "host",
+#  note that it may cause data collision if the node name is the same in different clusters
+#  and prefixDisplayNameWithCluster is not set to true.
+# 'false' will use the host name as the name for the "host".
+# useNodeNameAsDisplayName: true
+
+selfMonitoring:
+  pixie:
+    # selfMonitoring.pixie.enabled -- Enables the Pixie Health Check nri-flex config.
+    # This Flex config performs periodic checks of the Pixie /healthz and /statusz endpoints exposed by the Pixie
+    # Cloud Connector. A status for each endpoint is sent to New Relic in a pixieHealthCheck event.
+    enabled: false
+
+
+# -- Configures the integration to send all HTTP/HTTPS request through the proxy in that URL. The URL should have a standard format like `https://user:password@hostname:port`. Can be configured also with `global.proxy`
+proxy: ""
+
+# -- (bool) Send the metrics to the staging backend. Requires a valid staging license key. Can be configured also with `global.nrStaging`
+# @default -- `false`
+nrStaging:
+fedramp:
+  # -- (bool) Enables FedRAMP. Can be configured also with `global.fedramp.enabled`
+  # @default -- `false`
+  enabled:
+
+# -- (bool) Sets the debug logs to this integration or all integrations if it is set globally. Can be configured also with `global.verboseLog`
+# @default -- `false`
+verboseLog:

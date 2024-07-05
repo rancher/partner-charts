@@ -1,0 +1,137 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+# Helm installation
+
+You can install this chart using [`nri-bundle`](https://github.com/newrelic/helm-charts/tree/master/charts/nri-bundle) located in the
+[helm-charts repository](https://github.com/newrelic/helm-charts) or directly from this repository by adding this Helm repository:
+
+```shell
+helm repo add nri-kubernetes https://newrelic.github.io/nri-kubernetes
+helm upgrade --install newrelic-infrastructure nri-kubernetes/newrelic-infrastructure -f your-custom-values.yaml
+```
+
+{{ template "chart.sourcesSection" . }}
+
+## Values managed globally
+
+This chart implements the [New Relic's common Helm library](https://github.com/newrelic/helm-charts/tree/master/library/common-library) which
+means that it honors a wide range of defaults and globals common to most New Relic Helm charts.
+
+Options that can be defined globally include `affinity`, `nodeSelector`, `tolerations`, `proxy` and others. The full list can be found at
+[user's guide of the common library](https://github.com/newrelic/helm-charts/blob/master/library/common-library/README.md).
+
+## Chart particularities
+
+### Low data mode
+There are two mechanisms to reduce the amount of data that this integration sends to New Relic. See this snippet from the `values.yaml` file:
+```yaml
+common:
+  config:
+    interval: 15s
+
+lowDataMode: false
+```
+
+The `lowDataMode` toggle is the simplest way to reduce data send to Newrelic. Setting it to `true` changes the default scrape interval from 15 seconds
+(the default) to 30 seconds.
+
+If you need for some reason to fine-tune the number of seconds you can use `common.config.interval` directly. If you take a look at the `values.yaml`
+file, the value there is `nil`. If any value is set there, the `lowDataMode` toggle is ignored as this value takes precedence.
+
+Setting this interval above 40 seconds can make you experience issues with the Kubernetes Cluster Explorer so this chart limits setting the interval
+inside the range of 10 to 40 seconds.
+
+### Affinities and tolerations
+
+The New Relic common library allows to set affinities, tolerations, and node selectors globally using e.g. `.global.affinity` to ease the configuration
+when you use this chart using `nri-bundle`. This chart has an extra level of granularity to the components that it deploys:
+control plane, ksm, and kubelet.
+
+Take this snippet as an example:
+```yaml
+global:
+  affinity: {}
+affinity: {}
+
+kubelet:
+  affinity: {}
+ksm:
+  affinity: {}
+controlPlane:
+  affinity: {}
+```
+
+The order to set an affinity is to set first any `kubelet.affinity`, `ksm.affinity`, or `controlPlane.affinity`. If these values are empty the chart
+fallbacks to `affinity` (at root level), and if that value is empty, the chart fallbacks to `global.affinity`.
+
+The same procedure applies to `nodeSelector` and `tolerations`.
+
+On the other hand, some components have affinities and tolerations predefined e.g. to be able to run kubelet pods on nodes that are tainted as master
+nodes or to schedule the KSM scraper on the same node of KSM to reduce the inter-node traffic.
+
+If you are having problems assigning pods to nodes it may be because of this. Take a look at the [`values.yaml`](values.yaml) to see if the pod that is
+not having your expected behavior has any predefined value.
+
+### `hostNetwork` toggle
+
+In versions below v3, changing the `privileged` mode affected the `hostNetwork`. We changed this behavior and now you can set pods to use `hostNetwork`
+using the corresponding [flags from the common library](https://github.com/newrelic/helm-charts/blob/master/library/common-library/README.md)
+(`.global.hostNetwork` and `.hostNetwork`) but the component that scrapes data from the control plane has always set `hostNetwork` enabled by default
+(Look in the [`values.yaml`](values.yaml) for `controlPlane.hostNetwork: true`)
+
+This is because the most common configuration of the control plane components is to be configured to listen only to `localhost`.
+
+If your cluster security policy does not allow to use `hostNetwork`, you can disable it control plane monitoring by setting `controlPlane.enabled` to
+`false.`
+
+### `privileged` toggle
+
+The default value for `privileged` [from the common library](https://github.com/newrelic/helm-charts/blob/master/library/common-library/README.md) is
+`false` but in this particular this chart it is set to `true` (Look in the [`values.yaml`](values.yaml) for `privileged: true`)
+
+This is because when `kubelet` pods need to run in privileged mode to fetch cpu, memory, process, and network metrics of your nodes.
+
+If your cluster security policy does not allow to have `privileged` in your pod' security context, you can disable it by setting `privileged` to
+`false` taking into account that you will lose all the metrics from the host and some metadata from the host that are added to the metrics of the
+integrations that you have configured.
+
+{{ template "chart.valuesSection" . }}
+
+{{ if .Maintainers }}
+## Maintainers
+{{ range .Maintainers }}
+{{- if .Name }}
+{{- if .Url }}
+* [{{ .Name }}]({{ .Url }})
+{{- else }}
+* {{ .Name }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+## Past Contributors
+
+Previous iterations of this chart started as a community project in the [stable Helm chart repository](github.com/helm/charts/). New Relic is very thankful for all the 15+ community members that contributed and helped maintain the chart there over the years:
+
+* coreypobrien
+* sstarcher
+* jmccarty3
+* slayerjain
+* ryanhope2
+* rk295
+* michaelajr
+* isindir
+* idirouhab
+* ismferd
+* enver
+* diclophis
+* jeffdesc
+* costimuraru
+* verwilst
+* ezelenka

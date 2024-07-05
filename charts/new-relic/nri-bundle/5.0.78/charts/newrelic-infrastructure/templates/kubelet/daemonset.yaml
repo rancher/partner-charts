@@ -1,0 +1,264 @@
+{{- if (.Values.kubelet.enabled) }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nriKubernetes.labels" . | nindent 4 }}
+  name: {{ include "nriKubernetes.kubelet.fullname" . }}
+  {{- $legacyAnnotation:= fromYaml (include "newrelic.compatibility.annotations" .) -}}
+  {{- with  include "newrelic.compatibility.valueWithFallback" (dict "legacy" $legacyAnnotation "supported" .Values.kubelet.annotations )}}
+  annotations: {{ . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.updateStrategy }}
+  updateStrategy: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "newrelic.common.labels.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kubelet
+  template:
+    metadata:
+      annotations:
+        checksum/nri-kubernetes: {{ include (print $.Template.BasePath "/kubelet/scraper-configmap.yaml") . | sha256sum }}
+        checksum/agent-config: {{ include (print $.Template.BasePath "/kubelet/agent-configmap.yaml") . | sha256sum }}
+        {{- if include "newrelic.common.license.secret" . }}{{- /* If the is secret to template */}}
+        checksum/license-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        checksum/integrations_config: {{ include (print $.Template.BasePath "/kubelet/integrations-configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "nriKubernetes.labels.podLabels" . | nindent 8 }}
+        app.kubernetes.io/component: kubelet
+    spec:
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.images.pullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "newrelic.common.serviceAccount.name" . }}
+      hostNetwork: {{ include "nriKubernetes.kubelet.hostNetwork.value" . }}
+      {{- if include "nriKubernetes.kubelet.hostNetwork" . }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+
+      {{- if .Values.kubelet.initContainers }}
+      initContainers: {{- tpl (.Values.kubelet.initContainers | toYaml) . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: kubelet
+          image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.images.integration "context" .) }}
+          imagePullPolicy: {{ .Values.images.integration.pullPolicy }}
+          {{- with include "nriKubernetes.securityContext.container" . | fromYaml }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: "NRI_KUBERNETES_SINK_HTTP_PORT"
+              value: {{ get (fromYaml (include "nriKubernetes.kubelet.agentConfig" .)) "http_server_port" | quote }}
+            - name: "NRI_KUBERNETES_CLUSTERNAME"
+              value: {{ include "newrelic.common.cluster" . }}
+            - name: "NRI_KUBERNETES_VERBOSE"
+              value: {{ include "newrelic.common.verboseLog.valueAsBoolean" . | quote }}
+
+            - name: "NRI_KUBERNETES_NODENAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+            # Required to connect to the kubelet
+            - name: "NRI_KUBERNETES_NODEIP"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "status.hostIP"
+
+            {{- with .Values.kubelet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.kubelet.extraEnvFrom }}
+          envFrom: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: nri-kubernetes-config
+              mountPath: /etc/newrelic-infra/nri-kubernetes.yml
+              subPath: nri-kubernetes.yml
+            {{- with .Values.kubelet.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.kubelet.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+        - name: agent
+          image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.images.agent "context" .) }}
+          args: [ "newrelic-infra" ]
+          imagePullPolicy: {{ .Values.images.agent.pullPolicy }}
+          {{- with include "nriKubernetes.kubelet.securityContext.agentContainer" . | fromYaml }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ get (fromYaml (include "nriKubernetes.kubelet.agentConfig" .)) "http_server_port" }}
+          env:
+            - name: NRIA_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newrelic.common.license.secretName" . }}
+                  key: {{ include "newrelic.common.license.secretKeyName" . }}
+
+            - name: "NRIA_OVERRIDE_HOSTNAME_SHORT"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            - name: "NRIA_OVERRIDE_HOSTNAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            {{- if not (include "newrelic.common.privileged" .) }}
+            # Override NRIA_OVERRIDE_HOST_ROOT to empty if unprivileged. This must be done as an env var as the
+            # `k8s-events-forwarder` and `infrastructure-bundle` images ship this very same env var set to /host.
+            - name: "NRIA_OVERRIDE_HOST_ROOT"
+              value: ""
+            {{- end }}
+
+            - name: "NRI_KUBERNETES_NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            {{- if .Values.useNodeNameAsDisplayName }}
+            - name: "NRIA_DISPLAY_NAME"
+            {{- if .Values.prefixDisplayNameWithCluster }}
+              value: "{{ include "newrelic.common.cluster" . }}:$(NRI_KUBERNETES_NODE_NAME)"
+            {{- else }}
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+            {{- end }}
+            {{- end }}
+
+            {{- /* Needed to populate clustername in integration metrics */}}
+            - name: "CLUSTER_NAME"
+              value: {{ include "newrelic.common.cluster" . }}
+            - name: "NRIA_PASSTHROUGH_ENVIRONMENT"
+              value: "CLUSTER_NAME"
+
+            {{- /* Needed for autodiscovery since hostNetwork=false */}}
+            - name: "NRIA_HOST"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "status.hostIP"
+
+            {{- with .Values.kubelet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.kubelet.extraEnvFrom }}
+          envFrom: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/newrelic-infra.yml
+              subPath: newrelic-infra.yml
+            - name: nri-integrations-cfg-volume
+              mountPath: /etc/newrelic-infra/integrations.d/
+            {{- if include "newrelic.common.privileged" . }}
+            - name: dev
+              mountPath: /dev
+            - name: host-containerd-socket
+              mountPath: /run/containerd/containerd.sock
+            - name: host-docker-socket
+              mountPath: /var/run/docker.sock
+            - name: log
+              mountPath: /var/log
+            - name: host-volume
+              mountPath: /host
+              readOnly: true
+            {{- end }}
+            - mountPath: /var/db/newrelic-infra/data
+              name: agent-tmpfs-data
+            - mountPath: /var/db/newrelic-infra/user_data
+              name: agent-tmpfs-user-data
+            - mountPath: /tmp
+              name: agent-tmpfs-tmp
+            {{- with .Values.kubelet.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.kubelet.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        {{- if include "newrelic.common.privileged" . }}
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: host-containerd-socket
+          hostPath:
+            path: /run/containerd/containerd.sock
+        - name: host-docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+        - name: log
+          hostPath:
+            path: /var/log
+        - name: host-volume
+          hostPath:
+            path: /
+        {{- end }}
+        - name: agent-tmpfs-data
+          emptyDir: {}
+        - name: agent-tmpfs-user-data
+          emptyDir: {}
+        - name: agent-tmpfs-tmp
+          emptyDir: {}
+        - name: nri-kubernetes-config
+          configMap:
+            name: {{ include "nriKubernetes.kubelet.fullname" . }}
+            items:
+              - key: nri-kubernetes.yml
+                path: nri-kubernetes.yml
+        - name: config
+          configMap:
+            name: {{ include "nriKubernetes.kubelet.fullname.agent" . }}
+            items:
+              - key: newrelic-infra.yml
+                path: newrelic-infra.yml
+        - name: nri-integrations-cfg-volume
+          configMap:
+            name: {{ include "nriKubernetes.kubelet.fullname.integrations" . }}
+        {{- with .Values.kubelet.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with include "nriKubernetes.kubelet.affinity" . }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "nriKubernetes.kubelet.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        kubernetes.io/os: linux
+        {{- with .Values.kubelet.nodeSelector | default (fromYaml (include "newrelic.common.nodeSelector" .)) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end -}}
+{{- end }}

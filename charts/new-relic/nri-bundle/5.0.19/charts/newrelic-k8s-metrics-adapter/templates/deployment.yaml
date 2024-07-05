@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "newrelic.common.naming.fullname" . }}
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "newrelic.common.labels.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "newrelic.common.labels.podLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "newrelic.common.serviceAccount.name" . }}
+      {{- with include "newrelic-k8s-metrics-adapter.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.image.pullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ include "newrelic.common.naming.name" . }}
+        image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.image "context" .) }}
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+        {{- with include "newrelic.common.securityContext.container" . }}
+        securityContext:
+          {{- . | nindent 10 }}
+        {{- end }}
+        args:
+        - --tls-cert-file=/tmp/k8s-metrics-adapter/serving-certs/tls.crt
+        - --tls-private-key-file=/tmp/k8s-metrics-adapter/serving-certs/tls.key
+        {{- if .Values.verboseLog }}
+        - --v=10
+        {{- else }}
+        - --v=1
+        {{- end }}
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /healthz
+            port: 6443
+          initialDelaySeconds: 1
+        {{- if .Values.resources }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- end }}
+        env:
+        - name: CLUSTER_NAME
+          value: {{ include "newrelic.common.cluster" . }}
+        - name: NEWRELIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "newrelic.common.naming.fullname" . }}
+              key: personalAPIKey
+        {{- with (include "newrelic.common.proxy" .) }}
+        - name: HTTPS_PROXY
+          value: {{ . }}
+        {{- end }}
+        {{- with .Values.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.extraEnvFrom }}
+        envFrom: {{ toYaml . | nindent 8 }}
+        {{- end }}
+        volumeMounts:
+        - name: tls-key-cert-pair
+          mountPath: /tmp/k8s-metrics-adapter/serving-certs/
+        - name: config
+          mountPath: /etc/newrelic/adapter/
+        {{- with .Values.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+      - name: tls-key-cert-pair
+        secret:
+          secretName: {{ include "newrelic-k8s-metrics-adapter.name.apiservice" . }}
+      - name: config
+        configMap:
+          name: {{ include "newrelic.common.naming.fullname" .  }}
+      {{- with .Values.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.nodeSelector" . }}
+      nodeSelector:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.affinity" . }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      hostNetwork: {{ include "newrelic.common.hostNetwork.value" . }}
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}

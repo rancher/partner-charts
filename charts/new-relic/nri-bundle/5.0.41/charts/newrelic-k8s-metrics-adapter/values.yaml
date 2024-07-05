@@ -1,0 +1,156 @@
+# IMPORTANT: The Kubernetes cluster name
+# https://docs.newrelic.com/docs/kubernetes-monitoring-integration
+#
+# licenseKey:
+# cluster:
+# IMPORTANT: the previous values can also be set as global so that they
+# can be shared by other newrelic product's charts.
+#
+# global:
+#   licenseKey:
+#   cluster:
+#   nrStaging:
+
+# -- New Relic [Personal API Key](https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/#user-api-key) (stored in a secret). Used to connect to NerdGraph in order to fetch the configured metrics. (**Required**)
+personalAPIKey:
+
+# -- Enable metrics adapter verbose logs.
+verboseLog: false
+
+config:
+  # -- New Relic [Account ID](https://docs.newrelic.com/docs/accounts/accounts-billing/account-structure/account-id/) where the configured metrics are sourced from. (**Required**)
+  accountID:
+
+  # config.region -- New Relic account region. If not set, it will be automatically derived from the License Key.
+  # @default -- Automatically detected from `licenseKey`.
+  region:
+  # For US-based accounts, the region is: `US`.
+  # For EU-based accounts, the region is: `EU`.
+  # For Staging accounts, the region is: 'Staging' this is also automatically derived form `global.nrStaging`
+
+
+  # config.cacheTTLSeconds -- Period of time in seconds in which a cached value of a metric is consider valid.
+  cacheTTLSeconds: 30
+  # Not setting it or setting it to '0' disables the cache.
+
+  # config.externalMetrics -- Contains all the external metrics definition of the adapter. Each key of the externalMetric entry represents the metric name and contains the parameters that defines it.
+  # @default -- See `values.yaml`
+  externalMetrics:
+  # Names cannot contain uppercase characters and
+  # "/" or "%" characters.
+  # my_external_metric_name_example:
+  #
+  # NRQL query that will executed to obtain the metric value.
+  # The query must return just one value so is recommended to use aggregator functions like average or latest.
+  # Default time span for aggregator func is 1h so is recommended to use the SINCE clause to reduce the time span.
+  #   query: "FROM Metric SELECT average(`k8s.container.cpuCoresUtilization`) SINCE 2 MINUTES AGO"
+  #
+  # By default a cluster filter is added to the query to ensure no cross cluster metrics are taking into account.
+  # The added filter is equivalent to WHERE `clusterName`=<cluster>.
+  # If metrics are not from the cluster use removeClusterFilter. Default value for this parameter is false.
+  #   removeClusterFilter: false
+
+  # config.nrdbClientTimeoutSeconds -- Defines the NRDB client timeout. The maximum allowed value is 120.
+  # @default -- 30
+  nrdbClientTimeoutSeconds: 30
+
+# image -- Registry, repository, tag, and pull policy for the container image.
+# @default -- See `values.yaml`.
+image:
+  registry:
+  repository: newrelic/newrelic-k8s-metrics-adapter
+  tag: ""
+  pullPolicy: IfNotPresent
+  # It is possible to specify docker registry credentials.
+  # See https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod
+  # image.pullSecrets -- The image pull secrets.
+  pullSecrets: []
+  # - name: regsecret
+
+# -- Number of replicas in the deployment.
+replicas: 1
+
+# -- Resources you wish to assign to the pod.
+# @default -- See `values.yaml`
+resources:
+  limits:
+    memory: 80M
+  requests:
+    cpu: 100m
+    memory: 30M
+
+serviceAccount:
+  # -- Specifies whether a ServiceAccount should be created for the job and the deployment.
+  # false avoids creation, true or empty will create the ServiceAccount
+  # @default -- `true`
+  create:
+  # -- If `serviceAccount.create` this will be the name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template.
+  # If create is false, a serviceAccount with the given name must exist
+  # @default -- Automatically generated.
+  name:
+
+# -- Configure podSecurityContext
+podSecurityContext:
+
+# -- Configure containerSecurityContext
+containerSecurityContext:
+
+# -- Array to add extra environment variables
+extraEnv: []
+# -- Array to add extra envFrom
+extraEnvFrom: []
+# -- Array to add extra volumes
+extraVolumes: []
+# -- Add extra volume mounts
+extraVolumeMounts: []
+
+# -- Additional annotations to apply to the pod(s).
+podAnnotations:
+
+# Due to security restrictions, some users might require to use a https proxy to route traffic over the internet.
+# In this specific case, when the metrics adapter sends a request to the New Relic backend. If this is the case
+# for you, set this value to your http proxy endpoint.
+# -- Configure proxy for the metrics-adapter.
+proxy:
+
+# Pod scheduling priority
+# Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# priorityClassName: high-priority
+
+# fullnameOverride -- To fully override common.naming.fullname
+fullnameOverride: ""
+# -- Node affinity to use for scheduling.
+affinity: {}
+# -- Node label to use for scheduling.
+nodeSelector: {}
+# -- List of node taints to tolerate (requires Kubernetes >= 1.6)
+tolerations: []
+
+apiServicePatchJob:
+  # apiServicePatchJob.image -- Registry, repository, tag, and pull policy for the job container image.
+  # @default -- See `values.yaml`.
+  image:
+    registry:  # defaults to registry.k8s.io
+    repository: ingress-nginx/kube-webhook-certgen
+    tag: v1.3.0
+    pullPolicy: IfNotPresent
+
+  # -- Additional Volumes for Cert Job.
+  volumes: []
+  # - name: tmp
+  #   emptyDir: {}
+
+  # -- Additional Volume mounts for Cert Job, you might want to mount tmp if Pod Security Policies.
+  volumeMounts: []
+  # - name: tmp
+  #   mountPath: /tmp
+  # Enforce a read-only root.
+
+certManager:
+  # -- Use cert manager for APIService certs, rather than the built-in patch job.
+  enabled: false
+
+rbac:
+  # rbac.pspEnabled -- Whether the chart should create Pod Security Policy objects.
+  pspEnabled: false

@@ -1,0 +1,215 @@
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+# -- Name of the Kubernetes cluster monitored. Mandatory. Can be configured also with `global.cluster`
+cluster: ""
+# -- This set this license key to use. Can be configured also with `global.licenseKey`
+licenseKey: ""
+# -- In case you don't want to have the license key in you values, this allows you to point to a user created secret to get the key from there. Can be configured also with `global.customSecretName`
+customSecretName: ""
+# -- In case you don't want to have the license key in you values, this allows you to point to which secret key is the license key located. Can be configured also with `global.customSecretLicenseKey`
+customSecretLicenseKey: ""
+
+# -- Image for the New Relic Infrastructure Operator
+# @default -- See `values.yaml`
+image:
+  repository: newrelic/newrelic-infra-operator
+  tag: ""
+  pullPolicy: IfNotPresent
+  # -- The secrets that are needed to pull images from a custom registry.
+  pullSecrets: []
+  # - name: regsecret
+
+# -- Image used to create certificates and inject them to the admission webhook
+# @default -- See `values.yaml`
+admissionWebhooksPatchJob:
+  image:
+    registry:  # Defaults to registry.k8s.io
+    repository: ingress-nginx/kube-webhook-certgen
+    tag: v1.3.0
+    pullPolicy: IfNotPresent
+    # -- The secrets that are needed to pull images from a custom registry.
+    pullSecrets: []
+    # - name: regsecret
+
+  # -- Volume mounts to add to the job, you might want to mount tmp if Pod Security Policies.
+  # Enforce a read-only root.
+  volumeMounts: []
+  # - name: tmp
+  #   mountPath: /tmp
+  # -- Volumes to add to the job container.
+  volumes: []
+  # - name: tmp
+  #   emptyDir: {}
+
+rbac:
+  # rbac.pspEnabled -- Whether the chart should create Pod Security Policy objects.
+  pspEnabled: false
+
+replicas: 1
+
+# -- Resources available for this pod
+resources:
+  limits:
+    memory: 80M
+  requests:
+    cpu: 100m
+    memory: 30M
+
+# -- Settings controlling ServiceAccount creation
+# @default -- See `values.yaml`
+serviceAccount:
+  # serviceAccount.create -- (bool) Specifies whether a ServiceAccount should be created
+  # @default -- `true`
+  create:
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  # Specify any annotations to add to the ServiceAccount
+  annotations:
+
+# -- Annotations to add to the pod.
+podAnnotations: {}
+
+# -- Sets pod's priorityClassName. Can be configured also with `global.priorityClassName`
+priorityClassName: ""
+# -- (bool) Sets pod's hostNetwork. Can be configured also with `global.hostNetwork`
+# @default -- `false`
+hostNetwork:
+# -- Sets pod's dnsConfig. Can be configured also with `global.dnsConfig`
+dnsConfig: {}
+# -- Sets security context (at pod level). Can be configured also with `global.podSecurityContext`
+podSecurityContext:
+  fsGroup: 1001
+  runAsUser: 1001
+  runAsGroup: 1001
+# -- Sets security context (at container level). Can be configured also with `global.containerSecurityContext`
+containerSecurityContext: {}
+
+# -- Sets pod/node affinities. Can be configured also with `global.affinity`
+affinity: {}
+# -- Sets pod's node selector. Can be configured also with `global.nodeSelector`
+nodeSelector: {}
+# -- Sets pod's tolerations to node taints. Can be configured also with `global.tolerations`
+tolerations: []
+
+certManager:
+  # certManager.enabled -- Use cert manager for webhook certs
+  enabled: false
+
+# -- Webhook timeout
+# Ref: https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#timeouts
+timeoutSeconds: 28
+
+# -- Operator configuration
+# @default -- See `values.yaml`
+config:
+  # -- IgnoreMutationErrors instruments the operator to ignore injection error instead of failing.
+  # If set to false errors of the injection could block the creation of pods.
+  ignoreMutationErrors: true
+
+  # -- configuration of the sidecar injection webhook
+  # @default -- See `values.yaml`
+  infraAgentInjection:
+  # All policies are ORed, if one policy matches the sidecar is injected.
+  # Within a policy PodSelectors, NamespaceSelector and NamespaceName are ANDed, any of these, if not specified, is ignored.
+  # The following policy is injected if global.fargate=true and matches all pods belonging to any fargate profile.
+  #    policies:
+  #    - podSelector:
+  #        matchExpressions:
+  #        - key: "eks.amazonaws.com/fargate-profile"
+  #          operator: Exists
+  # Also NamespaceName and NamespaceSelector can be leveraged.
+  #      namespaceName: "my-namespace"
+  #      namespaceSelector: {}
+
+    # -- agentConfig contains the configuration for the container agent injected
+    # @default -- See `values.yaml`
+    agentConfig:
+    # Custom  Attributes allows to pass any custom attribute to the injected infra agents.
+    # The value is computed either from the defaultValue or taken at injected time from Label specified in "fromLabel".
+    # Either the label should exist or the default should be specified in order to have the injection working.
+    # customAttributes:
+    #   - name: computeType
+    #     defaultValue: serverless
+    #   - name: fargateProfile
+    #     fromLabel: eks.amazonaws.com/fargate-profile
+
+      # -- Image of the infrastructure agent to be injected.
+      # @default -- See `values.yaml`
+      image:
+        repository: newrelic/infrastructure-k8s
+        tag: 2.13.7-unprivileged
+        pullPolicy: IfNotPresent
+
+      # -- configSelectors is the way to configure resource requirements and extra envVars of the injected sidecar container.
+      # When mutating it will be applied the first configuration having the labelSelector matching with the mutating pod.
+      # @default -- See `values.yaml`
+      configSelectors:
+      - resourceRequirements:  # resourceRequirements to apply to the injected sidecar.
+          limits:
+            memory: 100M
+            cpu: 200m
+          requests:
+            memory: 50M
+            cpu: 100m
+        extraEnvVars:  # extraEnvVars to pass to the injected sidecar.
+          DISABLE_KUBE_STATE_METRICS: "true"
+        # NRIA_VERBOSE: "1"
+        labelSelector:
+          matchExpressions:
+          - key: "app.kubernetes.io/name"
+            operator: NotIn
+            values: ["kube-state-metrics"]
+          - key: "app"
+            operator: NotIn
+            values: ["kube-state-metrics"]
+          - key: "k8s-app"
+            operator: NotIn
+            values: ["kube-state-metrics"]
+
+      - resourceRequirements:
+          limits:
+            memory: 300M
+            cpu: 300m
+          requests:
+            memory: 150M
+            cpu: 150m
+        labelSelector:
+          matchLabels:
+            k8s-app: kube-state-metrics
+      # extraEnvVars:
+      #   NRIA_VERBOSE: "1"
+
+      - resourceRequirements:
+          limits:
+            memory: 300M
+            cpu: 300m
+          requests:
+            memory: 150M
+            cpu: 150m
+        labelSelector:
+          matchLabels:
+            app: kube-state-metrics
+      # extraEnvVars:
+      #   NRIA_VERBOSE: "1"
+
+      - resourceRequirements:
+          limits:
+            memory: 300M
+            cpu: 300m
+          requests:
+            memory: 150M
+            cpu: 150m
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: kube-state-metrics
+      # extraEnvVars:
+      #   NRIA_VERBOSE: "1"
+
+      # pod Security Context of the sidecar injected.
+      # Notice that ReadOnlyRootFilesystem and AllowPrivilegeEscalation enforced respectively to true and to false.
+      # podSecurityContext:
+      #   RunAsUser:
+      #   RunAsGroup:

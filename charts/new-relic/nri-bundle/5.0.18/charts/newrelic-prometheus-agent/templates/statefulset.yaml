@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+  name: {{ include "newrelic.common.naming.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: {{ include "newrelic.common.naming.fullname" . }}-headless
+  selector:
+    matchLabels:
+      {{- include "newrelic.common.labels.selectorLabels" . | nindent 6 }}
+  replicas: {{ include "newrelic-prometheus.configurator.replicas" . }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "newrelic.common.labels.podLabels" . | nindent 8 }}
+    spec:
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.images.pullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 }}
+      {{- end }}
+
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+
+      hostNetwork: {{ include "newrelic.common.hostNetwork.value" . }}
+      {{- if include "newrelic.common.hostNetwork" . }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+
+      serviceAccountName: {{ include "newrelic.common.serviceAccount.name" . }}
+
+      initContainers:
+        - name: configurator
+          image: {{ include "newrelic-prometheus.configurator.configurator_image" ( dict "imageRoot" .Values.images.configurator "context" .) }}
+          imagePullPolicy: {{ .Values.images.configurator.pullPolicy }}
+          args:
+            - --input=/etc/configurator/config.yaml
+            - --output=/etc/prometheus/config/config.yaml
+            {{- if include "newrelic.common.verboseLog" . }}
+            - --verbose=true
+            {{- end }}
+          volumeMounts:
+            - name: configurator-config
+              mountPath: /etc/configurator/
+            - name: prometheus-config
+              mountPath: /etc/prometheus/config
+          env:
+            - name: NR_PROM_DATA_SOURCE_NAME
+              valueFrom: 
+                fieldRef: 
+                  fieldPath: metadata.name
+            - name: NR_PROM_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newrelic.common.license.secretName" . }}
+                  key: {{ include "newrelic.common.license.secretKeyName" . }}
+            - name: NR_PROM_CHART_VERSION
+              value: {{ .Chart.Version }}
+
+      containers:
+        - name: prometheus
+          {{- with include "newrelic.common.securityContext.container" . }}
+          securityContext:
+            {{- . | nindent 12 }}
+          {{- end }}
+          image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.images.prometheus "context" .) }}
+          imagePullPolicy: {{ .Values.images.prometheus.pullPolicy }}
+          ports:
+            - containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 4
+            failureThreshold: 3
+            successThreshold: 1
+          args:
+            - --config.file=/etc/prometheus/config/config.yaml
+            - --enable-feature=agent,expand-external-labels
+            - --storage.agent.retention.max-time=30m
+            - --storage.agent.wal-truncate-frequency=30m
+            - --storage.agent.path=/etc/prometheus/storage
+            {{- if include "newrelic.common.verboseLog" . }}
+            - --log.level=debug
+            {{- end }}
+          {{- with .Values.resources.prometheus }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/config
+            - name: prometheus-storage
+              mountPath: /etc/prometheus/storage
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+      volumes:
+        - name: configurator-config
+          configMap:
+            name: {{ include "newrelic.common.naming.fullname" . }}
+        - name: prometheus-config
+          emptyDir: {}
+        - name: prometheus-storage
+          emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with include "newrelic.common.nodeSelector" . }}
+      nodeSelector:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.affinity" . }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}

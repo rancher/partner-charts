@@ -1,0 +1,472 @@
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+# -- Name of the Kubernetes cluster monitored. Can be configured also with `global.cluster`.
+# Note it will be set as an external label in prometheus configuration, it will have precedence over `config.common.external_labels.cluster_name`
+# and `customAttributes.cluster_name``.
+cluster: ""
+# -- This set this license key to use. Can be configured also with `global.licenseKey`
+licenseKey: ""
+# -- In case you don't want to have the license key in you values, this allows you to point to a user created secret to get the key from there. Can be configured also with `global.customSecretName`
+customSecretName: ""
+# -- In case you don't want to have the license key in you values, this allows you to point to which secret key is the license key located. Can be configured also with `global.customSecretLicenseKey`
+customSecretLicenseKey: ""
+
+# -- Adds extra attributes to prometheus external labels. Can be configured also with `global.customAttributes`. Please note, values defined
+# in `common.config.externar_labels` will have precedence over `customAttributes`.
+customAttributes: {}
+
+# Images used by the chart for prometheus and New Relic configurator.
+# @default See `values.yaml`
+images:
+  # -- The secrets that are needed to pull images from a custom registry.
+  pullSecrets: []
+
+  # -- Image for New Relic configurator.
+  # @default -- See `values.yaml`
+  configurator:
+    registry: ""
+    repository: newrelic/newrelic-prometheus-configurator
+    pullPolicy: IfNotPresent
+    # @default It defaults to `annotation.configuratorVersion` in `Chart.yaml`.
+    tag: ""
+  # -- Image for prometheus which is executed in agent mode.
+  # @default -- See `values.yaml`
+  prometheus:
+    registry: ""
+    repository: quay.io/prometheus/prometheus
+    pullPolicy: IfNotPresent
+    # @default It defaults to `appVersion` in `Chart.yaml`.
+    tag: ""
+
+# -- Volumes to mount in the containers
+extraVolumes: []
+# -- Defines where to mount volumes specified with `extraVolumes`
+extraVolumeMounts: []
+
+# -- Settings controlling ServiceAccount creation.
+# @default -- See `values.yaml`
+serviceAccount:
+  # -- Whether the chart should automatically create the ServiceAccount objects required to run.
+  create: true
+  annotations: {}
+  # If not set and create is true, a name is generated using the full name template
+  name: ""
+
+# -- Additional labels for chart objects. Can be configured also with `global.labels`
+labels: {}
+# -- Annotations to be added to all pods created by the integration.
+podAnnotations: {}
+# -- Additional labels for chart pods. Can be configured also with `global.podLabels`
+podLabels: {}
+
+# -- Resource limits to be added to all pods created by the integration.
+# @default -- `{}`
+resources:
+  prometheus: {}
+
+# -- Sets pod's priorityClassName. Can be configured also with `global.priorityClassName`
+priorityClassName: ""
+# -- (bool) Sets pod's hostNetwork. Can be configured also with `global.hostNetwork`
+# @default -- `false`
+hostNetwork:
+# -- Sets security context (at pod level). Can be configured also with `global.podSecurityContext`
+podSecurityContext: {}
+# -- Sets security context (at container level). Can be configured also with `global.containerSecurityContext`
+containerSecurityContext: {}
+
+# -- Sets pod's dnsConfig. Can be configured also with `global.dnsConfig`
+dnsConfig: {}
+
+# Settings controlling RBAC objects creation.
+rbac:
+  # -- Whether the chart should automatically create the RBAC objects required to run.
+  create: true
+  # -- Whether the chart should create Pod Security Policy objects.
+  pspEnabled: false
+
+# -- Sets pod/node affinities set almost globally. (See [Affinities and tolerations](README.md#affinities-and-tolerations))
+affinity: {}
+# -- Sets pod's node selector almost globally. (See [Affinities and tolerations](README.md#affinities-and-tolerations))
+nodeSelector: {}
+# -- Sets pod's tolerations to node taints almost globally. (See [Affinities and tolerations](README.md#affinities-and-tolerations))
+tolerations: []
+
+# -- (bool) Send the metrics to the staging backend. Requires a valid staging license key. Can be configured also with `global.nrStaging`
+# @default -- `false`
+nrStaging:
+
+# -- (bool) Reduces the number of metrics sent in order to reduce costs. It can be configured also with `global.lowDataMode`.
+# Specifically, it makes Prometheus stop reporting some Kubernetes cluster-specific metrics, you can see details in `static/lowdatamodedefaults.yaml`.
+# @default -- false
+lowDataMode:
+
+# -- It holds the configuration for metric type override. If enabled, a series of metric relabel configs will be added to
+# `config.newrelic_remote_write.extra_write_relabel_configs`, you can check the whole list in `static/metrictyperelabeldefaults.yaml`
+metric_type_override:
+  enabled: true
+
+# -- Set up Prometheus replicas to allow horizontal scalability.
+# @default -- See `values.yaml`
+sharding:
+  # -- Sets the number of Prometheus instances running on sharding mode.
+  # @default -- `1`
+  # total_shards_count:
+
+# -- (bool) Sets the debug log to Prometheus and prometheus-configurator or all integrations if it is set globally. Can be configured also with `global.verboseLog`
+# @default -- `false`
+verboseLog:
+
+# -- It holds the New Relic Prometheus configuration. Here you can easily set up Prometheus to get set metrics, discover
+# ponds and endpoints Kubernetes and send metrics to New Relic using remote-write.
+# @default -- See `values.yaml`
+config:
+  # -- Include global configuration for Prometheus agent.
+  # @default -- See `values.yaml`
+  common:
+    # -- The labels to add to any timeseries that this Prometheus instance scrapes.
+    # @default -- `{}`
+    # external_labels:
+    #   label_key_example: foo-bar
+    # -- How frequently to scrape targets by default, unless a different value is specified on the job.
+    scrape_interval: 30s
+    # -- The default timeout when scraping targets.
+    # @default -- `10s`
+    # scrape_timeout:
+
+  # -- (object) Newrelic remote-write configuration settings.
+  # @default -- See `values.yaml`
+  newrelic_remote_write:
+    # # -- Includes additional [relabel configs](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
+    # # for the New Relic remote write.
+    # # @default -- `[]`
+    # extra_write_relabel_configs: []
+
+    #   # Enable the extra_write_relabel_configs below for backwards compatibility with legacy POMI labels.
+    #   # This helpful when migrating from POMI to ensure that Prometheus metrics will contain both labels (e.g. cluster_name and clusterName).
+    #   # For more migration info, please visit the [migration guide](https://docs.newrelic.com/docs/infrastructure/prometheus-integrations/install-configure-prometheus-agent/migration-guide/).
+    #   - source_labels: [namespace]
+    #     action: replace
+    #     target_label: namespaceName
+    #   - source_labels: [node]
+    #     action: replace
+    #     target_label: nodeName
+    #   - source_labels: [pod]
+    #     action: replace
+    #     target_label: podName
+    #   - source_labels: [service]
+    #     action: replace
+    #     target_label: serviceName
+    #   - source_labels: [cluster_name]
+    #     action: replace
+    #     target_label: clusterName
+    #   - source_labels: [job]
+    #     action: replace
+    #     target_label: scrapedTargetKind
+    #   - source_labels: [instance]
+    #     action: replace
+    #     target_label: scrapedTargetInstance
+
+    # -- Set up the proxy used to send metrics to New Relic.
+    # @default -- `""`
+    # proxy_url:
+
+    # -- # Timeout for requests to the remote write endpoint.
+    # @default -- `30s`
+    # remote_timeout:
+
+    # -- Fine-tune remote-write behavior: <https://prometheus.io/docs/practices/remote_write/#remote-write-tuning>.
+    # queue_config:
+      # -- Remote Write shard capacity.
+      # @default -- `2500`
+      # capacity:
+      # -- Maximum number of shards.
+      # @default -- `200`
+      # max_shards:
+      # -- Minimum number of shards.
+      # @default -- `1`
+      # min_shards:
+      # -- Maximum number of samples per send.
+      # @default -- `500`
+      # max_samples_per_send:
+      # -- Maximum time a sample will wait in the buffer.
+      # @default -- `5s`
+      # batch_send_deadline:
+      # -- Initial retry delay. Gets doubled for every retry.
+      # @default -- `30ms`
+      # min_backoff:
+      # -- Maximum retry delay.
+      # @default -- `5s`
+      # max_backoff:
+      # -- Retry upon receiving a 429 status code from the remote-write storage.
+      # @default -- `false`
+      # retry_on_http_429:
+
+  # -- (object) It includes additional remote-write configuration. Note this configuration is not parsed, so valid
+  # [prometheus remote_write configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write)
+  # should be provided.
+  extra_remote_write:
+
+  # -- It allows defining scrape jobs for Kubernetes in a simple way.
+  # @default -- See `values.yaml`
+  kubernetes:
+    # NewRelic provides a list of Dashboards, alerts and entities for several Services. The integrations_filter configuration
+    # allows to scrape only the targets having this experience out of the box.
+    # If integrations_filter is enabled, then the jobs scrape merely the targets having one of the specified labels matching
+    # one of the values of app_values.
+    # Under the hood, a relabel_configs with 'action=keep' are generated, consider it in case any custom extra_relabel_config is needed.
+    integrations_filter:
+      # -- enabling the integration filters, merely the targets having one of the specified labels matching
+      #    one of the values of app_values are scraped. Each job configuration can override this default.
+      enabled: true
+      # -- source_labels used to fetch label values in the relabel config added by the integration filters configuration
+      source_labels: ["app.kubernetes.io/name", "app.newrelic.io/name", "k8s-app"]
+      # -- app_values used to create the regex used in the relabel config added by the integration filters configuration.
+      # Note that a single regex will be created from this list, example: '.*(?i)(app1|app2|app3).*'
+      app_values: ["redis", "traefik", "calico", "nginx", "coredns", "kube-dns", "etcd", "cockroachdb", "velero", "harbor", "argocd"]
+
+    # Kubernetes jobs define [kubernetes_sd_configs](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubernetes_sd_config)
+    # to discover and scrape Kubernetes objects. Besides, a set of relabel_configs are included in order to include some Kubernetes metadata as
+    # Labels. For example, address, metrics_path, URL scheme, prometheus_io_parameters, namespace, pod name, service name and labels are taken
+    # to set the corresponding labels.
+    # Please note, the relabeling allows configuring the pod/endpoints scrape using the following annotations:
+    # - `prometheus.io/scheme`: If the metrics endpoint is secured then you will need to set this to `https`
+    # - `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # - `prometheus.io/port`: If the metrics are exposed on a different port to the service for service endpoints or to
+    #   the default 9102 for pods.
+    # - `prometheus.io/param_<param-name>`: To include additional parameters in the scrape URL.
+    jobs:
+    # 'default' scrapes all targets having 'prometheus.io/scrape: true'.
+    # Out of the box, since kubernetes.integrations_filter.enabled=true then only targets selected by the integration filters are considered.
+    - job_name_prefix: default
+      target_discovery:
+        pod: true
+        endpoints: true
+        filter:
+          annotations:
+            prometheus.io/scrape: true
+      # -- integrations_filter configuration for this specific job. It overrides kubernetes.integrations_filter configuration
+      # integrations_filter:
+
+      # 'newrelic' scrapes all targets having 'newrelic.io/scrape: true'.
+      # This is useful to extend the targets scraped by the 'default' job allowlisting services leveraging `newrelic.io/scrape` annotation
+    - job_name_prefix: newrelic
+      integrations_filter:
+        enabled: false
+      target_discovery:
+        pod: true
+        endpoints: true
+        filter:
+          annotations:
+            newrelic.io/scrape: true
+
+    # -- Set up the job name prefix. The final Prometheus `job` name will be composed of <job_name_prefix> + the target discovery kind. ie: `default-pod`
+    # @default -- `""`
+    # - job_name_prefix:
+
+      # -- The target discovery field allows customizing how Kubernetes discovery works.
+      # target_discovery:
+
+        # -- Whether pods should be discovered.
+        # @default -- `false`
+        # pod:
+
+        # -- Whether endpoints should be discovered.
+        # @default -- `false`
+        # endpoints:
+
+        # -- Defines filtering criteria, it is possible to set labels and/or annotations. All filters will apply (defined
+        # filters are taken into account as an "AND operation").
+        # @default -- `{}`
+        # filter:
+          # -- Map of annotations that the targets should have. If only the annotation name is defined, the filter only checks if exists.
+          # @default -- `{}`
+          # annotations:
+
+          # -- Map of labels that the targets should have. If only the label name is defined, the filter only checks if exists.
+          # @default -- `{}`
+          # labels:
+
+      # -- Advanced configs of the Kubernetes service discovery `kuberentes_sd_config` options,
+      # check [prometheus documentation](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubernetes_sd_config) for details.
+      # Notice that using `filter` is the recommended way to filter targets to avoid adding load to the API Server.
+      # additional_config:
+        # kubeconfig_file: ""
+        # namespaces: {}
+        # selectors: {}
+        # attach_metadata: {}
+
+
+    # -- The HTTP resource path on which to fetch metrics from targets.
+    # Use `prometheus.io/path` pod/service annotation to override this or modify it here.
+    # @default -- `/metrics`
+    # metrics_path:
+
+    # -- Optional HTTP URL parameters.
+    # Use `prometheus.io/param_<param-name>` pod/service annotation to include additional parameters in the scrape url or modify it here.
+    # @default -- `{}`
+    # params:
+
+    # -- Configures the protocol scheme used for requests.
+    # Annotate the service/pod with `prometheus.io/scheme=https` if the secured port is used or modify it here.
+    # @default -- `http`
+    # scheme:
+
+    # -- How frequently to scrape targets from this job.
+    # @default -- defined in `common.scrape_interval`
+    # scrape_interval:
+
+    # -- Per-scrape timeout when scraping this job.
+    # @default -- defined in `common.scrape_timeout`
+    # scrape_timeout:
+
+    # -- Configures the scrape request's TLS settings.
+    # @default -- `{}`
+    # tls_config:
+      # -- CA certificate file path to validate API server certificate with.
+      # @default -- `""`
+      # ca_file:
+
+      # -- Certificate and key files path for client cert authentication to the server.
+      # @default -- `""`
+      # cert_file:
+      # key_file:
+
+      # Disable validation of the server certificate.
+      # @default -- `false`
+      # insecure_skip_verify:
+
+    # -- Sets the `Authorization` Bearer token header on every scrape request
+    # @default -- `{}`
+    # authorization:
+      # Sets the credentials to the credentials read from the configured file.
+      # @default -- `""`
+      # credentials_file:
+
+    # -- Sets the `Authorization` header on every scrape request with the configured username and password.
+    # @default -- `{}`
+    # basic_auth:
+      # username:
+      # password_file:
+
+    # -- List of relabeling configurations. Used if needed to add any special filter or label manipulation before the scrape takes place.
+    # @default -- `[]`
+    # extra_relabel_config:
+
+    # -- List of metric relabel configurations. Used it to filter metrics and labels after scrape.
+    # @default -- `[]`
+    # extra_metric_relabel_config:
+
+
+  # -- It allows defining scrape jobs for targets with static URLs.
+  # @default -- See `values.yaml`.
+  static_targets:
+    # -- List of static target jobs. By default, it defines a job to get self-metrics. Please note, if you define `static_target.jobs` and would like to keep
+    # self-metrics you need to include a job like the one defined by default.
+    # @default -- See `values.yaml`.
+    jobs:
+    - job_name: self-metrics
+      skip_sharding: true  # sharding is skipped to obtain self-metrics from all Prometheus servers.
+      targets:
+        - "localhost:9090"
+      extra_metric_relabel_config:
+        - source_labels: [__name__]
+          regex: "\
+            prometheus_agent_active_series|\
+            prometheus_target_interval_length_seconds|\
+            prometheus_target_scrape_pool_targets|\
+            prometheus_remote_storage_samples_pending|\
+            prometheus_remote_storage_samples_in_total|\
+            prometheus_remote_storage_samples_retried_total|\
+            prometheus_agent_corruptions_total|\
+            prometheus_remote_storage_shards|\
+            prometheus_sd_kubernetes_events_total|\
+            prometheus_agent_checkpoint_creations_failed_total|\
+            prometheus_agent_checkpoint_deletions_failed_total|\
+            prometheus_remote_storage_samples_dropped_total|\
+            prometheus_remote_storage_samples_failed_total|\
+            prometheus_sd_kubernetes_http_request_total|\
+            prometheus_agent_truncate_duration_seconds_sum|\
+            prometheus_build_info|\
+            process_resident_memory_bytes|\
+            process_virtual_memory_bytes|\
+            process_cpu_seconds_total"
+          action: keep
+
+    # -- The job name assigned to scraped metrics by default.
+    # @default -- `""`.
+    # - job_name:
+      # -- List of target URLs to be scraped by this job.
+      # @default -- `[]`.
+      # targets:
+
+      # -- Labels assigned to all metrics scraped from the targets.
+      # @default -- `{}`.
+      # labels:
+
+      # -- The HTTP resource path on which to fetch metrics from targets.
+      # @default -- `/metrics`
+      # metrics_path:
+
+      # -- Optional HTTP URL parameters.
+      # @default -- `{}`
+      # params:
+
+      # -- Configures the protocol scheme used for requests.
+      # @default -- `http`
+      # scheme:
+
+      # -- How frequently to scrape targets from this job.
+      # @default -- defined in `common.scrape_interval`
+      # scrape_interval:
+
+      # -- Per-scrape timeout when scraping this job.
+      # @default -- defined in `common.scrape_timeout`
+      # scrape_timeout:
+
+      # -- Configures the scrape request's TLS settings.
+      # @default -- `{}`
+      # tls_config:
+        # -- CA certificate file path to validate API server certificate with.
+        # @default -- `""`
+        # ca_file:
+
+        # -- Certificate and key files path for client cert authentication to the server.
+        # @default -- `""`
+        # cert_file:
+        # key_file:
+
+        # Disable validation of the server certificate.
+        # @default -- `false`
+        # insecure_skip_verify:
+
+      # -- Sets the `Authorization` Bearer token header on every scrape request
+      # @default -- `{}`
+      # authorization:
+        # Sets the credentials to the credentials read from the configured file.
+        # @default -- `""`
+        # credentials_file:
+
+      # -- Sets the `Authorization` header on every scrape request with the configured username and password.
+      # @default -- `{}`
+      # basic_auth:
+        # username:
+        # password_file:
+
+      # -- List of relabeling configurations. Used if needed to add any special filter or label manipulation before the scrape takes place.
+      # @default -- `[]`
+      # extra_relabel_config:
+
+      # -- List of metric relabel configurations. Used it to filter metrics and labels after scrape.
+      # @default -- `[]`
+      # extra_metric_relabel_config:
+
+
+  # -- It is possible to include extra scrape configuration in [prometheus format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config).
+  # Please note, it should be a valid Prometheus configuration which will not be parsed by the chart.
+  # WARNING extra_scrape_configs is a raw Prometheus config. Therefore, the metrics collected thanks to it will not have by default the metadata (pod_name, service_name, ...) added by the configurator for the static or kubernetes jobs.
+  # This configuration should be used as a workaround whenever kubernetes and static job do not cover a particular use-case.
+  # @default -- `[]`
+  extra_scrape_configs: []
