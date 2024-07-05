@@ -1,0 +1,70 @@
+# If the csireverseproxy cert and key are provided, deploy a CA Issuer using the cert and key
+{{- if ne .Values.certManager.selfSignedCert true }}
+apiVersion: v1
+data:
+  tls.crt: {{ .Values.certManager.certificateFile }}
+  tls.key: {{ .Values.certManager.privateKeyFile  }}
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: csirevproxy-tls-secret
+  namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: csirevproxy-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  ca:
+    secretName: csirevproxy-tls-secret
+---
+{{- else }}
+# deploy a selfsigned-issuer
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+
+---
+{{- end }}
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: csirevproxy-tls-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: csirevproxy-tls-secret
+  commonName: powermax-reverseproxy
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d
+  subject:
+    organizations:
+      - dellemc
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - powermax-reverseproxy
+    - powermax-reverseproxy.powermax.svc.cluster.local
+    - reverseproxy
+  issuerRef:
+  {{- if ne .Values.certManager.selfSignedCert true }}
+    name: csirevproxy-issuer
+  {{- else }}
+    name: selfsigned-issuer
+  {{- end }}
+    kind: Issuer
+    group: cert-manager.io
+---
