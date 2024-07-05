@@ -1,0 +1,254 @@
+# Default values for falcon-sensor.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+node:
+  # When enabled, Helm chart deploys the Falcon Sensors to Kubernetes nodes
+  enabled: true
+
+  # Overrides the backend leveraged by the Falcon Sensor (kernel, bpf)
+  backend: kernel
+
+  # Enable for use on Google's GKE Autopilot clusters
+  gke:
+    autopilot: false
+
+  daemonset:
+    # Annotations to apply to the daemonset
+    annotations: {}
+
+    # The key that is used to handle enabling/disabling sensor injection at the pod/node level
+    podAnnotationKey: sensor.falcon-system.crowdstrike.com/injection
+
+    # additionals labels
+    labels: {}
+
+    # Enable the priorityClass creation on chart installation
+    priorityClassCreate: true
+    # Assign a PriorityClassName to pods if set
+    priorityClassName: ""
+    priorityClassValue: 1000000000
+
+    tolerations:
+      # We want to schedule on control plane nodes where they are accessible
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      # Future taint for K8s >=1.24
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "kubernetes.azure.com/scalesetpriority"
+        operator: "Equal"
+        value: "spot"
+        effect: "NoSchedule"
+      # Daemonsets automatically get additional tolerations: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+
+    # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+    # Allow setting additional node selections e.g. processor type
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchExpressions:
+    #       - key: kubernetes.io/arch
+    #         operator: In
+    #         values:
+    #         - amd64
+    nodeAffinity: {}
+
+    # Resource settings that can be set with backend is set to bpf only. Cannot be used when backend is set to kernel.
+    # This will be ignored if backend is set to kernel. Purposefully. The defaults are set to the minimum requirements.
+    # Depending on the size of your cluster and the node types, you may need to increase these values.
+    # resources:
+    #   limits:
+    #     cpu: 250m
+    #     ephemeral-storage: 100Mi
+    #     memory: 500Mi
+    #   requests:
+    #     cpu: 250m
+    #     ephemeral-storage: 100Mi
+    #     memory: 500Mi
+
+    # Update strategy to role out new daemonset configuration to the nodes.
+    updateStrategy: RollingUpdate
+
+    # Sets the max unavailable nodes. Default is 1 when no value exists.
+    maxUnavailable: 1
+
+  image:
+    repository: falcon-node-sensor
+    pullPolicy: Always
+    pullSecrets:
+    # Overrides the image tag. In general, tags should not be used (including semver tags or `latest`). This variable is provided for those
+    # who have yet to move off of using tags. The sha256 digest should be used in place of tags for increased security and image immutability.
+    tag: "latest"
+    # Setting a digest will override any tag and should be used instead of tags.
+    #
+    # Example digest variable configuration:
+    # digest: sha256:ffdc91f66ef8570bd7612cf19145563a787f552656f5eec43cd80ef9caca0398
+    digest:
+
+    # Value must be base64. This setting conflicts with node.image.pullSecrets
+    # The base64 encoded string of the docker config json for the pull secret can be
+    # gotten through:
+    # $ cat ~/.docker/config.json | base64 -
+    registryConfigJSON:
+
+  podAnnotations: {}
+
+  # How long to wait for Falcon pods to stop gracefully
+  terminationGracePeriod: 30
+
+container:
+  # When enabled, Helm chart deploys the Falcon Container Sensor to Pods through Webhooks
+  enabled: false
+
+  # Configure the number of replicas for the mutating webhook backend
+  replicas: 2
+
+  # Configure PodTopologySpread constraints to allow pods run on different nodes
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          crowdstrike.com/component: crowdstrike-falcon-injector
+
+  # Auto update the certificates every time there is an update
+  autoCertificateUpdate: true
+
+  # Update Webhook and roll out new Deployment on upgrade
+  autoDeploymentUpdate: true
+
+  # For AKS without the pulltoken option
+  azure:
+    enabled: false
+
+    # Path to the Kubernetes Azure config file on worker nodes
+    azureConfig: /etc/kubernetes/azure.json
+
+  # GCP GKE workload identity init container
+  gcp:
+    enabled: false
+
+  # Enable Network Policies within the Injector namespace to allow ingress
+  networkPolicy:
+    enabled: false
+
+  # Enable using hostNetwork for the injector pod
+  hostNetwork: false
+
+  # Disable injection for all Namespaces
+  disableNSInjection: false
+
+  # Disable injection for all Pods
+  disablePodInjection: false
+
+  # Certificate validity duration in number of days
+  certExpiration: 3650
+
+  # Configure the Injector Port
+  injectorPort: 4433
+
+  # Configure the requests and limits of the sensor
+  sensorResources:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 10m
+  #   memory: 20Mi
+
+  # For custom DNS configurations when .svc requires a domain for services
+  # For example if service.my-namespace.svc doesn't resolve and the cluster uses
+  # service.my-namespace.svc.testing.io, you would add testing.io as the value below.
+  # Otherwise, keep this blank.
+  domainName:
+
+  # Provide a Secret containing CA certificate files.
+  # All CA certificates need to be a valid secret key, and have the extension ".crt"
+  # Example: kubectl create secret generic external-registry-cas --from-file=/tmp/thawte-Primary-Root-CA.crt --from-file=/tmp/DigiCert-Global-Root-CA.crt
+  #
+  # registryCertSecret: external-registry-cas
+  registryCertSecret:
+
+  # The key that is used to handle enabling/disabling sensor injection at the namespace level
+  namespaceLabelKey: sensor.falcon-system.crowdstrike.com/injection
+
+  image:
+    repository: falcon-sensor
+    pullPolicy: Always
+    # Set to true if connecting to a registry that requires authentication
+    pullSecrets:
+      enable: false
+      name:
+      # Configure the list of namespaces that should have access to pull the Falcon
+      # sensor from a registry that requires authentication. This is a comma separated
+      # list. For example:
+      #
+      # namespaces: ns1,ns2,ns3
+      namespaces:
+
+      # Attempt to create the Falcon sensor pull secret in all Namespaces
+      # instead of using "container.image.pullSecrets.namespaces"
+      allNamespaces: false
+
+      # Value must be base64
+      # The base64 encoded string of the docker config json for the pull secret can be
+      # gotten through:
+      # $ cat ~/.docker/config.json | base64 -
+      registryConfigJSON:
+
+    # Overrides the image tag. In general, tags should not be used (including semver tags or `latest`). This variable is provided for those
+    # who have yet to move off of using tags. The sha256 digest should be used in place of tags for increased security and image immutability.
+    tag: "latest"
+    # Setting a digest will override any tag and should be used instead of tags.
+    #
+    # Example digest variable configuration:
+    # digest: sha256:ffdc91f66ef8570bd7612cf19145563a787f552656f5eec43cd80ef9caca0398
+    digest:
+
+  # Annotations to apply to the injector deployment
+  annotations: {}
+
+  # additionals labels to apply to the injector deployment
+  labels: {}
+
+  # Annotations to apply to the injector deployment
+  podAnnotations: {}
+
+  tolerations: []
+
+  resources:
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 20Mi
+
+serviceAccount:
+  name: crowdstrike-falcon-sa
+  annotations: {}
+
+# Deploys the test suite during install for testing purposes.
+testing:
+  enabled: false
+
+falcon:
+  cid:
+  apd:
+  aph:
+  app:
+  trace: none
+  feature:
+  message_log:
+  billing:
+  tags:
+  provisioning_token:
+
+# Override various naming aspects of this chart
+# Only edit these if you know what you're doing
+nameOverride: ""
+fullnameOverride: ""

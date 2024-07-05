@@ -1,0 +1,292 @@
+{{- if .Values.container.enabled }}
+{{- $name := (printf "%s-injector" (include "falcon-sensor.name" .)) -}}
+{{- $fullName := (printf "%s.%s.svc" $name .Release.Namespace) -}}
+{{- if .Values.container.domainName }}
+{{- $fullName = (printf "%s.%s.svc.%s" $name .Release.Namespace .Values.container.domainName) -}}
+{{- end }}
+{{- $certValid := (.Values.container.certExpiration | int) -}}
+{{- $altNames := list ( printf "%s" $fullName ) ( printf "%s.%s.svc" $name .Release.Namespace ) ( printf "%s.%s.svc.cluster.local" $name .Release.Namespace ) ( printf "%s.%s" $name .Release.Namespace ) ( printf "%s" $name ) -}}
+{{- $ca := genCA ( printf "%s ca" .Release.Namespace ) $certValid -}}
+{{- $cert := genSignedCert $fullName nil $altNames $certValid $ca -}}
+{{- if not .Values.container.autoCertificateUpdate }}
+{{- $tlscrt := (lookup "v1" "Secret" .Release.Namespace (printf "%s-tls" (include "falcon-sensor.name" .))).data -}}
+{{- if kindIs "map" $tlscrt }}
+{{- $cert = dict "Cert" (index $tlscrt "tls.crt" | b64dec ) "Key" (index $tlscrt "tls.key" | b64dec ) -}}
+{{- end }}
+{{- $tlsca := (lookup "admissionregistration.k8s.io/v1" "MutatingWebhookConfiguration" .Release.Namespace $name).webhooks -}}
+{{- if kindIs "slice" $tlsca }}
+{{- range $index, $wca := $tlsca -}}
+  {{- $ca = dict "Cert" ($wca.clientConfig.caBundle | b64dec) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $tlsCert := $cert.Cert | b64enc }}
+{{- $tlsKey := $cert.Key | b64enc }}
+{{- $caCert := $ca.Cert | b64enc }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "falcon-sensor.name" . }}-injector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "falcon-sensor.name" . }}-injector
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "container_sensor"
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+    {{- if .Values.container.labels }}
+    {{- range $key, $value := .Values.container.labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+  {{- if .Values.container.annotations }}
+  annotations:
+    {{- range $key, $value := .Values.container.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.container.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "falcon-sensor.name" . }}-injector
+      app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: "container_sensor"
+      crowdstrike.com/provider: crowdstrike
+  template:
+    metadata:
+      labels:
+        app: {{ include "falcon-sensor.name" . }}-injector
+        app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: "container_sensor"
+        crowdstrike.com/provider: crowdstrike
+        crowdstrike.com/component: crowdstrike-falcon-injector
+        {{- if .Values.container.labels }}
+        {{- range $key, $value := .Values.container.labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        {{- end }}
+    {{- if or (.Values.container.autoDeploymentUpdate) (.Values.container.podAnnotations) }}
+      annotations:
+        {{- if .Values.container.autoDeploymentUpdate }}
+        rollme: {{ randAlphaNum 5 | quote }}
+        {{- end }}
+        {{- if .Values.container.podAnnotations }}
+        {{- range $key, $value := .Values.container.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        {{- end }}
+    {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+      {{- if .Values.container.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.container.topologySpreadConstraints | nindent 6 }}
+      {{- end }}
+      {{- if .Values.container.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+      {{- if .Values.container.image.pullSecrets.enable }}
+      imagePullSecrets:
+        - name: {{ .Values.container.image.pullSecrets.name | default (printf "%s-pull-secret" (include "falcon-sensor.fullname" .)) }}
+      {{- end }}
+      {{- if .Values.container.azure.enabled }}
+      initContainers:
+      - name: {{ include "falcon-sensor.name" . }}-init-container
+        image: "{{ include "falcon-sensor.image" . }}"
+        imagePullPolicy: "{{ .Values.container.image.pullPolicy }}"
+        command: ['bash', '-c', "cp /run/azure.json /tmp/CrowdStrike/; chmod a+r /tmp/CrowdStrike/azure.json"]
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          privileged: false
+        volumeMounts:
+        - name: {{ include "falcon-sensor.name" . }}-volume
+          mountPath: /tmp/CrowdStrike
+        - name: {{ include "falcon-sensor.name" . }}-azure-config
+          mountPath: /run/azure.json
+          readOnly: true
+      {{- end }}
+      {{- if .Values.container.gcp.enabled }}
+      initContainers:
+      - name: {{ include "falcon-sensor.name" . }}-init-container
+        image: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+        imagePullPolicy: "Always"
+        command:
+        - '/bin/bash'
+        - '-c'
+        - |
+          curl -sS -H 'Metadata-Flavor: Google' 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' --retry 30 --retry-connrefused --retry-max-time 60 --connect-timeout 3 --fail --retry-all-errors > /dev/null && exit 0 || echo 'Retry limit exceeded. Failed to wait for metadata server to be available. Check if the gke-metadata-server Pod in the kube-system namespace is healthy.' >&2; exit 1
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          privileged: false
+      {{- end }}
+      containers:
+      - name: {{ include "falcon-sensor.name" . }}-injector
+        image: "{{ include "falcon-sensor.image" . }}"
+        imagePullPolicy: "{{ .Values.container.image.pullPolicy }}"
+        command: ["injector"]
+        envFrom:
+        - configMapRef:
+            name: {{ include "falcon-sensor.fullname" . }}-config
+        ports:
+        - name: https
+          containerPort: {{ .Values.container.injectorPort }}
+        volumeMounts:
+        - name: {{ include "falcon-sensor.name" . }}-tls-certs
+          mountPath: /run/secrets/tls
+          readOnly: true
+        {{- if or (.Files.Glob "certs/*.crt") (.Values.container.registryCertSecret) }}
+        - name: {{ include "falcon-sensor.name" . }}-registry-certs
+          mountPath: /etc/docker/certs.d/{{ .Release.Namespace }}-certs
+          readOnly: true
+        {{- end }}
+        {{- if .Values.container.azure.enabled }}
+        - name: {{ include "falcon-sensor.name" . }}-volume
+          mountPath: /tmp/CrowdStrike
+          readOnly: true
+        {{- end }}
+        readinessProbe:
+          httpGet:
+            path: /live
+            port: {{ .Values.container.injectorPort }}
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: {{ .Values.container.injectorPort }}
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+    {{- if .Values.container.tolerations }}
+      tolerations:
+      {{- with .Values.container.tolerations }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+    {{- end }}
+      volumes:
+      - name: {{ include "falcon-sensor.name" . }}-tls-certs
+        secret:
+          secretName: {{ include "falcon-sensor.name" . }}-tls
+      {{- if (.Files.Glob "certs/*.crt") }}
+      - name: {{ include "falcon-sensor.name" . }}-registry-certs
+        configMap:
+          name: {{ include "falcon-sensor.name" . }}-registry-certs-config
+      {{- else if .Values.container.registryCertSecret }}
+      - name: {{ include "falcon-sensor.name" . }}-registry-certs
+        secret:
+          secretName: {{ .Values.container.registryCertSecret }}
+      {{- end }}
+      {{- if .Values.container.azure.enabled }}
+      - emptyDir: {}
+        name: {{ include "falcon-sensor.name" . }}-volume
+      - name: {{ include "falcon-sensor.name" . }}-azure-config
+        hostPath:
+          path: {{ .Values.container.azure.azureConfig }}
+          type: File
+      {{- end }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "falcon-sensor.name" . }}-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "container_sensor"
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+type: Opaque
+data:
+  tls.crt: {{ $tlsCert }}
+  tls.key: {{ $tlsKey }}
+  ca.crt: {{ $caCert }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "falcon-sensor.name" . }}-injector
+  labels:
+    app: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "container_sensor"
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+webhooks:
+  - name: {{ $name }}.{{ .Release.Namespace }}.svc
+    admissionReviewVersions:
+      - v1
+    {{- if lt (int (semver .Capabilities.KubeVersion.Version).Minor) 22 }}
+      - v1beta1
+    {{- end }}
+    sideEffects: None
+    namespaceSelector:
+      matchExpressions:
+      - key: {{ .Values.container.namespaceLabelKey }}
+        operator: {{ if .Values.container.disableNSInjection }}In{{ else }}NotIn{{- end }}
+        values:
+          - {{ if .Values.container.disableNSInjection }}enabled{{ else }}disabled{{- end }}
+    {{- if lt (int (semver .Capabilities.KubeVersion.Version).Minor) 22 }}
+      - key: "name"
+    {{- else }}
+      - key: kubernetes.io/metadata.name
+    {{- end }}
+        operator: "NotIn"
+        values:
+        - {{ .Release.Namespace }}
+        - kube-system
+        - kube-public
+    clientConfig:
+      {{- if .Values.container.domainName }}
+      url: https://{{ $fullName }}:443/mutate
+      {{- else }}
+      service:
+        name: {{ include "falcon-sensor.name" . }}-injector
+        namespace: {{ .Release.Namespace }}
+        path: "/mutate"
+      {{- end }}
+      caBundle: {{ $caCert }}
+    failurePolicy: Fail
+    rules:
+      - operations:
+          - CREATE
+        apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        resources:
+          - pods
+    timeoutSeconds: 30
+{{- end }}
