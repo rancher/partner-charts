@@ -1,0 +1,38 @@
+
+
+--------------------------------------------------
+{{- $isEKS := (regexMatch ".*eks.*" (.Capabilities.KubeVersion | quote) )}}
+{{- $isGT22 := (semverCompare ">=1.23-0" .Capabilities.KubeVersion.GitVersion) }}
+{{- $PVNotExists := (empty (lookup "v1" "PersistentVolume" "" "")) }}
+{{- $EBSCSINotExists := (empty (lookup "apps/v1" "Deployment" "kube-system" "ebs-csi-controller")) }}
+
+{{- $servicePort := .Values.service.port | default 9090 }}
+Kubecost {{ .Chart.Version }} has been successfully installed.
+
+{{ if (and $isEKS $isGT22) -}}
+
+WARNING: ON EKS v1.23+ INSTALLATION OF EBS-CSI DRIVER IS REQUIRED TO MANAGE PERSISTENT VOLUMES. LEARN MORE HERE: https://docs.kubecost.com/install-and-configure/install/provider-installations/aws-eks-cost-monitoring#prerequisites
+
+{{ if (and $EBSCSINotExists $PVNotExists) -}}
+
+ERROR: MISSING EBS-CSI DRIVER WHICH IS REQUIRED ON EKS v1.23+ TO MANAGE PERSISTENT VOLUMES. LEARN MORE HERE: https://docs.kubecost.com/install-and-configure/install/provider-installations/aws-eks-cost-monitoring#prerequisites
+
+{{ else if (and $EBSCSINotExists (not $PVNotExists)) -}}
+
+ERROR: MISSING EBS-CSI DRIVER WHICH IS REQUIRED ON EKS v1.23+ TO MANAGE PERSISTENT VOLUMES. LEARN MORE HERE: https://docs.kubecost.com/install-and-configure/install/provider-installations/aws-eks-cost-monitoring#prerequisites
+
+{{ end -}}
+{{ end -}}
+
+
+Please allow 5-10 minutes for Kubecost to gather metrics.
+
+When configured, cost reconciliation with cloud provider billing data will have a 48 hour delay.
+
+When pods are Ready, you can enable port-forwarding with the following command:
+
+    kubectl port-forward --namespace {{ .Release.Namespace }} deployment/{{ template "cost-analyzer.fullname" . }} {{ $servicePort }}
+
+Then, navigate to http://localhost:{{ $servicePort }} in a web browser.
+
+Having installation issues? View our Troubleshooting Guide at http://docs.kubecost.com/troubleshoot-install
