@@ -1,0 +1,80 @@
+{{- if .Values.audit.enable -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- with .Values.config }}
+  annotations:
+    checksum/config: '{{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}'
+  {{- end }}
+  name: {{ include "polaris.fullname" . }}
+  {{- if .Values.templateOnly }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "polaris.labels" . | nindent 4 }}
+    component: audit
+spec:
+  template:
+    spec:
+      serviceAccountName: {{ include "polaris.fullname" . }}
+      restartPolicy: Never
+      containers:
+      - command:
+        - polaris
+        - audit
+        - --output-url
+        - {{ required "Must set audit.outputURL in values if you enable the audit job." .Values.audit.outputURL }}
+        - --output-file
+        - /tmp/results/done
+        {{- with .Values.config }}
+        - --config
+        - /opt/app/config.yaml
+        {{- end }}
+        image: '{{.Values.image.repository}}:{{ .Values.image.tag | default .Chart.AppVersion }}'
+        imagePullPolicy: '{{.Values.image.pullPolicy}}'
+        name: audit
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        {{- with .Values.config }}
+        - name: config
+          mountPath: /opt/app/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        {{- end }}
+        - name: results
+          mountPath: /tmp/results
+      {{- if .Values.audit.cleanup }}
+      - name: cleanup
+        image: gcr.io/heptio-images/namespace-deleter:v0.0.2
+        imagePullPolicy: Always
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: results
+          mountPath: /tmp/results
+      {{- end }}
+      volumes:
+      {{- with .Values.config }}
+      - name: config
+        configMap:
+          name: {{ include "polaris.fullname" . }}
+      {{- end }}
+      - name: results
+{{- end -}}

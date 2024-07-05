@@ -1,0 +1,132 @@
+{{- if .Values.webhook.enable -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "polaris.fullname" . }}-webhook
+  {{- if .Values.templateOnly }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "polaris.labels" . | nindent 4 }}
+    component: webhook
+spec:
+  replicas: {{ .Values.webhook.replicas }}
+  selector:
+    matchLabels:
+      {{- include "polaris.selectors" . | nindent 6 }}
+      component: webhook
+  template:
+    metadata:
+      {{- with .Values.config }}
+      annotations:
+        checksum/config: '{{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}'
+      {{- end }}
+      labels:
+        {{- include "polaris.selectors" . | nindent 8 }}
+        component: webhook
+        {{- with .Values.webhook.podAdditionalLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+        - name: webhook
+          command:
+            - polaris
+            - webhook
+            {{- with .Values.config }}
+            - --config
+            - /opt/app/config.yaml
+            {{- end }}
+            {{- if .Values.webhook.disallowExemptions }}
+            - --disallow-exemptions
+            {{- end }}
+            {{- if .Values.webhook.disallowConfigExemptions }}
+            - --disallow-config-exemptions
+            {{- end }}
+            {{- if .Values.webhook.disallowAnnotationExemptions }}
+            - --disallow-annotation-exemptions
+            {{- end }}
+            - --validate={{ .Values.webhook.validate }}
+            - --mutate={{ .Values.webhook.mutate }}
+          image: '{{.Values.image.repository}}:{{.Values.image.tag | default .Chart.AppVersion }}'
+          imagePullPolicy: '{{.Values.image.pullPolicy}}'
+          ports:
+            - containerPort: 9876
+          # These are fairly useless readiness/liveness probes for now
+          # Follow this issue for potential improvements:
+          # https://github.com/kubernetes-sigs/controller-runtime/issues/356
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - ps -ef | grep polaris
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - ps -ef | grep polaris
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.webhook.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            {{- with .Values.config }}
+            - name: config
+              mountPath: /opt/app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            {{- end }}
+            - name: secret
+              mountPath: /opt/cert/
+              readOnly: true
+            - name: cr-logs
+              mountPath: /tmp/
+              readOnly: false
+      serviceAccountName:  {{ include "polaris.fullname" . }}
+      {{- if .Values.webhook.priorityClassName }}
+      priorityClassName: {{ .Values.webhook.priorityClassName | quote }}
+      {{- end }}
+      nodeSelector:
+      {{- with .Values.webhook.nodeSelector }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+      tolerations:
+      {{- with .Values.webhook.tolerations }}
+{{ toYaml . | indent 6 }}
+      {{- end }}
+{{- if .Values.webhook.affinity }}
+      affinity:
+{{ toYaml .Values.webhook.affinity | indent 8 }}
+{{- end }}
+{{- if .Values.webhook.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.webhook.topologySpreadConstraints | indent 6 }}
+      {{- end }}
+      volumes:
+        {{- with .Values.config }}
+        - name: config
+          configMap:
+            name: {{ include "polaris.fullname" $ }}
+        {{- end }}
+        - name: secret
+          secret:
+            {{- with .Values.webhook.secretName }}
+            secretName: {{ . }}
+            {{- else }}
+            secretName: {{ include "polaris.fullname" . }}
+            {{- end }}
+        - name: cr-logs
+          emptyDir: {}
+{{- end -}}

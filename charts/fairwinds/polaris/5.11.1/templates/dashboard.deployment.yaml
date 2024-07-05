@@ -1,0 +1,130 @@
+{{- if .Values.dashboard.enable -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "polaris.fullname" . }}-dashboard
+  {{- if .Values.templateOnly }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "polaris.labels" . | nindent 4 }}
+    component: dashboard
+spec:
+  replicas: {{.Values.dashboard.replicas}}
+  selector:
+    matchLabels:
+      {{- include "polaris.selectors" . | nindent 6 }}
+      component: dashboard
+  template:
+    metadata:
+      {{- with .Values.config }}
+      annotations:
+        checksum/config: '{{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}'
+      {{- end }}
+      labels:
+        {{- include "polaris.selectors" . | nindent 8 }}
+        component: dashboard
+        {{- with .Values.dashboard.podAdditionalLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.config }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "polaris.fullname" $ }}
+      {{- end }}
+      {{- if .Values.dashboard.priorityClassName }}
+      priorityClassName: {{ .Values.dashboard.priorityClassName | quote }}
+      {{- end }}
+      containers:
+      - command:
+        - polaris
+        - dashboard
+        {{- if .Values.configUrl }}
+        - --config
+        - {{ .Values.configUrl | quote }}
+        {{- else }}
+        {{- with .Values.config }}
+        - --config
+        - /opt/app/config.yaml
+        {{- end }}
+        {{- end }}
+        {{- with .Values.dashboard.basePath }}
+        - --base-path
+        - {{ . }}
+        {{- end }}
+        {{- with .Values.dashboard.port }}
+        - --port
+        - {{ . | quote }}
+        {{- end }}
+        {{- if .Values.dashboard.listeningAddress }}
+        - --listening-address
+        - {{ .Values.dashboard.listeningAddress }}
+        {{- end }}
+        {{- if .Values.dashboard.disallowExemptions }}
+        - --disallow-exemptions
+        {{- end }}
+        {{- if .Values.dashboard.disallowConfigExemptions }}
+        - --disallow-config-exemptions
+        {{- end }}
+        {{- if .Values.dashboard.disallowAnnotationExemptions }}
+        - --disallow-annotation-exemptions
+        {{- end }}
+        {{- if .Values.dashboard.logLevel }}
+        - --log-level
+        - {{ .Values.dashboard.logLevel | quote }}
+        {{- end }}
+        image: '{{.Values.image.repository}}:{{.Values.image.tag | default .Chart.AppVersion }}'
+        imagePullPolicy: '{{.Values.image.pullPolicy}}'
+        name: dashboard
+        ports:
+        - containerPort: {{ .Values.dashboard.port }}
+        livenessProbe:
+          httpGet:
+            path: {{.Values.dashboard.basePath | default "/" }}health
+            port: {{ .Values.dashboard.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: {{.Values.dashboard.basePath | default "/" }}health
+            port: {{ .Values.dashboard.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 20
+        resources:
+          {{- toYaml .Values.dashboard.resources | nindent 10 }}
+        {{- with .Values.dashboard.containerSecurityContext }}
+        securityContext:
+        {{- toYaml . | nindent 12 }}
+        {{- end }}                 
+        {{- if not .Values.configUrl }}
+        {{- with .Values.config }}
+        volumeMounts:
+        - name: config
+          mountPath: /opt/app/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        {{- end }}
+        {{- end }}
+      {{- with .Values.dashboard.extraContainers }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      serviceAccountName: {{ template "polaris.serviceAccountName" . }}
+      nodeSelector:
+      {{- with .Values.dashboard.nodeSelector }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+      tolerations:
+      {{- with .Values.dashboard.tolerations }}
+{{ toYaml . | indent 6 }}
+      {{- end }}
+{{- if .Values.dashboard.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.dashboard.topologySpreadConstraints | indent 6 }}
+      {{- end }}
+{{- if .Values.dashboard.affinity }}
+      affinity:
+{{ toYaml .Values.dashboard.affinity | indent 8 }}
+{{- end }}
+{{- end -}}
