@@ -1,0 +1,304 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller  
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+{{- if .Values.podmon.enabled }}
+    verbs: ["get", "list", "watch", "patch"]
+{{- else }}
+    verbs: ["get", "list", "watch"]
+{{- end }}
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete", "update","patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+{{- if .Values.podmon.enabled }}
+    verbs: ["get", "list", "watch", "update", "patch", "delete"]
+{{- else }}
+    verbs: ["get", "list", "watch", "update","patch"]
+{{- end }}
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodeinfos"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+{{- if .Values.podmon.enabled }}
+    verbs: ["get", "list", "watch", "update", "delete"]
+{{- else }}
+    verbs: ["get", "list", "watch"]
+{{- end }}
+# below for snapshotter
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create", "get", "list", "watch", "update", "delete", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots/status"]
+    verbs: ["update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create", "list", "watch", "delete"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update", "patch"]
+  # below for resizer
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+{{ $releaseName := .Release.Name }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if lt (.Values.controller.controllerCount | toString | atoi ) 1 -}}
+  {{- fail "value for .Values.controller.controllerCount should be atleast 1" }}
+  {{- else }}
+  replicas: {{ required "Must provide the number of controller instances to create." .Values.controller.controllerCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-controller
+    spec:
+      serviceAccountName: {{ .Release.Name }}-controller
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - {{ .Release.Name }}-controller
+            topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.controller.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.controller.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.tolerations }}
+      tolerations:
+      {{- toYaml .Values.controller.tolerations | nindent 6 }}
+      {{- end }}
+      containers:
+{{- if .Values.podmon.enabled }}
+        - name: podmon
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          args:
+            {{- toYaml .Values.podmon.controller.args | nindent 12 }}
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: unity-config
+              mountPath: /unity-config
+{{- end }}
+        - name: attacher
+          image: {{ required "Must provide the CSI attacher container image." ( include "csi-unity.attacherImage" . ) }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        - name: provisioner
+          image: {{ required "Must provide the CSI provisioner container image." ( include "csi-unity.provisionerImage" . ) }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--volume-name-prefix={{ required "Must provide a Volume Name Prefix." .Values.controller.volumeNamePrefix }}"
+            - "--volume-name-uuid-length=10"
+            - "--timeout=180s"
+            - "--worker-threads=6"
+            - "--v=5"
+            - "--feature-gates=Topology=true"
+            - "--strict-topology=true"
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+            - "--default-fstype={{ .Values.defaultFsType | default "ext4" }}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- if hasKey .Values.controller "snapshot" }}
+        {{- if eq .Values.controller.snapshot.enabled true }}
+        - name: snapshotter
+          image: {{ required "Must provide the CSI snapshotter container image. " ( include "csi-unity.snapshotterImage" . ) }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--snapshot-name-prefix={{ required "Must privided a Snapshot Name Prefix" .Values.controller.snapshot.snapNamePrefix }}"
+            - "--snapshot-name-uuid-length=10"
+            - "--timeout=360s"
+            - "--v=5"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end}}
+        {{- end}}
+        {{- if hasKey .Values.controller "resizer" }}
+        {{- if eq .Values.controller.resizer.enabled true }}
+        - name: resizer
+          image: {{ required "Must provide the CSI resizer container image." ( include "csi-unity.resizerImage" . ) }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{ end }}
+        {{ end }}
+        {{- if hasKey .Values.controller "healthMonitor" }}
+        {{- if eq .Values.controller.healthMonitor.enabled true }}
+        - name: csi-external-health-monitor-controller
+          image: {{ required "Must provide the CSI external health monitor image." ( include "csi-unity.healthmonitorImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--http-endpoint=:8080"
+            - "--enable-node-watcher=true"
+            - "--monitor-interval={{ .Values.controller.healthMonitor.interval | default "60s" }}"
+            - "--timeout=180s"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        - name: driver
+          image: "{{ required "Must provide the driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}"
+          args:
+            - "--driver-name=csi-unity.dellemc.com"
+            - "--driver-config=/unity-config/driver-config-params.yaml"
+            - "--driver-secret=/unity-secret/config"
+            - "--leader-election"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: CSI_ENDPOINT
+              value: /var/run/csi/csi.sock
+            - name: X_CSI_MODE
+              value: controller
+            - name: X_CSI_UNITY_AUTOPROBE
+              value: "true"
+            - name: SSL_CERT_DIR
+              value: /certs
+            {{- if hasKey .Values.controller "healthMonitor" }}
+            {{- if eq .Values.controller.healthMonitor.enabled true }}
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.controller.healthMonitor.enabled }}"
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            - name: unity-config
+              mountPath: /unity-config
+            - name: unity-secret
+              mountPath: /unity-secret
+      volumes:
+        - name: certs
+          projected:
+            sources:
+{{- range $i, $e := until (int .Values.certSecretCount ) }}
+              - secret:
+                  name: {{ print $releaseName "-certs-" $e }}
+                  items:
+                    - key: cert-{{ $e }}
+                      path: cert-{{ $e }}
+{{- end }}
+        - name: socket-dir
+          emptyDir:
+        - name: unity-config
+          configMap:
+              name: {{ .Release.Name }}-config-params
+        - name: unity-secret
+          secret:
+              secretName: {{ .Release.Name }}-creds
