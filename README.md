@@ -3,7 +3,7 @@
 Rancher Partner Charts is a collection of Helm charts from SUSE partners that
 are certified to run on Rancher-supported Kubernetes distributions. These charts
 are served from this repository so that users can deploy these charts directly
-from the Apps view in Rancher.
+from the Apps view in Rancher Manager.
 
 Rancher-specific modifications are applied to these charts, and overlay files
 may be added as well. 
@@ -35,10 +35,10 @@ To certify your software, you need to attest that the software:
 Once your software is certified SUSE "Ready", there are a few more requirements
 for inclusion in Rancher Partner charts. The Helm chart must:
 
-* be Helm 3 compatible.
+* be Helm 3 compatible
 * be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/)
-  (recommended) or Git repository that we can reference.
-* have the following Rancher specific add-ons (More details on this below).
+  (recommended) or Git repository that we can reference
+* have the following Rancher specific add-ons (More details on this below)
     * kubeVersion set in the chart's metadata
     * app-readme.md
     * questions.yml (Optional)
