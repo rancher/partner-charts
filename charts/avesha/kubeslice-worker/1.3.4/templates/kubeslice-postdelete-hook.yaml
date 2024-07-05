@@ -1,0 +1,142 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeslice-postdelete-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote}}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "1"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeslice-postdelete-job
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "-1"
+  labels:
+    app.kubernetes.io/name: kubeslice
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeslice-postdelete-job
+subjects:
+  - kind: ServiceAccount
+    name: kubeslice-postdelete-job
+    namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeslice-postdelete-job
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "-1"
+  labels:
+    app.kubernetes.io/name: kubeslice
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - namespaces
+    verbs:
+      - get
+      - list
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["list", "delete"]
+  - apiGroups: ["spire.spiffe.io"]
+    resources: ["clusterspiffeids"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["spire.spiffe.io"]
+    resources: ["clusterspiffeids/status"]
+    verbs: ["get", "patch", "update"]
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeslice-postdelete-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "1"
+data:
+  kubeslice-cleanup.sh: |-
+    #!/usr/bin/env bash
+    NAMESPACES=(spire kubeslice-system)
+    for ns in ${NAMESPACES[@]}
+    do
+      kubectl get ns $ns -o name  
+      if [[ $? -eq 1 ]]; then
+          echo "$ns namespace was deleted successfully"
+          continue
+      fi
+      echo "finding and removing spiffeids in namespace $ns ..."
+      for item in $(kubectl get clusterspiffeids.spire.spiffe.io -n $ns -o name); do
+        echo "removing item $item"
+        kubectl patch $item -p '{"metadata":{"finalizers":null}}' --type=merge -n $ns
+        kubectl delete $item --ignore-not-found -n $ns
+      done
+    done
+    echo "Deleting services from kubeslice-system namespace"
+    kubectl delete svc --all --ignore-not-found -n kubeslice-system
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kubeslice-postdelete-job
+  namespace:  {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "2"
+  labels:
+    app.kubernetes.io/name: nsm
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: kubeslice-postdelete-job
+      namespace: {{ .Release.Namespace }}
+    spec:
+      serviceAccountName: kubeslice-postdelete-job
+      containers:
+        - name: kubectl
+          image: "alpine/k8s:1.22.9"
+          command:
+            - /bin/bash
+            - /tmp/kubeslice-cleanup.sh
+          volumeMounts:
+            - mountPath: /tmp
+              name: kubeslice-cleanup
+      volumes:
+        - name: kubeslice-cleanup
+          configMap:
+            name: kubeslice-postdelete-job
+      restartPolicy: OnFailure

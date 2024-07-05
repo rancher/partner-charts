@@ -1,0 +1,71 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server
+  namespace: spire
+  labels:
+    app: spire-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spire-server
+  serviceName: spire-server
+  template:
+    metadata:
+      namespace: spire
+      labels:
+        app: spire-server
+    spec:
+      serviceAccountName: spire-server
+      shareProcessNamespace: true
+      containers:
+        - name: spire-server
+          image: {{ .Values.spireServer.imageRegistry }}:{{ .Values.spireServer.imageTag }}
+          args:
+            - -config
+            - /run/spire/config/server.conf
+          ports:
+            - containerPort: 8081
+          volumeMounts:
+            - name: spire-config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: spire-server-socket
+              mountPath: /tmp/spire-server/private
+          livenessProbe:
+            exec:
+              command:
+                - /opt/spire/bin/spire-server
+                - healthcheck
+            failureThreshold: 2
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 3
+          readinessProbe:
+            exec:
+              command: ["/opt/spire/bin/spire-server", "healthcheck", "--shallow"]
+        - name: spire-controller-manager
+          image: ghcr.io/spiffe/spire-controller-manager:0.2.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9443
+          args:
+            - "--config=spire-controller-manager-config.yaml"
+          volumeMounts:
+            - mountPath: /run/spire/sockets
+              name: spire-server-socket
+              readOnly: true
+            - name: spire-controller-manager-config
+              mountPath: /spire-controller-manager-config.yaml
+              subPath: spire-controller-manager-config.yaml
+      volumes:
+        - name: spire-config
+          configMap:
+            name: spire-server
+        - name: spire-server-socket
+          emptyDir: {}
+        - name: spire-controller-manager-config
+          configMap:
+            name: spire-controller-manager-config
