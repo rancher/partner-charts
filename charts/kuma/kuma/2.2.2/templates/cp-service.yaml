@@ -1,0 +1,43 @@
+{{ if .Values.controlPlane.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kuma.controlPlane.serviceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{ include "kuma.cpLabels" . | nindent 4 }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5680"
+    {{- range $key, $value := .Values.controlPlane.service.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  type: {{ .Values.controlPlane.service.type }}
+  ports:
+    - port: 5680
+      name: diagnostics
+      appProtocol: http
+    - port: 5681
+      name: http-api-server
+      appProtocol: http
+    - port: 5682
+      name: https-api-server
+      appProtocol: http
+    {{- if ne .Values.controlPlane.environment "universal" }}
+    - port: 443
+      name: https-admission-server
+      targetPort: {{ .Values.controlPlane.admissionServerPort | default "5443" }}
+      appProtocol: http
+    {{- end }}
+    {{- if ne .Values.controlPlane.mode "global" }}
+    - port: 5676
+      name: mads-server
+      appProtocol: http
+    - port: 5678
+      name: dp-server
+      appProtocol: http
+    {{- end }}
+  selector:
+    app: {{ include "kuma.name" . }}-control-plane
+  {{- include "kuma.selectorLabels" . | nindent 4 }}
+{{ end }}
