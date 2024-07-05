@@ -1,0 +1,1121 @@
+## Global parameters
+##
+## This will override any available parameters in this chart
+## as well as dependent charts
+##
+## Current available global parameters: storageClass, secureCookie
+##
+global:
+  storageClass: ""
+  # set to true if oauth is configured on Asserts and exclusively using https
+  secureCookie: false
+
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: svc.cluster.local
+
+rbac:
+  ## Namespaced role and rolebinding
+  ## to allow for get/list/watch of
+  ## pod, endpoints, and services in the
+  ## installed {{.Release.Namespace}}
+  create: true
+  annotations: {}
+  extraLabels: {}
+
+## ServiceAccount configuration
+##
+serviceAccount:
+  create: true
+  ## name of the service account to use.
+  ## note that the values in this file assume all the service
+  ## accounts for dependent charts are using the "asserts"
+  ## service account. This is here for completness and potential
+  ## future changes.
+  name: ""
+  imagePullSecrets: []
+  annotations: {}
+  extraLabels: {}
+
+## ServiceMonitor configuration
+##
+## If Asserts is being installed in the same cluster you are running Prometheus-Operator
+## set this to true and .Values.selfScrape: false
+##
+serviceMonitor:
+  enabled: false
+  # endpoints and appropriate relabelings
+  # used to avoid duplicates this allows us to
+  # avoid errors and keep everything in one ServiceMonitor
+  endpoints:
+    - port: http
+      path: /api-server/actuator/prometheus
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-server"
+          action: keep
+    - port: http
+      path: /authorization/actuator/prometheus
+      relabelings:
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-authorization"
+          action: keep
+    - port: http
+      path: /metrics
+      relabelings:
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-server"
+          action: drop
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-authorization"
+          action: drop
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-ui"
+          action: drop
+        - sourceLabels: [job]
+          regex: "{{.Release.Name}}-alertmanager-headless"
+          action: drop
+    - port: http-metrics
+      path: /metrics
+  # Use if you need to add a label that matches
+  # your prometheus-operator serviceMonitorSelector (e.g. release: kube-prometheus-stack)
+  extraLabels: {}
+
+## Asserts self scrape
+##
+## When this is set to true, the Asserts Tsdb will scrape
+## all of the Asserts Services independent of your Prometheus.
+##
+selfScrape: true
+
+## Asserts License File Secret
+##
+## When this is set, Asserts is assumed to be running
+## in airgapped mode. This references a Secret in the cluster
+## which contains the license file to be mounted
+##
+## to create the secret run this before setting licenseFileSecret and installing:
+##
+## kubectl create secret generic asserts-license --from-file=AssertsActivationFile.skm
+##
+licenseFileSecret: ""
+
+## Asserts Url
+##
+## Used to configure where your notifications
+## will link back to in Asserts (see /config/alertmanager-configmap.yaml )
+## If setting ui.ingress.enabled: true (similarly a node ip if using NodePort)
+## should match the hostname used in addtion to
+## adding the desired scheme (http/https)
+##
+## If unset, leave the url like this as opposed to empty
+## as it will work when using port-forwarding.
+##
+assertsUrl: http://localhost:8080
+
+## Receiver configuration
+## the notification receiver (e.g. slack, pagerduty, etc..)
+## wait times/intervals
+##
+receiver:
+  group_wait: 1m
+  group_interval: 15m
+  repeat_interval: 30m
+
+## Slack configuration
+## template is generated from alertmanager-templates/_slack.tpl
+## when slack is enabled
+##
+slack:
+  enabled: false
+  # api_url: https://hooks.slack.com/some-url
+  # channel: "#alerts"
+
+## PagerDuty configuration
+## template is generated from alertmanager-templates/_pagerduty.tpl
+## when pagerduty is enabled
+##
+## ref: https://www.pagerduty.com/docs/guides/prometheus-integration-guide/
+pagerduty:
+  enabled: false
+  # routing_key: <your-events-api-v2-integration-key>
+  # url: https://events.pagerduty.com/v2/enqueue
+
+
+## Asserts server configuration
+##
+server:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  replicaCount: 1
+
+  image:
+    repository: asserts/asserts-server
+    pullPolicy: IfNotPresent
+    ## Overrides the image tag whose default is the chart appVersion.
+    tag: v0.2.733
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 768Mi
+
+  initContainers:
+    - name: wait-for-postgres
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Values.postgres.fullnameOverride}}.{{.Release.Namespace}}.{{.Values.clusterDomain}}:5432"
+        - "-t"
+        - "420"
+    - name: wait-for-redisgraph
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{include \"asserts.redisgraphServiceEndpoint\" .}}"
+        - "-t"
+        - "420"
+    - name: wait-for-redisearch
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{include \"asserts.redisearchServiceEndpoint\" .}}"
+        - "-t"
+        - "420"
+
+  imagePullSecrets: []
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {}
+
+  service:
+    type: ClusterIP
+    port: 8030
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{.Values.server.service.port}}"
+      prometheus.io/path: "/api-server/actuator/prometheus"
+
+  ## wait 30 seconds before pod termination
+  ## to allow application shut down
+  ## ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle
+  terminationGracePeriodSeconds: 30
+
+  ## environment variables to add to the asserts-server pod
+  extraEnv: []
+
+  ## environment variables from secrets or configmaps to add to the asserts-server pod
+  extraEnvFrom: []
+
+  annotations: {}
+
+  extraLabels: {}
+
+  extraPodLabels: {}
+
+  extraPodAnnotations: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  extraContainers: []
+
+  extraVolumeMounts: []
+
+  extraVolumes: []
+
+  graphRetentionDays: 30
+  dataPath: /opt/asserts/data
+
+  persistence:
+    enabled: true
+
+    ## Persistent Volume storage class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is set, choosing the default provisioner
+    storageClass: ""
+
+    ## Persistent Volume access modes
+    accessModes:
+      - ReadWriteOnce
+
+    ## Persistent Volume size
+    size: 8Gi
+
+    ## When set, will use the existing PVC for persistence
+    existingClaim: ""
+
+  awsExporterEnabled: false
+
+## Asserts authorization server configuration
+##
+authorization:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  replicaCount: 1
+
+  image:
+    repository: asserts/authorization
+    pullPolicy: IfNotPresent
+    ## Overrides the image tag whose default is the chart appVersion.
+    tag: v0.2.733
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 512Mi
+
+  initContainers:
+    - name: wait-for-postgres
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Values.postgres.fullnameOverride}}.{{.Release.Namespace}}.{{.Values.clusterDomain}}:5432"
+        - "-t"
+        - "420"
+
+  imagePullSecrets: []
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {}
+
+  service:
+    type: ClusterIP
+    port: 8070
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{.Values.authorization.service.port}}"
+      prometheus.io/path: "/authorization/actuator/prometheus"
+
+  ## environment variables to add to the asserts-server pod
+  extraEnv: []
+
+  ## environment variables from secrets or configmaps to add to the asserts-server pod
+  extraEnvFrom: []
+
+  annotations: {}
+
+  extraLabels: {}
+
+  extraPodLabels: {}
+
+  extraPodAnnotations: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  extraVolumeMounts: []
+
+  extraVolumes: []
+
+## Asserts ui configuration
+##
+ui:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  replicaCount: 1
+
+  image:
+    repository: asserts/asserts-ui
+    pullPolicy: IfNotPresent
+    ## Overrides the image tag whose default is the chart appVersion.
+    tag: v0.1.1280
+
+  imagePullSecrets: []
+
+  containerPort: 8080
+
+  service:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+    clusterIP: ""
+
+    ## List of IP addresses at which the Prometheus server service is available
+    ## Ref: https://kubernetes.io/docs/user-guide/services/#external-ips
+    ##
+    externalIPs: []
+    loadBalancerIP: ""
+    loadBalancerSourceRanges: []
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 128Mi
+
+  ingress:
+    enabled: false
+
+    ## For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+    ## See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+    # ingressClassName: nginx
+
+    annotations: {}
+
+    extraLabels: {}
+
+    hosts: []
+    #   - asserts-ui.domain.com
+
+    path: /
+
+    ## pathType is only for k8s >= 1.18
+    pathType: Prefix
+
+    ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
+    extraPaths: []
+    # - path: /
+    #   backend:
+    #     serviceName: ssl-redirect
+    #     servicePort: use-annotation
+
+    tls: []
+    #   - secretName: asserts-ui-tls
+    #     hosts:
+    #       - asserts-ui.domain.com
+
+  annotations: {}
+
+  ## environment variables to add to the asserts-ui pod
+  extraEnv: []
+  ## environment variables from secrets or configmaps to add to the asserts-ui pod
+  extraEnvFrom: []
+  #   - secretRef:
+  #       name: license
+
+  extraLabels: {}
+
+  extraPodLabels: {}
+
+  podAnnotations: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  extraContainers: []
+
+  extraVolumeMounts: []
+
+  extraVolumes: []
+
+
+## Asserts grafana configuration
+##
+grafana:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  image:
+    repository: asserts/grafana
+    pullPolicy: IfNotPresent
+    ## Overrides the image tag whose default is the chart appVersion.
+    tag: v1.0.231
+
+  resources:
+    requests:
+      cpu: 30m
+      memory: 128Mi
+
+  imagePullSecrets: []
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {}
+
+  containerSecurityContext:
+    enabled: true
+    allowPrivilegeEscalation: false
+
+  extraContainers:
+    - name: custom-dashboards-sidecar
+      image: kiwigrid/k8s-sidecar:1.21.0
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: LABEL
+          value: custom-grafana-dashboards
+        - name: FOLDER
+          value: /var/lib/grafana/dashboards/custom
+      securityContext:
+        allowPrivilegeEscalation: false
+      volumeMounts:
+        - name: custom-dashboards
+          mountPath: /var/lib/grafana/dashboards/custom
+
+  service:
+    type: ClusterIP
+    port: 3000
+    clusterIP: ""
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{.Values.grafana.service.port}}"
+
+    ## List of IP addresses at which the Prometheus server service is available
+    ## Ref: https://kubernetes.io/docs/user-guide/services/#external-ips
+    ##
+    externalIPs: []
+    loadBalancerIP: ""
+    loadBalancerSourceRanges: []
+
+  ingress:
+    enabled: false
+
+    ## For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+    ## See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+    # ingressClassName: nginx
+
+    annotations: {}
+
+    extraLabels: {}
+
+    hosts: []
+    #   - asserts-grafana.domain.com
+
+    path: /
+
+    ## pathType is only for k8s >= 1.18
+    pathType: Prefix
+
+    ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
+    extraPaths: []
+    # - path: /
+    #   backend:
+    #     serviceName: ssl-redirect
+    #     servicePort: use-annotation
+
+    tls: []
+    #   - secretName: asserts-grafana-tls
+    #     hosts:
+    #       - asserts-grafana.domain.com
+
+  securityContext:
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  extraVolumeMounts: []
+
+  extraVolumes: []
+
+  ## Grafana admin password configuration
+  ##
+  ## If left with password: "" and existingSecret: ""
+  ## a random alpha numeric password will be generated on
+  ## first run. Upon upgrading the release, the credentials
+  ## stored in the secret will be retrieved, secret handling
+  ## is out of the box. Note that this will fail if using the
+  ## "helm-diff" plugin and would require setting it explicitly
+  ## or providing an existingSecret.
+  ##
+  ## ref: https://docs.bitnami.com/general/how-to/troubleshoot-helm-chart-issues/#credential-errors-while-upgrading-chart-releases
+  auth:
+    password: ""
+    existingSecret: ""
+
+  # set to the scrapeInterval of your Prometheus
+  # but never smaller than 30s (default)
+  scrapeInterval: 30s
+
+  # ref: https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+  datasources:
+    datasources:
+      - name: Prometheus
+        url: http://{{.Release.Name}}-promxyuser.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8082
+        isDefault: true
+        orgId: 1
+        access: proxy
+        type: prometheus
+        jsonData:
+          timeInterval: "{{.Values.grafana.scrapeInterval}}"
+      - name: Alertmanager
+        url: http://{{.Release.Name}}-alertmanager.{{.Release.Namespace}}.{{.Values.clusterDomain}}:9093
+        isDefault: false
+        orgId: 1
+        access: proxy
+        type: alertmanager
+        jsonData:
+          implementation: prometheus
+      - name: Prometheus-Rules
+        url: http://{{.Release.Name}}-promxyruler.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8082
+        isDefault: false
+        orgId: 1
+        access: proxy
+        type: prometheus
+        jsonData:
+          timeInterval: "{{.Values.grafana.scrapeInterval}}"
+
+  # ref: https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+  providers:
+    providers:
+      - name: asserts-ro
+        orgId: 1
+        folder: Asserts
+        type: file
+        updateIntervalSeconds: 30
+        disableDeletion: true
+        allowUiUpdates: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/asserts
+      - name: custom-ro
+        ordId: 1
+        folder: Custom
+        type: file
+        updateIntervalSeconds: 30
+        disableDeletion: false
+        allowUiUpdates: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/custom
+
+  dataPath: /var/lib/grafana/data
+
+  persistence:
+    enabled: true
+
+    ## Persistent Volume storage class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is set, choosing the default provisioner
+    storageClass: ""
+
+    ## Persistent Volume access modes
+    accessModes:
+      - ReadWriteOnce
+
+    ## Persistent Volume size
+    size: 8Gi
+
+    ## When set, will use the existing PVC for persistence
+    existingClaim: ""
+
+  ## 'volumePermissions' init container parameters
+  ## Changes the owner and group of the persistent volume mount point to runAsUser:fsGroup values
+  ##   based on the *podSecurityContext/*containerSecurityContext parameters
+  volumePermissions:
+    enabled: true
+    image:
+      repository: bitnami/bitnami-shell
+      tag: 10-debian-10-r378
+      pullPolicy: IfNotPresent
+    resources: {}
+
+## Asserts knowledge-sensor configuration
+##
+knowledge-sensor:
+  image:
+    repository: asserts/knowledge-sensor
+    tag: v1.1.15
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 128Mi
+
+  initContainers:
+    - name: wait-for-asserts-server
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Release.Name}}-server.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8030"
+        - "-t"
+        - "420"
+
+  ## tenant and asserts host knowledge sensor is retrieving configurations for
+  assertsTenant: bootstrap
+  assertsControllerHost: "http://{{.Release.Name}}-server.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8030"
+
+  ## how often the knowledge sensor will check for configurations
+  syncInterval: "30"
+
+  ## The configmap names and target directories for the rules
+  ## and relabel rules the configmaps will contain
+  ## NOTE: these should not need to change
+  prometheusRulesConfigmapName: "asserts-rules"
+  prometheusRulesTargetDir: "/opt/asserts/rules"
+  prometheusRelabelRulesConfigmapName: "asserts-relabel-rules"
+  prometheusRelabelRulesTargetDir: /opt/asserts/relabel
+
+  # enables promxy api and bootstraps promxyruler/promxyuser configmaps
+  promxyEnabled: true
+
+
+## Tsdb configuration
+## ref: https://github.com/asserts/helm-charts/blob/master/charts/victoria-metrics-single/values.yaml
+tsdb:
+  enabled: true
+  rbac:
+    create: false
+    pspEnabled: false
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+
+  configMap: asserts-tsdb-scrapeconfig
+  server:
+    image:
+      tag: v1.87.5
+
+    nameOverride: "tsdb"
+    fullNameOverride: "tsdb"
+
+    retentionPeriod: 30d
+
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8428"
+
+    initContainers:
+      ## wait for the knowledge-sensor to be ready to
+      ## serve up the rules
+      - name: wait-for-knowledge-sensor
+        image: asserts/wait-for:v2.2.3
+        imagePullPolicy: IfNotPresent
+        args:
+          - "{{.Release.Name}}-knowledge-sensor.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8080"
+          - "-t"
+          - "420"
+      ## initially add rule files to volume on startup
+      ## after the knowledge-sensor is ready. This is a
+      ## way to make sure the tsdb doesn't startup with
+      ## empty rules as it will crash or run with an empty
+      ## set.
+      - name: init-add-rule-files
+        image: kiwigrid/k8s-sidecar:1.21.0
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: LABEL
+            value: bootstrap-relabel-config
+          - name: FOLDER
+            value: /opt/asserts/relabel
+          - name: METHOD
+            value: LIST
+        volumeMounts:
+          - name: relabel-config
+            mountPath: /opt/asserts/relabel
+      ## initially add scrape config to volume on startup
+      ## This is a way to make sure the tsdb doesn't startup with
+      ## an empty scrape config as it will crash in that scenario
+      - name: init-add-scrape-config
+        image: kiwigrid/k8s-sidecar:1.21.0
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: LABEL
+            value: bootstrap-scrape-config
+          - name: FOLDER
+            value: /opt/asserts/scrape
+          - name: METHOD
+            value: LIST
+        volumeMounts:
+          - name: scrape-config
+            mountPath: /opt/asserts/scrape
+
+    extraArgs:
+      loggerFormat: default
+      relabelConfig: /opt/asserts/relabel/bootstrap.yml
+      maxLabelsPerTimeseries: 60
+      search.maxStalenessInterval: 60s
+      search.latencyOffset: 15s
+      memory.allowedPercent: 50
+
+    ## scrape configuration for the tsdb in config/tsdb-scrape-configmap.yaml
+    scrape:
+      enabled: true
+      configDir: /opt/asserts/scrape
+      configPath: /opt/asserts/scrape/scrape.yml
+      configMap: asserts-tsdb-scrapeconfig
+      extraLabels:
+        bootstrap-scrape-config: "1"
+
+    persistentVolume:
+      size: 8Gi
+
+    resources: {}
+
+    extraContainers:
+      - name: relabel-config-sidecar
+        image: kiwigrid/k8s-sidecar:1.21.0
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: LABEL
+            value: bootstrap-relabel-config
+          - name: FOLDER
+            value: /opt/asserts/relabel
+          - name: REQ_URL
+            value: http://localhost:8428/-/reload
+        volumeMounts:
+          - name: relabel-config
+            mountPath: /opt/asserts/relabel
+      - name: scrape-config-sidecar
+        image: kiwigrid/k8s-sidecar:1.21.0
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: LABEL
+            value: bootstrap-scrape-config
+          - name: FOLDER
+            value: /opt/asserts/scrape
+          - name: REQ_URL
+            value: http://localhost:8428/-/reload
+        volumeMounts:
+          - name: scrape-config
+            mountPath: /opt/asserts/scrape
+
+    extraVolumeMounts:
+      - name: relabel-config
+        mountPath: /opt/asserts/relabel
+      - name: scrape-config
+        mountPath: /opt/asserts/scrape
+
+    extraVolumes:
+      - name: relabel-config
+        emptyDir: {}
+      - name: scrape-config
+        emptyDir: {}
+
+
+## RedisGraph configuration
+## ref: https://github.com/bitnami/charts/blob/master/bitnami/redis/values.yaml
+redisgraph:
+  enabled: true
+
+  ## custom Redis multi module image
+  ## ref: https://hub.docker.com/repository/docker/asserts/redismod
+  image:
+    repository: asserts/redismod
+    tag: 6.2.7-rg-v2.8.20-rs-v2.4.16
+
+  nameOverride: asserts-redisgraph
+  fullnameOverride: asserts-redisgraph
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  architecture: standalone
+
+  auth:
+    enabled: false
+
+  master:
+    configuration: |
+      loadmodule /opt/bitnami/redis/modules/redisgraph.so
+    resources:
+      requests:
+        cpu: 20m
+        memory: 128Mi
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+
+  sentinel:
+    enabled: false
+
+  metrics:
+    enabled: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+
+
+## RedisSearch configuration
+## ref: https://github.com/bitnami/charts/blob/master/bitnami/redis/values.yaml
+redisearch:
+  enabled: true
+
+  ## custom Redis multi module image
+  ## ref: https://hub.docker.com/repository/docker/asserts/redismod
+  image:
+    repository: asserts/redismod
+    tag: 6.2.7-rg-v2.8.20-rs-v2.4.16
+
+  nameOverride: asserts-redisearch
+  fullnameOverride: asserts-redisearch
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  architecture: standalone
+
+  auth:
+    enabled: false
+
+  master:
+    configuration: |
+      loadmodule /opt/bitnami/redis/modules/redisearch.so
+    resources:
+      requests:
+        cpu: 10m
+        memory: 50Mi
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+
+  sentinel:
+    enabled: false
+
+  metrics:
+    enabled: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+
+
+## Alertmanager configuration
+## ref: https://github.com/asserts/helm-charts/blob/master/charts/alertmanager/values.yaml
+alertmanager:
+  enabled: true
+
+  serviceAccountName: asserts
+  serviceAccount:
+    create: false
+    name: asserts
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 50Mi
+
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9093"
+
+  persistence:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    size: 100Mi
+
+  extraArgs:
+    cluster.listen-address: null
+
+  existingConfigMap: asserts-alertmanager
+
+  configmapReload:
+    enabled: true
+
+## Promxy ruler configuration
+## ref: https://github.com/asserts/helm-charts/blob/master/charts/promxy/values.yaml
+promxyruler:
+  enabled: true
+  image:
+    repository: asserts/promxy
+    tag: v0.3.0
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8082"
+
+  existingConfigMap: asserts-promxyruler
+
+  initContainers:
+    - name: wait-for-tsdb
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Release.Name}}-tsdb-server.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8428"
+        - "-t"
+        - "420"
+
+  extraContainers:
+    - name: rules-config-sidecar
+      image: kiwigrid/k8s-sidecar:1.21.0
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: LABEL
+          value: bootstrap-rules-config
+        - name: FOLDER
+          value: /opt/asserts/rules
+        - name: REQ_URL
+          value: http://localhost:8082/-/reload
+        - name: REQ_METHOD
+          value: POST
+      volumeMounts:
+        - name: rules-config
+          mountPath: /opt/asserts/rules
+
+  extraVolumeMounts:
+    - name: rules-config
+      mountPath: /opt/asserts/rules
+    - name: extra-rules
+      mountPath: /opt/asserts/extra-rules/asserts-k8s-calls.yml
+      subPath: asserts-k8s-calls.yml
+
+  extraVolumes:
+    - name: rules-config
+      emptyDir: {}
+    - name: extra-rules
+      configMap:
+        name: asserts-k8s-calls-rules
+        items:
+          - key: asserts-k8s-calls.yml
+            path: asserts-k8s-calls.yml
+
+
+## Promxy user configuration
+## ref: https://github.com/asserts/helm-charts/blob/master/charts/promxy/values.yaml
+promxyuser:
+  enabled: true
+  image:
+    repository: asserts/promxy
+    tag: v0.3.0
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8082"
+
+  existingConfigMap: asserts-promxyuser
+
+  initContainers:
+    - name: wait-for-tsdb
+      image: asserts/wait-for:v2.2.3
+      imagePullPolicy: IfNotPresent
+      args:
+        - "{{.Release.Name}}-tsdb-server.{{.Release.Namespace}}.{{.Values.clusterDomain}}:8428"
+        - "-t"
+        - "420"
+
+
+## Postgres configuration
+## ref: https://github.com/bitnami/charts/blob/master/bitnami/postgresql/values.yaml
+postgres:
+  enabled: true
+
+  ## Postgres password configuration
+  ##
+  ## If left with postgresPassword: "" and existingSecret: ""
+  ## a random alpha numeric password will be generated on
+  ## first run. Upon upgrading the release, the credentials
+  ## stored in the secret will be retrieved, secret handling
+  ## is out of the box. Note that this will fail if using the
+  ## "helm-diff" plugin and would require setting it explicitly
+  ## or providing an existingSecret.
+  ##
+  ## ref: https://docs.bitnami.com/general/how-to/troubleshoot-helm-chart-issues/#credential-errors-while-upgrading-chart-releases
+  global:
+    postgresql:
+      auth:
+        database: "asserts"
+        postgresPassword: ""
+        existingSecret: ""
+
+  image:
+    repository: bitnami/postgresql
+    tag: 12.7.0
+
+  nameOverride: "asserts-postgres"
+  fullnameOverride: "asserts-postgres"
+
+  serviceAccount:
+    create: false
+    name: asserts
+
+  resources:
+    requests:
+      cpu: 20m
+      memory: 128Mi
+
+  primary:
+    initdb:
+      scripts:
+        load-extensions.sh: |
+          #!/bin/sh
+
+          psql --username "postgres" <<EOF
+          create extension IF NOT EXISTS pg_stat_statements;
+          select * FROM pg_extension;
+          EOF
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+
+  metrics:
+    enabled: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+
+## eBPF probe configuration
+## ref: https://github.com/asserts/helm-charts/blob/master/charts/ebpf-probe/values.yaml
+ebpfProbe:
+  enabled: false
+
+  fullnameOverride: asserts-ebpf-probe
+  nameOverride: asserts-ebpf-probe
+
+  image:
+    repository: asserts/ebpf-probe
+    pullPolicy: IfNotPresent
+    tag: v0.6.0
+
+  podMonitor:
+    enabled: true
+    # Use if you need to add a label that matches
+    # your prometheus-operator podMonitorSelector.
+    #
+    # Ex:
+    #
+    # running:
+    # kubectl get prometheus -A -ojsonpath='{.items[].spec.podMonitorSelector}'
+    #
+    # returns:
+    # {"matchLabels":{"release":"kube-prometheus-stack"}}
+    #
+    # set:
+    # extraLabels:
+    #   release: kube-prometheus-stack
+    extraLabels: {}
+
+    includeOnly:
+
+    includeExternal: false
+    reportObserved: true
+    reportActive: false
+    inactiveSeconds: 300

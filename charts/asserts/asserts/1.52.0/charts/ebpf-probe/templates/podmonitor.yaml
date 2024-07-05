@@ -1,0 +1,21 @@
+{{- if and (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") (.Values.podMonitor.enabled) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "ebpf-probe.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "ebpf-probe.labels" . | nindent 4 }}
+    {{- with .Values.podMonitor.extraLabels }}
+    {{- toYaml . | nindent 4 -}}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ebpf-probe.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: http-metrics
+      path: {{ .Values.prometheusEndpoint }}
+{{- end }}

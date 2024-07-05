@@ -1,0 +1,147 @@
+clusterDomain: svc.cluster.local
+
+replicaCount: 1
+
+rbac:
+  create: true
+
+image:
+  repository: asserts/knowledge-sensor
+  tag:
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+initContainers: []
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
+podSecurityContext: {}
+# fsGroup: 2000
+
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+# runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+
+  # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+  # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+  # ingressClassName: nginx
+
+  annotations: {}
+
+  extraLabels: {}
+
+  hosts: []
+  #   - knowledge-sensor.domain.com
+
+  path: /
+
+  # pathType is only for k8s >= 1.18
+  pathType: Prefix
+
+  ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
+  extraPaths: []
+  # - path: /*
+  #   backend:
+  #     serviceName: ssl-redirect
+  #     servicePort: use-annotation
+
+  tls: []
+  #   - secretName: knowledge-sensor-tls
+  #     hosts:
+  #       - knowledge-sensor.domain.com
+resources:
+  {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 9
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 9
+  failureThreshold: 3
+
+syncInterval: 60
+logLevel: "info"
+inCluster: "True"
+assertsControllerHost: "http://asserts-server.{{.Release.Namespace}}.{{.Values.clusterDomain}}"
+assertsTenant: "bootstrap"
+
+prometheusRulesConfigmapName: "prometheus-rules"
+prometheusRulesTargetDir: "/etc/vmagent/rules"
+prometheusRelabelRulesConfigmapName: "prometheus-relabel-rules"
+prometheusRelabelRulesTargetDir: "/etc/vmagent/relabel"
+
+promxyEnabled: false
+promxyUserConfigmapName: "asserts-promxyuser"
+promxyRulerConfigmapName: "asserts-promxyruler"
+promxyConfigTargetDir: "/etc/promxy"
+
+passwordSecret: false
+
+## Rules concurrency configuration
+## This is for use specifically with
+## vmalert as it supports concurrency
+##
+## ref: https://docs.victoriametrics.com/vmalert.html#groups
+concurrency:
+  enabled: false
+  # filepath the knowledge-sensor reads the concurrency file from
+  # shouldn't change this at the moment
+  path: "/ai/asserts/knowledge_sensor/resources/concurrency.yml"
+  # config takes a list of rule prefixes and their concurrency
+  #
+  # e.g. --> Run all rules with a concurrency of 2
+  # config:
+  #   concurrency:
+  #     - .*:2
+  config: {}
+#  concurrency:
+#    enabled: true
+#    path: "/ai/asserts/knowledge_sensor/resources/concurrency.yml"
+#    config:
+#      concurrency:
+#        - .*: 2
+
+## Command dictating the "mode" the
+## knowledge-sensor should run in
+## this is mainly a legacy option that
+## may be revived in the future
+command: knowledge-sensor-cloud

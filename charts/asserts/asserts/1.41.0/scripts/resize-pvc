@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+
+# This assumes you are running asserts in the asserts namespace
+NAMESPACE=asserts
+
+# Resizin the tsdb server
+PVC=server-volume-asserts-tsdb-server-0
+
+# Resize PV to 50Gi
+SIZE=50Gi
+
+STORAGECLASS=$(kubectl -n $NAMESPACE get pvc $PVC -ojsonpath='{.spec.storageClassName}')
+
+if [ -z $STORAGECLASS ]; then
+  echo "Could not find STORAGECLASS for pvc $PVC!"
+  exit 1
+fi
+
+# allow volume expansion, if already done then a noop
+kubectl patch storageclass $STORAGECLASS -p '{"allowVolumeExpansion":true}'
+
+# Get the volumeName for the PVC
+VOLUME_NAME=$(kubectl -n $NAMESPACE get pvc $PVC -ojsonpath='{.spec.volumeName}')
+
+# Ensure the data in the persistentvolume and data is retained in case the pvc is deleted
+kubectl -n $NAMESPACE patch pv $VOLUME_NAME -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+
+# Patch the pvc with the new size
+kubectl -n $NAMESPACE patch pvc $PVC -p '{"spec": {"resources": {"requests": {"storage": "'${SIZE}'"}}}}'
+
+# In order to change the helm chart disk size values, you will need to: 
+#
+# 1. Delete the StatefulSet with --cascade=false. This will ensure that only
+#    the manifest gets deleted, not the pods. The app will continue to run.
+#
+#    kubectl -n $NAMESPACE delete sts asserts-tsdb-server --cascade=false
+#
+# 2. Change you values to reflect the new pvc size
+#
+#    tsdb:
+#      server:
+#        persistentVolume:
+#          size: $SIZE
+#
+# 3. Redeploy to sync chart with system state
+#
+#    helm upgrade --install asserts asserts/asserts -n $NAMESPACE -f values.yaml

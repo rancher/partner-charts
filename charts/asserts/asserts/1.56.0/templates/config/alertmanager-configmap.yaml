@@ -1,0 +1,126 @@
+{{- if .Values.alertmanager.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.alertmanager.existingConfigMap }}
+  labels: {{- include "asserts.labels" . | nindent 4 }}
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      # setup for a single Asserts tenant
+      group_by:
+        - alertname
+        - asserts_env
+        - asserts_site
+        - asserts_notification_rule_name
+        - source_alertname
+        - asserts_slo_name
+        - namespace
+      receiver: {{ include "asserts.tenant" . }}-tenant
+      repeat_interval: 5m
+      group_wait: 5s
+      group_interval: 5s
+      routes:
+        - receiver: {{ include "asserts.tenant" . }}-tenant
+          group_wait: 5s
+          group_interval: 5s
+          routes:
+            - receiver: {{ include "asserts.tenant" . }}-tenant
+              group_wait: 5s
+              group_interval: 5s
+              continue: true
+            {{- if and (.Values.assertsUrl) (.Values.slack.enabled) }}
+            - receiver: slack-notification
+              matchers:
+                - alertname="NOTIFICATION_ALERTS"
+                - asserts_slo_name = ""
+              group_wait: {{ .Values.receiver.group_wait }}
+              group_interval: {{ .Values.receiver.group_interval }}
+              repeat_interval: {{ .Values.receiver.repeat_interval }}
+              continue: true
+            - receiver: slack-slo
+              matchers:
+                - alertname="NOTIFICATION_ALERTS"
+                - asserts_slo_name != ""
+              group_wait: {{ .Values.receiver.group_wait }}
+              group_interval: {{ .Values.receiver.group_interval }}
+              repeat_interval: {{ .Values.receiver.repeat_interval }}
+              continue: true
+            {{- end }}
+            {{- if and (.Values.assertsUrl) (.Values.pagerduty.enabled) }}
+            - receiver: pagerduty-notification
+              matchers:
+                - alertname="NOTIFICATION_ALERTS"
+                - asserts_slo_name = ""
+              group_wait: {{ .Values.receiver.group_wait }}
+              group_interval: {{ .Values.receiver.group_interval }}
+              repeat_interval: {{ .Values.receiver.repeat_interval }}
+              continue: true
+            - receiver: pagerduty-slo
+              matchers:
+                - alertname="NOTIFICATION_ALERTS"
+                - asserts_slo_name != ""
+              group_wait: {{ .Values.receiver.group_wait }}
+              group_interval: {{ .Values.receiver.group_interval }}
+              repeat_interval: {{ .Values.receiver.repeat_interval }}
+            {{- end }}
+    receivers:
+      - name: {{ include "asserts.tenant" . }}-tenant
+        webhook_configs:
+          - send_resolved: true
+            url: http://{{ .Release.Name }}-server.{{ include "domain" . }}:8030/api-server/v4/prometheus-alerts?tenant={{ include "asserts.tenant"  . }}
+      {{- if and (.Values.assertsUrl) (.Values.slack.enabled) }}
+      - name: slack-notification
+        slack_configs:
+          - api_url: {{ .Values.slack.api_url }}
+            channel: {{ .Values.slack.channel }}
+            icon_url: {{- printf " '{{ template \"slack.notification.icon_url\" . }}'" }}
+            send_resolved: true
+            title_link: ''
+            title: {{- printf " '{{ template \"slack.notification.title\" . }}'" }}
+            text: {{- printf " '{{ template \"slack.notification.text\" . }}'" }}
+      - name: slack-slo
+        slack_configs:
+          - api_url: {{ .Values.slack.api_url }}
+            channel: {{ .Values.slack.channel }}
+            icon_url: {{- printf " '{{ template \"slack.notification.icon_url\" . }}'" }}
+            send_resolved: true
+            title_link: ''
+            title: {{- printf " '{{ template \"slack.slo.title\" . }}'" }}
+            text: {{- printf " '{{ template \"slack.slo.text\" . }}'" }}
+      {{- end }}
+      {{- if and (.Values.assertsUrl) (.Values.pagerduty.enabled) }}
+      - name: pagerduty-notification
+        pagerduty_configs:
+          - routing_key: {{ .Values.pagerduty.routing_key }}
+            url: {{ .Values.pagerduty.url }}
+            description: {{- printf " '{{ template \"pagerduty.notification.description\" . }}'" }}
+            links:
+              - text: View Impact
+                href: {{- printf " '{{ template \"pagerduty.notification.link.incidents\" . }}'" }}
+              - text: Start Troubleshooting
+                href: {{- printf " '{{ template \"pagerduty.notification.link.insights\" . }}'" }}
+      - name: pagerduty-slo
+        pagerduty_configs:
+          - routing_key: {{ .Values.pagerduty.routing_key }}
+            url: {{ .Values.pagerduty.url }}
+            description: {{- printf " '{{ template \"pagerduty.slo.description\" . }}'" }}
+            links:
+              - text: View Impact
+                href: {{- printf " '{{ template \"pagerduty.slo.link.incidents\" . }}'" }}
+              - text: Start Troubleshooting
+                href: {{- printf " '{{ template \"pagerduty.slo.link.assertions\" . }}'" }}
+      {{- end }}
+    templates:
+      - '/etc/alertmanager/*.tmpl'
+  {{- if and (.Values.assertsUrl) (.Values.slack.enabled) }}
+  slack.tmpl: |-
+    {{ include "slack.template" . }}
+  {{- end }}
+  {{- if and (.Values.assertsUrl) (.Values.pagerduty.enabled) }}
+  pagerduty.tmpl: |-
+    {{ include "pagerduty.template" . }}
+  {{- end }}
+{{- end }}

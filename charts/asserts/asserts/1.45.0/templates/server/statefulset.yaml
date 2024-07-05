@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "asserts.serverFullname" . }}
+  labels: {{- include "asserts.serverSelectorLabels" . | nindent 4 }}
+    {{- with .Values.server.extraLabels }}
+    {{- toYaml . | nindent 4 -}}
+    {{- end }}
+  {{- if .Values.server.annotations }}
+  annotations:
+  {{- toYaml . | nindent 4 -}}
+  {{- end }}
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels: {{- include "asserts.serverSelectorLabels" . | nindent 6 }}
+  serviceName: {{ include "asserts.serverFullname" . }}
+  {{- with .Values.server.updateStrategy }}
+  updateStrategy: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{- include "asserts.serverLabels" . | nindent 8 }}
+        {{- with .Values.server.extraPodLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/server/configmap.yaml") . | sha256sum }}
+        {{- with .Values.server.extraPodAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ template "asserts.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
+      {{- if .Values.server.initContainers }}
+      initContainers: {{ include "common.tplvalues.render" ( dict "value" .Values.server.initContainers "context" $) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: server
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy | quote }}
+          env:
+            # set POSTGRES_RDB_PASSWORD generated from
+            # postgres subchart for consumption by the Asserts server
+            - name: POSTGRES_RDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.fullnameOverride }}
+                  key: postgres-password
+                  optional: false
+            # set grafana admin password
+            - name: GRAFANA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "asserts.grafanaFullname" . }}
+                  key: grafana-admin-password
+                  optional: false
+          {{- with .Values.server.extraEnv }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.server.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.service.port }}
+          resources: {{- toYaml .Values.server.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /opt/asserts/api-server/conf/application.yml
+              subPath: application.yml
+              readOnly: true
+            - name: data
+              mountPath: {{ .Values.server.dataPath }}
+          {{- with .Values.server.extraVolumeMounts }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "asserts.serverFullname" . }}
+            items:
+              - key: application.yml
+                path: application.yml
+        {{- with .Values.server.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  {{- if not .Values.server.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+  {{- else if .Values.server.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.server.persistence.existingClaim }}
+  {{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: {{- include "asserts.serverSelectorLabels" . | nindent 10 }}
+      spec:
+        accessModes:
+        {{- range .Values.server.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.server.persistence.size | quote }}
+        {{ include "common.storage.class" (dict "persistence" .Values.server.persistence "global" .Values.global) }}
+  {{- end }}

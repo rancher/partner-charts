@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "asserts.grafanaFullname" . }}
+  labels: {{- include "asserts.grafanaSelectorLabels" . | nindent 4 }}
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 -}}
+    {{- end }}
+  {{- if .Values.annotations }}
+  annotations:
+  {{- toYaml .Values.annotations | nindent 4 -}}
+  {{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "asserts.grafanaSelectorLabels" . | nindent 6 }}
+  serviceName: {{ include "asserts.grafanaFullname" . }}
+  {{- if .Values.updateStrategy }}
+  updateStrategy: {{- toYaml .Values.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{- include "asserts.grafanaLabels" . | nindent 8 }}
+        {{- with .Values.extraPodLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/grafana/configmap.yaml") . | sha256sum }}
+        {{- with .Values.extraPodAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.grafana.securityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ template "asserts.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if and .Values.grafana.persistence.enabled .Values.grafana.volumePermissions.enabled }}
+      initContainers:
+        - name: init-chmod-data
+          image: "{{ .Values.grafana.volumePermissions.image.repository }}:{{ .Values.grafana.volumePermissions.image.tag }}"
+          imagePullPolicy: {{ .Values.grafana.volumePermissions.image.pullPolicy | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p {{ .Values.grafana.dataPath }}
+              chown -R "{{ .Values.grafana.securityContext.runAsUser }}:{{ .Values.grafana.securityContext.fsGroup }}" {{ .Values.grafana.dataPath }}
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.grafana.dataPath }}
+      {{- end }}
+      containers:
+        {{- with .Values.grafana.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        - name: grafana
+          image:  "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.grafana.image.pullPolicy | quote }}
+          env:
+            # set grafana admin password
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "asserts.grafanaFullname" . }}
+                  key: grafana-admin-password
+                  optional: false
+          {{- with .Values.grafana.extraEnv }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.grafana.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.grafana.service.port }}
+          resources: {{- toYaml .Values.grafana.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grafana/grafana.ini
+              subPath: grafana.ini
+            - name: datasource
+              mountPath: /etc/grafana/provisioning/datasources/datasource.yml
+              subPath: datasource.yml
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards/dashboard.yml
+              subPath: dashboard.yml
+            - name: custom-dashboards
+              mountPath: /var/lib/grafana/dashboards/custom
+            - name: data
+              mountPath: {{ .Values.grafana.dataPath }}
+          {{- with .Values.grafana.extraVolumeMounts }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.grafana.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grafana.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grafana.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "asserts.grafanaFullname" . }}
+            items:
+              - key: grafana.ini
+                path: grafana.ini
+        - name: datasource
+          configMap:
+            name: {{ include "asserts.grafanaFullname" . }}
+            items:
+              - key: datasource.yml
+                path: datasource.yml
+        - name: dashboard-provider
+          configMap:
+            name: {{ include "asserts.grafanaFullname" . }}
+            items:
+              - key: dashboard.yml
+                path: dashboard.yml
+        - name: custom-dashboards
+          emptyDir: {}
+        {{- with .Values.grafana.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  {{- if not .Values.grafana.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+  {{- else if .Values.grafana.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.grafana.persistence.existingClaim }}
+  {{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: {{- include "asserts.grafanaSelectorLabels" . | nindent 10 }}
+      spec:
+        accessModes:
+        {{- range .Values.grafana.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.grafana.persistence.size | quote }}
+        {{ include "common.storage.class" (dict "persistence" .Values.grafana.persistence "global" .Values.global) }}
+  {{- end }}
