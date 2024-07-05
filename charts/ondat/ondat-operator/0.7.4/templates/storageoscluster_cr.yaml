@@ -1,0 +1,69 @@
+{{- if .Values.cluster.create }}
+
+apiVersion: storageos.com/v1
+kind: StorageOSCluster
+metadata:
+  name: {{ .Values.cluster.name }}
+  namespace: {{ template "cluster.namespace" . }}
+spec:
+  secretRefName: {{ .Values.cluster.secretRefName }}
+  disableTelemetry: {{ .Values.cluster.disableTelemetry }}
+  storageClassName: {{ .Values.cluster.storageClassName }}
+
+
+  {{- if .Values.k8sDistro }}
+  k8sDistro: {{ .Values.k8sDistro }}
+  {{- end }}
+
+  {{- if .Values.cluster.sharedDir }}
+  sharedDir: {{ .Values.cluster.sharedDir }}
+  {{- end }}
+
+  kvBackend:
+    address: {{ .Values.cluster.kvBackend.svcName }}.{{ default .Release.Namespace .Values.cluster.kvBackend.namespace }}:2379
+    backend: {{ .Values.cluster.kvBackend.backend }}
+  {{- if .Values.cluster.kvBackend.tlsSecretName }}
+  tlsEtcdSecretRefName: {{ .Values.cluster.kvBackend.tlsSecretName }}
+  {{- end }}
+  {{- if .Values.cluster.kvBackend.tlsSecretNamespace }}
+  tlsEtcdSecretRefNamespace: {{ .Values.cluster.kvBackend.tlsSecretNamespace }}
+  {{- end }}
+
+  resources:
+{{ toYaml .Values.cluster.resources | indent 4 }}
+
+  {{- if .Values.cluster.nodeSelectorTerm.key }}
+  nodeSelectorTerms:
+    - matchExpressions:
+        - key: {{ .Values.cluster.nodeSelectorTerm.key }}
+          operator: In
+          values:
+          - "{{ .Values.cluster.nodeSelectorTerm.value }}"
+  {{- end }}
+
+  metrics:
+    enabled: {{ .Values.cluster.metricsExporter.enabled }}
+
+  {{- if .Values.cluster.snapshots.enabled }}
+  snapshots:
+    volumeSnapshotClassName: {{ .Values.cluster.snapshots.volumeSnapshotClassName }}
+  {{- end }}
+
+  {{- if .Values.cluster.nodeManagerFeatures.nodeGuard.enabled }}
+  nodeManagerFeatures:
+    nodeGuard: "true"
+  {{- end }}
+
+  {{- if .Values.cluster.toleration.key }}
+  tolerations:
+    - key: {{ .Values.cluster.toleration.key }}
+      operator: "Equal"
+      value: {{ .Values.cluster.toleration.value }}
+      effect: "NoSchedule"
+  {{- end }}
+
+  {{- if .Values.cluster.portalManager.enabled }}
+  enablePortalManager: {{ .Values.cluster.portalManager.enabled }}
+  {{- end }}
+
+{{- end }}
