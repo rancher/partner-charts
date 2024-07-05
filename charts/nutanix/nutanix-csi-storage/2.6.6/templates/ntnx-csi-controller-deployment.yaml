@@ -1,0 +1,175 @@
+# Copyright 2021 Nutanix Inc
+#
+# example usage: kubectl create -f <this_file>
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: nutanix-csi-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.controller.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: nutanix-csi-controller
+  template:
+    metadata:
+      labels:
+        app: nutanix-csi-controller
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: nutanix-csi-controller
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      serviceAccount: nutanix-csi-controller
+      hostNetwork: true
+      containers:
+        - name: csi-provisioner
+          {{- if semverCompare ">=1.20-0" .Capabilities.KubeVersion.Version }}
+          image: {{ .Values.sidecars.provisioner.image }}
+          {{- else }}
+          image: {{ .Values.sidecars.provisioner.imageLegacy }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=$(ADDRESS)
+            - --timeout=60s
+            - --worker-threads=16
+            # This adds PV/PVC metadata to create volume requests
+            - --extra-create-metadata=true
+            - --default-fstype=ext4
+            # This is used to collect CSI operation metrics
+            - --http-endpoint=:9809
+            - --v=2
+            - --leader-election=true
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-resizer
+          image: {{ .Values.sidecars.resizer.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --v=2
+            - --csi-address=$(ADDRESS)
+            - --timeout=60s
+            - --leader-election=true
+            # NTNX CSI dirver supports online volume expansion.
+            - --handle-volume-inuse-error=false
+            - --http-endpoint=:9810
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          resources:
+            requests:
+              cpu: 5m
+              memory: 30Mi
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-snapshotter
+          {{- if .Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1" }}
+          image: {{ .Values.sidecars.snapshotter.image }}
+          {{- else }}
+          image: {{ .Values.sidecars.snapshotter.imageBeta }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+          - --csi-address=$(ADDRESS)
+          - --leader-election=true
+          - --logtostderr=true
+          - --timeout=300s
+          env:
+          - name: ADDRESS
+            value: /csi/csi.sock
+          resources:
+            requests:
+              cpu: 5m
+              memory: 30Mi
+          volumeMounts:
+          - name: socket-dir
+            mountPath: /csi
+        - name: nutanix-csi-plugin
+          image: {{ .Values.controller.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+          args:
+            - --endpoint=$(CSI_ENDPOINT)
+            - --nodeid=$(NODE_ID)
+            - --drivername={{ include "nutanix-csi-storage.drivername" . }}
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          volumeMounts:
+            - mountPath: /var/lib/csi/sockets/pluginproxy/
+              name: socket-dir
+            # This is needed for static NFS volume feature.
+            - mountPath: /host
+              name: root-dir
+          ports:
+            - containerPort: 9807
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-endpoint
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+            failureThreshold: 3
+        - name: liveness-probe
+          resources:
+            requests:
+              cpu: 5m
+              memory: 20Mi
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          image: {{ .Values.sidecars.livenessprobe.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+            - --http-endpoint=:9807
+      priorityClassName: system-cluster-critical
+    {{- with (.Values.controller.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with (.Values.controller.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - emptyDir: {}
+          name: socket-dir
+        - hostPath:
+            path: /
+            type: Directory
+          name: root-dir

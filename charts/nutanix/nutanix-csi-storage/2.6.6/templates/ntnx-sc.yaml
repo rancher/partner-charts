@@ -1,0 +1,126 @@
+{{- if eq .Values.volumeClass true }}
+---
+{{- $storageContainer := .Values.storageContainer | required "storageContainer is required." -}}
+
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: {{ .Values.volumeClassName }}
+  annotations:
+  {{- if eq .Values.defaultStorageClass "volume" }}
+    storageclass.kubernetes.io/is-default-class: "true"
+  {{- end }}
+  {{- with .Values.volumeClassAnnotations }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+  {{- with .Values.volumeClassLabels }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+provisioner: {{ include "nutanix-csi-storage.drivername" . }}
+parameters:
+  storageType: NutanixVolumes
+  csi.storage.k8s.io/provisioner-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/provisioner-secret-namespace: {{ .Release.Namespace }}
+  csi.storage.k8s.io/node-publish-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/node-publish-secret-namespace: {{ .Release.Namespace }}
+  csi.storage.k8s.io/controller-expand-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/controller-expand-secret-namespace: {{ .Release.Namespace }}
+  storageContainer: {{ .Values.storageContainer }}
+  csi.storage.k8s.io/fstype: {{ .Values.fsType }}
+  isSegmentedIscsiNetwork: {{ quote .Values.networkSegmentation }}
+  description: {{ quote (.Values.volumeClassDescription | default .Values.volumeClassName) }}
+{{- if eq .Values.lvmVolume true }}
+  isLVMVolume: "true"
+  numLVMDisks: {{ quote .Values.lvmDisks }}
+{{- end }}
+allowVolumeExpansion: true
+reclaimPolicy: {{ .Values.volumeClassRetention }}
+---
+{{- if .Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1" }}
+apiVersion: snapshot.storage.k8s.io/v1
+{{- else }}
+apiVersion: snapshot.storage.k8s.io/v1beta1
+{{- end }}
+kind: VolumeSnapshotClass
+metadata:
+  name: {{ .Values.volumeSnapshotClassName }}
+  annotations:
+  {{- with .Values.volumeSnapshotClassAnnotations }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+  {{- with .Values.volumeSnapshotClassLabels }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+driver: {{ include "nutanix-csi-storage.drivername" . }}
+parameters:
+  storageType: NutanixVolumes
+  csi.storage.k8s.io/snapshotter-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/snapshotter-secret-namespace: {{ .Release.Namespace }}
+deletionPolicy: Delete
+{{- end }}
+
+{{- if eq .Values.fileClass true }}
+---
+{{- $fileHost := .Values.fileHost | required "fileHost is required." -}}
+{{- $filePath := .Values.filePath | required "filePath is required." -}}
+
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: {{ .Values.fileClassName }}
+  annotations:
+  {{- if eq .Values.defaultStorageClass "file" }}
+    storageclass.kubernetes.io/is-default-class: "true"
+  {{- end }}
+  {{- with .Values.fileClassAnnotations }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+  {{- with .Values.fileClassLabels }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+provisioner: {{ include "nutanix-csi-storage.drivername" . }}
+parameters:
+  storageType: NutanixFiles
+  nfsServer: {{ .Values.fileHost }}
+  nfsPath: {{ .Values.filePath }}
+reclaimPolicy: {{ .Values.fileClassRetention }}
+{{- end }}
+
+{{- if eq .Values.dynamicFileClass true }}
+---
+{{- $fileServerName := .Values.fileServerName | required "fileServerName is required." -}}
+
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: {{ .Values.dynamicFileClassName }}
+  annotations:
+  {{- if eq .Values.defaultStorageClass "dynfile" }}
+    storageclass.kubernetes.io/is-default-class: "true"
+  {{- end }}
+  {{- with .Values.dynamicFileClassAnnotations }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+  {{- with .Values.dynamicFileClassLabels }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+provisioner: {{ include "nutanix-csi-storage.drivername" . }}
+parameters:
+  storageType: NutanixFiles
+  dynamicProv: ENABLED
+  squashType: {{ .Values.dynamicFileSquashType }}
+  nfsServerName: {{ .Values.fileServerName }}
+  csi.storage.k8s.io/provisioner-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/provisioner-secret-namespace: {{ .Release.Namespace }}
+  csi.storage.k8s.io/node-publish-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/node-publish-secret-namespace: {{ .Release.Namespace }}
+  csi.storage.k8s.io/controller-expand-secret-name: {{ .Values.secretName }}
+  csi.storage.k8s.io/controller-expand-secret-namespace: {{ .Release.Namespace }}
+  description: {{ quote (.Values.dynamicFileClassDescription | default .Values.dynamicFileClassName) }}
+allowVolumeExpansion: true
+reclaimPolicy: {{ .Values.dynamicFileClassRetention }}
+{{- end }}
