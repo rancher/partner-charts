@@ -1,0 +1,99 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- $root := . }}
+{{- $tls := $root.Values.tls }}
+{{- if and $tls.enabled $tls.certManager.enabled }}
+{{- if $tls.certManager.genSelfsigned }}
+{{- if $tls.certManager.useClusterIssuer }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ $root.Release.Name }}-yugaware-cluster-issuer
+spec:
+  selfSigned: {}
+{{- else }} # useClusterIssuer=false
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $root.Release.Name }}-yugaware-issuer
+  namespace: {{ $root.Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+{{- end }} # useClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $root.Release.Name }}-yugaware-ui-root-ca
+  namespace: {{ $root.Release.Namespace }}
+spec:
+  isCA: true
+  commonName: Yugaware self signed CA
+  secretName: {{ .Release.Name }}-yugaware-root-ca
+  secretTemplate:
+    labels:
+      app: "{{ template "yugaware.name" . }}"
+      chart: "{{ template "yugaware.chart" . }}"
+      release: {{ .Release.Name | quote }}
+      heritage: {{ .Release.Service | quote }}
+  duration: {{ $tls.certManager.configuration.duration | quote }}
+  renewBefore: {{ $tls.certManager.configuration.renewBefore | quote }}
+  privateKey:
+    algorithm: {{ $tls.certManager.configuration.algorithm | quote }}
+    encoding: PKCS8
+    size: {{ $tls.certManager.configuration.keySize }}
+    rotationPolicy: Always
+  issuerRef:
+    {{- if $tls.certManager.useClusterIssuer }}
+    name: {{ $root.Release.Name }}-yugaware-cluster-issuer
+    kind: ClusterIssuer
+    {{- else }}
+    name: {{ $root.Release.Name }}-yugaware-issuer
+    kind: Issuer
+    {{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $root.Release.Name }}-yugaware-ca-issuer
+  namespace: {{ $root.Release.Namespace }}
+spec:
+  ca:
+    secretName: {{ .Release.Name }}-yugaware-root-ca
+---
+{{- end }} # genSelfsigned
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $root.Release.Name }}-yugaware-ui-tls
+  namespace: {{ $root.Release.Namespace }}
+spec:
+  isCA: false
+  commonName: {{ $tls.hostname }}
+  secretName: {{ .Release.Name }}-yugaware-tls-cert
+  secretTemplate:
+    labels:
+      app: "{{ template "yugaware.name" . }}"
+      chart: "{{ template "yugaware.chart" . }}"
+      release: {{ .Release.Name | quote }}
+      heritage: {{ .Release.Service | quote }}
+  duration: {{ $tls.certManager.configuration.duration | quote }}
+  renewBefore: {{ $tls.certManager.configuration.renewBefore | quote }}
+  privateKey:
+    algorithm: {{ $tls.certManager.configuration.algorithm | quote }}
+    encoding: PKCS8
+    size: {{ $tls.certManager.configuration.keySize }}
+    rotationPolicy: Always
+  issuerRef:
+    name: {{ $tls.certManager.genSelfsigned | ternary (printf "%s%s" $root.Release.Name "-yugaware-ca-issuer") ($tls.certManager.useClusterIssuer | ternary $tls.certManager.clusterIssuer $tls.certManager.issuer) }}
+    {{- if $tls.certManager.useClusterIssuer }}
+    kind: ClusterIssuer
+    {{- else }}
+    kind: Issuer
+    {{- end }}
+---
+{{- end }}

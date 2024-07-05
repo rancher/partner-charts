@@ -1,0 +1,342 @@
+# Copyright (c) YugaByte, Inc.
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-yugaware
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+spec:
+  serviceName: {{ .Release.Name }}-yugaware
+  replicas: {{ .Values.yugaware.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-yugaware
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configs.yaml") . | sha256sum }}
+{{- if .Values.yugaware.pod.annotations }}
+{{ toYaml .Values.yugaware.pod.annotations | indent 8 }}
+{{- end }}
+      labels:
+        app: {{ .Release.Name }}-yugaware
+    spec:
+      serviceAccountName: {{ .Release.Name }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- if .Values.securityContext.enabled }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        {{- if (semverCompare ">=1.20-x" .Capabilities.KubeVersion.Version) }}
+        fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
+        {{- end }}
+      {{- end }}
+      volumes:
+        - name: yugaware-storage
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-yugaware-storage
+        - name: yugaware-ui
+          emptyDir: {}
+        - name: yugaware-config
+          projected:
+            sources:
+              - configMap:
+                  name: {{ .Release.Name }}-yugaware-app-config
+                  items:
+                    - key: application.docker.conf
+                      path: application.docker.conf
+            {{- if .Values.yugaware.universe_boot_script }}
+              - configMap:
+                  name: {{ .Release.Name }}-universe-boot-script
+                  items:
+                    - key: universe_boot_script
+                      path: universe-boot-script.sh
+            {{- end }}
+        - name: nginx-config
+          configMap:
+            name: {{ .Release.Name }}-yugaware-nginx-config
+            items:
+              - key: default.conf
+                path: default.conf
+        - name: nginx-main-config
+          configMap:
+            name: {{ .Release.Name }}-yugaware-nginx-main-config
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+        - name: prometheus-config
+          configMap:
+            name: {{ .Release.Name }}-yugaware-prometheus-config
+            items:
+              - key: prometheus.yml
+                path: prometheus.yml
+        {{- if .Values.securityContext.enabled }}
+        - name: init-container-script
+          configMap:
+            name: {{ .Release.Name }}-yugaware-init
+            items:
+              - key: init-permissions.sh
+                path: init-permissions.sh
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: {{  .Release.Name }}-yugaware-tls-cert
+          secret:
+            secretName: {{ .Release.Name }}-yugaware-tls-cert
+        {{- end }}
+        {{- if .Values.prometheus.remoteWrite.tls.enabled }}
+        - name: {{  .Release.Name }}-yugaware-prometheus-remote-write-tls
+          secret:
+            secretName: {{ .Release.Name }}-yugaware-prometheus-remote-write-tls
+        {{- end }}
+        - name: pg-upgrade-11-to-14
+          configMap:
+            name: {{ .Release.Name }}-yugaware-pg-upgrade
+            items:
+              - key: pg-upgrade-11-to-14.sh
+                path: pg-upgrade-11-to-14.sh
+      initContainers:
+        - image: {{ include "full_yugaware_image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: prometheus-configuration
+          {{- if .Values.securityContext.enabled }}
+          command:
+            - 'bash'
+            - '-c'
+            - |
+              cp /default_prometheus_config/prometheus.yml /prometheus_configs/prometheus.yml && /bin/bash /init-container/init-permissions.sh;
+          securityContext:
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+            runAsGroup: {{ .Values.securityContext.runAsGroup }}
+            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          {{- else }}
+          command: ["cp", "/default_prometheus_config/prometheus.yml", "/prometheus_configs/prometheus.yml"]
+          {{- end }}
+          volumeMounts:
+          - name: prometheus-config
+            mountPath: /default_prometheus_config
+          - name: yugaware-storage
+            mountPath: /prometheus_configs
+            subPath: prometheus.yml
+          {{- if .Values.securityContext.enabled }}
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/yugaware/data/
+            subPath: data
+          - name: init-container-script
+            mountPath: /init-container
+          {{- end }}
+        - image: {{ include "full_image" (dict "containerName" "postgres-upgrade" "root" .) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: postgres-upgrade
+          command:
+          - 'bash'
+          - '-c'
+          - /bin/bash /pg_upgrade_11_to_14/pg-upgrade-11-to-14.sh;
+          env:
+          - name: PGDATANEW
+            value: /var/lib/postgresql/14/pgdata
+          - name: PGDATAOLD
+            value: /var/lib/postgresql/11/pgdata
+          # https://github.com/tianon/docker-postgres-upgrade/issues/10#issuecomment-523020113
+          - name: PGUSER
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-yugaware-global-config
+                key: postgres_user
+          - name: POSTGRES_INITDB_ARGS
+            value: "-U $PGUSER"
+          volumeMounts:
+          - name: yugaware-storage
+            mountPath: /var/lib/postgresql/11/
+            subPath: postgres_data
+          - name: yugaware-storage
+            mountPath: /var/lib/postgresql/14/
+            subPath: postgres_data_14
+          - name: pg-upgrade-11-to-14
+            mountPath: /pg_upgrade_11_to_14
+          - name: yugaware-storage
+            mountPath: /pg_upgrade_logs
+            subPath: postgres_data_14
+      containers:
+        {{ if not .Values.postgres.external.host }}
+        - name: postgres
+          image: {{ include "full_image" (dict "containerName" "postgres" "root" .) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-c", "huge_pages=off"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+
+         {{- if .Values.postgres.resources }}
+          resources:
+{{ toYaml .Values.postgres.resources | indent 12 }}
+          {{ end }}
+
+          volumeMounts:
+            - name: yugaware-storage
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres_data_14
+        {{ end }}
+        - name: prometheus
+          image: {{ include "full_image" (dict "containerName" "prometheus" "root" .) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.securityContext.enabled }}
+          securityContext:
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+            runAsGroup: {{ .Values.securityContext.runAsGroup }}
+            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          {{- else if (not .Values.ocpCompatibility.enabled) }}
+          securityContext:
+            runAsUser: 0
+          {{- end }}
+
+          {{- if .Values.prometheus.resources }}
+          resources:
+{{ toYaml .Values.prometheus.resources | indent 12 }}
+          {{ end }}
+
+          volumeMounts:
+          - name: yugaware-storage
+            mountPath: /prometheus_configs
+            subPath: prometheus.yml
+          - name: yugaware-storage
+            mountPath: /prometheus/
+          {{- if .Values.prometheus.scrapeNodes }}
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/prometheus/targets
+            subPath: swamper_targets
+          {{- end }}
+          {{- if .Values.prometheus.evaluateAlertRules }}
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/prometheus/rules
+            subPath: swamper_rules
+          {{- end }}
+          {{- if .Values.prometheus.remoteWrite.tls.enabled }}
+          - name: {{ .Release.Name }}-yugaware-prometheus-remote-write-tls
+            mountPath: /opt/remote_write/certs/
+            readOnly: true
+          {{- end }}
+          args:
+            - --config.file=/prometheus_configs/prometheus.yml
+            - --storage.tsdb.path=/prometheus/
+            - --web.enable-admin-api
+            - --web.enable-lifecycle
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retentionTime }}
+          ports:
+            - containerPort: 9090
+        - name: yugaware
+          image: {{ include "full_yugaware_image" . }}
+          {{- if .Values.securityContext.enabled }}
+          securityContext:
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+            runAsGroup: {{ .Values.securityContext.runAsGroup }}
+            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          {{- if .Values.yugaware.resources }}
+          resources:
+{{ toYaml .Values.yugaware.resources | indent 12 }}
+          {{- end }}
+
+          command: [ "/sbin/tini", "--"]
+          args:
+            - "bin/yugaware"
+            - "-Dconfig.file=/data/application.docker.conf"
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_db
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: app_secret
+          ports:
+            - containerPort: 9000
+              name: yugaware
+          volumeMounts:
+          - name: yugaware-config
+            mountPath: /data
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/yugaware/data/
+            subPath: data
+          # old path for backward compatibility
+          - name: yugaware-storage
+            mountPath: /opt/yugaware_data/
+            subPath: data
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/releases/
+            subPath: releases
+          # old path for backward compatibility
+          - name: yugaware-storage
+            mountPath: /opt/releases/
+            subPath: releases
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/prometheus/targets
+            subPath: swamper_targets
+          - name: yugaware-storage
+            mountPath: /opt/yugabyte/prometheus/rules
+            subPath: swamper_rules
+          - name: yugaware-storage
+            mountPath: /prometheus_configs
+            subPath: prometheus.yml
+        - name: nginx
+          image: {{ include "full_image" (dict "containerName" "nginx" "root" .) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - containerPort: 8080
+
+          {{- if .Values.nginx.resources }}
+          resources:
+{{ toYaml .Values.nginx.resources | indent 12 }}
+          {{- end }}
+
+          volumeMounts:
+          - mountPath: /etc/nginx/conf.d/
+            name: nginx-config
+          - mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+            name: nginx-main-config
+          {{- if .Values.tls.enabled }}
+          - name: {{  .Release.Name }}-yugaware-tls-cert
+            mountPath: /opt/certs/
+            readOnly: true
+          {{- end }}
+{{ if .Values.sidecars }}
+{{ toYaml .Values.sidecars | indent 8 }}
+{{ end }}
