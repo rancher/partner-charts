@@ -1,37 +1,51 @@
 # partner-charts
 
-This repository is reserved for partner charts in Rancher's v2.5+ catalog. Its
-helm charts are based on upstream charts. Rancher-specific modifications are
-applied to these charts, and overlay files may be added as well. These charts
-are then served from this repository so that they are available within Rancher.
+Rancher Partner Charts is a collection of Helm charts from SUSE partners that
+are certified to run on Rancher-supported Kubernetes distributions. These charts
+are served from this repository so that users can deploy these charts directly
+from the Apps view in Rancher Manager.
+
+Rancher-specific modifications are applied to these charts, and overlay files
+may be added as well. 
+
+## SUSE Ready Partnership
+
+Before submitting a contribution to this repository, you must be a 
+[SUSE "Ready" Verified partner](https://www.suse.com/product-certification/ready/certify-your-applications/).
+
+Start this process with a [Partner Application](https://partner.suse.com/s/apply).
+
+To certify your software, you need to attest that the software:
+
+* has been tested on RKE2 or K3s and publishes documentation showing supported
+  versions, including
+  * version of Rancher (e.g. 2.8) 
+  * Rancher-supported distribution of Kubernetes (RKE2, K3s, EKS, etc.)
+  * version of Kubernetes (e.g. 1.27)
+* is supported by your organization on the declared Rancher versions and configurations
+* is actively maintained and proactively updated
+  * Critical vulnerabilities are patched in a timely way
+  * release notes disclose serious bugs and vulnerabilities
+* has a license and/or terms and conditions for use available in public
+  documentation or via the chart itself
+* does not compete commercially with Rancher Prime
 
 ## Requirements
 
-* Chart must be Helm 3 compatible.
+Once your software is certified SUSE "Ready", there are a few more requirements
+for inclusion in Rancher Partner charts. The Helm chart must:
 
-    Helm 2 installed CRDs via an `helm.sh/hook: crd-install` annotation that installed
-    CRDs via a special hook. In Helm 3, this annotation was removed in favor of a `crds/`
-    directory where your CRDs should now reside. Templating and upgrading CRDs is also no
-    longer supported by default. Users who need to support templating / upgrading CRDs should
-    use a separate CRD chart that installs the CRDs via the `templates/` directory instead.
-    Leaving this hook in your chart will not cause it to break, but will cause the Helm logs
-    to emit the warning `manifest_sorter.go:175: info: skipping unknown hook: "crd-install"`
-    on an install or upgrade.
-
-    In addition, starting [Helm 3.5.2](https://github.com/helm/helm/releases/tag/v3.5.2), Helm is stricter about parsing semver strings. Therefore, to ensure that your chart is deployable via Helm 3.5.2, your chart must have a semver-compliant version.
-
-    More information:
-    * Supported Hooks: https://helm.sh/docs/topics/charts_hooks/
-    * Helm 2 to 3 migration: https://helm.sh/docs/topics/v2_v3_migration/
-    * Managing CRDs and best practices: https://helm.sh/docs/chart_best_practices/custom_resource_definitions/
-    * Semver Rules: https://semver.org/
-
-* Chart must be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/) (recommended) or Git repository that we can reference.
-
-* Chart must have the following Rancher specific add-ons (More details on this below).
+* be Helm 3 compatible
+* be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/)
+  (recommended) or Git repository that we can reference
+* have the following Rancher specific add-ons (More details on this below)
     * kubeVersion set in the chart's metadata
     * app-readme.md
     * questions.yml (Optional)
+* be deployable from the current version of Rancher with the default Values
+
+Testing these requirements will ensure that Rancher users can deploy your
+software correctly and easily.
 
 ## Workflow
 
