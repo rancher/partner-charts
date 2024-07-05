@@ -1,0 +1,82 @@
+{{- if .Values.sumologic.setupEnabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sumologic.metadata.name.setup.job" . }}
+  annotations:
+{{ include "sumologic.annotations.app.setup.helmsh" "3" | indent 4 }}
+  labels:
+    app: {{ template "sumologic.labels.app.setup.job" . }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+spec:
+  template:
+    metadata:
+      annotations:
+{{- if .Values.sumologic.podAnnotations }}
+{{ toYaml .Values.sumologic.podAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.sumologic.setup.job.podAnnotations }}
+{{ toYaml .Values.sumologic.setup.job.podAnnotations | indent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.sumologic.podLabels }}
+{{ toYaml .Values.sumologic.podLabels | indent 8 }}
+{{- end }}
+{{- if .Values.sumologic.setup.job.podLabels }}
+{{ toYaml .Values.sumologic.setup.job.podLabels | indent 8 }}
+{{- end }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ template "sumologic.metadata.name.setup.roles.serviceaccount" . }}
+{{- if .Values.sumologic.setup.job.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.sumologic.setup.job.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.sumologic.setup.job.tolerations }}
+      tolerations:
+{{ toYaml .Values.sumologic.setup.job.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.sumologic.setup.job.affinity }}
+      affinity:
+{{ toYaml .Values.sumologic.setup.job.affinity | indent 8 }}
+{{- end }}
+      volumes:
+      - name: setup
+        configMap:
+          name: {{ template "sumologic.metadata.name.setup.configmap" . }}
+          defaultMode: 0777
+      - name: custom
+        configMap:
+          name: {{ template "sumologic.metadata.name.setup.configmap-custom" . }}
+          defaultMode: 0777
+      containers:
+      - name: setup
+        image: {{ .Values.sumologic.setup.job.image.repository }}:{{ .Values.sumologic.setup.job.image.tag }}
+        imagePullPolicy: {{ .Values.sumologic.setup.job.image.pullPolicy }}
+        command: ["/etc/terraform/setup.sh"]
+        resources:
+          {{- toYaml .Values.sumologic.setup.job.resources | nindent 10 }}
+        volumeMounts:
+        - name: setup
+          mountPath: /etc/terraform
+        - name: custom
+          mountPath: /customer-scripts
+        envFrom:
+        - secretRef:
+            name: {{ .Values.sumologic.envFromSecret | default (include "sumologic.metadata.name.setup.secret" .)}}
+        env:
+        - name: SUMOLOGIC_BASE_URL
+          value: {{ .Values.sumologic.endpoint }}
+        - name: HTTP_PROXY
+          value: {{ .Values.sumologic.httpProxy }}
+        - name: HTTPS_PROXY
+          value: {{ .Values.sumologic.httpsProxy }}
+        - name: NO_PROXY
+          value: {{ .Values.sumologic.noProxy }}
+{{- if .Values.sumologic.setup.debug }}
+        - name: DEBUG_MODE
+          value: "true"
+{{- end }}
+      securityContext:
+        runAsUser: 999
+{{- end }}
