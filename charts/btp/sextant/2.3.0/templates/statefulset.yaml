@@ -1,0 +1,141 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "common.names.fullname" . }}
+  namespace: {{.Release.Namespace}}
+  labels: {{- include "lib.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" . | nindent 6}}
+  serviceName: {{ include "common.names.fullname" . }}
+  template:
+    metadata:
+      labels: {{- include "lib.labels" .| nindent 8}}
+    spec:
+      serviceAccountName: {{ include "lib.serviceAccountName" . }}
+      containers:
+        {{- if .Values.postgres.enabled }}
+        - name: postgres
+          {{- include "override.lib.image" (dict "imageRoot" .Values.postgres.image "global" .Values.global ) | nindent 10 }}
+          ports:
+            - containerPort: {{.Values.postgres.port }}
+          resources: {{- include "lib.safeToYaml" .Values.postgres.resources | nindent 12 }}
+          env:
+            - name: PGDATA
+              value: /data/sextant
+            - name: POSTGRES_PASSWORD
+              {{- if .Values.postgres.existingPasswordSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingPasswordSecret }}
+                  key: password
+              {{- else }}
+              value: {{ .Values.postgres.password }}
+              {{- end }}
+              {{- include "lib.safeToYaml" .Values.postgres.env | nindent 12 }}
+          volumeMounts:
+            - mountPath: /data
+              name: "pgdata"
+            {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+        {{- end }}
+        - name: api
+          {{- include "sextant.image" (dict "imageRoot" .Values.api.image "editionRoot" .Values.editionImages.api "edition" .Values.edition "global" .Values.global ) | nindent 10 }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources: {{- include "lib.safeToYaml" .Values.api.resources | nindent 12 }}
+          env:
+            - name: PORT
+              value: "8080"
+            - name: LOGGING
+              value: {{ default "1" .Values.logging |quote }}
+            - name: POSTGRES_USER
+              value: {{ default "postgres" .Values.postgres.user }}
+            - name: INITIAL_PASSWORD
+              {{- if .Values.intialPassword }}
+              value: {{ .Values.initialPassword | quote}}
+              {{- else }}
+              value: {{ include "sextant.randomPassword" .}}
+              {{- end }}
+            - name: INITIAL_USER
+              value: {{ default "admin" .Values.initialUser}}
+            - name: POSTGRES_PASSWORD
+              {{- if .Values.postgres.existingPasswordSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{.Values.postgres.existingPasswordSecret}}
+                  key: {{.Values.postgres.existingPasswordSecretKey}}
+              {{- else }}
+              value: {{ .Values.postgres.password }}
+              {{- end }}
+            - name: POSTGRES_DB
+              value: {{ default "postgres" .Values.postgres.database }}
+            - name: POSTGRES_SERVICE_HOST
+              value: {{ default "localhost" .Values.postgres.host }}
+            - name: POSTGRES_SERVICE_PORT
+              value: {{ default "5432" .Values.postgres.port | quote }}
+            {{- if .Values.postgres.tls }}
+            - name: POSTGRES_TLS
+              value: {{ .Values.postgres.tls | quote }}
+            {{- end }}
+            {{ if eq .Values.edition "enterprise" -}}
+            - name: NODE_ENV
+              value: "development"
+            {{- end -}}
+            {{- include "lib.safeToYaml" .Values.api.env | nindent 12 }}
+          volumeMounts:
+            {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+        - name: frontend
+          {{- include "sextant.image" (dict "imageRoot" .Values.ui.image "editionRoot" .Values.editionImages.ui "edition" .Values.edition "global" .Values.global ) | nindent 10 }}
+          ports:
+            - containerPort: 8081
+              protocol: TCP
+          resources: {{- include "lib.safeToYaml" .Values.ui.resources | nindent 12 }}
+          env:
+            - name: PORT
+              value: "8081"
+            {{- include "lib.safeToYaml" .Values.ui.env | nindent 12 }}
+          volumeMounts: {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+        - name: router
+          {{- include "override.lib.image" (dict "imageRoot" .Values.noxy.image "global" .Values.global ) | nindent 10 }}
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          env:
+            - name: NOXY_DEFAULT_HOST
+              value: localhost
+            - name: NOXY_DEFAULT_PORT
+              value: "8081"
+            - name: NOXY_API_FRONT
+              value: /api/v1
+            - name: NOXY_API_HOST
+              value: localhost
+            - name: NOXY_API_PORT
+              value: "8080"
+            - name: NOXY_PROXY_FRONT
+              value: /proxy
+            - name: NOXY_PROXY_HOST
+              value: localhost
+            - name: NOXY_PROXY_PORT
+              value: "8080"
+            {{- include "lib.safeToYaml" .Values.noxy.env | nindent 12 }}
+          resources: {{- include "lib.safeToYaml" .Values.noxy.resources | nindent 12 }}
+          volumeMounts: {{- include "lib.volumeMounts" .Values.extraVolumeMounts | nindent 12 }}
+      restartPolicy: "Always"
+      volumes: {{- include "lib.volumes" .Values.extraVolumes | nindent 8 }}
+{{- if not .Values.postgres.persistence.enabled }}
+        - name: "pgdata"
+          emptyDir: {}
+{{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: "pgdata"
+        annotations: {{- include "lib.safeToYaml" .Values.postgres.persistence.annotations | nindent 10 }}
+      spec:
+        accessModes: {{- include "lib.safeToYaml" .Values.postgres.persistence.accessModes | nindent 10 }}
+        storageClassName: {{ .Values.postgres.persistence.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.persistence.size | quote }}
+{{- end }}
