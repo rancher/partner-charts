@@ -1,0 +1,527 @@
+{{/*
+Licensed to the Apache Software Foundation (ASF) under one or more
+contributor license agreements.  See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The ASF licenses this file to You under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- include "fail-on-insecure-sasl-logging" . -}}
+
+{{- $values := .Values }}
+{{- $internalAdvertiseAddress := printf "%s.%s" "$(SERVICE_NAME)" (include "redpanda.internal.domain" .) -}}
+{{- $externalAdvertiseAddress := printf "$(SERVICE_NAME)" -}}
+{{- if (tpl ($values.external.domain | default "") $) }}
+  {{- $externalAdvertiseAddress = printf "$(SERVICE_NAME).%s" (tpl $values.external.domain $) -}}
+{{- end -}}
+{{- $uid := dig "podSecurityContext" "runAsUser" .Values.statefulset.securityContext.runAsUser .Values.statefulset -}}
+{{- $gid := dig "podSecurityContext" "fsGroup" .Values.statefulset.securityContext.fsGroup .Values.statefulset -}}
+{{- $root := deepCopy . }}
+
+{{- if not (include "redpanda-atleast-22-2-0" . | fromJson).bool -}}
+  {{- if eq (get .Values "force" | default false) false -}}
+    {{- fail (
+    printf "\n\nError: The Redpanda version (%s) is no longer supported \nTo accept this risk, run the upgrade again adding `--set force=true`\n" (( include "redpanda.semver" . ))
+        )
+    -}}
+  {{- end -}}
+{{- end -}}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "redpanda.fullname" . }}
+  labels:
+{{- with include "full.labels" . }}
+  {{- . | nindent 4 }}
+{{- end }}
+spec:
+  selector:
+    matchLabels: {{ (include "statefulset-pod-labels" .) | nindent 6 }}
+  serviceName: {{ template "redpanda.fullname" . }}
+  replicas: {{ .Values.statefulset.replicas | int64 }}
+  updateStrategy:
+    {{- toYaml .Values.statefulset.updateStrategy | nindent 4 }}
+  podManagementPolicy: "Parallel"
+  template:
+    metadata:
+      labels: {{ (include "statefulset-pod-labels" .) | nindent 8 }}
+        redpanda.com/poddisruptionbudget: {{ template "redpanda.name" . }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+{{- with $.Values.statefulset.annotations }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.statefulset.terminationGracePeriodSeconds }}
+      securityContext: {{ include "pod-security-context" . | nindent 8 }}
+      serviceAccountName: {{ include "redpanda.serviceAccountName" . }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+    {{- end }}
+      initContainers:
+{{- if and (hasKey $values.tuning "tune_aio_events") $values.tuning.tune_aio_events }}
+        - name: tuning
+          image: {{ .Values.image.repository }}:{{ template "redpanda.tag" . }}
+          command:
+            - bash
+            - -c
+          args:
+            - |
+              rpk redpanda tune all
+          securityContext:
+            capabilities:
+              add: ["SYS_RESOURCE"]
+            privileged: true
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: {{ template "redpanda.fullname" . }}
+              mountPath: /etc/redpanda
+        {{- if get .Values.statefulset.initContainers.tuning "resources" }}
+          resources: {{- toYaml .Values.statefulset.initContainers.tuning.resources | nindent 12 }}
+        {{- end }}
+{{- end }}
+{{- if .Values.statefulset.initContainers.setDataDirOwnership.enabled }}
+        - name: set-datadir-ownership
+          image: {{ .Values.statefulset.initContainerImage.repository }}:{{ .Values.statefulset.initContainerImage.tag }}
+          command: ["/bin/sh", "-c", "chown {{ $uid }}:{{ $gid }} -R /var/lib/redpanda/data"]
+          volumeMounts:
+            - name: datadir
+              mountPath: /var/lib/redpanda/data
+        {{- if .Values.statefulset.initContainers.setDataDirOwnership.resources }}
+          resources: {{- toYaml .Values.statefulset.initContainers.setDataDirOwnership.resources | nindent 12 }}
+        {{- end }}
+{{- end }}
+{{- if and (include "is-licensed" . | fromJson).bool .Values.storage.tieredConfig.cloud_storage_enabled }}
+        - name: set-tiered-storage-cache-dir-ownership
+          image: {{ .Values.statefulset.initContainerImage.repository }}:{{ .Values.statefulset.initContainerImage.tag }}
+          command: ["/bin/sh", "-c", 'chown {{ $uid }}:{{ $gid }} -R {{ template "tieredStorage.cacheDirectory" . }}']
+          volumeMounts:
+            - name: tiered-storage-dir
+              mountPath: {{ template "tieredStorage.cacheDirectory" . }}
+        {{- if get .Values.statefulset.initContainers.setTieredStorageCacheDirOwnership "resources" }}
+          resources: {{- toYaml .Values.statefulset.initContainers.setTieredStorageCacheDirOwnership.resources | nindent 12 }}
+        {{- end }}
+{{- end }}
+        - name: {{ (include "redpanda.name" .) | trunc 51 }}-configurator
+          image: {{ .Values.image.repository }}:{{ template "redpanda.tag" . }}
+          command: ["/bin/bash", "-c"]
+          env:
+            - name: SERVICE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+{{- range $listenerName := (list "kafka" "http") }}
+{{- $listenerVals := get $values.listeners $listenerName }}
+  {{- $ordList := list }}
+  {{- /* do this for each pod in the statefulset */}}
+  {{- range $replicaIndex := until ($values.statefulset.replicas | int) }}
+    {{- /* build a list of listeners */}}
+    {{- $listenerList := list (toJson (dict "name" "internal" "address" $internalAdvertiseAddress "port" $listenerVals.port)) }}
+    {{- if $listenerVals.external }}
+        {{- /* add each external listener */}}
+        {{- range $externalName, $externalVals := $listenerVals.external }}
+          {{- $tmplVals := dict "listenerVals" $listenerVals "externalVals" $externalVals "replicaIndex" $replicaIndex "externalName" $externalName "externalAdvertiseAddress" $externalAdvertiseAddress "values" $values }}
+          {{- $port := int (include "advertised-port" $tmplVals) }}
+          {{- $host := tpl (include "advertised-host" (mustMerge $tmplVals (dict "port" $port)) ) $ }}
+          {{- $listenerList = mustAppend $listenerList $host }}
+        {{- end }}
+    {{- end }}
+    {{- /*
+    This is making a semicolon list of listeners, one list for each pod.
+    We can safely remove all the spaces as there cannot be a space in a name, address, or port, and this fixes
+    a problem where a user can feed in a trailing space on a hostname.
+    */}}
+    {{- $ordList = mustAppend $ordList (nospace (join ";" $listenerList)) }}
+  {{- end }}
+            - name: ADVERTISED_{{ upper $listenerName }}_ADDRESSES
+              value: {{ squote (join " " $ordList) }}
+{{- end }}
+            - name: KUBERNETES_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          args:
+            - |
+              set -xe
+              CONFIG=/etc/redpanda/redpanda.yaml
+              POD_ORDINAL=${SERVICE_NAME##*-}
+
+              # Setup config files
+              cp /tmp/base-config/redpanda.yaml "${CONFIG}"
+              cp /tmp/base-config/bootstrap.yaml /etc/redpanda/.bootstrap.yaml
+
+              {{- if not (include "redpanda-atleast-22-3-0" . | fromJson).bool }}
+              # Configure bootstrap
+              ## Not used for Redpanda v22.3.0+
+              rpk --config "${CONFIG}" redpanda config set redpanda.node_id "${POD_ORDINAL}"
+              if [ "${POD_ORDINAL}" = "0" ]; then
+                rpk --config "${CONFIG}" redpanda config set redpanda.seed_servers '[]' --format yaml
+              fi
+              {{- end }}
+
+              NODE_INDEX=`expr $POD_ORDINAL + 1`
+
+              LISTENER_INDEX=1
+              LISTENER=`echo $ADVERTISED_KAFKA_ADDRESSES | cut -d ' ' -f $NODE_INDEX | cut -d ';' -f $LISTENER_INDEX`
+              until [ "$LISTENER" == "" ]; do
+                rpk redpanda config --config "$CONFIG" set redpanda.advertised_kafka_api[$(($LISTENER_INDEX-1))] "$LISTENER"
+                let "LISTENER_INDEX+=1"
+                LISTENER=`echo $ADVERTISED_KAFKA_ADDRESSES | cut -d ' ' -f $NODE_INDEX | cut -d ';' -f $LISTENER_INDEX`
+              done
+
+              LISTENER_INDEX=1
+              LISTENER=`echo $ADVERTISED_HTTP_ADDRESSES | cut -d ' ' -f $NODE_INDEX | cut -d ';' -f $LISTENER_INDEX`
+              until [ "$LISTENER" == "" ]; do
+                rpk redpanda config --config "$CONFIG" set pandaproxy.advertised_pandaproxy_api[$(($LISTENER_INDEX-1))] "$LISTENER"
+                let "LISTENER_INDEX+=1"
+                LISTENER=`echo $ADVERTISED_HTTP_ADDRESSES | cut -d ' ' -f $NODE_INDEX | cut -d ';' -f $LISTENER_INDEX`
+              done
+
+              {{- if (include "redpanda-atleast-22-3-0" . | fromJson).bool }}
+                {{- if .Values.rackAwareness.enabled }}
+                # Configure Rack Awareness
+                set +x
+                RACK=$(curl --silent --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt --fail -H 'Authorization: Bearer '$(cat /run/secrets/kubernetes.io/serviceaccount/token) "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}/api/v1/nodes/${KUBERNETES_NODE_NAME}?pretty=true" | grep {{ .Values.rackAwareness.nodeAnnotation | quote | squote }} | grep -v '\"key\":' | sed 's/.*": "\([^"]\+\).*/\1/')
+                set -x
+                rpk --config "$CONFIG" redpanda config set redpanda.rack "${RACK}"
+                {{- end }}
+              {{- end }}
+          securityContext: {{ include "container-security-context" . | nindent 12 }}
+          volumeMounts:
+            - name: {{ template "redpanda.fullname" . }}
+              mountPath: /tmp/base-config
+            - name: config
+              mountPath: /etc/redpanda
+        {{- if get .Values.statefulset.initContainers.configurator "resources" }}
+          resources: {{- toYaml .Values.statefulset.initContainers.configurator.resources | nindent 12 }}
+        {{- end }}
+      containers:
+        - name: {{ template "redpanda.name" . }}
+          image: {{ .Values.image.repository }}:{{ template "redpanda.tag" . }}
+          env:
+            - name: SERVICE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/bash", "-c", "./var/lifecycle/postStart.sh"]
+            preStop:
+              exec:
+                command: ["/bin/bash", "-c", "./var/lifecycle/preStop.sh"]
+          # the startupProbe checks to see that the admin api is listening and that the broker has a node_id assigned. This
+          # check is only used to delay the start of the liveness and readiness probes until it passes.
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  RESULT=$(curl --silent --fail -k {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://{{ include "admin-api-urls" . }}/v1/status/ready")
+                  echo $RESULT
+                  echo $RESULT | grep ready
+            initialDelaySeconds: {{ .Values.statefulset.startupProbe.initialDelaySeconds }}
+            failureThreshold: {{ .Values.statefulset.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.statefulset.startupProbe.periodSeconds }}
+          # the livenessProbe just checks to see that the admin api is listening and returning 200s.
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - curl --silent --fail -k {{ include "admin-tls-curl-flags" . }} "{{ include "admin-http-protocol" . }}://{{ include "admin-api-urls" . }}/v1/status/ready"
+            initialDelaySeconds: {{ .Values.statefulset.livenessProbe.initialDelaySeconds }}
+            failureThreshold: {{ .Values.statefulset.livenessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.statefulset.livenessProbe.periodSeconds }}
+          # the readiness probe just checks that the cluster is healthy according to rpk cluster health.
+          # It's ok that this cluster-wide check affects all the pods as it's only used for the
+          # PodDisruptionBudget and we don't want to roll any pods if the Redpanda cluster isn't healthy.
+          # https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -x
+                  rpk cluster health {{ (include "rpk-flags" . | fromJson).admin }}
+                  rpk cluster health {{ (include "rpk-flags" . | fromJson).admin }} | grep 'Healthy:.*true'
+            initialDelaySeconds: {{ .Values.statefulset.readinessProbe.initialDelaySeconds }}
+            failureThreshold: {{ .Values.statefulset.readinessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.statefulset.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.statefulset.readinessProbe.initialDelaySeconds }}
+          command:
+            - rpk
+            - redpanda
+            - start
+            - --smp={{ include "redpanda-smp" . }}
+            - --memory={{ template "redpanda-memory" . }}M
+            - --reserve-memory={{ template "redpanda-reserve-memory" . }}M
+            - --default-log-level={{ .Values.logging.logLevel }}
+            - --advertise-rpc-addr={{ $internalAdvertiseAddress }}:{{ .Values.listeners.rpc.port }}
+            {{- with .Values.statefulset.additionalRedpandaCmdFlags }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+{{- range $name, $listener := .Values.listeners }}
+            - name: {{ lower $name }}
+              containerPort: {{ $listener.port }}
+  {{- range $externalName, $external := $listener.external }}
+    {{- if $external.port }}
+            - name: {{ lower $name | trunc 6 }}-{{ lower $externalName | trunc 8 }}
+              containerPort: {{ $external.port }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+          securityContext: {{ include "container-security-context" . | nindent 12 }}
+          volumeMounts:
+            - name: lifecycle-scripts
+              mountPath: /var/lifecycle
+            - name: datadir
+              mountPath: /var/lib/redpanda/data
+{{- if and (include "is-licensed" . | fromJson).bool .Values.storage.tieredConfig.cloud_storage_enabled }}
+            - name: tiered-storage-dir
+              mountPath: {{ template "tieredStorage.cacheDirectory" . }}
+{{- end }}
+            - name: config
+              mountPath: /etc/redpanda
+{{- if (include "tls-enabled" . | fromJson).bool }}
+  {{- range $name, $cert := .Values.tls.certs }}
+            - name: redpanda-{{ $name }}-cert
+              mountPath: {{ printf "/etc/tls/certs/%s" $name }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.auth.sasl.enabled (not (empty .Values.auth.sasl.secretRef )) }}
+            - name: {{ .Values.auth.sasl.secretRef }}
+              mountPath: /etc/secrets/users
+              readOnly: true
+{{- end}}
+          resources:
+{{- if hasKey .Values.resources.memory "min" }}
+            requests:
+              cpu: {{ .Values.resources.cpu.cores }}
+              memory: {{ .Values.resources.memory.container.min }}
+{{- end }}
+            limits:
+              cpu: {{ .Values.resources.cpu.cores }}
+              memory: {{ .Values.resources.memory.container.max }}
+      {{- if .Values.statefulset.sideCars.configWatcher.enabled }}
+        - name: config-watcher
+          image: {{ .Values.image.repository }}:{{ template "redpanda.tag" . }}
+          command:
+            - /bin/bash # could be expanded for multiple scripts
+            - -c 
+            - /etc/secrets/config-watcher/scripts/sasl-user.sh
+          {{- if get .Values.statefulset.sideCars.configWatcher "resources" }}
+          resources: {{- toYaml .Values.statefulset.sideCars.configWatcher.resources | nindent 12 }}
+          {{- end }}
+          {{- if get .Values.statefulset.sideCars.configWatcher "securityContext" }}
+          securityContext: {{- toYaml .Values.statefulset.sideCars.configWatcher.securityContext | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: {{ template "redpanda.fullname" . }}-config-watcher
+              mountPath: /etc/secrets/config-watcher/scripts
+              readOnly: true
+          {{- if and .Values.auth.sasl.enabled (not (empty .Values.auth.sasl.secretRef )) }}
+            - name: {{ .Values.auth.sasl.secretRef }}
+              mountPath: /etc/secrets/users
+              readOnly: true
+          {{- end }}
+          {{- if (include "tls-enabled" . | fromJson).bool }}
+            {{- range $name, $cert := .Values.tls.certs }}
+            - name: redpanda-{{ $name }}-cert
+              mountPath: {{ printf "/etc/tls/certs/%s" $name }}
+              readOnly: true
+            {{- end }}
+          {{- end }}
+      {{- end }}
+      volumes:
+        - name: lifecycle-scripts
+          secret:
+            secretName: {{ (include "redpanda.fullname" . | trunc 50 ) }}-sts-lifecycle
+            defaultMode: 0774
+        - name: datadir
+{{- if .Values.storage.persistentVolume.enabled }}
+          persistentVolumeClaim:
+            claimName: datadir
+{{- else if .Values.storage.hostPath }}
+          hostPath:
+            path: {{ .Values.storage.hostPath | quote }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
+{{- if and (include "is-licensed" . | fromJson).bool .Values.storage.tieredConfig.cloud_storage_enabled }}
+        - name: tiered-storage-dir
+{{- if .Values.storage.tieredStoragePersistentVolume.enabled }}
+          persistentVolumeClaim:
+            claimName: tiered-storage-dir
+{{- else if .Values.storage.tieredStorageHostPath }}
+          hostPath:
+            path: {{ .Values.storage.tieredStorageHostPath | quote }}
+{{- else }}
+          emptyDir:
+            sizeLimit: {{ .Values.storage.tieredConfig.cloud_storage_cache_size }}
+{{- end }}
+{{- end }}
+        - name: {{ template "redpanda.fullname" . }}
+          configMap:
+            name: {{ template "redpanda.fullname" . }}
+        - name: config
+          emptyDir: {}
+{{- if (include "tls-enabled" . | fromJson).bool }}
+  {{- range $name, $cert := .Values.tls.certs }}
+  {{- $r :=  set $root "tempCert" ( dict "name" $name "cert" $cert ) }}
+        - name: redpanda-{{ $name }}-cert
+          secret:
+            defaultMode: 420
+            items:
+            - key: tls.key
+              path: tls.key
+            - key: tls.crt
+              path: tls.crt
+    {{- if $cert.caEnabled }}
+            - key: ca.crt
+              path: ca.crt
+    {{- end }}
+            secretName: {{ template "cert-secret-name" $r }}
+  {{- end }}
+{{- end }}
+        {{- if and .Values.auth.sasl.enabled (not (empty .Values.auth.sasl.secretRef )) }}
+        - name: {{ .Values.auth.sasl.secretRef }}
+          secret:
+            secretName: {{ .Values.auth.sasl.secretRef }}
+            optional: false
+        {{- end }}
+        - name: {{ template "redpanda.fullname" . }}-config-watcher
+          secret:
+            secretName: {{ template "redpanda.fullname" . }}-config-watcher
+            optional: false
+            defaultMode: 0774
+{{- if or .Values.statefulset.nodeAffinity .Values.statefulset.podAffinity .Values.statefulset.podAntiAffinity }}
+      affinity:
+  {{- with .Values.statefulset.nodeAffinity }}
+        nodeAffinity: {{- toYaml . | nindent 10 }}
+  {{- end }}
+  {{- with .Values.statefulset.podAffinity }}
+        podAffinity: {{- toYaml . | nindent 10 }}
+  {{- end }}
+  {{- if .Values.statefulset.podAntiAffinity }}
+        podAntiAffinity:
+      {{- if eq .Values.statefulset.podAntiAffinity.type "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: {{ .Values.statefulset.podAntiAffinity.topologyKey }}
+              labelSelector:
+                matchLabels: {{ include "statefulset-pod-labels" . | nindent 18 }}
+      {{- else if eq .Values.statefulset.podAntiAffinity.type "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: {{ .Values.statefulset.podAntiAffinity.weight | int64 }}
+              podAffinityTerm:
+                topologyKey: {{ .Values.statefulset.podAntiAffinity.topologyKey }}
+                labelSelector:
+                  matchLabels: {{ include "statefulset-pod-labels" . | nindent 20 }}
+      {{- else if eq .Values.statefulset.podAntiAffinity.type "custom" }}
+          {{- toYaml .Values.statefulset.podAntiAffinity.custom | nindent 10 }}
+      {{- end }}
+  {{- end }}
+{{- end }}
+{{- if semverCompare ">=1.16-0" .Capabilities.KubeVersion.GitVersion }}
+      topologySpreadConstraints:
+    {{- range $v := .Values.statefulset.topologySpreadConstraints }}
+        - maxSkew: {{ $v.maxSkew }}
+          topologyKey: {{ $v.topologyKey }}
+          whenUnsatisfiable: {{ $v.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels: {{ include "statefulset-pod-labels" $ | nindent 14 }}
+    {{- end }}
+{{- end }}
+{{- with ( include "statefulset-nodeSelectors" . ) }}
+      nodeSelector: {{- . | nindent 8 }}
+{{- end }}
+{{- if .Values.statefulset.priorityClassName }}
+      priorityClassName: {{ .Values.statefulset.priorityClassName }}
+{{- end }}
+{{- with ( include "statefulset-tolerations" . ) }}
+      tolerations: {{- . | nindent 8 }}
+{{- end }}
+{{- if or .Values.storage.persistentVolume.enabled (and (include "is-licensed" . | fromJson).bool .Values.storage.tieredConfig.cloud_storage_enabled .Values.storage.tieredStoragePersistentVolume.enabled) }}
+  volumeClaimTemplates:
+{{- if .Values.storage.persistentVolume.enabled }}
+    - metadata:
+        name: datadir
+        labels:
+          app.kubernetes.io/name: {{ template "redpanda.name" . }}
+          app.kubernetes.io/instance: {{ .Release.Name | quote }}
+          app.kubernetes.io/component: {{ template "redpanda.name" . }}
+  {{- with .Values.storage.persistentVolume.labels }}
+    {{- toYaml . | nindent 10 }}
+  {{- end }}
+  {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 10 }}
+  {{- end }}
+  {{- with .Values.storage.persistentVolume.annotations }}
+        annotations: {{- toYaml . | nindent 10 }}
+  {{- end }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+  {{- if .Values.storage.persistentVolume.storageClass }}
+    {{- if (eq "-" .Values.storage.persistentVolume.storageClass) }}
+        storageClassName: ""
+    {{- else }}
+        storageClassName: {{ .Values.storage.persistentVolume.storageClass | quote }}
+    {{- end }}
+  {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.persistentVolume.size | quote }}
+{{- end }}
+{{- if and (include "is-licensed" . | fromJson).bool .Values.storage.tieredConfig.cloud_storage_enabled .Values.storage.tieredStoragePersistentVolume.enabled }}
+    - metadata:
+        name: tiered-storage-dir
+        labels:
+          app.kubernetes.io/name: {{ template "redpanda.name" . }}
+          app.kubernetes.io/instance: {{ .Release.Name | quote }}
+          app.kubernetes.io/component: {{ template "redpanda.name" . }}
+  {{- with .Values.storage.tieredStoragePersistentVolume.labels }}
+    {{- toYaml . | nindent 10 }}
+  {{- end }}
+  {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 10 }}
+  {{- end }}
+  {{- with .Values.storage.tieredStoragePersistentVolume.annotations }}
+        annotations: {{- toYaml . | nindent 10 }}
+  {{- end }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+  {{- if .Values.storage.tieredStoragePersistentVolume.storageClass }}
+    {{- if (eq "-" .Values.storage.tieredStoragePersistentVolume.storageClass) }}
+        storageClassName: ""
+    {{- else }}
+        storageClassName: {{ .Values.storage.tieredStoragePersistentVolume.storageClass | quote }}
+    {{- end }}
+  {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.tieredConfig.cloud_storage_cache_size }}
+{{- end }}
+{{- end }}
