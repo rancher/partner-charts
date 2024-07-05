@@ -1,0 +1,50 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: frontend-config
+data:
+  frontend.conf: |
+    server {
+        listen {{ .Values.service.externalPort }} default_server;
+    {{- if .Values.global.network.enable_ipv6 }}
+        listen [::]:{{ .Values.service.externalPort }} default_server;
+    {{- end }}
+        server_name localhost;
+
+        gzip on;
+        # serves *.gz files (when present) instead of dynamic compression
+        gzip_static on;
+
+        root /frontend;
+        index index.html;
+
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+  nginx.conf: |
+    #user nginx; # this directive is ignored if we use a non-root user in Dockerfile
+    worker_processes 4;
+
+    error_log stderr warn;
+    pid /var/run/nginx/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        access_log /dev/stdout;
+        sendfile on;
+        keepalive_timeout 650;
+
+        # turn off nginx version in responses
+        server_tokens off;
+
+        include /etc/nginx/conf.d/*.conf;
+    }

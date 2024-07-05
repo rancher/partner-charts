@@ -1,0 +1,34 @@
+{{- if include "k10.siemEnabled" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: aggauditpolicy-config
+  namespace: {{ .Release.Namespace }}
+data:
+  {{ include "k10.aggAuditPolicyFile" .}}: |
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    omitStages:
+    - "RequestReceived"
+    rules:
+    - level: RequestResponse
+      resources:
+      - group: "actions.kio.kasten.io"
+        resources: ["cancelactions", "restoreactions", "retireactions", "runactions"]
+      - group: "apps.kio.kasten.io"
+        resources: ["applications", "clusterrestorepoints", "restorepoints", "restorepointcontents"]
+      - group: "repositories.kio.kasten.io"
+        resources: ["storagerepositories"]
+      - group: "vault.kio.kasten.io"
+        resources: ["passkeys"]
+      verbs: ["create", "update", "patch", "delete", "get"]
+    - level: None
+      nonResourceURLs:
+        - /healthz*
+        - /version
+        - /openapi/v2*
+        - /openapi/v3*
+        - /timeout*
+{{- end -}}
