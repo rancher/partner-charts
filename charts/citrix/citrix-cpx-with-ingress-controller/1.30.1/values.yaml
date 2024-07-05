@@ -1,0 +1,244 @@
+# Default values for citrix-cpx-with-ingress-controller.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Citrix ADC CPX config details
+imageRegistry: quay.io
+imageRepository: citrix/citrix-k8s-cpx-ingress
+imageTag: 13.1-37.38
+image: "{{ .Values.imageRegistry }}/{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
+pullPolicy: IfNotPresent
+imagePullSecrets: []
+daemonSet: False
+nameOverride: ""
+replicaCount: 1
+fullnameOverride: ""
+mgmtHttpPort: 9080
+mgmtHttpsPort: 9443
+openshift: false
+nsHTTP2ServerSide: "OFF"
+nsCookieVersion: "0"
+nsConfigDnsRec:
+nsSvcLbDnsRec:
+nsDnsNameserver:
+optimizeEndpointBinding:
+routeLabels:
+namespaceLabels:
+
+# Service Type LoadBalancer and ingress support  with CPX through BGP advertisement
+# If you enable this, CPX is run as DaemonSet. Please edit the bgpSettings for configuring
+# BGP neighbors for propgation of external IPs.
+cpxBgpRouter: false
+
+# If cpxBgpRouter is true, then this is the NSIP used by CPX for internal communication
+nsIP: 192.168.1.2
+
+# If cpxBgpRouter is true, then this is the Gateway used by CPX for internal communication
+nsGateway: 192.168.1.1
+
+# Protocol used for communication between Citrix Ingress Controller sidecar and Citrix CPX
+nsProtocol: http
+
+# External IP for ingress resource when bgpRouter is set to True
+ingressIP:
+
+# If IPAM controller is used for auto allocation of the external IP for service of type LoadBalancer, set this option to true
+ipam: False
+
+# Enable RBAC role (so called local role), by default CIC deployed with ClusterRole.
+# below variable to deploy CIC with RBAC role, only ingress service supported with this config
+rbacRole: False
+
+# API server Cert verification can be disabled, while communicating with API Server, if disableAPIServerCertVerify set to True
+disableAPIServerCertVerify: False
+
+cpxLicenseAggregator: 
+
+sslCertManagedByAWS: False
+
+nodeSelector:
+  key:
+  value:
+tolerations: []
+
+serviceType:
+  loadBalancer:
+    enabled: False
+  nodePort:
+    enabled: False
+    httpPort:
+    httpsPort:
+
+serviceAnnotations: {}
+
+serviceSpec:
+  externalTrafficPolicy: "Cluster"
+  loadBalancerIP:
+  loadBalancerSourceRanges: []
+
+servicePorts: []
+
+# Citrix Ingress Controller config details
+cic:
+  imageRegistry: quay.io
+  imageRepository: citrix/citrix-k8s-ingress-controller
+  imageTag: 1.30.1
+  image: "{{ .Values.cic.imageRegistry }}/{{ .Values.cic.imageRepository }}:{{ .Values.cic.imageTag }}"
+  pullPolicy: IfNotPresent
+  required: true
+  resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # Following values depends on no of ingresses configured by Ingress Controllers, so it is
+  # advised to test with maximum no of ingresses to set these values.
+  # limits:
+  #   cpu: 1000m
+  #   memory: 1000Mi
+  # requests:
+  #   cpu: 250m
+  #   memory: 256Mi
+entityPrefix:
+license:
+  accept: no
+ingressClass:
+setAsDefaultIngressClass: False
+# nitroReadTimeout is timeout value in seconds for nitro api read timeout(default is 20)
+nitroReadTimeout:
+logLevel: INFO
+jsonLog: false 
+defaultSSLCertSecret:
+updateIngressStatus: False
+logProxy:
+kubernetesURL:
+disableOpenshiftRoutes:
+profileSslFrontend: {}
+  # preconfigured: my_ssl_profile
+  #  OR
+  # config:
+  #   tls13: 'ENABLED'
+  #   hsts: 'ENABLED'
+profileHttpFrontend: {}
+  # preconfigured: my_http_profile
+  #  OR
+  # config:
+  #   dropinvalreqs: 'ENABLED'
+  #   websocket: 'ENABLED'
+profileTcpFrontend: {}
+  # preconfigured: my_tcp_profile
+  #  OR
+  # config:
+  #   sack: 'ENABLED'
+  #   nagle: 'ENABLED'
+
+
+# Citrix ADM/License Server config details
+ADMSettings:
+  licenseServerIP:
+  licenseServerPort: 27000
+  ADMIP:
+  loginSecret:
+  bandWidthLicense: false
+  bandWidth: 1000 #bandwidth value shoule be in Mbps
+  vCPULicense: false
+  cpxCores:
+  analyticsServerPort: 5557
+  licenseEdition: PLATINUM
+
+# Exporter config details
+exporter:
+  required: false
+  imageRegistry: quay.io
+  imageRepository: citrix/citrix-adc-metrics-exporter
+  imageTag: 1.4.9
+  image: "{{ .Values.exporter.imageRegistry }}/{{ .Values.exporter.imageRepository }}:{{ .Values.exporter.imageTag }}"
+  pullPolicy: IfNotPresent
+  ports:
+    containerPort: 8888
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+
+# For CRDs supported by Citrix Ingress Controller
+crds:
+  install: false
+  retainOnDelete: false
+
+# Config required to be done by Citrix Ingress Controller for sending metrics to Citrix Observability Exporter
+analyticsConfig:
+  required: false
+  distributedTracing:
+    enable: false
+    samplingrate: 100
+  endpoint:
+    server:
+    service:
+  timeseries:
+    port: 5563
+    metrics:
+      enable: false
+      mode: 'avro'
+    auditlogs:
+      enable: false
+    events:
+      enable: false
+  transactions:
+    enable: false
+    port: 5557
+
+# BGP configurations: local AS, remote AS and remote address is mandatory to provide. Please do the approrpiate changes with respect to your environment
+bgpSettings:
+  # When bgpConfig is configured correctly, set the required to true for the configuration to be applied.
+  required: false
+  bgpConfig:
+  - bgpRouter:
+      # Local AS number for BGP advertisement
+      localAS: 100
+      neighbor:
+        # Address of the nighbor router for BGP advertisement
+      - address:
+        # Remote AS number
+        remoteAS: 100
+        advertisementInterval: 10
+        ASOriginationInterval: 10
+
+bgpPort: 
+
+nsLbHashAlgo:
+  required: false
+  hashFingers: 256
+  hashAlgorithm: 'DEFAULT'
+
+# Specifies whether a ServiceAccount should be created
+serviceAccount:
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and `create` is true, a name is generated using the fullname template
+  # name:
+
+podAnnotations: {}
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'
+  # This is the resource for CPX container.
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+affinity: {}
