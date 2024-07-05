@@ -1,0 +1,108 @@
+#DxEnterprise + MSSQL StatefulSet 
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dxemssql.fullname" . }}
+  labels:
+    {{- include "dxemssql.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "dxemssql.fullname" . }}
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "dxemssql.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dxemssql.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+      - name: sql
+        image: "{{ .Values.sqlImage.repository }}:{{ .Values.sqlImage.tag }}"
+        imagePullPolicy: {{ .Values.sqlImage.pullPolicy }}
+        env:
+        - name: ACCEPT_EULA
+          value: {{ required "You must accept the SQL Server EULA." .Values.ACCEPT_EULA | upper | quote }}
+        - name: MSSQL_AGENT_ENABLED
+          value: {{ .Values.MSSQL_AGENT_ENABLED | quote }}
+        - name: MSSQL_ENABLE_HADR
+          value: "1"
+        - name: MSSQL_PID
+          value: {{ .Values.MSSQL_PID | quote }}
+        - name: MSSQL_SA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "You must provide a secret key that contains MSSQL_SA_PASSWORD and DX_PASSKEY." .Values.secretKeys }}
+              key: MSSQL_SA_PASSWORD
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 12
+          tcpSocket:
+            port: 1433
+        volumeMounts:
+        - name: mssql
+          mountPath: "/var/opt/mssql"
+      - name: dxe
+        image: "{{ .Values.dxeImage.repository }}:{{ .Values.dxeImage.tag }}"
+        imagePullPolicy: {{ .Values.dxeImage.pullPolicy }}
+        env:
+        - name: DX_LICENSE
+          value: {{ required "DxEnterprise license key is required." .Values.DX_LICENSE | upper | quote }}
+        - name: DX_ACCEPT_EULA
+          value: {{ required "You must accept the DxEnterprise EULA." .Values.DX_ACCEPT_EULA | lower | quote }}
+        - name: DX_OTPK
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretKeys }}
+              key: DX_OTPK
+              optional: true
+        - name: DX_PASSKEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "You must provide a secret key that contains MSSQL_SA_PASSWORD and DX_PASSKEY." .Values.secretKeys }}
+              key: DX_PASSKEY
+        - name: DX_VHOST_NAME
+          value: {{ .Values.DX_VHOST_NAME | upper | quote }}
+        - name: DX_AG_NAME
+          value: {{ .Values.DX_AG_NAME | upper | quote }}
+        - name: DX_AG_OPTIONS
+          value: {{ .Values.DX_AG_OPTIONS | quote }}
+        - name: DX_NEW_CLUSTER
+          value: {{ .Values.DX_NEW_CLUSTER | lower | quote }}
+        - name: MSSQL_SA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretKeys }}
+              key: MSSQL_SA_PASSWORD
+        readinessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 12
+          exec:
+            command:
+            - sh
+            - -c
+            - "cat /opt/dh2i/sbin/ready | grep -q \"1\""
+        volumeMounts:
+        - name: dxe
+          mountPath: "/etc/dh2i"
+  volumeClaimTemplates:
+  - metadata:
+      name: dxe
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+  - metadata:
+      name: mssql
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 8Gi
