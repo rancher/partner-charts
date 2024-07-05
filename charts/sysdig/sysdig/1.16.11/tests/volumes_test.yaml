@@ -1,0 +1,35 @@
+suite: Host volumes are available for agent
+templates:
+  - templates/daemonset.yaml
+tests:
+  - it: Ensure /var/run host volume is mounted as /host/var/run in container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[*].volumeMounts[?(@.name == "varrun-vol")].mountPath
+          value: /host/var/run
+        template: templates/daemonset.yaml
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "varrun-vol")].hostPath.path
+          value: /var/run
+        template: templates/daemonset.yaml
+  - it: Ensure /var/lib host volume is mounted as /host/var/lib in container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[*].volumeMounts[?(@.name == "varlib-vol")].mountPath
+          value: /host/var/lib
+        template: templates/daemonset.yaml
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "varlib-vol")].hostPath.path
+          value: /var/lib
+        template: templates/daemonset.yaml
+  - it: Ensure /var/lib host volume is not mounted as /host/var/lib in container when running on gke.autopilot
+    set:
+      gke:
+        autopilot: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[*].volumeMounts[?(@.name == "varlib-vol")]
+        template: templates/daemonset.yaml
+      - isNull:
+          path: spec.template.spec.volumes[?(@.name == "varlib-vol")]
+        template: templates/daemonset.yaml

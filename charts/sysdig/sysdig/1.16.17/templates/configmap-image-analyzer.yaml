@@ -1,0 +1,94 @@
+{{ if and (not .Values.secure.vulnerabilityManagement.newEngineOnly) (include "nodeAnalyzer.deployImageAnalyzer" .) }}
+{{- if include "deploy-nia" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sysdig.fullname" . }}-image-analyzer
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+data:
+  {{- if .Values.nodeImageAnalyzer.settings.dockerSocketPath }}
+  docker_socket_path: {{ .Values.nodeImageAnalyzer.settings.dockerSocketPath }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.criSocketPath }}
+  cri_socket_path: {{ .Values.nodeImageAnalyzer.settings.criSocketPath }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.containerdSocketPath }}
+  containerd_socket_path: {{ .Values.nodeImageAnalyzer.settings.containerdSocketPath }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.collectorEndpoint }}
+  collector_endpoint: {{ .Values.nodeImageAnalyzer.settings.collectorEndpoint }}
+  {{- end }}
+  {{- if hasKey .Values.nodeImageAnalyzer.settings "sslVerifyCertificate" }}
+  ssl_verify_certificate: "{{ .Values.nodeImageAnalyzer.settings.sslVerifyCertificate }}"
+  {{- end }}
+  debug: "{{ .Values.nodeImageAnalyzer.settings.debug | default false }}"
+  {{- if .Values.nodeImageAnalyzer.settings.imagePeriod }}
+  image_period: {{ .Values.nodeImageAnalyzer.settings.imagePeriod }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.imageCacheTTL }}
+  image_cache_ttl: {{ .Values.nodeImageAnalyzer.settings.imageCacheTTL }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.reportPeriod }}
+  report_period: {{ .Values.nodeImageAnalyzer.settings.reportPeriod }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.collectorTimeout }}
+  collector_timeout: {{ .Values.nodeImageAnalyzer.settings.collectorTimeout }}
+  {{- end }}
+  {{- if .Values.nodeImageAnalyzer.settings.httpProxy }}
+  http_proxy: {{ .Values.nodeImageAnalyzer.settings.httpProxy }}
+  {{- end -}}
+  {{- if .Values.nodeImageAnalyzer.settings.httpsProxy }}
+  https_proxy: {{ .Values.nodeImageAnalyzer.settings.httpsProxy }}
+  {{- end -}}
+  {{- if .Values.nodeImageAnalyzer.settings.noProxy }}
+  no_proxy: {{ .Values.nodeImageAnalyzer.settings.noProxy }}
+  {{- end -}}
+{{- end }}
+{{- if not .Values.gke.autopilot }}
+{{- if and (not (include "deploy-nia" .)) .Values.nodeAnalyzer.deploy }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sysdig.fullname" . }}-image-analyzer
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+data:
+  collector_endpoint: "https://{{ required "A valid .Values.nodeAnalyzer.apiEndpoint is required" (.Values.nodeAnalyzer.apiEndpoint | default .Values.nodeAnalyzer.collectorEndpoint) }}/internal/scanning/scanning-analysis-collector"
+  {{- if hasKey .Values.nodeAnalyzer "sslVerifyCertificate" }}
+  ssl_verify_certificate: "{{ .Values.nodeAnalyzer.sslVerifyCertificate }}"
+  {{- end }}
+  debug: "{{ .Values.nodeAnalyzer.debug | default false }}"
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.dockerSocketPath }}
+  docker_socket_path: {{ .Values.nodeAnalyzer.imageAnalyzer.dockerSocketPath }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.criSocketPath }}
+  cri_socket_path: {{ .Values.nodeAnalyzer.imageAnalyzer.criSocketPath }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.containerdSocketPath }}
+  containerd_socket_path: {{ .Values.nodeAnalyzer.imageAnalyzer.containerdSocketPath }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.imagePeriod }}
+  image_period: {{ .Values.nodeAnalyzer.imageAnalyzer.imagePeriod }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.imageCacheTTL }}
+  image_cache_ttl: {{ .Values.nodeAnalyzer.imageAnalyzer.imageCacheTTL }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.reportPeriod }}
+  report_period: {{ .Values.nodeAnalyzer.imageAnalyzer.reportPeriod }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.imageAnalyzer.collectorTimeout }}
+  collector_timeout: {{ .Values.nodeAnalyzer.imageAnalyzer.collectorTimeout }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.httpProxy }}
+  http_proxy: {{ .Values.nodeAnalyzer.httpProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.httpsProxy }}
+  https_proxy: {{ .Values.nodeAnalyzer.httpsProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.noProxy }}
+  no_proxy: {{ .Values.nodeAnalyzer.noProxy }}
+  {{- end -}}
+  {{- end }}
+{{- end }}
+{{- end }}

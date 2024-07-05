@@ -1,0 +1,83 @@
+{{- if .Values.kspm.deploy }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "sysdig.fullname" . }}-kspm-collector
+  labels:
+    app.kubernetes.io/name: {{ include "sysdig.name" . }}-kspm-collector
+{{ include "sysdig.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.kspmCollector.settings.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "sysdig.name" . }}-kspm-collector
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "sysdig.name" . }}-kspm-collector
+{{ include "sysdig.labels" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "sysdig.serviceAccountName" .}}-kspm-collector
+      containers:
+      - name: {{ include "sysdig.name" . }}-kspm-collector
+        image: {{ template "sysdig.image.kspmCollector" . }}
+        imagePullPolicy: {{ .Values.kspmCollector.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.kspmCollector.resources | indent 10 }}
+        env:
+          - name: ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                {{- if not .Values.sysdig.existingAccessKeySecret }}
+                name: {{ template "sysdig.fullname" . }}
+                {{- else }}
+                name: {{ .Values.sysdig.existingAccessKeySecret }}
+                {{- end }}
+                key: access-key
+          - name: CLUSTER_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: cluster_name
+          - name: INCLUDED_NAMESPACES
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: included_namespaces
+          - name: EXCLUDED_NAMESPACES
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: excluded_namespaces
+          - name: INCLUDED_WORKLOADS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: included_workloads
+          - name: EXCLUDED_WORKLOADS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: excluded_workloads
+          - name: HEALTH_INTERVAL_MINUTES
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: health_interval_minutes
+          - name: ENVIRONMENT
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: environment
+          - name: EXTERNAL_NATS_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-collector
+                key: external_nats_url
+          {{- range $key, $value := .Values.kspmCollector.env }}
+          - name: "{{ $key }}"
+            value: "{{ $value }}"
+          {{- end }}
+{{- end }}

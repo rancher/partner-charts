@@ -1,0 +1,42 @@
+{{- if not .Values.gke.autopilot }}
+{{ if not .Values.secure.vulnerabilityManagement.newEngineOnly }}
+{{- if and (not (include "deploy-nia" .)) .Values.nodeAnalyzer.deploy (include "nodeAnalyzer.deployHostAnalyzer" .) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sysdig.fullname" . }}-host-analyzer
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+data:
+  collector_endpoint: "https://{{ .Values.nodeAnalyzer.apiEndpoint | default .Values.nodeAnalyzer.collectorEndpoint }}/internal/scanning/scanning-analysis-collector"
+  {{- if .Values.nodeAnalyzer.collectorTimeout }}
+  collector_timeout: {{ .Values.nodeAnalyzer.collectorTimeout }}
+  {{- end }}
+  {{- if hasKey .Values.nodeAnalyzer "sslVerifyCertificate" }}
+  ssl_verify_certificate: "{{ .Values.nodeAnalyzer.sslVerifyCertificate }}"
+  {{- end }}
+  debug: "{{ .Values.nodeAnalyzer.debug | default false }}"
+  {{- if .Values.nodeAnalyzer.hostAnalyzer.schedule }}
+  schedule: {{ .Values.nodeAnalyzer.hostAnalyzer.schedule | quote }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.hostAnalyzer.analyzeAtStartup }}
+  analyze_at_startup: {{ .Values.nodeAnalyzer.hostAnalyzer.analyzeAtStartup }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.hostAnalyzer.dirsToScan }}
+  dirs_to_scan: {{ .Values.nodeAnalyzer.hostAnalyzer.dirsToScan }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.hostAnalyzer.maxSendAttempts }}
+  max_send_attempts: {{ .Values.nodeAnalyzer.hostAnalyzer.maxSendAttempts }}
+  {{- end }}
+  {{- if .Values.nodeAnalyzer.httpProxy }}
+  http_proxy: {{ .Values.nodeAnalyzer.httpProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.httpsProxy }}
+  https_proxy: {{ .Values.nodeAnalyzer.httpsProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.noProxy }}
+  no_proxy: {{ .Values.nodeAnalyzer.noProxy }}
+  {{- end -}}
+{{- end }}
+{{- end }}
+{{- end }}

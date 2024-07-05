@@ -1,0 +1,586 @@
+{{- if not .Values.gke.autopilot }}
+{{- if (include "deploy-na" .) }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ template "sysdig.fullname" . }}-node-analyzer
+  labels:
+    app.kubernetes.io/name: {{ include "sysdig.name" . }}-node-analyzer
+{{ include "sysdig.labels" . | indent 4 }}
+{{ include "nodeAnalyzer.labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "sysdig.name" . }}-node-analyzer
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      name: {{ template "sysdig.fullname" . }}-node-analyzer
+      labels:
+        app.kubernetes.io/name: {{ include "sysdig.name" . }}-node-analyzer
+{{ include "sysdig.labels" . | indent 8 }}
+{{ include "nodeAnalyzer.labels" . | indent 8 }}
+    spec:
+      volumes:
+{{ if include "nodeAnalyzer.deployBenchmarkRunner" . }}
+        - name: sysdig-agent-config
+          configMap:
+            name: {{ template "sysdig.fullname" . }}
+            optional: true
+{{- end }}
+        # Needed for cri-o image inspection.
+        # cri-o and especially OCP 4.x by default use containers/storage to handle images, and this makes sure that the
+        # analyzer has access to the configuration. This file is mounted read-only.
+        - name: etc-containers-storage-vol
+          hostPath:
+            path: /etc/containers/storage.conf
+        # Needed for cri-o image inspection.
+        # This is the directory where image data is stored by default when using cri-o and OCP 4.x and the analyzer
+        # uses it to get the data to scan. This directory must be mounted r/w because proper access to its files through
+        # the containers/storage library is always regulated with a lockfile.
+        - name: var-lib-containers-vol
+          hostPath:
+            path: /var/lib/containers
+        # Needed for some IBM OpenShift clusters which symlink /var/run/containers/storage to contents of /var/data by default
+        - name: vardata-vol
+          hostPath:
+            path: /var/data
+        # Needed for socket access
+        - name: varrun-vol
+          hostPath:
+            path: /var/run
+        # Add custom volume here
+        - name: sysdig-image-analyzer-config
+          configMap:
+            name: {{ template "sysdig.fullname" . }}-image-analyzer
+            optional: true
+{{ if or (include "nodeAnalyzer.deployBenchmarkRunner" .) (include "nodeAnalyzer.deployHostAnalyzer" .) .Values.kspm.deploy }}
+        # Needed to run Benchmarks and Host Analyzer. This mount is read-only.
+        # Benchmarks include numerous checks that run tests against config files in the host filesystem. There are also
+        # checks that test various host configurations such as loaded modules and enabled security features.
+        - name: root-vol
+          hostPath:
+            path: /
+{{- end }}
+        - name: tmp-vol
+          emptyDir: {}
+        {{- with .Values.nodeAnalyzer.imageAnalyzer.extraVolumes.volumes }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+      {{- if .Values.nodeAnalyzer.priorityClassName }}
+      priorityClassName: "{{ .Values.nodeAnalyzer.priorityClassName }}"
+      {{- end }}
+      tolerations:
+{{ toYaml .Values.nodeAnalyzer.tolerations | indent 8 }}
+      # The following line is necessary for RBAC
+      serviceAccountName: {{ template "sysdig.nodeAnalyzer.serviceAccountName" .}}
+      {{- if .Values.nodeAnalyzer.pullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.nodeAnalyzer.pullSecrets | indent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 5
+{{ if include "nodeAnalyzer.deployBenchmarkRunner" . }}
+      # Use the Host Network Namespace.
+      # This is required by the Benchmark container to determine the hostname and host mac address
+      hostNetwork: true
+      # Use the Host PID namespace.
+      # This is required for Kubernetes benchmarks, as they contain tests that check Kubernetes processes running on
+      # the host
+      hostPID: true
+{{- end }}
+      containers:
+{{ if .Values.kspm.deploy }}
+      - name: sysdig-kspm-analyzer
+        image: {{ template "sysdig.image.kspmAnalyzer" . }}
+        imagePullPolicy: {{ .Values.nodeAnalyzer.kspmAnalyzer.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.nodeAnalyzer.kspmAnalyzer.resources | indent 10 }}
+        securityContext:
+          runAsUser: 0
+          privileged: true
+          capabilities:
+            add:
+              - NET_ADMIN
+              - SYS_ADMIN
+        env:
+          - name: ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                {{- if not .Values.sysdig.existingAccessKeySecret }}
+                name: {{ template "sysdig.fullname" . }}
+                {{- else }}
+                name: {{ .Values.sysdig.existingAccessKeySecret }}
+                {{- end }}
+                key: access-key
+          - name: ENVIRONMENT
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-analyzer
+                key: environment
+          - name: EXTERNAL_NATS_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-analyzer
+                key: external_nats_url
+          - name: CLUSTER_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-analyzer
+                key: cluster_name
+          - name: AGENT_APP_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-kspm-analyzer
+                key: agent_app_name
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- range $key, $value := .Values.nodeAnalyzer.kspmAnalyzer.env }}
+          - name: "{{ $key }}"
+            value: "{{ $value }}"
+          {{- end }}
+        volumeMounts:
+          - name: root-vol
+            mountPath: /host
+            readOnly: true
+          - name: tmp-vol
+            mountPath: /host/tmp
+{{- end }}
+{{ if not .Values.secure.vulnerabilityManagement.newEngineOnly }}
+{{- if include "nodeAnalyzer.deployImageAnalyzer" . }}
+      - name: sysdig-image-analyzer
+        image: {{ template "sysdig.image.imageAnalyzer" . }}
+        securityContext:
+          # The privileged flag is necessary for OCP 4.x and other Kubernetes setups that deny host filesystem access to
+          # running containers by default regardless of volume mounts. In those cases, access to the CRI socket would fail.
+          privileged: true
+        imagePullPolicy: {{ .Values.nodeAnalyzer.imageAnalyzer.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.nodeAnalyzer.imageAnalyzer.resources | indent 10 }}
+        volumeMounts:
+          # Needed for some IBM OpenShift clusters which symlink /var/run/containers/storage to contents of /var/data by default
+          - mountPath: /var/data
+            name: vardata-vol
+          - mountPath: /var/run
+            name: varrun-vol
+          - mountPath: /etc/containers/storage.conf
+            name: etc-containers-storage-vol
+            readOnly: true
+          - mountPath: /var/lib/containers
+            name: var-lib-containers-vol
+          # Custom volume mount here
+          {{- if .Values.nodeAnalyzer.imageAnalyzer.extraVolumes.mounts }}
+{{ toYaml .Values.nodeAnalyzer.imageAnalyzer.extraVolumes.mounts | indent 10 }}
+          {{- end }}
+        env:
+        - name: ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              {{- if not .Values.sysdig.existingAccessKeySecret }}
+              name: {{ template "sysdig.fullname" . }}
+              {{- else }}
+              name: {{ .Values.sysdig.existingAccessKeySecret }}
+              {{- end }}
+              key: access-key
+        - name: IMAGE_PERIOD
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: image_period
+              optional: true
+        - name: IMAGE_CACHE_TTL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: image_cache_ttl
+              optional: true
+        - name: REPORT_PERIOD
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: report_period
+              optional: true
+        - name: DOCKER_SOCKET_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: docker_socket_path
+              optional: true
+        - name: CRI_SOCKET_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: cri_socket_path
+              optional: true
+        - name: CONTAINERD_SOCKET_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: containerd_socket_path
+              optional: true
+        - name: AM_COLLECTOR_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: collector_endpoint
+              optional: true
+        - name: AM_COLLECTOR_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: collector_timeout
+              optional: true
+        - name: VERIFY_CERTIFICATE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: ssl_verify_certificate
+              optional: true
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: K8S_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: K8S_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: debug
+              optional: true
+        - name: HTTP_PROXY
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: http_proxy
+              optional: true
+        - name: HTTPS_PROXY
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: https_proxy
+              optional: true
+        - name: NO_PROXY
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-image-analyzer
+              key: no_proxy
+              optional: true
+        {{- range $key, $value := .Values.nodeAnalyzer.imageAnalyzer.env }}
+        - name: "{{ $key }}"
+          value: "{{ $value }}"
+        {{- end }}
+{{- end }}
+{{ if include "nodeAnalyzer.deployHostAnalyzer" . }}
+      - name: sysdig-host-analyzer
+        image: {{ template "sysdig.image.hostAnalyzer" . }}
+        securityContext:
+          # The privileged flag is necessary for OCP 4.x and other Kubernetes setups that deny host filesystem access to
+          # running containers by default regardless of volume mounts. In those cases, access to any host related components
+          # would fail
+          privileged: true
+        imagePullPolicy: {{ .Values.nodeAnalyzer.hostAnalyzer.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.nodeAnalyzer.hostAnalyzer.resources | indent 10 }}
+        volumeMounts:
+          - mountPath: /host
+            name: root-vol
+            readOnly: true
+        env:
+        - name: ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              {{- if not .Values.sysdig.existingAccessKeySecret }}
+              name: {{ template "sysdig.fullname" . }}
+              {{- else }}
+              name: {{ .Values.sysdig.existingAccessKeySecret }}
+              {{- end }}
+              key: access-key
+        - name: AM_COLLECTOR_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: collector_endpoint
+        - name: AM_COLLECTOR_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: collector_timeout
+              optional: true
+        - name: SCHEDULE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: schedule
+              optional: true
+        - name: ANALYZE_AT_STARTUP
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: analyze_at_startup
+              optional: true
+        - name: HOST_BASE
+          value: /host
+        - name: DIRS_TO_SCAN
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: dirs_to_scan
+              optional: true
+        - name: MAX_SEND_ATTEMPTS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: max_send_attempts
+              optional: true
+        - name: VERIFY_CERTIFICATE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: ssl_verify_certificate
+              optional: true
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              key: debug
+              optional: true
+        - name: HTTP_PROXY
+          valueFrom:
+            configMapKeyRef:
+              key: http_proxy
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              optional: true
+        - name: HTTPS_PROXY
+          valueFrom:
+            configMapKeyRef:
+              key: https_proxy
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              optional: true
+        - name: NO_PROXY
+          valueFrom:
+            configMapKeyRef:
+              key: no_proxy
+              name: {{ template "sysdig.fullname" . }}-host-analyzer
+              optional: true
+        {{- range $key, $value := .Values.nodeAnalyzer.hostAnalyzer.env }}
+        - name: "{{ $key }}"
+          value: "{{ $value }}"
+        {{- end }}
+{{- end }}
+{{- end }}
+{{ if include "nodeAnalyzer.deployBenchmarkRunner" . }}
+      - name: sysdig-benchmark-runner
+        image: {{ template "sysdig.image.benchmarkRunner" . }}
+        imagePullPolicy: {{ .Values.nodeAnalyzer.benchmarkRunner.image.pullPolicy }}
+        securityContext:
+          # The privileged flag is necessary for OCP 4.x and other Kubernetes setups that deny host filesystem access to
+          # running containers by default regardless of volume mounts. In those cases, the benchmark process would fail.
+          privileged: true
+        resources:
+{{ toYaml .Values.nodeAnalyzer.benchmarkRunner.resources | indent 10 }}
+        volumeMounts:
+          - mountPath: /opt/draios/etc/kubernetes/config
+            name: sysdig-agent-config
+          - mountPath: /host
+            name: root-vol
+            readOnly: true
+          - mountPath: /host/tmp
+            name: tmp-vol
+        env:
+        - name: ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              {{- if not .Values.sysdig.existingAccessKeySecret }}
+              name: {{ template "sysdig.fullname" . }}
+              {{- else }}
+              name: {{ .Values.sysdig.existingAccessKeySecret }}
+              {{- end }}
+              key: access-key
+        - name: BACKEND_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-benchmark-runner
+              key: collector_endpoint
+        - name: BACKEND_VERIFY_TLS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-benchmark-runner
+              key: ssl_verify_certificate
+              optional: true
+        - name: KUBERNETES_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "sysdig.fullname" . }}-benchmark-runner
+              key: debug
+              optional: true
+        - name: HTTP_PROXY
+          valueFrom:
+            configMapKeyRef:
+              key: http_proxy
+              name: {{ template "sysdig.fullname" . }}-benchmark-runner
+              optional: true
+        - name: HTTPS_PROXY
+          valueFrom:
+            configMapKeyRef:
+              key: https_proxy
+              name: {{ template "sysdig.fullname" . }}-benchmark-runner
+              optional: true
+        - name: NO_PROXY
+          valueFrom:
+            configMapKeyRef:
+              key: no_proxy
+              name: {{ template "sysdig.fullname" . }}-benchmark-runner
+              optional: true
+        {{- range $key, $value := .Values.nodeAnalyzer.benchmarkRunner.env }}
+        - name: "{{ $key }}"
+          value: "{{ $value }}"
+        {{- end }}
+{{- end }}
+{{ if or  .Values.nodeAnalyzer.runtimeScanner.deploy .Values.secure.vulnerabilityManagement.newEngineOnly }}
+      # Runtime Scanner #
+      - name: sysdig-runtime-scanner
+        image: {{ template "sysdig.image.runtimeScanner" . }}
+        imagePullPolicy: {{ .Values.nodeAnalyzer.runtimeScanner.image.pullPolicy }}
+        securityContext:
+            privileged: true
+        resources:
+{{ toYaml .Values.nodeAnalyzer.runtimeScanner.resources | indent 10 }}
+        # Custom volume mount here
+        env:
+          - name: TMPDIR
+            value: "/tmp"
+          - name: PROM_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: prom_port
+                optional: true
+          - name: MAX_FILE_SIZE_ALLOWED
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: analyzer.maxFileSizeAllowed
+                optional: true
+          - name: MAX_IMAGE_SIZE_ALLOWED
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: max_image_size_allowed
+                optional: true
+          - name: SYSDIG_API_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: api_endpoint
+          - name: SYSDIG_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                {{- if not .Values.sysdig.existingAccessKeySecret }}
+                name: {{ template "sysdig.fullname" . }}
+                {{- else }}
+                name: {{ .Values.sysdig.existingAccessKeySecret }}
+                {{- end }}
+                key: access-key
+          - name: SYSDIG_API_VERIFY_CERTIFICATE
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: ssl_verify_certificate
+                optional: true
+          - name: CLUSTER_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: cluster_name
+          - name: K8S_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: DEBUG
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: debug
+                optional: true
+          - name: HTTP_PROXY
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: http_proxy
+                optional: true
+          - name: HTTPS_PROXY
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: https_proxy
+                optional: true
+          - name: NO_PROXY
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: no_proxy
+                optional: true
+          {{- range $key, $value := .Values.nodeAnalyzer.runtimeScanner.env }}
+          - name: "{{ $key }}"
+            value: "{{ $value }}"
+          {{- end }}
+{{- if .Values.nodeAnalyzer.runtimeScanner.settings.eveEnabled }}
+          - name: EVE_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: eve_enabled
+                optional: true
+{{- end }}
+{{- if .Values.nodeAnalyzer.runtimeScanner.eveConnector.deploy }}
+          - name: EVE_INTEGRATION_ENABLED
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "sysdig.fullname" . }}-runtime-scanner
+                key: eve_integration_enabled
+                optional: true
+{{- end }}
+        volumeMounts:
+          # Needed for some IBM OpenShift clusters which symlink /var/run/containers/storage to contents of /var/data by default
+          - mountPath: /var/data
+            name: vardata-vol
+          - mountPath: /var/run
+            name: varrun-vol
+          - mountPath: /etc/containers/storage.conf
+            name: etc-containers-storage-vol
+            readOnly: true
+          - mountPath: /var/lib/containers
+            name: var-lib-containers-vol
+          - mountPath: /tmp
+            name: tmp-vol
+          {{- if .Values.nodeAnalyzer.runtimeScanner.extraMounts }}
+{{ toYaml .Values.nodeAnalyzer.runtimeScanner.extraMounts | indent 10 }}
+          {{- end }}
+# Runtime Scanner #
+{{- end }}
+      {{- with .Values.nodeAnalyzer.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeAnalyzer.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
