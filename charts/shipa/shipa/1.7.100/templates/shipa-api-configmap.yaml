@@ -1,0 +1,190 @@
+{{- if and (.Values.tags.defaultDB) (.Values.tags.legacyMongoReplicaset) }}
+{{- fail "tags.defaultDB and tags.legacyMongoReplicaset cannot both be true.\n  To use the legacy MongoDB chart set tags.defaultDB to false, tags.legacyMongoReplicaset to true,\n    and if upgrading, provide mongodb.persistence.existingClaim to match the existing PVC, which can be found with:\n      kubectl get pvc -A -l app=mongodb-replicaset -o jsonpath='{.items[].metadata.name}'\n  To use the current MongoDB chart set tags.defaultDB to true, tags.legacyMongoReplicaset to false (these are the default values)" }}
+{{- end }}
+{{- if and (or .Values.tags.defaultDB .Values.tags.legacyMongoReplicaset) (and (.Values.externalMongodb.url) (ne .Values.externalMongodb.url "< database url >")) }}
+{{- fail "externalMongodb.url cannot be set when either tags.defaultDB or tags.legacyMongoReplicaset are true.\n  Either set tags.defaultDB and tags.legacyMongoReplicaset to false to use an external MongoDB instance, or remove the value for externalMongodb.url" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "shipa.fullname" . }}-api-config
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+data:
+  shipa.conf: |-
+    shipaVersion: {{ .Chart.Version }}
+    tls-listen: "0.0.0.0:{{ .Values.shipaApi.securePort }}"
+    listen: "0.0.0.0:{{ .Values.shipaApi.port }}"
+    host: https://SHIPA_PUBLIC_IP:{{ first .Values.shipaApi.serviceSecurePorts }}
+    host-internal: http://{{ template "shipa.fullname" . }}-api.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}:{{ first .Values.shipaApi.servicePorts }}
+    use-internal-host: {{ .Values.shipaApi.useInternalHost }}
+    use-tls: true
+    shipaCloud:
+      enabled: {{ .Values.shipaCloud.enabled }}
+    tls:
+      server-cert: /certs/api-server.crt
+      server-key: /certs/api-server.key
+
+    database:
+    {{- if or (.Values.tags.defaultDB) (.Values.tags.legacyMongoReplicaset) }}
+      {{- if eq .Values.shipaCluster.ingress.type "istio" }}
+        {{- if .Values.tags.defaultDB }}
+      url: {{ .Release.Name }}-mongodb.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}:{{ .Values.mongodb.service.port }}
+        {{- else if .Values.tags.legacyMongoReplicaset }}
+      url: {{ .Release.Name }}-mongodb-replicaset.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}:{{ .Values.mongodb.service.port }}
+        {{- end }}
+      {{ else }}
+        {{- if .Values.tags.defaultDB }}
+      url: {{ .Release.Name }}-mongodb:{{ .Values.mongodb.service.port }}
+        {{- else if .Values.tags.legacyMongoReplicaset }}
+      url: {{ .Release.Name }}-mongodb-replicaset:{{ .Values.mongodb.service.port }}
+        {{- end }}
+      {{- end }}
+      tls: false
+    {{ else }}
+      url: {{ .Values.externalMongodb.url }}
+      tls: {{ .Values.externalMongodb.tls.enable }}
+    {{- end }}
+      name: shipa
+      username: $DB_USERNAME
+      password: $DB_PASSWORD
+    organization:
+      id: SHIPA_ORGANIZATION_ID
+    dashboard:
+      enabled: $DASHBOARD_ENABLED
+      image: $DASHBOARD_IMAGE
+      envs:
+        SHIPA_ADMIN_USER: {{ .Values.auth.adminUser | quote }}
+        SHIPA_CLOUD: {{ .Values.shipaCloud.enabled | quote }}
+        SHIPA_TARGETS: {{ trimPrefix "\n" (include "shipa.cnames" .) }}
+        SHIPA_PAY_API_HOST: {{ .Values.shipaCloud.shipaPayApi.host }}
+        SHIPA_PAY_API_TOKEN: {{ .Values.shipaCloud.shipaPayApi.token }}
+        GOOGLE_RECAPTCHA_SITEKEY: {{ .Values.shipaCloud.googleRecaptcha.sitekey }}
+        GOOGLE_RECAPTCHA_SECRET: {{ .Values.shipaCloud.googleRecaptcha.secret }}
+        SMARTLOOK_PROJECT_KEY: {{ .Values.shipaCloud.smartlook.projectKey }}
+        LAUNCH_DARKLY_SDK_KEY: {{ .Values.shipaCloud.launchDarkly.sdkKey }}
+        SHIPA_API_INTERNAL_URL: http://{{ template "shipa.fullname" . }}-api.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}:{{ first .Values.shipaApi.servicePorts }}
+    auth:
+      admin-email: {{ .Values.auth.adminUser | quote }}
+      dummy-domain: {{ .Values.auth.dummyDomain | quote }}
+      token-expire-days: 2
+      hash-cost: 4
+      user-registration: true
+    user-activation:
+      cert: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUF6TXIwd3hETklDcm9JN3VEVkdoTgpFZytVbTdkQzk3NVZpM1l1NnJHUUdlc3ZwZTY5T2NhT0VxZHFML0NNWGVRMW1oTVFtUnplQnlxWEJ1Q2xOemphCjlEbjV2WTBlVnNIZUhuVTJ4bkkyV1dSR3JjUE1mRGJuRzlDSnNZQmdHd3A2eDcrYVR2RXZCRFBtS3YrcjdOcysKUXhhNzBFZEk4NTZLMWQyTTQ1U3RuZW1hcm51cjdOTDdGb2VsS1FWNGREd1hxU2EvVW1tdHdOOGNSTENUQ0N4NQpObkVya2UrTWo1RFFqTW5TUlRHbjFxOE91azlOUXRxNDlrbFMwMUhIQTJBWnR6ZExteTMrTktXRVZta3Z0cGgxClJseHBtZVQ5SERNbHI5aFI3U3BidnRHeVZVUG1pbXVYWFA4cXdOcHZab01Ka3hWRm4zbWNRVHRMbk8xa0Jjb1cKZVFJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
+    provisioner: kubernetes
+    metrics:
+      host: {{ template "shipa.fullname" . }}-metrics
+      password: $METRICS_PASSWORD
+
+      # section contains configuration of Prometheus Metrics Exporter
+      prometheus-metrics-exporter:
+      {{- if .Values.prometheusMetricsExporter.image }}
+        image: "{{ .Values.prometheusMetricsExporter.image }}"
+      {{- else }}
+        image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.prometheusMetricsExporter.repositoryBasename }}:{{ .Values.prometheusMetricsExporter.tag }}"
+      {{- end }}
+
+    docker:
+      cluster:
+        storage: mongodb
+        mongo-database: cluster
+      collection: docker
+      registry-scheme: https
+      repository-namespace: shipa
+      router: traefik
+      deploy-cmd: /var/lib/shipa/deploy
+      run-cmd:
+        bin: /var/lib/shipa/start
+        port: "8888"
+      tls:
+        root-path: /certs
+      auto-scale:
+        enabled: true
+        run-interval: $DOCKER_AUTOSCALE_RUN_INTERVAL
+    routers:
+      traefik:
+        type: traefik
+        domain: shipa.cloud
+      istio:
+        type: istio
+      nginx:
+        type: nginx
+        serviceType: {{ .Values.shipaCluster.ingress.serviceType }}
+        ip: {{ .Values.shipaCluster.ingress.ip }}
+    queue:
+      mongo-database: queuedb
+    quota:
+      units-per-app: 4
+      apps-per-user: 8
+    log:
+      disable-syslog: true
+      use-stderr: true
+    clair:
+      server: http://{{ template "shipa.fullname" . }}-clair:6060
+      disabled: false
+    kubernetes:
+      # pod name is used by a leader election thing as an identifier for the current shipa-api instance
+      pod-name: $POD_NAME
+      pod-namespace: $POD_NAMESPACE
+      core-services-address: SHIPA_PUBLIC_IP
+      use-pool-namespaces: true
+      remote-cluster-ingress:
+        http-port: 80
+        https-port: 443
+        protected-port: 31567
+        service-type: LoadBalancer
+      ketch:
+        enabled: true
+        {{- if .Values.ketch.image }}
+        image: "{{ .Values.ketch.image }}"
+        {{- else }}
+        image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.ketch.repositoryBasename }}:{{ .Values.ketch.tag }}"
+        {{- end }}
+        metrics-address: {{ .Values.ketch.metricsAddress }}
+      cert-manager:
+        install-url: {{ .Values.certManager.installUrl }}
+
+      cluster-update:
+       # it's a default value that specifies if cluster-update operations can restart ingress controllers
+        ingress-restart-is-allowed: {{ .Values.shipaApi.allowRestartIngressControllers }}
+
+      app-auto-discovery:
+        enabled: {{ .Values.shipaApi.appAutoDiscoveryEnabled }}
+        event-updates: {{ .Values.shipaController.enableEventUpdater }}
+
+    debug: {{ .Values.shipaApi.debug }}
+    node-traefik:
+      image: {{ .Values.shipaNodeTraefik.image }}
+      user: {{ .Values.shipaNodeTraefik.user }}
+      password: $NODE_TRAEFIK_PASSWORD
+    certificates:
+      root: /certs/
+      ca: ca.pem
+      ca-key: ca-key.pem
+      client-ca: client-ca.crt
+      client-ca-key: client-ca.key
+      is-ca-endpoint-disabled: {{ .Values.shipaApi.isCAEndpointDisabled }}
+
+    shipa-controller:
+    {{- if .Values.shipaController.image }}
+      image: "{{ .Values.shipaController.image }}"
+    {{- else }}
+      image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.shipaController.repositoryBasename }}:{{ .Values.shipaController.tag }}"
+    {{- end }}
+
+
+    agent:
+      image-repository: {{ .Values.images.shipaRepositoryDirname }}
+      repository-name: {{ .Values.agent.repositoryBasename }}
+      tag: {{ .Values.agent.tag }}
+    busybody:
+    {{- if .Values.busybody.image }}
+      image: "{{ .Values.busybody.image }}"
+    {{- else }}
+      image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.busybody.repositoryBasename }}:{{ .Values.busybody.tag }}"
+    {{- end }}
+      socket: /var/run/docker.sock
+
+    signatures: single # multiple/single
+    launch-darkly:
+      api-key: {{ .Values.shipaCloud.launchDarkly.sdkKey }}

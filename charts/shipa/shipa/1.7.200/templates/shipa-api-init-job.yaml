@@ -1,0 +1,111 @@
+{{ $shipaCloud := default dict .Values.shipaCloud }}
+{{ $shipaCloudEnabled := $shipaCloud.enabled | default "false" | quote}}
+{{ $shipaPayApi := default dict $shipaCloud.shipaPayApi }}
+{{ $shipaPayApiHost := $shipaPayApi.host | default "" | quote}}
+{{ $shipaPayApiToken := $shipaPayApi.token | default "" | quote}}
+{{ $googleRecaptcha := default dict $shipaCloud.googleRecaptcha }}
+{{ $googleRecaptchaSitekey := $googleRecaptcha.sitekey | default "" | quote}}
+{{ $googleRecaptchaSecret := $googleRecaptcha.secret | default "" | quote}}
+{{ $smartlook := default dict $shipaCloud.smartlook }}
+{{ $smartlookProjectKey := $smartlook.projectKey | default "" | quote}}
+{{ $launchDarkly := default dict $shipaCloud.launchDarkly }}
+{{ $launchDarklySdkKey := $launchDarkly.sdkKey | default "" | quote}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "shipa.fullname" . }}-init-job-{{ .Release.Revision }}"
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "post-install"
+    sidecar.istio.io/inject: "false"
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      name: "{{ template "shipa.fullname" . }}-init-job-{{ .Release.Revision }}"
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      terminationGracePeriodSeconds: 3
+      {{- if .Values.rbac.enabled }}
+      serviceAccountName: {{ template "shipa.fullname" . }}
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
+      restartPolicy: Never
+      containers:
+        - name: migrations
+        {{- if .Values.cli.image }}
+          image: "{{ .Values.cli.image }}"
+        {{- else }}
+          image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.cli.repositoryBasename }}:{{ .Values.cli.tag }}"
+        {{- end }}
+          command:
+            - /scripts/init-job.sh
+          imagePullPolicy: {{ .Values.cli.pullPolicy }}
+          env:
+            - name: RELEASE_NAME
+              value: {{ template "shipa.fullname" . }}
+            - name: SHIPA_ENDPOINT
+              value: "{{ template "shipa.fullname" . }}-api.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}"
+            - name: SHIPA_ENDPOINT_PORT
+              value: "{{ first .Values.shipaApi.servicePorts }}"
+            - name: USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shipa.fullname" . }}-api-init-secret
+                  key: username
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shipa.fullname" . }}-api-init-secret
+                  key: password
+            - name: INGRESS_TYPE
+              value: {{ default ( "nginx" ) .Values.shipaCluster.ingress.type | quote }}
+            - name: DASHBOARD_IMAGE
+            {{- if .Values.dashboard.image }}
+              value: "{{ .Values.dashboard.image }}"
+            {{- else }}
+              value: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.dashboard.repositoryBasename }}:{{ .Values.dashboard.tag }}"
+            {{- end }}
+            - name: DASHBOARD_ENABLED
+              value: "{{ .Values.dashboard.enabled }}"
+            - name: SHIPA_CLOUD
+              value: {{ $shipaCloudEnabled }}
+            - name: SHIPA_PAY_API_HOST
+              value: {{ $shipaPayApiHost }}
+            - name: SHIPA_PAY_API_TOKEN
+              value: {{ $shipaPayApiToken }}
+            - name: GOOGLE_RECAPTCHA_SITEKEY
+              value: {{ $googleRecaptchaSitekey }}
+            - name: GOOGLE_RECAPTCHA_SECRET
+              value: {{ $googleRecaptchaSecret }}
+            - name: SMARTLOOK_PROJECT_KEY
+              value: {{ $smartlookProjectKey }}
+            - name: LAUNCH_DARKLY_SDK_KEY
+              value: {{ $launchDarklySdkKey }}
+            - name: SHIPA_TARGETS
+              value: {{ trimPrefix "\n" (include "shipa.cnames" .) }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: scripts-out
+              mountPath: /etc/shipa/
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      volumes:
+        - name: scripts
+          configMap:
+            defaultMode: 0755
+            name: {{ template "shipa.fullname" . }}-api-init-config
+        - name: scripts-out
+          emptyDir: {}

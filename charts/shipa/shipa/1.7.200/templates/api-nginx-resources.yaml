@@ -1,0 +1,107 @@
+{{ if eq .Values.shipaCluster.ingress.type "nginx" }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ template "shipa.fullname" . }}-nginx-tcp-services
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+    shipa.io/shipa-api-ingress-controller: "true"
+data:
+{{- if not .Values.shipaApi.secureIngressOnly }}
+{{- range $servicePort := without (.Values.shipaApi.servicePorts | toStrings) "80" }}
+  {{ $servicePort }}: "{{ $.Release.Namespace }}/{{ include "shipa.fullname" $ }}-api:{{ $servicePort }}"
+{{- end }}
+{{- end }}
+{{- range $secureContainerPort := without (.Values.shipaApi.serviceSecurePorts | toStrings) "443" }}
+  {{ $secureContainerPort }}: "{{ $.Release.Namespace }}/{{ include "shipa.fullname" $ }}-api:{{ $secureContainerPort }}"
+{{- end }}
+---
+{{- if has "80" (.Values.shipaApi.servicePorts | toStrings) }}
+{{- if .Values.shipaCluster.ingress.apiAccessOnIngressIp }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "shipa.fullname" . }}-api-http-ingress
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+  annotations:
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+    nginx.org/websocket-services: "{{ template "shipa.fullname" . }}-api"
+{{- if and $.Values.shipaApi.secureIngressOnly (has "443" ($.Values.shipaApi.serviceSecurePorts | toStrings)) }}
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    ingress.kubernetes.io/ssl-redirect: "true"
+{{- else }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    ingress.kubernetes.io/ssl-redirect: "false"
+{{- end }}
+spec:
+  ingressClassName: {{ default (include "shipa.defaultNginxClassName" . | trim) .Values.shipaCluster.ingress.className }}
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: {{ template "shipa.fullname" . }}-api
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+{{ if has "443" (.Values.shipaApi.serviceSecurePorts | toStrings) }}
+  tls:
+  - secretName: {{ template "shipa.fullname" . }}-api-ingress-secret
+{{- end }}
+{{- end }}
+{{- end }}
+---
+{{ if not (empty (trimPrefix "\n" (include "shipa.cnames" .))) }}
+{{- range $i, $cname := splitList "," (trimPrefix "\n" (include "shipa.cnames" .)) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "shipa.fullname" $ }}-api-http-ingress-cname-{{ $i }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  annotations:
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+    {{- if and $.Values.shipaApi.secureIngressOnly (has "443" ($.Values.shipaApi.serviceSecurePorts | toStrings)) }}
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    ingress.kubernetes.io/ssl-redirect: "true"
+    {{- else }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    ingress.kubernetes.io/ssl-redirect: "false"
+    {{- end }}
+    nginx.org/websocket-services: "{{ template "shipa.fullname" $ }}-api"
+spec:
+  ingressClassName: {{ default ( include "shipa.defaultNginxClassName" $ | trim) $.Values.shipaCluster.ingress.className }}
+  rules:
+  - host: {{ $cname }}
+    http:
+      paths:
+      - backend:
+          service:
+            name: {{ template "shipa.fullname" $ }}-api
+            port:
+              number: 80
+        path: /
+        pathType: ImplementationSpecific
+{{ if has "443" ($.Values.shipaApi.serviceSecurePorts | toStrings) }}
+{{ if $.Values.shipaApi.customSecretName}}
+  tls:
+  - secretName: {{ $.Values.shipaApi.customSecretName }}
+    hosts:
+    - {{ $cname }}
+{{- else }}
+  tls:
+  - secretName: {{ template "shipa.fullname" $ }}-api-ingress-secret
+    hosts:
+    - {{ $cname }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

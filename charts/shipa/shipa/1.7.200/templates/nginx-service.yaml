@@ -1,0 +1,59 @@
+{{ if and (eq .Values.shipaCluster.ingress.type "nginx") (not .Values.shipaCluster.ingress.ip) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "shipa.fullname" . }}-ingress-nginx
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+    shipa.io/shipa-api-ingress-controller: "true"
+  annotations:
+{{- if $.Values.shipaCluster.ingress.customNginxServiceAnnotations }}
+{{ toYaml $.Values.shipaCluster.ingress.customNginxServiceAnnotations | indent 4 }}
+{{- end }}
+spec:
+  type: "{{ .Values.shipaCluster.ingress.serviceType }}"
+  {{- if eq .Values.shipaCluster.ingress.serviceType "LoadBalancer" }}
+  {{- if .Values.shipaCluster.ingress.loadBalancerIp }}
+  loadBalancerIP: "{{ .Values.shipaCluster.ingress.loadBalancerIp }}"
+  {{- end }}
+  {{- end }}
+  {{- if eq .Values.shipaCluster.ingress.serviceType "ClusterIP" }}
+  {{- if .Values.shipaCluster.ingress.clusterIp }}
+  clusterIP: "{{ .Values.shipaCluster.ingress.clusterIp }}"
+  {{- end }}
+  {{- end }}
+  selector:
+    name: {{ template "shipa.fullname" . }}-nginx-ingress
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 443
+    {{- if not .Values.shipaApi.secureIngressOnly }}
+    {{- range $i, $servicePort := without (.Values.shipaApi.servicePorts | toStrings) "80" }}
+    - port:  {{ $servicePort }}
+      name: shipa-{{ $i }}
+      targetPort: {{ $.Values.shipaApi.port }}
+      protocol: TCP
+      {{- if eq $.Values.shipaCluster.ingress.serviceType "NodePort" }}
+      {{- if $.Values.shipaCluster.ingress.nodePort }}
+      nodePort: {{ $.Values.shipaCluster.ingress.nodePort }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- range $i, $servicePort := without (.Values.shipaApi.serviceSecurePorts | toStrings) "443"  }}
+    - port:  {{ $servicePort }}
+      name: shipa-secure-{{ $i }}
+      targetPort: {{ $.Values.shipaApi.securePort }}
+      protocol: TCP
+      {{- if eq $.Values.shipaCluster.ingress.serviceType "NodePort" }}
+      {{- if $.Values.shipaCluster.ingress.nodePort }}
+      nodePort: {{ $.Values.shipaCluster.ingress.nodePort }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+{{- end }}

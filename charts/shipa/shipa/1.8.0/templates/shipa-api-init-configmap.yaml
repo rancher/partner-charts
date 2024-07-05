@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "shipa.fullname" . }}-api-init-config
+  labels: {{- include "shipa.labels" . | nindent 4 }}
+data:
+  init-job.sh: |
+{{ .Files.Get "scripts/init-job.sh" | indent 4 }}
+  bootstrap.sh: |
+{{ .Files.Get "scripts/bootstrap.sh" | indent 4 }}
+  csr-docker-cluster.json: |
+{{ .Files.Get "scripts/csr-docker-cluster.json" | indent 4 }}
+  csr-shipa-ca.json: |
+{{ .Files.Get "scripts/csr-shipa-ca.json" | indent 4 }}
+  csr-client-ca.json: |
+{{ .Files.Get "scripts/csr-client-ca.json" | indent 4 }}
+  csr-api-config.json: |
+{{ .Files.Get "scripts/csr-api-config.json" | indent 4 }}
+  csr-api-server.json: |
+{{ .Files.Get "scripts/csr-api-server.json" | indent 4 }}
+  default-framework-template.yaml: |
+    shipaFramework: shipa-framework
+    resources:
+      general:
+        setup:
+          force: false
+          default: true
+          public: true
+          kubeNamespace: {{ .Release.Namespace }}
+        security:
+          disableScan: true
+        router: {{ default ( "nginx" ) .Values.shipaCluster.ingress.type }}
+        access:
+          append:
+            - shipa-admin-team
+            - shipa-system-team
+  default-cluster-template.yaml: |
+    cluster:
+      name: shipa-cluster
+      kubernetesPublicEndpoint: CLUSTER_ADDR
+    frameworks:
+      - shipa-framework
+    ingress:
+      ip: {{ .Values.shipaCluster.ingress.ip }}
+      serviceType: {{ default ( "LoadBalancer" ) .Values.shipaCluster.ingress.serviceType | quote }}
+      type: {{ default ( "nginx" ) .Values.shipaCluster.ingress.type }}
+    {{ if eq .Values.shipaCluster.ingress.type "nginx" }}
+      className: {{ default ( include "shipa.defaultNginxClassName" . | trim ) .Values.shipaCluster.ingress.className }}
+    {{- end }}
+    {{ if eq .Values.shipaCluster.ingress.type "traefik" }}
+      className: {{ default ("traefik") .Values.shipaCluster.ingress.className }}
+    {{- end }}
+    {{ if eq .Values.shipaCluster.ingress.type "istio" }}
+      className: {{ default ("istio") .Values.shipaCluster.ingress.className }}
+    {{- end }}

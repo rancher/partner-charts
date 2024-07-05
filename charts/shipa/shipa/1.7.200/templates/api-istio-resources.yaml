@@ -1,0 +1,296 @@
+{{ if eq .Values.shipaCluster.ingress.type "istio" }}
+{{- if not .Values.shipaApi.secureIngressOnly }}
+{{- range $i, $servicePort := .Values.shipaApi.servicePorts }}
+{{- if $.Values.shipaCluster.ingress.apiAccessOnIngressIp }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: {{ default ( "istio" ) $.Values.shipaCluster.ingress.className }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-http-virutal-service-{{ $i }}
+spec:
+  gateways:
+  - {{ template "shipa.fullname" $ }}-api-http-gateway-{{ $i }}
+  hosts:
+  - "*"
+  http:
+  - route:
+    - destination:
+        host: {{ template "shipa.fullname" $ }}-api
+        port:
+          number: {{ $servicePort }}
+      weight: 100
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-http-gateway-{{ $i }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - hosts:
+    - "*"
+    port:
+      name: http
+      number: {{ $servicePort }}
+      protocol: HTTP
+---
+{{- if empty $.Values.shipaApi.serviceSecurePorts }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-rule-{{ $i }}
+spec:
+  host: {{ template "shipa.fullname" $ }}-api
+  subsets:
+  - labels:
+      app: {{ template "shipa.fullname" $ }}-api
+      version: "1"
+    name: v1
+---
+{{- end }}
+{{- end }}
+{{- range $j, $cname := splitList "," (trimPrefix "\n" (include "shipa.cnames" $)) }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: {{ default ( "istio" ) $.Values.shipaCluster.ingress.className }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-http-virutal-service-cname-{{ $i }}-{{ $j }}
+spec:
+  gateways:
+  - {{ template "shipa.fullname" $ }}-api-http-gateway-cname-{{ $i }}-{{ $j }}
+  hosts:
+  - {{ $cname }}
+  http:
+  - route:
+    - destination:
+        host: {{ template "shipa.fullname" $ }}-api
+        port:
+          number: {{ $servicePort }}
+      weight: 100
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-http-gateway-cname-{{ $i }}-{{ $j }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - hosts:
+    - {{ $cname }}
+    port:
+      name: http
+      number: {{ $servicePort }}
+      protocol: HTTP
+---
+{{- if empty $.Values.shipaApi.serviceSecurePorts }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-rule-cname-{{ $i }}-{{ $j }}
+spec:
+  host: {{ template "shipa.fullname" $ }}-api
+  subsets:
+  - labels:
+      app: {{ template "shipa.fullname" $ }}-api
+      version: "1"
+    name: v1
+---
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $i, $servicePort := .Values.shipaApi.serviceSecurePorts }}
+{{- if $.Values.shipaCluster.ingress.apiAccessOnIngressIp }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: {{ default ( "istio" ) $.Values.shipaCluster.ingress.className }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-https-virutal-service-{{ $i }}
+spec:
+  gateways:
+  - {{ template "shipa.fullname" $ }}-api-https-gateway-{{ $i }}
+  hosts:
+  - "*"
+  http:
+  - route:
+    - destination:
+        host: {{ template "shipa.fullname" $ }}-api
+        port:
+          number: {{ $servicePort }}
+      weight: 100
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-https-gateway-{{ $i }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - hosts:
+    - "*"
+    port:
+      name: https
+      number: {{ $servicePort }}
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      {{ if $.Values.shipaApi.customSecretName}}
+      credentialName: {{ $.Values.shipaApi.customSecretName }}
+      {{- else }}
+      credentialName: {{ template "shipa.fullname" $ }}-api-ingress-secret
+      {{- end }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-rule-{{ $i }}
+spec:
+  host: {{ template "shipa.fullname" $ }}-api
+  subsets:
+  - labels:
+      app: {{ template "shipa.fullname" $ }}-api
+      version: "1"
+    name: v1
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    portLevelSettings:
+    - port:
+        number: {{ $servicePort }}
+      tls:
+        mode: SIMPLE
+---
+{{- end }}
+{{- range $j, $cname := splitList "," (trimPrefix "\n" (include "shipa.cnames" $)) }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: {{ default ( "istio" ) $.Values.shipaCluster.ingress.className }}
+{{- if $.Values.shipaApi.customIngressAnnotations }}
+{{ toYaml $.Values.shipaApi.customIngressAnnotations | indent 4 }}
+{{- end }}
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-https-virutal-service-cname-{{ $i }}-{{ $j }}
+spec:
+  gateways:
+  - {{ template "shipa.fullname" $ }}-api-https-gateway-cname-{{ $i }}-{{ $j }}
+  hosts:
+  - {{ $cname }}
+  http:
+  - route:
+    - destination:
+        host: {{ template "shipa.fullname" $ }}-api
+        port:
+          number: {{ $servicePort }}
+      weight: 100
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-https-gateway-cname-{{ $i }}-{{ $j }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - hosts:
+    - {{ $cname }}
+    port:
+      name: https
+      number: {{ $servicePort }}
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      {{ if $.Values.shipaApi.customSecretName}}
+      credentialName: {{ $.Values.shipaApi.customSecretName }}
+      {{- else }}
+      credentialName: {{ template "shipa.fullname" $ }}-api-ingress-secret
+      {{- end }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  labels: {{- include "shipa.labels" $ | nindent 4 }}
+  name: {{ template "shipa.fullname" $ }}-api-rule-cname-{{ $i }}-{{ $j }}
+spec:
+  host: {{ template "shipa.fullname" $ }}-api
+  subsets:
+  - labels:
+      app: {{ template "shipa.fullname" $ }}-api
+      version: "1"
+    name: v1
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    portLevelSettings:
+    - port:
+        number: {{ $servicePort }}
+      tls:
+        mode: SIMPLE
+---
+{{- end }}
+{{- end }}
+{{- if or (.Values.tags.defaultDB) (.Values.tags.legacyMongoReplicaset) }}
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: {{ template "shipa.fullname" $ }}-mongodb-peer
+spec:
+  mtls:
+    mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ template "shipa.fullname" $ }}-mongo-rule
+spec:
+{{- if .Values.tags.defaultDB }}
+  host: "{{ template "shipa.fullname" $ }}-mongodb.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}"
+{{- else if .Values.tags.legacyMongoReplicaset }}
+  host: "{{ template "shipa.fullname" $ }}-mongodb-replicaset.{{ .Release.Namespace }}.svc.{{ .Values.shipaCluster.clusterDomain }}"
+{{- end }}
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+{{ else }}
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: mongo
+spec:
+  hosts:
+{{- range $mongoShard := (splitList "," $.Values.externalMongodb.url) }}
+  -  {{ trimSuffix ":27017" $mongoShard }}
+{{- end }}
+  ports:
+  - number: 27017
+    name: tls
+    protocol: TLS
+  resolution: DNS
+{{- end }}
+{{- end }}
