@@ -1,0 +1,152 @@
+{{- if eq .Values.webhook.tls.mode "generated" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "http-header-injector.cert-config.name" . }}"
+  labels:
+    app.kubernetes.io/component: http-header-injector-cert-hook
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ include "http-header-injector.app.name" . }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-delete,post-upgrade
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  generate-cert.sh: |
+    #!/bin/bash
+
+    # We are going for a self-signed certificate here. We would like to use k8s CertificateSigningRequest, however,
+    # currently there are no out of the box signers that can sign a 'server auth' certificate, which is required for mutation webhooks.
+    set -ex
+
+    SCRIPTDIR="${BASH_SOURCE%/*}"
+
+    DIR=`mktemp -d`
+
+    cd "$DIR"
+
+    {{ if .Values.enabled }}
+    echo "Chart enabled, creating secret and webhook"
+
+    openssl genrsa -out ca.key 2048
+
+    openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "http-header-injector.webhook-service.fqname" . }}" -days 10000 -out ca.crt
+
+    openssl genrsa -out tls.key 2048
+
+    openssl req -new -key tls.key -out tls.csr -config "$SCRIPTDIR/csr.conf"
+
+    openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key \
+    -CAcreateserial -out tls.crt -days 10000 \
+    -extensions v3_ext -extfile "$SCRIPTDIR/csr.conf" -sha256
+
+    # Create or update the secret
+    echo "Applying secret"
+    kubectl create secret tls "{{ include "http-header-injector.cert-secret.name" . }}" \
+      -n "{{ .Release.Namespace }}" \
+      --cert=./tls.crt \
+      --key=./tls.key \
+      --dry-run=client \
+      -o yaml | kubectl apply -f -
+
+    echo "Applying mutationwebhook"
+    caBundle=`base64 -w 0 ca.crt`
+    cat "$SCRIPTDIR/mutatingwebhookconfiguration.yaml" | sed "s/\\\$CA_BUNDLE/$caBundle/g" | kubectl apply -f -
+    {{ else }}
+    echo "Chart disabled, not creating secret and webhook"
+    {{ end }}
+  delete-cert.sh: |
+    #!/bin/bash
+
+    set -x
+
+    DIR="${BASH_SOURCE%/*}"
+    if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+    if [[ "$DIR" = "." ]]; then DIR="$PWD"; fi
+
+    cd "$DIR"
+
+    # Using detection of deployment hee to also make this work in post-delete.
+    if kubectl get deployments "{{ include "http-header-injector.app.name" . }}"  -n "{{ .Release.Namespace }}"; then
+      echo "Chart enabled, not removing secret and mutationwebhook"
+      exit 0
+    else
+      echo "Chart disabled, removing secret and mutationwebhook"
+    fi
+
+    # Create or update the secret
+    echo "Deleting secret"
+    kubectl delete secret "{{ include "http-header-injector.cert-secret.name" . }}" -n "{{ .Release.Namespace }}"
+
+    echo "Applying mutationwebhook"
+    kubectl delete MutatingWebhookConfiguration "{{ include "http-header-injector.mutating-webhook.name" . }}" -n "{{ .Release.Namespace }}"
+
+    exit 0
+
+  csr.conf: |
+    [ req ]
+    default_bits = 2048
+    prompt = no
+    default_md = sha256
+    req_extensions = req_ext
+    distinguished_name = dn
+
+    [ dn ]
+    C = NL
+    ST = Utrecht
+    L = Hilversum
+    O = StackState
+    OU = Dev
+    CN = {{ include "http-header-injector.webhook-service.fqname" . }}
+
+    [ req_ext ]
+    subjectAltName = @alt_names
+
+    [ alt_names ]
+    DNS.1 = {{ include "http-header-injector.webhook-service.fqname" . }}
+
+    [ v3_ext ]
+    authorityKeyIdentifier=keyid,issuer:always
+    basicConstraints=CA:FALSE
+    keyUsage=keyEncipherment,dataEncipherment
+    extendedKeyUsage=serverAuth
+    subjectAltName=@alt_names
+
+  mutatingwebhookconfiguration.yaml: |
+    apiVersion: admissionregistration.k8s.io/v1
+    kind: MutatingWebhookConfiguration
+    metadata:
+      name: "{{ include "http-header-injector.mutating-webhook.name" . }}"
+      namespace: "{{ .Release.Namespace }}"
+    webhooks:
+      - clientConfig:
+          caBundle: "$CA_BUNDLE"
+          service:
+            name: "{{ include "http-header-injector.webhook-service.name" . }}"
+            path: /mutate
+            namespace: {{ .Release.Namespace }}
+            port: 8443
+        # Putting failure on ignore, not doing so can crash the entire control plane if something goes wrong with the service.
+        failurePolicy: "{{ .Values.webhook.failurePolicy }}"
+        name: "{{ include "http-header-injector.mutatingwebhookconfiguration.name" . }}"
+        namespaceSelector:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: NotIn
+              values:
+                - kube-system
+                - cert-manager
+                - {{ .Release.Namespace }}
+        rules:
+          - apiGroups:
+              - ""
+            apiVersions:
+              - v1
+            operations:
+              - CREATE
+            resources:
+              - pods
+        sideEffects: None
+        admissionReviewVersions:
+          - v1
+{{- end }}
