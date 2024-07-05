@@ -1,0 +1,351 @@
+#
+#
+# Copyright © 2020-2023 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#      http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["create", "delete", "get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["persistentvolumesclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["security.openshift.io"]
+    resourceNames: ["privileged"]
+    resources: ["securitycontextconstraints"]
+    verbs: ["use"]
+  {{- if hasKey .Values "podmon" }}
+  {{- if eq .Values.podmon.enabled true }}
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "update", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+  {{ end }}
+  {{ end }}
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-node
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-node
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-node
+      {{- if .Values.podmon.enabled }}
+        driver.dellemc.com: dell-storage
+      {{- end }}
+    spec:
+      {{ if .Values.node.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.node.nodeSelector | nindent 8 }}
+      {{ end }}
+      {{ if .Values.node.tolerations }}
+      tolerations:
+      {{- toYaml .Values.node.tolerations | nindent 6 }}
+      {{ end }}
+      serviceAccountName: {{ .Release.Name }}-node
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      hostIPC: true
+      containers:
+      {{- if hasKey .Values "podmon" }}
+      {{- if eq .Values.podmon.enabled true }}
+        - name: podmon
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: {{ required "Must provide the podmon container image." .Values.podmon.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            {{- toYaml .Values.podmon.node.args | nindent 12 }}
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: X_CSI_PRIVATE_MOUNT_DIR
+              value: {{ .Values.kubeletConfigDir }}
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: kubelet-pods
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/{{ .Values.driverName }}
+              mountPropagation: "Bidirectional"
+            - name: csi-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: usr-bin
+              mountPath: /usr-bin
+            - name: var-run
+              mountPath: /var/run
+            - name: powerstore-config-params
+              mountPath: /powerstore-config-params
+      {{- end }}
+      {{- end }}
+        {{- if hasKey .Values "dev" }}
+        {{ if .Values.dev.enableTracing }}{{- include "pstore.tracing" . | nindent 8 }}{{ end }}
+        {{- end}}
+        - name: driver
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: {{ required "Must provide the Powerstore driver image repository." .Values.images.driverRepository }}/{{ .Chart.Name }}:{{ .Values.version }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [ "/csi-powerstore" ]
+          env:
+            {{- if hasKey .Values "dev" }}
+            - name: ENABLE_TRACING
+              value: {{ .Values.dev.enableTracing | quote}}
+            {{ if .Values.dev.enableTracing }}{{- include "pstore.tracingenvvars" . | nindent 12 }}{{ end }}
+            {{- end}}
+            - name: CSI_ENDPOINT
+              value: unix://{{ .Values.kubeletConfigDir }}/plugins/{{ .Values.driverName }}/csi_sock
+            - name: X_CSI_MODE
+              value: node
+            - name: X_CSI_POWERSTORE_KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: X_CSI_POWERSTORE_NODE_NAME_PREFIX
+              value: {{ .Values.node.nodeNamePrefix }}
+            - name: X_CSI_POWERSTORE_NODE_ID_PATH
+              value: /node-id
+            - name: X_CSI_POWERSTORE_NODE_CHROOT_PATH
+              value: /noderoot
+            - name: X_CSI_POWERSTORE_TMP_DIR
+              value: {{ .Values.kubeletConfigDir }}/plugins/{{ .Values.driverName }}/tmp
+            - name: X_CSI_DRIVER_NAME
+              value: {{ .Values.driverName }}
+            - name: X_CSI_FC_PORTS_FILTER_FILE_PATH
+              value: {{ .Values.nodeFCPortsFilterFile }}
+            - name: X_CSI_DRIVER_NAME
+              value: {{ .Values.driverName }}
+            {{- if eq .Values.connection.enableCHAP  true }}
+            - name: X_CSI_POWERSTORE_ENABLE_CHAP
+              value: "true"
+            {{- else }}
+            - name: X_CSI_POWERSTORE_ENABLE_CHAP
+              value: "false"
+            {{- end }}
+            - name: X_CSI_POWERSTORE_CONFIG_PATH
+              value: /powerstore-config/config
+            - name: X_CSI_POWERSTORE_CONFIG_PARAMS_PATH
+              value: /powerstore-config-params/driver-config-params.yaml
+            - name: GOPOWERSTORE_DEBUG
+              value: "true"
+            {{- if hasKey .Values.node "healthMonitor" }}
+            {{- if eq .Values.node.healthMonitor.enabled true}}
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.controller.healthMonitor.enabled }}"
+            {{- end }}
+            {{- end }}
+            {{- if hasKey .Values "podmon" }}
+            - name: X_CSI_PODMON_ENABLED
+              value: "{{ .Values.podmon.enabled }}"
+            {{- if eq .Values.podmon.enabled true }}
+              {{- range $key, $value := .Values.podmon.node.args }}
+                {{- if contains "--arrayConnectivityPollRate" $value }}
+            - name: X_CSI_PODMON_ARRAY_CONNECTIVITY_POLL_RATE
+              value: "{{ (split "=" $value)._1 }}"
+                {{- end }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            - name: X_CSI_PODMON_API_PORT
+              value: "{{ .Values.podmonAPIPort }}"
+          volumeMounts:
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/{{ .Values.driverName }}
+            - name: csi-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi
+              mountPropagation: "Bidirectional"
+            - name: pods-path
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: sys
+              mountPath: /sys
+            - name: run
+              mountPath: /run
+            - name: node-id
+              mountPath: /node-id
+            - name: etciscsi
+              mountPath: /etc/iscsi
+            - name: mpath
+              mountPath: /etc/multipath.conf
+            - name: noderoot
+              mountPath: /noderoot
+            - name: powerstore-config
+              mountPath: /powerstore-config
+            - name: powerstore-config-params
+              mountPath: /powerstore-config-params
+        - name: registrar
+          image: {{ required "Must provide the CSI node registrar container image." ( include "csi-powerstore.registrarImage" . ) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - --kubelet-registration-path={{ .Values.kubeletConfigDir }}/plugins/{{ .Values.driverName }}/csi_sock
+          env:
+            - name: ADDRESS
+              value: /csi/csi_sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: registration-dir
+              mountPath: /registration
+            - name: driver-path
+              mountPath: /csi
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: driver-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/{{ .Values.driverName }}
+            type: DirectoryOrCreate
+        - name: csi-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi
+        - name: pods-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/pods
+            type: Directory
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: node-id
+          hostPath:
+            path: {{ required "Must provide the path to file with node identifier." .Values.node.nodeIDPath }}
+            type: File
+        - name: etciscsi
+          hostPath:
+            path: /etc/iscsi
+            type: DirectoryOrCreate
+        - name: mpath
+          hostPath:
+            path: /etc/multipath.conf
+            type: FileOrCreate
+        - name: noderoot
+          hostPath:
+            path: /
+            type: Directory
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: run
+          hostPath:
+            path: /run
+            type: Directory
+        - name: powerstore-config-params
+          configMap:
+            name: {{ .Release.Name }}-config-params
+        - name: powerstore-config
+          secret:
+            secretName: {{ .Release.Name }}-config
+        {{- if hasKey .Values "podmon" }}
+        {{- if eq .Values.podmon.enabled true }}
+        - name: usr-bin
+          hostPath:
+            path: /usr/bin
+            type: Directory
+        - name: kubelet-pods
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+        - name: var-run
+          hostPath:
+            path: /var/run
+            type: Directory
+        {{ end }}
+        {{ end }}
