@@ -1,0 +1,45 @@
+{{- if or .Values.service.create (eq "true" (include "instana-agent.opentelemetry.grpc.isEnabled" .)) (eq "true" (include "instana-agent.opentelemetry.http.isEnabled" .)) .Values.prometheus.remoteWrite.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "instana-agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{- include "instana-agent.commonLabels" . | nindent 4 }}
+spec:
+  selector:
+{{- include "instana-agent.selectorLabels" . | nindent 4 }}
+  ports:
+    # Prometheus remote_write, Trace Web SDK and other APIs
+    - name: agent-apis
+      protocol: TCP
+      port: 42699
+      targetPort: 42699
+    {{ if eq "true" (include "instana-agent.opentelemetry.grpc.isEnabled" .) }}
+    # OpenTelemetry original default port
+    - name: opentelemetry
+      protocol: TCP
+      port: 55680
+      targetPort: 55680
+    # OpenTelemetry as registered and reserved by IANA
+    - name: opentelemetry-iana
+      protocol: TCP
+      port: 4317
+      targetPort: 4317
+    {{- end -}}
+    {{ if eq "true" (include "instana-agent.opentelemetry.http.isEnabled" .) }}
+    # OpenTelemetry HTTP port
+    - name: opentelemetry-http
+      protocol: TCP
+      port: 4318
+      targetPort: 4318
+    {{- end -}}
+  {{- if semverCompare "< 1.22.x" (include "kubeVersion" .) }}
+  # since we run agents as DaemonSets we assume every node has this Service available:
+  topologyKeys:
+    - "kubernetes.io/hostname"
+  {{- else }}
+  internalTrafficPolicy: Local
+  {{- end -}}
+{{- end -}}

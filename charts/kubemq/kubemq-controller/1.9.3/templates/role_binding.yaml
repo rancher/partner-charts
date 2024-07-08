@@ -1,0 +1,37 @@
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" .Release.Namespace (printf "kubemq-operator-%s-crb" .Release.Namespace)) }}
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubemq-operator-{{ .Release.Namespace }}-crb
+subjects:
+  - kind: ServiceAccount
+    name: kubemq-operator
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: kubemq-operator
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+---
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "Role" .Release.Namespace "kubemq-cluster-role") }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubemq-cluster-role
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - use
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    resourceNames:
+      - privileged
+{{- end }}

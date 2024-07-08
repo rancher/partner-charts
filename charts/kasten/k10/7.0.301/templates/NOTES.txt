@@ -1,0 +1,88 @@
+Thank you for installing Kasten’s K10 Data Management Platform {{ .Chart.Version }}!
+{{- if .Values.fips.enabled }}
+
+You are operating in FIPS mode.
+{{- end }}
+
+Documentation can be found at https://docs.kasten.io/.
+
+How to access the K10 Dashboard:
+
+{{- if .Values.ingress.create }}
+
+You are using the system's default ingress controller. Please ask your
+administrator for instructions on how to access the cluster.
+
+WebUI location:  https://{{ default "Your ingress endpoint" .Values.ingress.host }}/{{ default .Release.Name .Values.ingress.urlPath }}
+
+In addition,
+{{- end }}
+
+{{- if .Values.route.enabled }}
+WebUI location: https://{{ default "k10-route endpoint" .Values.route.host}}/{{ default .Release.Name .Values.route.path }}/
+
+In addition,
+{{- end }}
+
+{{- if .Values.externalGateway.create }}
+{{- if .Values.externalGateway.fqdn.name }}
+
+The K10 Dashboard is accessible via {{ if or (and .Values.secrets.apiTlsCrt .Values.secrets.apiTlsKey) .Values.externalGateway.awsSSLCertARN }}https{{ else }}http{{ end }}://{{ .Values.externalGateway.fqdn.name }}/{{ .Release.Name }}/#/
+
+In addition,
+{{- else }}
+
+The K10 Dashboard is accessible via a LoadBalancer. Find the service's EXTERNAL IP using:
+  `kubectl get svc gateway-ext --namespace {{ .Release.Namespace }} -o wide`
+And use it in following URL
+ `http://SERVICE_EXTERNAL_IP/{{ .Release.Name }}/#/`
+
+In addition,
+{{- end }}
+{{- end }}
+
+To establish a connection to it use the following `kubectl` command:
+
+`kubectl --namespace {{ .Release.Namespace }} port-forward service/gateway 8080:{{ .Values.gateway.service.externalPort }}`
+
+The Kasten dashboard will be available at: `http{{ if or (and .Values.secrets.apiTlsCrt .Values.secrets.apiTlsKey) .Values.externalGateway.awsSSLCertARN }}s{{ end }}://127.0.0.1:8080/{{ .Release.Name }}/#/`
+{{ if and ( .Values.metering.awsManagedLicense )  ( not .Values.metering.licenseConfigSecretName ) }}
+
+IAM Role created during installation need to have permissions that allow K10 to
+perform operations on EBS and, if needed, EFS and S3. Please create a policy
+with required permissions, and use the commands below to attach the policy to
+the service account.
+
+`ROLE_NAME=$(kubectl get serviceaccount {{ .Values.serviceAccount.name }} -n {{ .Release.Namespace }} -ojsonpath="{.metadata.annotations['eks\.amazonaws\.com/role-arn']}" | awk -F '/' '{ print $(NF) }')`
+`aws iam attach-role-policy --role-name "${ROLE_NAME}" --policy-arn <POLICY NAME>`
+
+Refer to `https://docs.kasten.io/latest/install/aws-containers-anywhere/aws-containers-anywhere.html#attaching-permissions-for-eks-installations`
+for more information.
+
+{{ end }}
+
+{{- if .Values.restore }}
+{{- if or (empty .Values.restore.copyImagePullSecrets) (.Values.restore.copyImagePullSecrets) }}
+--------------------
+Removal warning: The helm field `restore.copyImagePullSecrets` has been removed in version 6.0.12. K10 no longer copies the `imagePullSecret` to the application namespace.
+--------------------
+{{- end }}
+{{- end }}
+
+{{- if or (not (empty .Values.garbagecollector.importRunActions)) (not (empty .Values.garbagecollector.backupRunActions)) (not (empty .Values.garbagecollector.retireActions)) }}
+Deprecation warning: The `garbagecollector.importRunActions`, `garbagecollector.backupRunActions`, `garbagecollector.retireActions`
+blocks within the helm chart values have been replaced with `garbagecollector.actions`.
+{{- end }}
+
+{{- if .Values.secrets.azureADEndpoint  }}
+--------------------
+Deprecation warning: The helm field `secret.azureADEndpoint` is deprecated and will be removed in upcoming release, we recommend you to use correct respective field, i.e., `secrets.microsoftEntraIDEndpoint`.
+--------------------
+{{- end }}
+
+
+{{- if .Values.secrets.azureADResourceID  }}
+--------------------
+Deprecation warning: The helm field `secret.azureADResourceID` is deprecated and will be removed in upcoming release, we recommend you to use correct respective field, i.e., `secrets.microsoftEntraIDResourceID`
+--------------------
+{{- end }}

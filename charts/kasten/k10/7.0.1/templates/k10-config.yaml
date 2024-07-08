@@ -1,0 +1,248 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-config
+data:
+  DataStoreLogLevel: {{ default "error" | quote }}
+  DataStoreFileLogLevel: {{ default "" | quote }}
+  loglevel: {{ .Values.logLevel | quote }}
+  {{- if .Values.clusterName }}
+  clustername: {{ quote .Values.clusterName }}
+  {{- end }}
+  version: {{ .Chart.AppVersion }}
+  {{- $capabilities := include "k10.capabilities" . | splitList " " }}
+  {{- $capabilities_mask := include "k10.capabilities_mask" . | splitList " " }}
+  {{- if and ( has "mc" $capabilities ) ( not ( has "mc" $capabilities_mask ) ) }}
+  multiClusterVersion: {{ include "k10.multiClusterVersion" . | quote }}
+  {{- end }}
+  modelstoredirname: "//mnt/k10state/kasten-io/"
+  apiDomain: {{ include "apiDomain" . }}
+  concurrentSnapConversions: {{ default (include "k10.defaultConcurrentSnapshotConversions" .) .Values.limiter.concurrentSnapConversions | quote }}
+  concurrentWorkloadSnapshots: {{ include "k10.defaultConcurrentWorkloadSnapshots" . | quote }}
+  k10DataStoreDisableCompression: "false"
+  k10DataStoreParallelUpload: {{ .Values.datastore.parallelUploads | quote }}
+  k10DataStoreGeneralContentCacheSizeMB: {{ include "k10.defaultK10DataStoreGeneralContentCacheSizeMB" . | quote }}
+  k10DataStoreGeneralMetadataCacheSizeMB: {{ include "k10.defaultK10DataStoreGeneralMetadataCacheSizeMB" . | quote }}
+  k10DataStoreRestoreContentCacheSizeMB: {{ include "k10.defaultK10DataStoreRestoreContentCacheSizeMB" . | quote }}
+  k10DataStoreRestoreMetadataCacheSizeMB: {{ include "k10.defaultK10DataStoreRestoreMetadataCacheSizeMB" . | quote }}
+  K10BackupBufferFileHeadroomFactor: {{ include "k10.defaultK10BackupBufferFileHeadroomFactor" . | quote }}
+  AWSAssumeRoleDuration: {{ default (include "k10.defaultAssumeRoleDuration" .) .Values.awsConfig.assumeRoleDuration | quote }}
+  KanisterBackupTimeout: {{ default (include "k10.defaultKanisterBackupTimeout" .) .Values.kanister.backupTimeout | quote }}
+  KanisterRestoreTimeout: {{ default (include "k10.defaultKanisterRestoreTimeout" .) .Values.kanister.restoreTimeout | quote }}
+  KanisterDeleteTimeout: {{ default (include "k10.defaultKanisterDeleteTimeout" .) .Values.kanister.deleteTimeout | quote }}
+  KanisterHookTimeout: {{ default (include "k10.defaultKanisterHookTimeout" .) .Values.kanister.hookTimeout | quote }}
+  KanisterCheckRepoTimeout: {{ default (include "k10.defaultKanisterCheckRepoTimeout" .) .Values.kanister.checkRepoTimeout | quote }}
+  KanisterStatsTimeout: {{ default (include "k10.defaultKanisterStatsTimeout" .) .Values.kanister.statsTimeout | quote }}
+  KanisterEFSPostRestoreTimeout: {{ default (include "k10.defaultKanisterEFSPostRestoreTimeout" .) .Values.kanister.efsPostRestoreTimeout | quote }}
+  KanisterManagedDataServicesBlueprintsEnabled: {{ .Values.kanister.managedDataServicesBlueprintsEnabled | quote }}
+  KanisterPodReadyWaitTimeout: {{ .Values.kanister.podReadyWaitTimeout | quote }}
+  KanisterPodMetricSidecarEnabled: {{ .Values.kanisterPodMetricSidecar.enabled | quote }}
+  KanisterPodMetricSidecarMetricLifetime: {{ .Values.kanisterPodMetricSidecar.metricLifetime | quote }}
+  KanisterPodPushgatewayMetricsInterval: {{ .Values.kanisterPodMetricSidecar.pushGatewayInterval | quote }}
+{{- include "kanisterPodMetricSidecarResources" . | indent 2 }}
+  KanisterToolsImage: {{ include "get.kanisterToolsImage" . | quote }}
+  K10MutatingWebhookTLSCertDir: "/etc/ssl/certs/webhook"
+
+  K10LimiterGenericVolumeSnapshots: {{ default (include "k10.defaultK10LimiterGenericVolumeSnapshots" .) .Values.limiter.genericVolumeSnapshots | quote }}
+  K10LimiterGenericVolumeCopies: {{ default (include "k10.defaultK10LimiterGenericVolumeCopies" .) .Values.limiter.genericVolumeCopies | quote }}
+  K10LimiterGenericVolumeRestores: {{ default (include "k10.defaultK10LimiterGenericVolumeRestores" .) .Values.limiter.genericVolumeRestores | quote }}
+  K10LimiterCsiSnapshots: {{ default (include "k10.defaultK10LimiterCsiSnapshots" .) .Values.limiter.csiSnapshots | quote }}
+  K10LimiterProviderSnapshots: {{ default (include "k10.defaultK10LimiterProviderSnapshots" .) .Values.limiter.providerSnapshots | quote }}
+  K10LimiterImageCopies: {{ default (include "k10.defaultK10LimiterImageCopies" .) .Values.limiter.imageCopies | quote }}
+  K10ExecutorWorkerCount: {{ default (include "k10.defaultK10ExecutorWorkerCount" .) .Values.services.executor.workerCount | quote }}
+  K10ExecutorMaxConcurrentRestoreCsiSnapshots: {{ default (include "k10.defaultK10ExecutorMaxConcurrentRestoreCsiSnapshots" .) .Values.services.executor.maxConcurrentRestoreCsiSnapshots | quote }}
+  K10ExecutorMaxConcurrentRestoreGenericVolumeSnapshots: {{ default (include "k10.defaultK10ExecutorMaxConcurrentRestoreGenericVolumeSnapshots" .) .Values.services.executor.maxConcurrentRestoreGenericVolumeSnapshots | quote }}
+  K10ExecutorMaxConcurrentRestoreWorkloads: {{ default (include "k10.defaultK10ExecutorMaxConcurrentRestoreWorkloads" .) .Values.services.executor.maxConcurrentRestoreWorkloads | quote }}
+
+  K10GCDaemonPeriod: {{ default (include "k10.defaultK10GCDaemonPeriod" .) .Values.garbagecollector.daemonPeriod | quote }}
+  K10GCKeepMaxActions: {{ default (include "k10.defaultK10GCKeepMaxActions" .) .Values.garbagecollector.keepMaxActions | quote }}
+  K10GCActionsEnabled: {{ default (include "k10.defaultK10GCActionsEnabled" .) .Values.garbagecollector.actions.enabled | quote }}
+  
+  K10EphemeralPVCOverhead: {{ .Values.ephemeralPVCOverhead | quote }}
+  
+  K10DefaultPriorityClassName: {{ default (include "k10.defaultK10DefaultPriorityClassName" .) .Values.defaultPriorityClassName | quote }}
+
+  kubeVirtVMsUnFreezeTimeout: {{ default (include "k10.defaultKubeVirtVMsUnfreezeTimeout" .) .Values.kubeVirtVMs.snapshot.unfreezeTimeout | quote }}
+
+  k10JobMaxWaitDuration: {{ .Values.maxJobWaitDuration | quote }}
+
+  quickDisasterRecoveryEnabled: {{ .Values.kastenDisasterRecovery.quickMode.enabled | quote }}
+
+  k10ForceRootInKanisterHooks: {{ .Values.forceRootInKanisterHooks | quote }}
+
+  {{- if .Values.awsConfig.efsBackupVaultName }}
+  efsBackupVaultName: {{ quote .Values.awsConfig.efsBackupVaultName }}
+  {{- end }}
+
+  {{- if .Values.excludedApps }}
+  excludedApps: '{{ join "," .Values.excludedApps }}'
+  {{- end }}
+
+  {{- if .Values.vmWare.taskTimeoutMin }}
+  vmWareTaskTimeoutMin: {{ quote .Values.vmWare.taskTimeoutMin }}
+  {{- end }}
+
+{{- include "get.kanisterPodCustomLabels" . | indent 2}}
+{{- include "get.kanisterPodCustomAnnotations" . | indent 2}}
+
+  {{- if .Values.kanisterFunctionVersion }}
+  kanisterFunctionVersion: {{ .Values.kanisterFunctionVersion | quote }}
+  {{- else }}
+  kanisterFunctionVersion: {{ quote "v1.0.0-alpha" }}
+  {{- end }}
+{{- include "kanisterToolsResources" . | indent 2 }}
+{{- include "get.gvsActivationToken" . | indent 2 }}
+
+  {{- if .Values.genericStorageBackup.overridepubkey }}
+  overridePublicKeyForGVS: {{ .Values.genericStorageBackup.overridepubkey | quote }}
+  {{- end }}
+
+{{ if .Values.features }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-features
+data:
+{{ include "k10.features" . | indent 2}}
+{{ end }}
+{{ if .Values.auth.openshift.enabled }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: k10-dex
+  namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+    issuer: {{ printf "%s/dex" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:8080
+    logger:
+      level: info
+      format: text
+    connectors:
+    - type: openshift
+      id: openshift
+      name: OpenShift
+      config:
+        issuer: {{ .Values.auth.openshift.openshiftURL }}
+        clientID: {{ printf "system:serviceaccount:%s:%s" .Release.Namespace (include "get.openshiftServiceAccountName" .) }}
+        clientSecret: {{ printf "{{ getenv \"%s\" }}" (include "k10.openShiftClientSecretEnvVar" . ) }}
+        redirectURI: {{ printf "%s/dex/callback" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
+        insecureCA: {{ .Values.auth.openshift.insecureCA }}
+{{- if and (eq (include "check.cacertconfigmap" .) "false") .Values.auth.openshift.useServiceAccountCA }}
+        rootCA: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+{{- end }}
+    oauth2:
+      skipApprovalScreen: true
+    staticClients:
+    - name: 'K10'
+      id: kasten
+      secret: kastensecret
+      redirectURIs:
+      - {{ printf "%s/auth-svc/v0/oidc/redirect" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
+{{ end }}
+{{ if .Values.auth.ldap.enabled }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: k10-dex
+  namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+    issuer: {{ printf "%s/dex" (trimSuffix "/" .Values.auth.ldap.dashboardURL) }}
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:8080
+    frontend:
+      dir: {{ include "k10.dexFrontendDir" . }}
+      theme: custom
+      logoURL: theme/kasten-logo.svg
+    logger:
+      level: info
+      format: text
+    connectors:
+    - type: ldap
+      id: ldap
+      name: LDAP
+      config:
+        host: {{ .Values.auth.ldap.host }}
+        insecureNoSSL: {{ .Values.auth.ldap.insecureNoSSL }}
+        insecureSkipVerify: {{ .Values.auth.ldap.insecureSkipVerifySSL }}
+        startTLS: {{ .Values.auth.ldap.startTLS }}
+        bindDN: {{ .Values.auth.ldap.bindDN }}
+        bindPW: BIND_PASSWORD_PLACEHOLDER
+        userSearch:
+          baseDN: {{ .Values.auth.ldap.userSearch.baseDN }}
+          filter: {{ .Values.auth.ldap.userSearch.filter }}
+          username: {{ .Values.auth.ldap.userSearch.username }}
+          idAttr: {{ .Values.auth.ldap.userSearch.idAttr }}
+          emailAttr: {{ .Values.auth.ldap.userSearch.emailAttr }}
+          nameAttr: {{ .Values.auth.ldap.userSearch.nameAttr }}
+          preferredUsernameAttr: {{ .Values.auth.ldap.userSearch.preferredUsernameAttr }}
+        groupSearch:
+          baseDN: {{ .Values.auth.ldap.groupSearch.baseDN }}
+          filter: {{ .Values.auth.ldap.groupSearch.filter }}
+          nameAttr: {{ .Values.auth.ldap.groupSearch.nameAttr }}
+{{- with .Values.auth.ldap.groupSearch.userMatchers }}
+          userMatchers:
+{{ toYaml . | indent 10 }}
+{{- end }}
+    oauth2:
+      skipApprovalScreen: true
+    staticClients:
+    - name: 'K10'
+      id: kasten
+      secret: kastensecret
+      redirectURIs:
+      - {{ printf "%s/auth-svc/v0/oidc/redirect" (trimSuffix "/" .Values.auth.ldap.dashboardURL) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k10-logos-dex
+  namespace: {{ .Release.Namespace }}
+binaryData:
+  {{- $files := .Files }}
+  {{- range tuple "files/favicon.png" "files/kasten-logo.svg" "files/styles.css" }}
+  {{ trimPrefix "files/" . }}: |-
+    {{ $files.Get . | b64enc }}
+  {{- end }}
+{{ end }}
+{{ if (include "k10.capability.gateway" $) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k10-gateway
+  namespace: {{ .Release.Namespace }}
+data:
+  {{ include "k10.gatewayPrefixVarName" . }}: {{ include "k10.prefixPath" . }}
+
+  {{- if .Values.gateway.requestHeaders }}
+  {{ include "k10.gatewayRequestHeadersVarName" .}}: {{ (.Values.gateway.requestHeaders | default list) | join " " }}
+  {{- end }}
+
+  {{- if .Values.gateway.authHeaders }}
+  {{ include "k10.gatewayAuthHeadersVarName" .}}: {{ (.Values.gateway.authHeaders | default list) | join " " }}
+  {{- end }}
+
+  {{- if .Values.gateway.service.internalPort }}
+  {{ include "k10.gatewayPortVarName" .}}: {{ .Values.gateway.service.internalPort | quote }}
+  {{- end }}
+{{ end }}

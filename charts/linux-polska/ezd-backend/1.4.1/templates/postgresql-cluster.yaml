@@ -1,0 +1,42 @@
+{{- if .Values.global.postgresql.deploy }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "ezd-backend.postgresqlConfig.fullname" . }}
+  labels:
+    {{- include "ezd-backend.labels" . | nindent 4 }}
+spec:
+  imagePullSecrets:
+  - name: {{ .Values.global.imageCredentials.name }}
+  superuserSecret:
+    name: credentials-{{ include "ezd-backend.postgresqlConfig.fullname" . }}-adm
+  bootstrap: 
+    initdb: 
+      database: {{ default ( "ezdrp" ) }}
+      owner: {{ default ( "ezdrp" ) }}
+      dataChecksums: true
+      localeCollate: "en_US.utf8"
+      localeCType: "en_US.utf8"
+      secret: 
+        name: credentials-{{ include "ezd-backend.postgresqlConfig.fullname" . }}-app
+{{- if (eq "custom" .Values.global.deployment.type) }}
+{{- with .Values.postgresqlConfig.customConfig }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+
+{{- end }}
+
+{{- /*
+  bootstrap: 
+    initdb: 
+      database: ezdrp
+      dataChecksums: true
+      localeCollate: "en_US.utf8"
+      localeCType: "en_US.utf8"
+      secret: 
+        name: credentials-{{ include "ezd-backend.postgresqlConfig.fullname" . }}-app
+
+*/}}
+
