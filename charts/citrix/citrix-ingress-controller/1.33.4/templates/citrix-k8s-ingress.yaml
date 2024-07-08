@@ -1,0 +1,264 @@
+{{- if .Values.openshift }}
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+{{- else }}
+apiVersion: apps/v1
+kind: Deployment
+{{- end }}
+metadata:
+  name: {{ include "citrix-ingress-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+{{- if .Values.openshift }}
+     router: {{ include "citrix-ingress-controller.fullname" . }}
+{{- else }}
+    matchLabels:
+      app: {{ include "citrix-ingress-controller.fullname" . }}
+{{- end }}
+  replicas: 1
+{{- if .Values.openshift }}
+  strategy:
+    resources: {}
+    rollingParams:
+      intervalSeconds: 1
+      maxSurge: 0
+      maxUnavailable: 25%
+      timeoutSeconds: 600
+      updatePeriodSeconds: 1
+    type: Rolling
+{{- end }}
+  template:
+    metadata:
+      name: cic
+      labels:
+{{- if .Values.openshift }}
+        router: {{ include "citrix-ingress-controller.fullname" . }}
+{{- else }}
+        app: {{ include "citrix-ingress-controller.fullname" . }}
+{{- end }}
+{{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "citrix-ingress-controller.serviceAccountName" . }}
+      containers:
+      - name: cic
+        image: "{{ tpl .Values.image . }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        args:
+          - --configmap
+            {{ .Release.Namespace }}/{{ include "cicconfigmap.fullname" . }}
+{{- if .Values.defaultSSLCertSecret }}
+          - --default-ssl-certificate
+            {{ .Release.Namespace }}/{{ .Values.defaultSSLCertSecret }}
+{{- end }}
+{{- if .Values.ingressClass }}
+          - --ingress-classes
+{{- range .Values.ingressClass}}
+            {{.}}
+{{- end }}
+{{- end }}
+{{- if .Values.serviceClass }}
+          - --service-classes
+{{- range .Values.serviceClass}}
+            {{.}}
+{{- end }}
+{{- end }}
+          - --feature-node-watch
+            {{ .Values.nodeWatch }}
+          - --enable-cnc-pbr
+            {{ .Values.cncPbr }}
+{{- if .Values.ipam }}
+          - --ipam
+            citrix-ipam-controller
+{{- end }}
+{{- if .Values.disableAPIServerCertVerify }}
+          - --disable-apiserver-cert-verify
+            {{ .Values.disableAPIServerCertVerify }}
+{{- end }}
+{{- if .Values.updateIngressStatus }}
+          - --update-ingress-status
+            yes
+{{- end }}
+        env:
+        - name: "NS_IP"
+          value: "{{ .Values.nsIP }}"
+{{- if .Values.nsVIP }}
+        - name: "NS_VIP"
+          value: "{{ .Values.nsVIP }}"
+{{- end }}
+{{- if .Values.rbacRole }}
+        - name: "SCOPE"
+          value: "local"
+{{- end }}
+{{- if .Values.nitroReadTimeout }}
+        - name: "NS_NITRO_READ_TIMEOUT"
+          value: "{{ .Values.nitroReadTimeout }}"
+{{- end }}
+        - name: "NS_USER"
+        {{- if and .Values.secretStore.enabled .Values.secretStore.username}}
+        {{- toYaml .Values.secretStore.username | nindent 10 }}
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.adcCredentialSecret }}
+              key: username
+        {{- end }}
+        - name: "NS_PASSWORD"
+        {{- if and .Values.secretStore.enabled .Values.secretStore.password}}
+        {{- toYaml .Values.secretStore.password | nindent 10 }}
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.adcCredentialSecret }}
+              key: password
+        {{- end }}
+        - name: "EULA"
+          value: "{{ .Values.license.accept }}"
+{{- if and .Values.openshift .Values.routeLabels }}
+        - name: "ROUTE_LABELS"
+          value: {{ .Values.routeLabels | quote}}
+{{- end }}
+{{- if and .Values.openshift .Values.namespaceLabels }}
+        - name: "NAMESPACE_LABELS"
+          value: {{ .Values.namespaceLabels | quote }}
+{{- end }}
+        - name: "NS_APPS_NAME_PREFIX"
+          value: {{ .Values.entityPrefix | default "k8s"| quote }}
+{{- if .Values.kubernetesURL }}
+        - name: "kubernetes_url"
+          value: "{{ .Values.kubernetesURL }}"
+{{- end }}
+{{- if .Values.clusterName }}
+        - name: "CLUSTER_NAME"
+          value: "{{ .Values.clusterName }}"
+{{- end }}
+{{- if .Values.logProxy }}
+        - name: "NS_LOGPROXY"
+          value: "{{ .Values.logProxy }}"
+{{- end }}
+{{- if .Values.disableOpenshiftRoutes }}
+        - name: "DISABLE_OPENSHIFT_ROUTES"
+          value: "{{ .Values.disableOpenshiftRoutes }}"
+{{- end }}
+{{- if .Values.nsConfigDnsRec }}
+        - name: "NS_CONFIG_DNS_REC"
+          value: "{{ .Values.nsConfigDnsRec }}"
+{{- end }}
+{{- if .Values.nsSvcLbDnsRec }}
+        - name: "NS_SVC_LB_DNS_REC"
+          value: "{{ .Values.nsSvcLbDnsRec }}"
+{{- end }}
+{{- if .Values.optimizeEndpointBinding }}
+        - name: "OPTIMIZE_ENDPOINT_BINDING"
+          value: "{{ .Values.optimizeEndpointBinding }}"
+{{- end }}
+        resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- if ne (len .Values.extraVolumeMounts) 0 }}
+        volumeMounts:
+{{- toYaml .Values.extraVolumeMounts | nindent 8 }}
+        {{- end }}
+{{- if .Values.exporter.required }}
+      - name: exporter
+        image: "{{ tpl .Values.exporter.image . }}"
+        imagePullPolicy: {{ .Values.exporter.pullPolicy }}
+        args:
+          - "--target-nsip={{ .Values.nsIP }}"
+          - "--port={{ .Values.exporter.ports.containerPort }}"
+        env:
+        - name: "NS_USER"
+        {{- if and .Values.secretStore.enabled .Values.secretStore.username}}
+        {{- toYaml .Values.secretStore.username | nindent 10 }}
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.adcCredentialSecret }}
+              key: username
+        {{- end }}
+        - name: "NS_PASSWORD"
+        {{- if and .Values.secretStore.enabled .Values.secretStore.password}}
+        {{- toYaml .Values.secretStore.password | nindent 10 }}
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.adcCredentialSecret }}
+              key: password
+        {{- end }}
+        {{- if ne (len .Values.exporter.extraVolumeMounts) 0 }}
+        volumeMounts:
+        {{- toYaml .Values.exporter.extraVolumeMounts | nindent 8 }}
+        {{- end }}
+        securityContext:
+          readOnlyRootFilesystem: true
+        resources:
+{{- toYaml .Values.exporter.resources | nindent 12 }}
+{{- end }}
+{{- if or (and .Values.extraVolumeMounts .Values.extraVolumes) (and .Values.exporter.extraVolumeMounts .Values.extraVolumes) }}
+      volumes:
+{{- end }}
+{{- if ne (len .Values.extraVolumes) 0 }}
+{{ toYaml .Values.extraVolumes | indent 6 }}
+{{- end }}
+{{- if and .Values.nodeSelector.key .Values.nodeSelector.value }}
+      nodeSelector:
+        {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}
+{{- end }}
+{{- if .Values.tolerations }}
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+
+---
+
+{{- if .Values.exporter.required }}
+
+
+apiVersion: v1
+kind: Service
+metadata:
+   name: {{ include "exporter.fullname" . }}
+   labels:
+     app: {{ include "exporter.fullname" . }}
+     service-type: {{ include "servicemonitorlabel" . }}
+spec:
+   type: ClusterIP
+   ports:
+   - port: {{ .Values.exporter.ports.containerPort }}
+     targetPort: {{ .Values.exporter.ports.containerPort }}
+     name: exporter-port
+   selector:
+{{- if .Values.openshift }}
+     router: {{ include "citrix-ingress-controller.fullname" . }}
+{{- else }}
+     app: {{ include "citrix-ingress-controller.fullname" . }}
+{{- end }}
+
+---
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "servicemonitor.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    servicemonitor: citrix-adc
+spec:
+  endpoints:
+  - interval: 30s
+    port: exporter-port
+  selector:
+    matchLabels:
+      service-type: {{ include "servicemonitorlabel" . }}
+  namespaceSelector:
+    matchNames:
+    - monitoring
+    - default
+    - {{ .Release.Namespace }}
+
+{{- end }}

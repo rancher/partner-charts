@@ -1,0 +1,49 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeslice-ui-proxy
+  labels:
+    app: kubeslice-ui-proxy
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+      name: http
+      {{- if eq .Values.kubeslice.uiproxy.service.type "NodePort" }}
+      nodePort: {{ .Values.kubeslice.uiproxy.service.nodePort }}
+      {{ end }}
+  selector:
+    app: kubeslice-ui-proxy
+  type: {{ .Values.kubeslice.uiproxy.service.type }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeslice-ui-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeslice-ui-proxy
+  template:
+    metadata:
+      labels:
+        app: kubeslice-ui-proxy
+    spec:
+      containers:
+        - name: kubeslice-ui-proxy
+          image: '{{ .Values.kubeslice.uiproxy.image }}:{{ .Values.kubeslice.uiproxy.tag }}'
+          imagePullPolicy: '{{ .Values.kubeslice.uiproxy.pullPolicy }}'
+          env:
+          - name: KUBESLICE-CONTROLLER-PROMETHEUS
+            value: {{ .Values.kubeslice.prometheus.url }}
+          - name: REACT_APP_SOCKET_URL
+            value: 'ws://kubeslice-api-gw.kubeslice-controller.svc.cluster.local:3000'
+          ports:
+            - containerPort: 443
+        {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
+      imagePullSecrets:
+      - name: kubeslice-ui-image-pull-secret
+        {{- end }}

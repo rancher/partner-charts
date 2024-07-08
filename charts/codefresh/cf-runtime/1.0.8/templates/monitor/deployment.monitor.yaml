@@ -1,0 +1,70 @@
+{{- if .Values.monitor.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cf-monitor.fullname" . }}
+  labels: {{- include "cf-monitor.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 50%
+      maxSurge: 50%
+  selector:
+    matchLabels: {{- include "cf-monitor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cf-monitor.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "cf-monitor.fullname" . }}
+      containers:
+        - name: monitor
+          resources:
+{{ toYaml .Values.monitor.resources | indent 12 }}
+          image: {{ include "cf-monitor.docker-image" . }}
+          imagePullPolicy: Always
+          env:
+            {{- if .Values.monitor.env }}
+            {{- range $key, $value := .Values.monitor.env }}
+            - name: {{ $key }}
+              value: "{{ $value}}"
+            {{- end}}
+            {{- end}}
+            - name: SERVICE_NAME
+              value: {{ include "cf-monitor.fullname" . }}
+            {{- if .Values.monitor.useNamespaceWideRole  }} # not use cluster role
+            - name: ROLE_BINDING
+              value: "true"
+            {{- end }}
+            - name: PORT
+              value: "9020"
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "cf-monitor.secretTokenName" . }}
+                  key: codefresh.token
+            - name: CLUSTER_ID
+              value: {{ .Values.monitor.clusterId }}
+            - name: API_URL
+              value: {{ .Values.global.codefreshHost }}/api/k8s-monitor/events
+            - name: ACCOUNT_ID
+              value: user
+            - name: HELM3
+              value: "{{ .Values.monitor.helm3 }}"
+            - name: NAMESPACE
+              value: "{{ .Release.Namespace }}"
+            - name: NODE_OPTIONS
+              value: "--max_old_space_size=4096"
+          ports:
+            - containerPort: 9020
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /api/ping
+              port: 9020
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+  {{- end }}

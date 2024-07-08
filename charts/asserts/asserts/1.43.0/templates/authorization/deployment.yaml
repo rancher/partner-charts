@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "asserts.authorizationFullname" . }}
+  labels: {{- include "asserts.authorizationSelectorLabels" . | nindent 4 }}
+    {{- with .Values.authorization.extraLabels }}
+    {{- toYaml . | nindent 4 -}}
+    {{- end }}
+  {{- if .Values.authorization.annotations }}
+  annotations:
+  {{- toYaml . | nindent 4 -}}
+  {{- end }}
+spec:
+  replicas: {{ .Values.authorization.replicaCount }}
+  selector:
+    matchLabels: {{- include "asserts.authorizationSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "asserts.authorizationLabels" . | nindent 8 }}
+        {{- with .Values.authorization.extraPodLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/authorization/configmap.yaml") . | sha256sum }}
+        {{- with .Values.authorization.extraPodAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.authorization.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "asserts.serviceAccountName" . }}
+      {{- if .Values.authorization.initContainers }}
+      initContainers: {{ include "common.tplvalues.render" ( dict "value" .Values.authorization.initContainers "context" $) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "asserts.authorizationFullname" . }}
+          image: "{{ .Values.authorization.image.repository }}:{{ .Values.authorization.image.tag }}"
+          imagePullPolicy: {{ .Values.authorization.image.pullPolicy }}
+          env:
+            # set POSTGRES_RDB_PASSWORD generated from
+            # postgres subchart for consumption by the Asserts authorization server
+            - name: POSTGRES_RDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.fullnameOverride }}
+                  key: postgres-password
+                  optional: false
+          {{- with .Values.authorization.extraEnv }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authorization.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.authorization.service.port }}
+          resources: {{- toYaml .Values.authorization.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /opt/asserts/authorization/conf/application.yml
+              subPath: application.yml
+              readOnly: true
+          {{- with .Values.authorization.extraVolumeMounts }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.authorization.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authorization.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authorization.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "asserts.authorizationFullname" . }}
+            items:
+              - key: application.yml
+                path: application.yml
+        {{- with .Values.authorization.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

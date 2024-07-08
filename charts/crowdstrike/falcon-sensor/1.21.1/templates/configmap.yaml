@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "falcon-sensor.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: "{{ include "falcon-sensor.name" . }}"
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "container_sensor"
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+data:
+  FALCONCTL_OPT_CID: {{ .Values.falcon.cid }}
+  {{- range $key, $value := .Values.falcon }}
+  {{- if and (or $value (eq ($value | toString) "false")) (ne $key "cid") }}
+  FALCONCTL_OPT_{{ $key | upper }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if and .Values.node.enabled .Values.node.backend }}
+  FALCONCTL_OPT_BACKEND: "{{ .Values.node.backend }}"
+  {{- end }}
+  {{- if .Values.container.enabled }}
+  CP_NAMESPACE: {{ .Release.Namespace }}
+  FALCON_IMAGE_PULL_POLICY: "{{ .Values.container.image.pullPolicy }}"
+  FALCON_IMAGE: "{{ .Values.container.image.repository }}:{{ .Values.container.image.tag }}"
+  FALCON_INJECTOR_LISTEN_PORT: "{{ .Values.container.injectorPort }}"
+  {{- if .Values.container.image.pullSecrets.enable }}
+  FALCON_IMAGE_PULL_SECRET: {{ .Values.container.image.pullSecrets.name | default (printf "%s-pull-secret" (include "falcon-sensor.fullname" .)) }}
+  {{- end }}
+  {{- if .Values.container.disablePodInjection }}
+  INJECTION_DEFAULT_DISABLED: T
+  {{- end }}
+  {{- if .Values.container.sensorResources }}
+  FALCON_RESOURCES: '{{ toJson .Values.container.sensorResources | b64enc }}'
+  {{- end }}
+  {{- end }}

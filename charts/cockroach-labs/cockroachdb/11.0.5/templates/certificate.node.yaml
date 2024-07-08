@@ -1,0 +1,58 @@
+{{- if and .Values.tls.enabled .Values.tls.certs.certManager }}
+{{- if .Values.tls.certs.useCertManagerV1CRDs }}
+apiVersion: cert-manager.io/v1
+{{- else }}
+apiVersion: cert-manager.io/v1alpha2
+{{- end }}
+kind: Certificate
+metadata:
+  name: {{ template "cockroachdb.fullname" . }}-node
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    helm.sh/chart: {{ template "cockroachdb.chart" . }}
+    app.kubernetes.io/name: {{ template "cockroachdb.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+  {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  duration: {{ .Values.tls.certs.certManagerIssuer.nodeCertDuration }}
+  renewBefore: {{ .Values.tls.certs.certManagerIssuer.nodeCertExpiryWindow }}
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+{{- if .Values.tls.certs.useCertManagerV1CRDs }}
+  privateKey:
+    algorithm: RSA
+    size: 2048
+{{- else }}
+  keySize: 2048
+  keyAlgorithm: rsa
+{{- end }}
+  commonName: node
+{{- if .Values.tls.certs.useCertManagerV1CRDs }}
+  subject:
+    organizations:
+      - Cockroach
+{{- else }}
+  organization:
+    - Cockroach
+{{- end }}
+  dnsNames:
+    - "localhost"
+    - "127.0.0.1"
+    - {{ printf "%s-public" (include "cockroachdb.fullname" .) | quote }}
+    - {{ printf "%s-public.%s" (include "cockroachdb.fullname" .) .Release.Namespace | quote }}
+    - {{ printf "%s-public.%s.svc.%s" (include "cockroachdb.fullname" .) .Release.Namespace .Values.clusterDomain | quote }}
+    - {{ printf "*.%s" (include "cockroachdb.fullname" .) | quote }}
+    - {{ printf "*.%s.%s" (include "cockroachdb.fullname" .) .Release.Namespace | quote }}
+    - {{ printf "*.%s.%s.svc.%s" (include "cockroachdb.fullname" .) .Release.Namespace .Values.clusterDomain | quote }}
+  secretName: {{ .Values.tls.certs.nodeSecret }}
+  issuerRef:
+    name: {{ .Values.tls.certs.certManagerIssuer.name }}
+    kind: {{ .Values.tls.certs.certManagerIssuer.kind }}
+    group: {{ .Values.tls.certs.certManagerIssuer.group }}
+{{- end }}

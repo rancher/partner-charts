@@ -1,0 +1,75 @@
+{{- if eq .Values.storage.backend "local" -}}
+  {{- $localVolumeParentDir := .Values.storage.local.volumeParentDir  }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "cf-vp.monitorName" . }}
+  labels: {{- include "cf-vp.monitorLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "cf-vp.monitorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cf-vp.monitorLabels" . | nindent 8 }}
+      annotations:
+        prometheus_port: "9100"
+        prometheus_scrape: "true"
+    spec:
+      serviceAccountName: {{ include "cf-vp.fullname" . }}
+      {{- if .Values.storage.localVolumeMonitor.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.storage.localVolumeMonitor.nodeSelector | indent 8 }}
+      {{- end }}
+      tolerations:
+        - key: 'codefresh/dind'
+          operator: 'Exists'
+          effect: 'NoSchedule'
+      {{- if .Values.storage.localVolumeMonitor.tolerations }}
+{{ toYaml .Values.storage.localVolumeMonitor.tolerations | indent 8 }}
+      {{- end }}
+      initContainers:
+      - command:
+        - chown
+        - -R
+        - 1000:1000
+        - /var/lib/codefresh/dind-volumes
+        image: {{ .Values.storage.localVolumeMonitor.initContainer.image }}
+        imagePullPolicy: Always
+        name: fs-change-owner
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/codefresh/dind-volumes
+          name: dind-volume-dir
+      containers:
+        - image: {{ include "cf-vp.docker-image-volume-utils" . }}
+          name: lv-cleaner
+          imagePullPolicy: Always
+          resources: {{ toYaml .Values.storage.localVolumeMonitor.resources | nindent 12 }}
+          command:
+            - /home/dind-volume-utils/bin/local-volumes-agent
+          env:
+            {{- if .Values.storage.localVolumeMonitor.env }}
+            {{- range $key, $value := .Values.storage.localVolumeMonitor.env }}
+            - name: {{ $key }}
+              value: "{{ $value}}"
+            {{- end}}
+            {{- end}}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: VOLUME_PARENT_DIR
+              value: {{ $localVolumeParentDir }}
+          volumeMounts:
+            - mountPath: {{ $localVolumeParentDir }}
+              readOnly: false
+              name: dind-volume-dir
+      securityContext:
+        fsGroup: 1000
+      volumes:
+        - name: dind-volume-dir
+          hostPath:
+            path: {{ $localVolumeParentDir }}
+  {{- end -}}

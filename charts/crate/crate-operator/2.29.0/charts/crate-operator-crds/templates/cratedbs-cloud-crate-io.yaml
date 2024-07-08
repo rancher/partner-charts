@@ -1,0 +1,631 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+  name: cratedbs.cloud.crate.io
+spec:
+  conversion:
+    strategy: None
+  group: cloud.crate.io
+  names:
+    kind: CrateDB
+    listKind: CrateDBList
+    plural: cratedbs
+    singular: cratedb
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: The CrateDB Cluster name
+      jsonPath: .spec.cluster.name
+      name: ClusterName
+      type: string
+    - description: The CrateDB Cluster version
+      jsonPath: .spec.cluster.version
+      name: Version
+      type: string
+    - description: Number of data nodes in this cluster
+      jsonPath: .spec.nodes.data[?(@.name == "hot")].replicas
+      name: Nodes
+      type: number
+    - description: CPU Requests
+      jsonPath: .spec.nodes.data[?(@.name == "hot")].resources.requests.cpu
+      name: CPU_REQ
+      type: number
+    - description: CPU Limits
+      jsonPath: .spec.nodes.data[?(@.name == "hot")].resources.limits.cpu
+      name: CPU_LIM
+      type: number
+      # Only shown in wide mode (-o wide)
+      priority: 1
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.crateDBStatus.health
+      name: Health
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              backups:
+                properties:
+                  aws:
+                    properties:
+                      accessKeyId:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the AWS Access Key ID.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the AWS Access Key ID to be used for backups.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      basePath:
+                        description: The base path within the backup under which the
+                          snapshots will be placed.
+                        type: string
+                      bucket:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the AWS S3 bucket name.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the AWS S3 bucket name to be used for backups.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      cron:
+                        description: A crontab formatted string indicating when and
+                          how often to perform backups.
+                        pattern: ^(((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*) ){4}(((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*))$
+                        type: string
+                      endpointUrl:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the S3 endpoint.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the S3 endpoint-url to be used for backups.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      region:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the name of the AWS region to use.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the AWS region to be used for backups.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      secretAccessKey:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the AWS Secret Access Key.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the AWS Secret Access Key to be used for backups.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                    required:
+                    - accessKeyId
+                    - bucket
+                    - cron
+                    - region
+                    - secretAccessKey
+                    type: object
+                type: object
+              cluster:
+                properties:
+                  allowedCIDRs:
+                    description: Whitelisted CIDRs
+                    items:
+                      type: string
+                    type: array
+                  externalDNS:
+                    description: The external DNS name record that should point to
+                      the CrateDB cluster.
+                    type: string
+                  imageRegistry:
+                    description: Point to a Docker registry. For the offical image
+                      it's 'crate', testing and nightly releases are under 'crate/crate'.
+                      Or others under 'https://example.com/path/to/registry'
+                    type: string
+                  license:
+                    properties:
+                      secretKeyRef:
+                        properties:
+                          key:
+                            description: The key within the Kubernetes Secret that
+                              holds the CrateDB license.
+                            type: string
+                          name:
+                            description: Name of a Kubernetes Secret that contains
+                              a valid CrateDB license.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                        description: Deprecated and no longer has any effect.
+                          Only here for backwards-compatibility.
+                    required:
+                    - secretKeyRef
+                    type: object
+                  name:
+                    description: Name of the cluster
+                    pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+                    type: string
+                  restoreSnapshot:
+                    description: Restore data from a snapshot.
+                    properties:
+                      accessKeyId:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the Access Key ID.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the Access Key ID to be used for accessing the
+                                  backup of the source cluster.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      basePath:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the base path of the repository.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the base path to be used.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      bucket:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the snapshot's bucket name.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the snapshot's bucket name to be used for the restore.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      secretAccessKey:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: The key within the Kubernetes Secret
+                                  that holds the Secret Access Key.
+                                type: string
+                              name:
+                                description: Name of a Kubernetes Secret that contains
+                                  the Secret Access Key to be used for accessing the
+                                  backup of the source cluster..
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      snapshot:
+                        description: The name of the snapshot to use.
+                        type: string
+                      tables:
+                        description: The tables to restore from the backup.
+                          Format '<schema_name>.<table_name>'. Defaults to 'all'
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - snapshot
+                    - bucket
+                    - secretAccessKey
+                    - basePath
+                    - accessKeyId
+                    type: object
+                  settings:
+                    description: Additional settings to apply to all nodes in the
+                      cluster.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  service:
+                    description: Additional configuration for k8s services.
+                    properties:
+                      annotations:
+                        description: Additional annotations to add to the k8s load balancer service.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  ssl:
+                    properties:
+                      keystore:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: CrateDB SSL keystore
+                                type: string
+                              name:
+                                description: Keystore name
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      keystoreKeyPassword:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: Keystore key password
+                                type: string
+                              name:
+                                description: Keystore passwords
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                      keystorePassword:
+                        properties:
+                          secretKeyRef:
+                            properties:
+                              key:
+                                description: Keystore password
+                                type: string
+                              name:
+                                description: Keystore passwords
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                    required:
+                    - keystore
+                    - keystoreKeyPassword
+                    - keystorePassword
+                    type: object
+                  version:
+                    description: CrateDB version
+                    type: string
+                required:
+                - imageRegistry
+                - name
+                - version
+                type: object
+              nodes:
+                properties:
+                  data:
+                    items:
+                      properties:
+                        annotations:
+                          description: Additional annotations to put on the corresponding
+                            pods.
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        labels:
+                          description: Additional labels to put on the corresponding
+                            pods.
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        name:
+                          description: Uniquely identifying name of this type of node.
+                          pattern: ^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$
+                          type: string
+                        replicas:
+                          description: Number of CrateDB nodes of this type.
+                          type: number
+                        resources:
+                          properties:
+                            cpus:
+                              description: Deprecated - please use requests/d.
+                              type: number
+                            disk:
+                              properties:
+                                count:
+                                  description: Number of disks
+                                  type: number
+                                size:
+                                  description: Size of the disk.
+                                  type: string
+                                storageClass:
+                                  description: The name of a Kubernetes StorageClass
+                                  type: string
+                              required:
+                              - count
+                              - size
+                              - storageClass
+                              type: object
+                            heapRatio:
+                              description: Allocated heap size relative to memory
+                              format: float
+                              type: number
+                            limits:
+                              properties:
+                                cpu:
+                                  description: Limited CPUs for each CrateDB container.
+                                    Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                  type: number
+                                memory:
+                                  description: Limited memory for each CrateDB container.
+                                    Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                  type: string
+                              type: object
+                            memory:
+                              description: Deprecated - please use requests/limits.
+                              type: string
+                            requests:
+                              properties:
+                                cpu:
+                                  description: Requested CPUs for each CrateDB container.
+                                    Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                  type: number
+                                memory:
+                                  description: Requested memory for each CrateDB container.
+                                    Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                  type: string
+                              type: object
+                          required:
+                          - disk
+                          - heapRatio
+                          type: object
+                        settings:
+                          description: Additional settings to apply to all nodes of
+                            that type in the cluster.
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      required:
+                      - name
+                      - replicas
+                      - resources
+                      type: object
+                    minItems: 1
+                    type: array
+                  master:
+                    properties:
+                      annotations:
+                        description: Additional annotations to put on the corresponding
+                          pods.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      labels:
+                        description: Additional labels to put on the corresponding
+                          pods.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      replicas:
+                        description: Number of master nodes. Should be an odd number.
+                        minimum: 3
+                        type: number
+                      resources:
+                        properties:
+                          cpus:
+                            description: Deprecated - please use requests/limits.
+                            type: number
+                          disk:
+                            properties:
+                              count:
+                                description: Number of disks
+                                type: number
+                              size:
+                                description: Size of the disk.
+                                type: string
+                              storageClass:
+                                description: The name of a Kubernetes StorageClass
+                                type: string
+                            required:
+                            - count
+                            - size
+                            - storageClass
+                            type: object
+                          heapRatio:
+                            description: Allocated heap size relative to memory
+                            format: float
+                            type: number
+                          limits:
+                            properties:
+                              cpu:
+                                description: Limited CPUs for each CrateDB container.
+                                  Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                type: number
+                              memory:
+                                description: Limited memory for each CrateDB container.
+                                  Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                type: string
+                            type: object
+                          memory:
+                            description: Deprecated - please use requests/limits.
+                            type: string
+                          requests:
+                            properties:
+                              cpu:
+                                description: Requested CPUs for each CrateDB container.
+                                  Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                type: number
+                              memory:
+                                description: Requested memory for each CrateDB container.
+                                  Supports the syntax documented in https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/.
+                                type: string
+                            type: object
+                        required:
+                        - disk
+                        - heapRatio
+                        type: object
+                      settings:
+                        description: Additional settings to apply to all master nodes
+                          in the cluster.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    required:
+                    - replicas
+                    - resources
+                    type: object
+                required:
+                - data
+                type: object
+              ports:
+                properties:
+                  exporter:
+                    description: SQL exporter port number
+                    maximum: 65535
+                    minimum: 1
+                    type: number
+                  http:
+                    description: HTTP port number
+                    maximum: 65535
+                    minimum: 1
+                    type: number
+                  jmx:
+                    description: JMX port number
+                    maximum: 65535
+                    minimum: 1
+                    type: number
+                  postgres:
+                    description: PostgreSQL port number
+                    maximum: 65535
+                    minimum: 1
+                    type: number
+                  prometheus:
+                    description: Prometheus port number
+                    maximum: 65535
+                    minimum: 1
+                    type: number
+                required:
+                - exporter
+                - http
+                - jmx
+                - postgres
+                - prometheus
+                type: object
+              users:
+                items:
+                  properties:
+                    name:
+                      description: The username for a CrateDB cluster user.
+                      type: string
+                    password:
+                      properties:
+                        secretKeyRef:
+                          properties:
+                            key:
+                              description: The key within the Kubernetes Secret that
+                                holds the user's password.
+                              type: string
+                            name:
+                              description: Name of a Kubernetes Secret that contains
+                                the password for the user.
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                      required:
+                      - secretKeyRef
+                      type: object
+                  required:
+                  - name
+                  - password
+                  type: object
+                type: array
+            required:
+            - cluster
+            - nodes
+            type: object
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true

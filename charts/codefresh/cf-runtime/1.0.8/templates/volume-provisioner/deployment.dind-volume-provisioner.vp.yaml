@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cf-vp.provisionerName" . }}
+  labels: {{- include "cf-vp.provisionerLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "cf-vp.provisionerSelectorLabels" . | nindent 6 }}
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {{- include "cf-vp.provisionerLabels" . | nindent 9 }}
+      annotations:
+        {{- range $key, $value := .Values.volumeProvisioner.annotations }}
+        {{ $key }}: {{ $value }}
+        {{- end}}
+    spec:
+      serviceAccountName: {{ include "cf-vp.fullname" . }}
+      {{- if .Values.volumeProvisioner.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.volumeProvisioner.nodeSelector | indent 8 }}
+      {{- end }}
+      tolerations:
+      {{- if .Values.volumeProvisioner.tolerations }}
+{{ toYaml .Values.volumeProvisioner.tolerations | indent 8 }}
+      {{- end }}
+      {{- if .Values.volumeProvisioner.securityContext.enabled }}
+      securityContext:
+        runAsUser: 3000
+        runAsGroup: 3000
+        fsGroup: 3000
+      {{- end }}
+      containers:
+        - name: dind-volume-provisioner
+          {{- if .Values.volumeProvisioner.resources }}
+          resources:
+{{ toYaml .Values.volumeProvisioner.resources | indent 12 }}
+          {{- end }}      
+          image: {{ include "cf-vp.docker-image-volume-provisioner" . }}
+          imagePullPolicy: Always
+          command:
+            - /usr/local/bin/dind-volume-provisioner
+            - -v=4
+            - --resync-period=50s
+          env:
+            {{- if .Values.volumeProvisioner.env }}
+            {{- range $key, $value := .Values.volumeProvisioner.env }}
+            - name: {{ $key }}
+              value: "{{ $value}}"
+            {{- end}}
+            {{- end}}
+            - name: PROVISIONER_NAME
+              value: {{ include "cf-vp.volumeProvisionerName" . }}
+            {{- if ne .Values.dockerRegistry "" }}
+            - name: DOCKER_REGISTRY
+              value: {{ .Values.dockerRegistry }}
+            {{- end }}
+            {{- if .Values.storage.ebs.accessKeyId }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: dind-volume-provisioner
+                  key: aws_access_key_id
+            {{- end }}
+            {{- if .Values.storage.ebs.secretAccessKey }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dind-volume-provisioner
+                  key: aws_secret_access_key
+            {{- end }}
+            {{- if .Values.storage.gcedisk.serviceAccountJson }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /etc/dind-volume-provisioner/credentials/google-service-account.json
+            {{- end }}
+            {{- if .Values.volumeProvisioner.mountAzureJson }}
+            - name: AZURE_CREDENTIAL_FILE
+              value: "/etc/kubernetes/azure.json"
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.volumeProvisioner.mountAzureJson }}
+            - name: azure-json
+              readOnly: true
+              mountPath: "/etc/kubernetes/azure.json"
+            {{- end }}
+            {{- if .Values.storage.gcedisk.serviceAccountJson }}
+            - name: credentials
+              readOnly: true
+              mountPath: "/etc/dind-volume-provisioner/credentials"
+      {{- end }}
+      volumes:
+        {{- if .Values.volumeProvisioner.mountAzureJson }}
+        - name: azure-json
+          hostPath:
+            path: /etc/kubernetes/azure.json
+            type: File
+        {{- end }}
+        {{- if .Values.storage.gcedisk.serviceAccountJson }}
+        - name: credentials
+          secret:
+            secretName: dind-volume-provisioner
+  {{- end }}

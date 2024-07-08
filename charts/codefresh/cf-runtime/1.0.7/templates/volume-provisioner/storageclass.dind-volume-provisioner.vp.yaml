@@ -1,0 +1,61 @@
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  {{/* has to be exactly that */}}
+  name: dind-local-volumes-runner-{{.Values.global.namespace}}
+  labels:
+    app: dind-volume-provisioner
+  {{/*  annotations:*/}}
+  {{/*    {{ range $key, $value := .Values.Storage.Annotations }}*/}}
+  {{/*    {{ $key }}: {{ $value }}*/}}
+  {{/*  {{ end }}*/}}
+provisioner: {{ include "cf-vp.volumeProvisionerName" . }}
+parameters:
+  {{- if eq .Values.storage.backend "local" }}
+
+  volumeBackend: local
+  volumeParentDir: {{ .Values.storage.local.volumeParentDir }}
+
+  {{- else if eq .Values.storage.backend "gcedisk" }}
+
+  volumeBackend: {{ .Values.storage.backend }}
+  type: {{ .Values.storage.gcedisk.volumeType | default "pd-ssd" }}
+  zone: {{ .Values.storage.gcedisk.availabilityZone }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+
+  {{- else if or (eq .Values.storage.backend "ebs") (eq .Values.storage.backend "ebs-csi")}}
+  volumeBackend: {{ .Values.storage.backend }}
+  VolumeType: {{ .Values.storage.ebs.volumeType | default "gp2" }}
+  AvailabilityZone: {{ .Values.storage.ebs.availabilityZone }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+  encrypted: "{{ .Values.storage.ebs.encrypted | default "false" }}"
+  {{ if .Values.storage.ebs.kmsKeyId }}
+  kmsKeyId: {{ .Values.storage.ebs.kmsKeyId }}
+  {{- end }}
+  {{- if .Values.storage.ebs.iops }}
+  iops: {{ .Values.storage.ebs.iops | quote }}
+  {{- end }}
+  {{- if .Values.storage.ebs.throughput }}
+  throughput: {{ .Values.storage.ebs.throughput | quote }}
+  {{- end }}
+
+
+  {{- else if or (eq .Values.storage.backend "azuredisk") (eq .Values.storage.backend "azuredisk-csi")}}
+  volumeBackend: {{ .Values.storage.backend }}
+  kind: managed
+  skuName: {{ .Values.storage.azuredisk.skuName | default "Premium_LRS" }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+  cachingMode: {{ .Values.storage.azuredisk.cachingMode | default "None" }}
+
+  {{- if .Values.storage.azuredisk.location }}
+  location: {{ .Values.storage.azuredisk.location }}
+  {{- end }}
+  {{/* azure location */}}
+
+  {{- if .Values.storage.azuredisk.resourceGroup }}
+  resourceGroup: {{ .Values.storage.azuredisk.resourceGroup }}
+  {{- end }}
+  {{/* azure resource group*/}}
+
+  {{- end }}
+  {{/* if azuredisk*/}}

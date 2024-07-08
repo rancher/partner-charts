@@ -1,0 +1,163 @@
+{{- if .Values.node.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "falcon-sensor.fullname" . }}-node-cleanup
+  labels:
+    app: "{{ include "falcon-sensor.name" . }}"
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}-node-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "kernel_sensor"
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+    {{- if .Values.node.daemonset.labels }}
+    {{- range $key, $value := .Values.node.daemonset.labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  {{- if .Values.node.daemonset.annotations }}
+    {{- range $key, $value := .Values.node.daemonset.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}-node-cleanup
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: "kernel_sensor"
+      crowdstrike.com/provider: crowdstrike
+  template:
+    metadata:
+      annotations:
+        {{ .Values.node.daemonset.podAnnotationKey }}: disabled
+        {{- range $key, $value := .Values.node.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      labels:
+        app: "{{ include "falcon-sensor.name" . }}"
+        app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}-node-cleanup
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/component: "kernel_sensor"
+        crowdstrike.com/provider: crowdstrike
+        helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+        {{- if .Values.node.daemonset.labels }}
+        {{- range $key, $value := .Values.node.daemonset.labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        {{- end }}
+    spec:
+    {{- if and (.Values.node.image.pullSecrets) (.Values.node.image.registryConfigJSON) }}
+      {{- fail "node.image.pullSecrets and node.image.registryConfigJSON cannot be used together." }}
+    {{- else }}
+    {{- if or (.Values.node.image.pullSecrets) (.Values.node.image.registryConfigJSON) }}
+      imagePullSecrets:
+      {{- if .Values.node.image.pullSecrets }}
+        - name: {{ .Values.node.image.pullSecrets }}
+      {{- end }}
+      {{- if .Values.node.image.registryConfigJSON }}
+        - name: {{ include "falcon-sensor.fullname" . }}-pull-secret-cleanup
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if .Values.node.daemonset.tolerations }}
+      tolerations:
+      {{- with .Values.node.daemonset.tolerations }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+    {{- end }}
+      nodeSelector:
+        kubernetes.io/os: linux
+    {{- if .Values.node.daemonset.nodeAffinity }}
+      affinity:
+        nodeAffinity:
+        {{- with .Values.node.daemonset.nodeAffinity }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+    {{- end }}
+      initContainers:
+      - name: cleanup-opt-crowdstrike
+        image: "{{ include "falcon-sensor.image" . }}"
+        imagePullPolicy: "{{ .Values.node.image.pullPolicy }}"
+        command:
+          - /bin/bash
+        {{- if .Values.node.gke.autopilot }}
+        args:
+          - '-c'
+          - >-
+            echo "Running /opt/CrowdStrike/falcon-daemonset-init -u";
+            /opt/CrowdStrike/falcon-daemonset-init -u
+        {{- else }}
+        args: ['-c', 'if [ -x "/opt/CrowdStrike/falcon-daemonset-init" ]; then echo "Running /opt/CrowdStrike/falcon-daemonset-init -u"; /opt/CrowdStrike/falcon-daemonset-init -u ; else rm -rf "/host_opt/CrowdStrike"; fi']
+        volumeMounts:
+          - name: opt-crowdstrike
+            mountPath: /host_opt
+        {{- end }}
+        {{- if or .Values.node.gke.autopilot .Values.node.daemonset.resources }}
+        resources:
+          requests:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+          limits:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+        {{- end }}
+        securityContext:
+          runAsUser: 0
+          privileged: true
+          allowPrivilegeEscalation: true
+        {{- if .Values.node.gke.autopilot }}
+          readOnlyRootFilesystem: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - SYS_PTRACE
+              - SYS_CHROOT
+              - DAC_READ_SEARCH
+        {{- else }}
+          readOnlyRootFilesystem: false
+        {{- end }}
+      containers:
+      - name: cleanup-sleep
+        image: "{{ include "falcon-sensor.image" . }}"
+        imagePullPolicy: "{{ .Values.node.image.pullPolicy }}"
+        args:
+        - -c
+        - sleep 10
+        command:
+        - /bin/bash
+        {{- if or .Values.node.gke.autopilot .Values.node.daemonset.resources }}
+        resources:
+          requests:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+          limits:
+            cpu: 10m
+            ephemeral-storage: 100Mi
+            memory: 50Mi
+        {{- end }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: true
+      {{- if not .Values.node.gke.autopilot }}
+      volumes:
+      - name: opt-crowdstrike
+        hostPath:
+          path: /opt
+      {{- end }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}-node-cleanup
+      terminationGracePeriodSeconds: {{ .Values.node.terminationGracePeriod }}
+      hostPID: true
+{{- end }}
+

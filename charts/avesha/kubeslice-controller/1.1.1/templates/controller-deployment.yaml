@@ -1,0 +1,294 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: kubeslice-controller-manager
+  namespace: kubeslice-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        prometheus.io/port: "18080"
+        prometheus.io/scrape: "true"
+      labels:
+        control-plane: controller-manager
+    spec:
+      containers:
+        - args:
+            - --secure-listen-address=0.0.0.0:8443
+            - --upstream=http://127.0.0.1:8080/
+            - --logtostderr=true
+            - --v=0
+          image: '{{ .Values.kubeslice.rbacproxy.image }}:{{ .Values.kubeslice.rbacproxy.tag }}'
+          name: kube-rbac-proxy
+          ports:
+            - containerPort: 8443
+              name: https
+              protocol: TCP
+        - args:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=127.0.0.1:8080
+            - --leader-elect
+            - --log-level={{ required "A valid value is required!" .Values.kubeslice.controller.logLevel }}
+            - --rbac-resource-prefix={{ required "A valid value is required!" .Values.kubeslice.controller.rbacResourcePrefix }}
+            - --project-namespace-prefix={{ required "A valid value is required!" .Values.kubeslice.controller.projectnsPrefix }}
+            - --controller-end-point={{ required "A valid value is required!" .Values.kubeslice.controller.endpoint }}
+            - --prometheus-service-endpoint={{ required "A valid value is required!" .Values.kubeslice.prometheus.url}}
+            - --ovpn-job-image={{ .Values.kubeslice.ovpnJob.image }}:{{ .Values.kubeslice.ovpnJob.tag }}
+            - --license-mode={{ .Values.kubeslice.license.mode }}
+            - --license-customer-name={{ .Values.kubeslice.license.customerName }}
+            - --license-type={{.Values.kubeslice.license.type }}
+            - --license-image={{ .Values.kubeslice.controller.image }}:{{ .Values.kubeslice.controller.tag }}
+          command:
+            - /manager
+          env:
+            - name: KUBESLICE_CONTROLLER_MANAGER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          image: '{{ .Values.kubeslice.controller.image }}:{{ .Values.kubeslice.controller.tag }}'
+          imagePullPolicy: '{{ .Values.kubeslice.controller.pullPolicy }}'
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          name: manager
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+            - name: kubeslice-controller-event-schema-conf
+              mountPath: /events/event-schema/
+            - name: kubeslice-controller-license-conf
+              mountPath: /etc/license/config
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: kubeslice-controller-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: kubeslice-controller-license-conf
+          configMap:
+            name: kubeslice-controller-license-config
+            defaultMode: 420
+        - name: kubeslice-controller-event-schema-conf
+          configMap:
+            name: kubeslice-controller-event-schema-conf
+            defaultMode: 420
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: webhook-server-cert-secret
+        {{- if and .Values.imagePullSecrets .Values.imagePullSecrets.repository .Values.imagePullSecrets.username .Values.imagePullSecrets.password }}
+      imagePullSecrets:
+        - name: kubeslice-image-pull-secret
+        {{- end }}
+---
+apiVersion: v1
+data:
+  {{ if .Values.kubeslice.events.disabled}}
+  controller.yaml: |-
+    disabledEvents:
+      - DefaultDeploymentSliceRoleTemplateCreationFailed
+      - DefaultDeploymentSliceRoleTemplateCreated
+      - DefaultReaderSliceRoleTemplateCreationFailed
+      - DefaultReaderSliceRoleTemplateCreated
+      - SliceRoleTemplateDeletionFailed
+      - SliceRoleTemplateDeleted
+      - SliceResourceQuotaCreationFailed
+      - SliceResourceQuotaCreatedOnSliceConfigCreation
+      - SliceResourceQuotaDeletionFailed
+      - SliceResourceQuotaDeleted
+      - SliceResourceQuotaRecreationFailed
+      - SliceResourceQuotaRecreated
+      - SetSliceConfigAsOwnerOfSliceResourceQuotaFailed
+      - SetSliceConfigAsOwnerOfSliceResourceQuotaSucceeded
+      - SliceResourceQuotaCreated
+      - SliceResourceQuotaUpdated
+      - AllRQSpecificationViolationMetricsResetSuccess
+      - SliceRQSpecificationViolationMetricsResetSuccess
+      - ClusterRQSpecificationViolationMetricsResetSuccess
+      - OutdatedNamespaceRQSpecificationViolationMetricsResetSuccess
+      - OutdatedClusterRQSpecificationViolationMetricsResetSuccess
+      - SliceNodeAffinityDeletionFailed
+      - SliceNodeAffinityDeleted
+      - SetSliceConfigAsOwnerOfSliceNodeAffinityFailed
+      - SetSliceConfigAsOwnerOfSliceNodeAffinitySucceeded
+      - SliceRoleBindingDeletingFailed
+      - SliceRoleBindingDeleted
+      - SetSliceConfigAsOwnerOfSliceRoleBindingFailed
+      - SetSliceConfigAsOwnerOfSliceRoleBindingSucceeded
+      - WorkerSliceRoleBindingReconciliationSuccess
+      - WorkerSliceRoleBindingDeletedForcefully
+      - WorkerSliceRoleBindingRecreationFailed
+      - WorkerSliceRoleBindingRecreated
+      - WorkerSliceRoleBindingCreationFailed
+      - WorkerSliceRoleBindingCreated
+      - WorkerSliceRoleBindingUpdateFailed
+      - WorkerSliceRoleBindingUpdated
+      - WorkerSliceRoleBindingDeletionFailed
+      - WorkerSliceRoleBindingDeleted
+      - WorkerSliceNodeAffinityDeletedForcefully
+      - WorkerSliceNodeAffinityRecreationFailed
+      - WorkerSliceNodeAffinityRecreated
+      - NodeAffinityRilesExpansionFailed
+      - SliceNodeAffinityConfigDeepCopyFailed
+      - WorkerSliceNodeAffinityCreationFailed
+      - WorkerSliceNodeAffinityCreated
+      - WorkerSliceNodeAffinityUpdateFailed
+      - WorkerSliceNodeAffinityUpdated
+      - WorkerSliceNodeAffinityDeletionFailed
+      - WorkerSliceNodeAffinityDeleted
+      - WorkerSliceResourceQuotaDeletedForcefully
+      - WorkerSliceResourceQuotaRecreationFailed
+      - WorkerSliceResourceQuotaRecreated
+      - OffBoardedNamespaceUtilizationMetricsReset
+      - ResourceQuotaMetricsPopulated
+      - ClusterCPULimitViolated
+      - ClusterMemoryLimitViolated
+      - ClusterPodCountViolated
+      - ClusterEphemeralStorageLimitViolated
+      - ClusterCPURequestViolated
+      - ClusterMemoryRequestViolated
+      - ClusterEphemeralStorageRequestViolated
+      - NamespaceCPULimitViolated
+      - NamespaceMemoryLimitViolated
+      - NamespacePodCountViolated
+      - NamespaceEphemeralStorageLimitViolated
+      - NamespaceCPURequestViolated
+      - NamespaceMemoryRequestViolated
+      - NamespaceEphemeralStorageRequestViolated
+      - SliceCPULimitViolated
+      - SliceMemoryLimitViolated
+      - SlicePodCountViolated
+      - SliceEphemeralStorageLimitViolated
+      - SliceCPURequestViolated
+      - SliceMemoryRequestViolated
+      - SliceEphemeralStorageRequestViolated
+      - WorkerSliceResourceQuotaCreationFailed
+      - WorkerSliceResourceQuotaCreated
+      - WorkerSliceResourceQuotaUpdateFailed
+      - WorkerSliceResourceQuotaUpdated
+      - WorkerSliceResourceQuotaDeletionFailed
+      - WorkerSliceResourceQuotaDeleted
+      - DetachClusterInititated
+      - DetachClusterSucceeded
+      - DetachClusterFailed
+      - OffboardNamesapceInitiated
+      - OffboardNamesapceSucceeded
+      - OffboardNamesapceFailed
+      - InactiveServiceAccountDeletionFailed
+      - WorkerSliceGatewayCreated
+      - ServiceExportConfigDeletionFailed
+      - ReadWriteRoleCreated
+      - DefaultRoleBindingCreated
+      - DefaultRoleBindingDeleted
+      - WorkerSliceGatewayRecreated
+      - ClusterDeregistered
+      - ReadOnlyRoleCreationFailed
+      - ReadOnlyRoleUpdated
+      - WorkerClusterRoleCreationFailed
+      - DefaultRoleBindingCreationFailed
+      - DefaultRoleBindingUpdated
+      - InactiveRoleBindingDeleted
+      - ServiceAccountDeleted
+      - ProjectDeletionFailed
+      - ClusterDeletionFailed
+      - WorkerClusterRoleCreated
+      - WorkerServiceImportRecreationFailed
+      - WorkerSliceConfigCreationFailed
+      - SliceGatewayJobCreated
+      - WorkerServiceImportUpdateFailed
+      - ServiceAccountCreationFailed
+      - InactiveServiceAccountDeleted
+      - WorkerServiceImportRecreated
+      - ServiceAccountDeletionFailed
+      - NamespaceCreated
+      - ServiceAccountSecretCreated
+      - DefaultRoleBindingUpdateFailed
+      - WorkerServiceImportDeletedForcefully
+      - WorkerServiceImportCreated
+      - SliceQoSConfigDeleted
+      - ReadWriteRoleCreationFailed
+      - InactiveRoleBindingDeletionFailed
+      - WorkerClusterRoleUpdated
+      - WorkerSliceConfigUpdateFailed
+      - WorkerSliceGatewayDeletionFailed
+      - ClusterDeleted
+      - ServiceExportConfigDeleted
+      - SecretDeleted
+      - ReadOnlyRoleUpdateFailed
+      - WorkerServiceImportCreationFailed
+      - WorkerSliceGatewayCreationFailed
+      - SliceConfigDeletionFailed
+      - WorkerSliceConfigDeletedForcefully
+      - WorkerSliceConfigDeletionFailed
+      - WorkerSliceGatewayDeleted
+      - NamespaceDeleted
+      - WorkerClusterRoleUpdateFailed
+      - WorkerServiceImportDeletionFailed
+      - ClusterInstallationFailed
+      - WorkerSliceConfigUpdated
+      - ClusterInstallationInProgress
+      - ClusterDeregistrationInProgress
+      - WorkerServiceImportDeleted
+      - SliceConfigDeleted
+      - SliceQoSConfigDeletionFailed
+      - NamespaceDeletionFailed
+      - WorkerSliceConfigRecreated
+      - SliceGatewayJobCreationFailed
+      - ClusterDeregisterFailed
+      - SecretDeletionFailed
+      - ReadWriteRoleUpdateFailed
+      - WorkerSliceConfigRecreationFailed
+      - ClusterInstallationPending
+      - NamespaceCreationFailed
+      - WorkerServiceImportUpdated
+      - ReadWriteRoleUpdated
+      - ServiceAccountCreated
+      - ServiceAccountSecretCreationFailed
+      - DefaultRoleBindingDeletionFailed
+      - WorkerSliceConfigCreated
+      - ProjectDeleted
+      - ClusterDeregisterTimeout
+      - ReadOnlyRoleCreated
+      - WorkerSliceConfigDeleted
+      - WorkerSliceGatewayDeletedForcefully
+      - WorkerSliceGatewayRecreationFailed
+  {{ else }}
+  controller.yaml: |- 
+    disabledEvents:
+  {{ end }} 
+kind: ConfigMap
+metadata:
+  labels:
+    name: event-schema
+  name: kubeslice-controller-event-schema-conf
+  namespace: kubeslice-controller

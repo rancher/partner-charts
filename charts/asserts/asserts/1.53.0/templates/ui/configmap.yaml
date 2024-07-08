@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "asserts.uiFullname" . }}
+  labels: {{- include "asserts.uiLabels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        server_name asserts-ui;
+        listen {{ .Values.ui.service.port }};
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log debug;
+        location /api-server {
+            proxy_http_version 1.1;
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Asserts-Tenant '{{ include "asserts.tenant" . }}';
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host localhost:{{ .Values.server.service.port }};
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Original-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_pass http://{{ .Release.Name }}-server.{{ include "domain" . }}:{{ .Values.server.service.port }};
+            proxy_buffering off;
+        }
+        location /authorization {
+            proxy_http_version 1.1;
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Asserts-Tenant '{{ include "asserts.tenant" . }}';
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host localhost:{{ .Values.authorization.service.port }};
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Original-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_pass http://{{ .Release.Name }}-authorization.{{ include "domain" . }}:{{ .Values.authorization.service.port }};
+            proxy_buffering off;
+        }
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+        large_client_header_buffers 4 32k;
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+            try_files $uri $uri/ /index.html;
+        }
+    }

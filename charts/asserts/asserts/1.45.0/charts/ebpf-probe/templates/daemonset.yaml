@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "ebpf-probe.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ebpf-probe.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ebpf-probe.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+    {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "ebpf-probe.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ebpf-probe.serviceAccountName" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ebpf-probe
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - mountPath: /proc
+              name: proc
+            - mountPath: /sys/kernel/debug
+              name: debug
+          ports:
+            - name: http-metrics
+              containerPort: {{ .Values.prometheusPort }}
+              protocol: TCP
+          env:
+            - name: "RESOLVE_DNS"
+              value: "{{ .Values.enableDnsResolving }}"
+            - name: "PROMETHEUS_PORT"
+              value: "{{ .Values.prometheusPort }}"
+            - name: "PROMETHEUS_ENDPOINT"
+              value: "{{ .Values.prometheusEndpoint }}"
+            - name: "POLL_INTERVAL"
+              value: "{{ .Values.pollIntervalSeconds }}"
+            - name: "INCLUDE_ONLY"
+              value: "{{ .Values.includeOnly }}"
+            - name: "INCLUDE_EXTERNAL"
+              value: "{{ .Values.includeExternal }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: debug
+          hostPath:
+            path: /sys/kernel/debug
