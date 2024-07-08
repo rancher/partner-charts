@@ -1,0 +1,29 @@
+#Test for dxemssql
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "dxemssql.fullname" . }}-test"
+  labels:
+    {{- include "dxemssql.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: dxe
+    image: "{{ .Values.dxeImage.repository }}:{{ .Values.dxeImage.tag }}"
+    imagePullPolicy: {{ .Values.dxeImage.pullPolicy }}
+    env:
+    - name: DX_TARGET_HOSTNAME
+      value: "{{ include "dxemssql.fullname" . }}-0"
+    - name: DX_PASSKEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secretKeys }}
+          key: DX_PASSKEY
+    - name: DX_VHOST_NAME
+      value: {{ .Values.DX_VHOST_NAME | upper | quote }}
+    - name: DX_AG_NAME
+      value: {{ .Values.DX_AG_NAME | upper | quote }}
+    command: ["/bin/bash"]
+    args: ["-c", "/opt/dh2i/sbin/helm-test.sh"]
