@@ -1,0 +1,53 @@
+{{- if .Values.global.istio.ingress }}
+# NEEDS WORK TO ALLOW CLIENT SIDE AUTHENTICATION. THIS IS MERELY A PLACEHOLDER
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ .Release.Name }}-istio-auth-server-protected-endpoints
+  namespace: {{.Release.Namespace}}
+  labels:
+    APP_NAME: auth-server
+{{ include "auth-server.labels" . | indent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | indent 4 }}
+{{- end }}
+spec:
+  hosts:
+  - {{ .Values.global.fqdn }}
+{{- if .Values.global.istio.gateways }}
+  gateways:
+{{ toYaml .Values.global.istio.gateways | indent 2 }}
+{{- else }}
+  gateways:
+  - {{ .Release.Name }}-global-gtw
+{{- end }}
+  http:
+  {{ if index .Values "global" "auth-server" "ingress" "authServerProtectedToken" -}}
+  - name: "{{ .Release.Name }}-istio-auth-server-protected-token"
+    match:
+    - uri:
+        prefix: "/jans-auth/restv1/token"
+    route:
+      - destination:
+          host: {{ index .Values "global" "auth-server" "authServerServiceName" }}.{{ .Release.Namespace }}.svc.cluster.local
+          port:
+            number: 8080
+        weight: 100
+  {{- end }}
+  {{ if index .Values "global" "auth-server" "ingress" "authServerProtectedRegister" -}}
+  - name: "{{ .Release.Name }}-istio-auth-server-protected-register"
+    match:
+    - uri:
+        prefix: "/jans-auth/restv1/register"
+    route:
+      - destination:
+          host: {{ index .Values "global" "auth-server" "authServerServiceName" }}.{{ .Release.Namespace }}.svc.cluster.local
+          port:
+            number: 8080
+        weight: 100
+  {{- end }}
+{{- end }}

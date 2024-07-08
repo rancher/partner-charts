@@ -1,0 +1,37 @@
+{{- if and (.Values.global.istio.ingress) (index .Values "global" "admin-ui" "ingress" "adminUiEnabled") }}
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ .Release.Name }}-istio-admin-ui
+  namespace: {{.Release.Namespace}}
+  labels:
+    APP_NAME: admin-ui
+{{ include "admin-ui.labels" . | indent 4 }}
+{{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | indent 4 }}
+{{- end }}
+{{- if .Values.additionalAnnotations }}
+  annotations:
+{{ toYaml .Values.additionalAnnotations | indent 4 }}
+{{- end }}
+spec:
+  hosts:
+  - {{ .Values.global.fqdn }}
+{{- if .Values.global.istio.gateways }}
+  gateways:
+{{ toYaml .Values.global.istio.gateways | indent 2 }}
+{{- else }}
+  gateways:
+  - {{ .Release.Name }}-global-gtw
+{{- end }}
+  http:
+  - name: "{{ .Release.Name }}-istio-cn"
+    match:
+    - uri:
+        prefix: "/admin"
+    route:
+    - destination:
+        host: {{ index .Values "global" "admin-ui" "adminUiServiceName" }}.{{ .Release.Namespace }}.svc.cluster.local
+        port:
+          number: 8080
+{{- end }}

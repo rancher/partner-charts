@@ -1,0 +1,32 @@
+{{- if not .Values.controller.customConfigMap -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nginx-ingress.configName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nginx-ingress.labels" . | nindent 4 }}
+{{- if .Values.controller.config.annotations }}
+  annotations:
+{{ toYaml .Values.controller.config.annotations | indent 4 }}
+{{- end }}
+data:
+{{ toYaml (default dict .Values.controller.config.entries) | indent 2 }}
+{{- end }}
+---
+{{- if and .Values.nginxAgent.enable (eq (.Values.nginxAgent.customConfigMap | default "") "") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nginx-ingress.agentConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nginx-ingress.labels" . | nindent 4 }}
+{{- if .Values.controller.config.annotations }}
+  annotations:
+{{ toYaml .Values.controller.config.annotations | indent 4 }}
+{{- end }}
+data:
+  nginx-agent.conf: |-
+{{ include "nginx-ingress.agentConfiguration" . | indent 4 }}
+{{- end }}
