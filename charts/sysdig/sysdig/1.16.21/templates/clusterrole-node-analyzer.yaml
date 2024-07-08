@@ -1,0 +1,103 @@
+{{- if and (include "deploy-na" .) .Values.rbac.create }}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ template "sysdig.fullname" .}}-node-analyzer
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+rules:
+- apiGroups:
+    - ""
+    - apps
+    - batch
+    - extensions
+  resources:
+    - "namespaces"
+    - "deployments"
+    - "replicasets"
+    - "daemonsets"
+    - "statefulsets"
+    - "pods"
+    - "cronjobs"
+    - "jobs"
+    - "nodes"
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - ""
+  resources:
+    - configmaps
+    - endpoints
+    - nodes
+    - pods/log
+    - secrets
+    - serviceaccounts
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - rbac.authorization.k8s.io
+  resources:
+    - clusterrolebindings
+    - rolebindings
+    - roles
+  verbs:
+    - list
+- apiGroups:
+    - machineconfiguration.openshift.io
+  resources:
+    - machineconfigpools
+    - machineconfigs
+  verbs:
+    - get
+    - list
+- apiGroups:
+    - operator.openshift.io
+  resources:
+    - kubeapiservers
+    - openshiftapiservers
+  verbs:
+    - get
+    - list
+- apiGroups:
+    - config.openshift.io
+  resources:
+    - clusteroperators
+  verbs:
+    - get
+- apiGroups:
+    - security.openshift.io
+  resources:
+    - securitycontextconstraints
+  verbs:
+    - get
+    - list
+{{- if .Values.nodeAnalyzer.benchmarkRunner.includeSensitivePermissions  }}
+- apiGroups:
+    - ""
+  resources:
+    - pods/exec
+  verbs:
+    - create
+- apiGroups:
+    - ""
+  resources:
+    - pods
+  verbs:
+    - create
+    - delete
+{{- end }}
+{{- if .Values.psp.create  }}
+- apiGroups:
+    - "policy"
+  resources:
+    - "podsecuritypolicies"
+  resourceNames:
+    - "{{ template "sysdig.fullname" . }}-node-analyzer"
+  verbs:
+    - "use"
+{{- end }}
+{{- end }}

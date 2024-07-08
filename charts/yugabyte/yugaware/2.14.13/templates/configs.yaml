@@ -1,0 +1,596 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- if .Values.image.pullSecretFile }}
+---
+apiVersion: v1
+data:
+  .dockerconfigjson: {{ $.Files.Get .Values.image.pullSecretFile | b64enc }}
+kind: Secret
+metadata:
+  name: {{ .Values.image.pullSecret }}
+type: kubernetes.io/dockerconfigjson
+{{- end }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-app-config
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  application.docker.conf: |
+    include classpath("application.common.conf")
+    play.crypto.secret=${APP_SECRET}
+    play.i18n.langs = [ "en" ]
+    pidfile.path = "/dev/null"
+    play.logger.includeConfigProperties=true
+    log.override.path = "/opt/yugabyte/yugaware/data/logs"
+
+    db {
+  {{ if .Values.postgres.external.host }}
+      default.host="{{ .Values.postgres.external.host }}"
+      default.port={{ .Values.postgres.external.port }}
+      default.url="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${POSTGRES_DB}${db.default.params}
+  {{ else if eq .Values.ip_version_support "v6_only" }}
+      default.host="::1"
+      default.url="jdbc:postgresql://[::1]:"${db.default.port}"/"${POSTGRES_DB}${db.default.params}
+  {{ else }}
+      default.host="127.0.0.1"
+      default.url="jdbc:postgresql://127.0.0.1:"${db.default.port}"/"${POSTGRES_DB}${db.default.params}
+  {{ end }}
+      default.params="{{ .Values.jdbcParams }}"
+      default.driver=org.postgresql.Driver
+      default.username=${POSTGRES_USER}
+      default.password=${POSTGRES_PASSWORD}
+      default.logStatements=true
+      default.migration.initOnMigrate=true
+      default.migration.auto=true
+    }
+    ebean {
+      default = ["com.yugabyte.yw.models.*"]
+    }
+
+    yb {
+  {{- if .Values.yugaware.universe_boot_script }}
+      universe_boot_script = "/data/universe-boot-script.sh"
+  {{- end }}
+      cloud.enabled = {{ .Values.yugaware.cloud.enabled }}
+      cloud.requestIdHeader = "{{ .Values.yugaware.cloud.requestIdHeader }}"
+      devops.home = /opt/yugabyte/devops
+      metrics.host = "{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}"
+      metrics.url = "http://"${yb.metrics.host}":9090/api/v1"
+      metrics.management.url = "http://"${yb.metrics.host}":9090/-"
+      storage.path = /opt/yugabyte/yugaware/data
+      docker.network = bridge
+      seedData = false
+      swamper.targetPath = /opt/yugabyte/prometheus/targets
+      swamper.rulesPath = /opt/yugabyte/prometheus/rules
+      security.enable_auth_for_proxy_metrics = {{ .Values.yugaware.enableProxyMetricsAuth }}
+      proxy_endpoint_timeout = {{ .Values.yugaware.proxyEndpointTimeoutMs }}
+      multiTenant = {{ .Values.yugaware.multiTenant }}
+      releases.path = "/opt/yugabyte/releases"
+      docker.release = "/opt/yugabyte/release"
+      # TODO(bogdan): need this extra level for installing from local...
+      thirdparty.packagePath = /opt/third-party
+      helm.packagePath = "{{ .Values.helm.packagePath }}"
+      helm.timeout_secs = {{ .Values.helm.timeout }}
+      health.check_interval_ms = 300000
+      health.status_interval_ms = 43200000
+      health.default_email = "{{ .Values.yugaware.health.email }}"
+      health.ses_email_username = "{{ .Values.yugaware.health.username }}"
+      health.ses_email_password = "{{ .Values.yugaware.health.password }}"
+      kubernetes.storageClass = "{{ .Values.yugaware.storageClass }}"
+      kubernetes.pullSecretName = "{{ .Values.image.pullSecret }}"
+      url = "https://{{ .Values.tls.hostname }}"
+    }
+
+    play.filters {
+      # CSRF config
+      csrf {
+        cookie {
+          # If non null, the CSRF token will be placed in a cookie with this name
+          name = "csrfCookie"
+          # Whether the cookie should be set to secure
+          secure = false
+          # Whether the cookie should have the HTTP only flag set
+          httpOnly = false
+        }
+        # Whether to bypass CSRF check if CORS check is satisfied
+        bypassCorsTrustedOrigins = false
+        header {
+          # The name of the header to accept CSRF tokens from.
+          name = "Csrf-Token"
+        }
+      }
+      # CORS config
+      cors {
+        pathPrefixes = ["/"]
+        allowedOrigins = {{ include "allowedCorsOrigins" . }}
+        # Server allows cookies/credentials to be sent with cross-origin requests
+        supportsCredentials=true
+        allowedHttpMethods = ["GET", "POST", "PUT", "OPTIONS", "DELETE"]
+        allowedHttpHeaders = ["Accept", "Origin", "Content-Type", "X-Auth-Token", "X-AUTH-YW-API-TOKEN", "{{ .Values.yugaware.cloud.requestIdHeader }}", ${play.filters.csrf.header.name}]
+      }
+    }
+
+    # string config entries from helm values additionalAppConf
+    {{- range $key, $value := .Values.additionalAppConf.stringConf }}
+    {{ $key }} = "{{ $value }}"
+    {{- end }}
+
+    # boolean/int config entries from helm values additionalAppConf
+    {{- range $key, $value := .Values.additionalAppConf.nonStringConf }}
+    {{ $key }} = {{ $value }}
+    {{- end }}
+{{- if .Values.tls.enabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-yugaware-tls-cert
+  labels:
+    app: "{{ template "yugaware.name" . }}"
+    chart: "{{ template "yugaware.chart" . }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+type: Opaque
+data:
+  server.crt: {{ .Values.tls.certificate }}
+  server.key: {{ .Values.tls.key }}
+{{- end }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-nginx-config
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  default.conf: |
+{{- if .Values.tls.enabled }}
+    # Ref: https://www.nginx.com/blog/http-strict-transport-security-hsts-and-nginx/
+    server {
+      listen  {{ eq .Values.ip_version_support "v6_only" | ternary "[::]:8080" "8080" }};
+      server_name {{ .Values.tls.hostname }};
+      return  301  https://$host$request_uri;
+    }  
+{{- end }}
+
+    server {
+{{- if .Values.tls.enabled }}
+      listen       8443 ssl;
+      ssl_certificate /opt/certs/server.crt;
+      ssl_certificate_key /opt/certs/server.key;
+{{- if .Values.tls.sslProtocols }}
+      ssl_protocols {{ include "validate_nginx_ssl_protocols" . }};
+{{- end }}
+      server_name  {{ .Values.tls.hostname }};
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+{{- else }}
+      listen       {{ eq .Values.ip_version_support "v6_only" | ternary "[::]:8080" "8080" }};
+      server_name  {{ .Values.tls.hostname }};
+{{- end }}
+      proxy_http_version 1.1;
+      proxy_set_header X-Real-IP  $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header Host $host;
+
+      location / {
+        proxy_pass http://{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}:9000;
+      }
+{{- if .Values.nginx.db_node_proxy_enabled }}
+      location ~ "^/universes/.+/proxy/(?!(169.254.|127.))(.+):(7000|9000|9300|12000|13000)/(metrics|prometheus-metrics)$" {
+        proxy_pass "http://$2:$3/$4$is_args$args";
+    }
+{{- end }}
+
+      location ~ /settings/ha/internal/upload$ {
+        proxy_pass http://{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}:9000;
+        client_max_body_size {{ .Values.nginx.upload_size }};
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-pg-upgrade
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  pg-upgrade-11-to-14.sh: |
+    #!/bin/bash
+    set -x -o errexit
+
+    cd /pg_upgrade_logs/
+    if [ ! "$(ls -A ${PGDATANEW})" ] && [ "$(ls -A ${PGDATAOLD})" ];
+    then
+      echo "Upgrading PG data from ${PGDATAOLD} to ${PGDATANEW}"
+      # if fsGroup is set, we need to remove the sticky bit, and group
+      # write permission from the directories
+      chmod -R g-w-s "${PGDATAOLD}"
+      chmod g-w-s "${PGDATAOLD}"
+      docker-upgrade pg_upgrade | tee -a /pg_upgrade_logs/pg_upgrade_11_to_14.log;
+      echo "host all all all scram-sha-256" >> "${PGDATANEW}/pg_hba.conf";
+    fi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-nginx-main-config
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  nginx.conf: |
+    worker_processes  1;
+
+    error_log  /var/log/nginx/error.log warn;
+    pid        /tmp/nginx.pid;
+
+    events {
+      worker_connections  {{ .Values.nginx.workerConnections }};
+    }
+
+    http {
+      proxy_temp_path /tmp/proxy_temp;
+      client_body_temp_path /tmp/client_temp;
+      fastcgi_temp_path /tmp/fastcgi_temp;
+      uwsgi_temp_path /tmp/uwsgi_temp;
+      scgi_temp_path /tmp/scgi_temp;
+
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+
+      log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+      access_log  /var/log/nginx/access.log  main;
+
+      sendfile        on;
+      #tcp_nopush     on;
+
+      keepalive_timeout  65;
+
+      #gzip  on;
+
+      include /etc/nginx/conf.d/*.conf;
+    }
+{{- if .Values.prometheus.remoteWrite.tls.enabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-yugaware-prometheus-remote-write-tls
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+type: Opaque
+data:
+# For user-provided remote write ca cert, cert and key. Expect to be base-64 encoded.
+{{- if .Values.prometheus.remoteWrite.tls.caCert }}
+  ca.crt: {{ .Values.prometheus.remoteWrite.tls.caCert }}
+{{- end }}
+{{- if .Values.prometheus.remoteWrite.tls.clientCert }}
+  client.crt: {{ .Values.prometheus.remoteWrite.tls.clientCert }}
+{{- end }}
+{{- if .Values.prometheus.remoteWrite.tls.clientKey }}
+  client.key: {{ .Values.prometheus.remoteWrite.tls.clientKey }}
+{{- end }}
+{{- end}}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-prometheus-config
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  prometheus.yml: |
+    global:
+        scrape_interval:     10s
+        evaluation_interval: 10s
+    rule_files:
+      - '/opt/yugabyte/prometheus/rules/yugaware.ad.*.yml'
+      - '/opt/yugabyte/prometheus/rules/yugaware.recording-rules.yml'
+    {{- if .Values.prometheus.remoteWrite.config }}
+    remote_write:
+{{ toYaml .Values.prometheus.remoteWrite.config | indent 6}}
+    {{- end }}
+    scrape_configs:
+      {{- if .Values.ocpCompatibility.enabled }}
+      - job_name: "ocp-prometheus-federated"
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        honor_labels: true
+        metrics_path: "/federate"
+
+        params:
+          'match[]':
+            # kubelet metrics
+            - 'kubelet_volume_stats_used_bytes{persistentvolumeclaim=~"(.*)-yb-(.*)"}'
+            - 'kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"(.*)-yb-(.*)"}'
+            # kubelet cadvisor metrics
+            - 'container_cpu_usage_seconds_total{pod=~"(.*)yb-(.*)"}'
+            - 'container_memory_working_set_bytes{pod=~"(.*)yb-(.*)"}'
+            # kube-state-metrics
+            - 'kube_pod_container_resource_requests_cpu_cores{pod=~"(.*)yb-(.*)"}'
+
+        static_configs:
+          - targets:
+            - "prometheus-k8s.openshift-monitoring.svc:9091"
+
+        metric_relabel_configs:
+          # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+          - source_labels: ["__name__"]
+            regex: "(.*)"
+            target_label: "saved_name"
+            replacement: "$1"
+          - source_labels: ["pod"]
+            regex: "(.*)"
+            target_label: "pod_name"
+            replacement: "$1"
+          - source_labels: ["container"]
+            regex: "(.*)"
+            target_label: "container_name"
+            replacement: "$1"
+
+      {{- else }}
+
+      - job_name: 'kubernetes-nodes'
+
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+        - role: node
+
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+        metric_relabel_configs:
+          # Only keep the metrics which we care about
+          - source_labels: ["__name__"]
+            regex: "kubelet_volume_stats_used_bytes|kubelet_volume_stats_capacity_bytes"
+            action: keep
+          - source_labels: ["persistentvolumeclaim"]
+            regex: "(.*)-yb-(.*)"
+            action: keep
+          # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+          - source_labels: ["__name__"]
+            regex: "(.*)"
+            target_label: "saved_name"
+            replacement: "$1"
+          - source_labels: ["pod"]
+            regex: "(.*)"
+            target_label: "pod_name"
+            replacement: "$1"
+          - source_labels: ["container"]
+            regex: "(.*)"
+            target_label: "container_name"
+            replacement: "$1"
+
+      - job_name: 'kube-state-metrics'
+        static_configs:
+        - targets: ['kube-state-metrics.kube-system.svc.{{.Values.domainName}}:8080']
+        metric_relabel_configs:
+          # Only keep the metrics which we care about
+          - source_labels: ["__name__"]
+            regex: "kube_pod_container_resource_requests_cpu_cores"
+            action: keep
+          # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+          - source_labels: ["__name__"]
+            regex: "(.*)"
+            target_label: "saved_name"
+            replacement: "$1"
+          - source_labels: ["pod"]
+            regex: "(.*)"
+            target_label: "pod_name"
+            replacement: "$1"
+          - source_labels: ["container"]
+            regex: "(.*)"
+            target_label: "container_name"
+            replacement: "$1"
+          # Keep metrics from YugabyteDB pods, discard everything else
+          - source_labels: ["pod_name"]
+            regex: "(.*)yb-(.*)"
+            action: keep
+
+      - job_name: 'kubernetes-cadvisor'
+
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+        - role: node
+
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+        metric_relabel_configs:
+          # Only keep the metrics which we care about
+          - source_labels: ["__name__"]
+            regex: "container_cpu_usage_seconds_total|container_memory_working_set_bytes"
+            action: keep
+          # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+          - source_labels: ["__name__"]
+            regex: "(.*)"
+            target_label: "saved_name"
+            replacement: "$1"
+          - source_labels: ["pod"]
+            regex: "(.*)"
+            target_label: "pod_name"
+            replacement: "$1"
+          - source_labels: ["container"]
+            regex: "(.*)"
+            target_label: "container_name"
+            replacement: "$1"
+          # Keep metrics from YugabyteDB pods, discard everything else
+          - source_labels: ["pod_name"]
+            regex: "(.*)yb-(.*)"
+            action: keep
+
+      {{- end }}
+
+      - job_name: 'platform'
+        metrics_path: "/api/v1/prometheus_metrics"
+        static_configs:
+          - targets: [
+            '{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}:9000'
+          ]
+
+      - job_name: "node"
+        file_sd_configs:
+          - files:
+            - '/opt/yugabyte/prometheus/targets/node.*.json'
+        metric_relabel_configs:
+          # Below relabels are required for smooth migration from node_exporter 0.13.0 to the latest
+          - source_labels: ["__name__"]
+            regex: "node_cpu"
+            target_label: "__name__"
+            replacement: "node_cpu_seconds_total"
+          - source_labels: ["__name__"]
+            regex: "node_filesystem_free"
+            target_label: "__name__"
+            replacement: "node_filesystem_free_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_filesystem_size"
+            target_label: "__name__"
+            replacement: "node_filesystem_size_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_disk_reads_completed"
+            target_label: "__name__"
+            replacement: "node_disk_reads_completed_total"
+          - source_labels: ["__name__"]
+            regex: "node_disk_writes_completed"
+            target_label: "__name__"
+            replacement: "node_disk_writes_completed_total"
+          - source_labels: ["__name__"]
+            regex: "node_memory_MemTotal"
+            target_label: "__name__"
+            replacement: "node_memory_MemTotal_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_memory_Slab"
+            target_label: "__name__"
+            replacement: "node_memory_Slab_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_memory_Cached"
+            target_label: "__name__"
+            replacement: "node_memory_Cached_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_memory_Buffers"
+            target_label: "__name__"
+            replacement: "node_memory_Buffers_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_memory_MemFree"
+            target_label: "__name__"
+            replacement: "node_memory_MemFree_bytes"
+          - source_labels: ["__name__"]
+            regex: "node_network_receive_bytes"
+            target_label: "__name__"
+            replacement: "node_network_receive_bytes_total"
+          - source_labels: ["__name__"]
+            regex: "node_network_transmit_bytes"
+            target_label: "__name__"
+            replacement: "node_network_transmit_bytes_total"
+          - source_labels: ["__name__"]
+            regex: "node_network_receive_packets"
+            target_label: "__name__"
+            replacement: "node_network_receive_packets_total"
+          - source_labels: ["__name__"]
+            regex: "node_network_transmit_packets"
+            target_label: "__name__"
+            replacement: "node_network_transmit_packets_total"
+          - source_labels: ["__name__"]
+            regex: "node_network_receive_errs"
+            target_label: "__name__"
+            replacement: "node_network_receive_errs_total"
+          - source_labels: ["__name__"]
+            regex: "node_network_transmit_errs"
+            target_label: "__name__"
+            replacement: "node_network_transmit_errs_total"
+          - source_labels: ["__name__"]
+            regex: "node_disk_bytes_read"
+            target_label: "__name__"
+            replacement: "node_disk_read_bytes_total"
+          - source_labels: ["__name__"]
+            regex: "node_disk_bytes_written"
+            target_label: "__name__"
+            replacement: "node_disk_written_bytes_total"
+          # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+          - source_labels: ["__name__"]
+            regex: "(.*)"
+            target_label: "saved_name"
+            replacement: "$1"
+
+      - job_name: "yugabyte"
+        metrics_path: "/prometheus-metrics"
+        file_sd_configs:
+          - files:
+            - '/opt/yugabyte/prometheus/targets/yugabyte.*.json'
+        metric_relabel_configs:
+          # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+          - source_labels: ["__name__"]
+            regex: "(.*)"
+            target_label: "saved_name"
+            replacement: "$1"
+          # The following basically retrofit the handler_latency_* metrics to label format.
+          - source_labels: ["__name__"]
+            regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(.*)"
+            target_label: "server_type"
+            replacement: "$1"
+          - source_labels: ["__name__"]
+            regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(.*)"
+            target_label: "service_type"
+            replacement: "$2"
+          - source_labels: ["__name__"]
+            regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(_sum|_count)?"
+            target_label: "service_method"
+            replacement: "$3"
+          - source_labels: ["__name__"]
+            regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(_sum|_count)?"
+            target_label: "__name__"
+            replacement: "rpc_latency$4"

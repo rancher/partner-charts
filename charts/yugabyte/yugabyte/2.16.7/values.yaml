@@ -1,0 +1,468 @@
+# Default values for yugabyte.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+Component: "yugabytedb"
+
+fullnameOverride: ""
+nameOverride: ""
+
+Image:
+  repository: "yugabytedb/yugabyte"
+  tag: 2.16.7.0-b59
+  pullPolicy: IfNotPresent
+  pullSecretName: ""
+
+storage:
+  ephemeral: false  # will not allocate PVs when true
+  master:
+    count: 2
+    size: 10Gi
+    storageClass: ""
+  tserver:
+    count: 2
+    size: 10Gi
+    storageClass: ""
+
+resource:
+  master:
+    requests:
+      cpu: "2"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  tserver:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+replicas:
+  master: 3
+  tserver: 3
+  ## Used to set replication factor when isMultiAz is set to true
+  totalMasters: 3
+
+partition:
+  master: 0
+  tserver: 0
+
+# Used in Multi-AZ setup
+masterAddresses: ""
+
+isMultiAz: false
+AZ: ""
+
+# Disable the YSQL
+disableYsql: false
+
+tls:
+  # Set to true to enable the TLS.
+  enabled: false
+  nodeToNode: true
+  clientToServer: true
+  # Set to false to disallow any service with unencrypted communication from joining this cluster
+  insecure: false
+  # Set enabled to true to use cert-manager instead of providing your own rootCA
+  certManager:
+    enabled: false
+    # Will create own ca certificate and issuer when set to true
+    bootstrapSelfsigned: true
+    # Use ClusterIssuer when set to true, otherwise use Issuer
+    useClusterIssuer: false
+    # Name of ClusterIssuer to use when useClusterIssuer is true
+    clusterIssuer: cluster-ca
+    # Name of Issuer to use when useClusterIssuer is false
+    issuer: yugabyte-ca
+    certificates:
+      # The lifetime before cert-manager will issue a new certificate.
+      # The re-issued certificates will not be automatically reloaded by the service.
+      # It is necessary to provide some external means of restarting the pods.
+      duration: 2160h # 90d
+      renewBefore: 360h # 15d
+      algorithm: ECDSA # ECDSA or RSA
+      # Can be 2046, 4096 or 8192 for RSA
+      # Or 256, 384 or 521 for ECDSA
+      keySize: 521
+
+  ## When certManager.enabled=false, rootCA.cert and rootCA.key are used to generate TLS certs.
+  ## When certManager.enabled=true and boostrapSelfsigned=true, rootCA is ignored.
+  ## When certManager.enabled=true and bootstrapSelfsigned=false, only rootCA.cert is used
+  ## to verify TLS certs generated and signed by the external provider.
+  rootCA:
+    cert: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM2VENDQWRHZ0F3SUJBZ0lCQVRBTkJna3Foa2lHOXcwQkFRc0ZBREFXTVJRd0VnWURWUVFERXd0WmRXZGgKWW5sMFpTQkVRakFlRncweE9UQXlNRGd3TURRd01qSmFGdzB5T1RBeU1EVXdNRFF3TWpKYU1CWXhGREFTQmdOVgpCQU1UQzFsMVoyRmllWFJsSUVSQ01JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBCnVOMWF1aWc4b2pVMHM0OXF3QXhrT2FCaHkwcTlyaVg2akVyZWJyTHJOWDJOeHdWQmNVcWJkUlhVc3VZNS96RUQKUC9CZTNkcTFuMm9EQ2ZGVEwweGkyNFdNZExRcnJBMndCdzFtNHM1WmQzcEJ1U04yWHJkVVhkeUx6dUxlczJNbgovckJxcWRscXp6LzAyTk9TOE9SVFZCUVRTQTBSOFNMQ1RjSGxMQmRkMmdxZ1ZmemVXRlVObXhWQ2EwcHA5UENuCmpUamJJRzhJWkh5dnBkTyt3aURQM1Y1a1ZEaTkvbEtUaGUzcTFOeDg5VUNFcnRJa1pjSkYvWEs3aE90MU1sOXMKWDYzb2lVMTE1Q2svbGFGRjR6dWgrZk9VenpOVXRXeTc2RE92cm5pVGlaU0tQZDBBODNNa2l2N2VHaDVkV3owWgpsKzJ2a3dkZHJaRzVlaHhvbGhGS3pRSURBUUFCbzBJd1FEQU9CZ05WSFE4QkFmOEVCQU1DQXFRd0hRWURWUjBsCkJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUZCd01DTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3RFFZSktvWkkKaHZjTkFRRUxCUUFEZ2dFQkFEQjVRbmlYd1ptdk52eG5VbS9sTTVFbms3VmhTUzRUZldIMHY4Q0srZWZMSVBTbwpVTkdLNXU5UzNEUWlvaU9SN1Vmc2YrRnk1QXljMmNUY1M2UXBxTCt0V1QrU1VITXNJNk9oQ05pQ1gvQjNKWERPCkd2R0RIQzBVOHo3aWJTcW5zQ2Rid05kajAyM0lwMHVqNE9DVHJ3azZjd0RBeXlwVWkwN2tkd28xYWJIWExqTnAKamVQMkwrY0hkc2dKM1N4WWpkK1kvei9IdmFrZG1RZDJTL1l2V0R3aU1SRDkrYmZXWkJVRHo3Y0QyQkxEVmU0aAp1bkFaK3NyelR2Sjd5dkVodzlHSDFyajd4Qm9VNjB5SUUrYSszK2xWSEs4WnBSV0NXMnh2eWNrYXJSKytPS2NKClFsL04wWExqNWJRUDVoUzdhOTdhQktTamNqY3E5VzNGcnhJa2tKST0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
+    key: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcEFJQkFBS0NBUUVBdU4xYXVpZzhvalUwczQ5cXdBeGtPYUJoeTBxOXJpWDZqRXJlYnJMck5YMk54d1ZCCmNVcWJkUlhVc3VZNS96RURQL0JlM2RxMW4yb0RDZkZUTDB4aTI0V01kTFFyckEyd0J3MW00czVaZDNwQnVTTjIKWHJkVVhkeUx6dUxlczJNbi9yQnFxZGxxenovMDJOT1M4T1JUVkJRVFNBMFI4U0xDVGNIbExCZGQyZ3FnVmZ6ZQpXRlVObXhWQ2EwcHA5UENualRqYklHOElaSHl2cGRPK3dpRFAzVjVrVkRpOS9sS1RoZTNxMU54ODlVQ0VydElrClpjSkYvWEs3aE90MU1sOXNYNjNvaVUxMTVDay9sYUZGNHp1aCtmT1V6ek5VdFd5NzZET3ZybmlUaVpTS1BkMEEKODNNa2l2N2VHaDVkV3owWmwrMnZrd2RkclpHNWVoeG9saEZLelFJREFRQUJBb0lCQUJsdW1tU3gxR1djWER1Mwpwei8wZEhWWkV4c2NsU3U0SGRmZkZPcTF3cFlCUjlmeGFTZGsxQzR2YXF1UjhMaWl6WWVtVWViRGgraitkSnlSCmpwZ2JNaDV4S1BtRkw5empwU3ZUTkN4UHB3OUF5bm5sM3dyNHZhcU1CTS9aZGpuSGttRC9kQzBadEEvL0JIZ3YKNHk4d3VpWCsvUWdVaER0Z1JNcmR1ZUZ1OVlKaFo5UE9jYXkzSkkzMFhEYjdJSS9vNFNhYnhTcFI3bTg5WjY0NwpUb3hsOEhTSzl0SUQxbkl1bHVpTmx1dHI1RzdDdE93WTBSc2N5dmZ2elg4a1d2akpLZVJVbmhMSCtXVFZOaExICjdZc0tMNmlLa1NkckMzeWVPWnV4R0pEbVdrZVgxTzNPRUVGYkc4TjVEaGNqL0lXbDh1dGt3LzYwTEthNHBCS2cKTXhtNEx3RUNnWUVBNnlPRkhNY2pncHYxLzlHZC8yb3c2YmZKcTFjM1dqQkV2cnM2ZXNyMzgrU3UvdVFneXJNcAo5V01oZElpb2dYZjVlNjV5ZlIzYVBXcjJJdWMxZ0RUNlYycDZFR2h0NysyQkF1YkIzczloZisycVNRY1lkS3pmCnJOTDdKalE4ZEVGZWdYd041cHhKOTRTTVFZNEI4Qm9hOHNJWTd3TzU4dHpVMjZoclVnanFXQ1VDZ1lFQXlVUUIKNzViWlh6MGJ5cEc5NjNwYVp0bGlJY0cvUk1XMnVPOE9rVFNYSGdDSjBob25uRm5IMGZOc1pGTHdFWEtnTTRORworU3ZNbWtUekE5eVVSMHpIMFJ4UW44L1YzVWZLT2k5RktFeWx6NzNiRkV6ZW1QSEppQm12NWQ4ZTlOenZmU0E0CkdpRTYrYnFyV3VVWWRoRWlYTnY1SFNPZ3I4bUx1TzJDbGlmNTg0a0NnWUFlZzlDTmlJWmlOODAzOHNNWFYzZWIKalI5ZDNnYXY3SjJ2UnVyeTdvNDVGNDlpUXNiQ3AzZWxnY1RnczY5eWhkaFpwYXp6OGNEVndhREpyTW16cHF4cQpWY1liaFFIblppSWM5MGRubS9BaVF2eWJWNUZqNnQ5b05VVWtreGpaV1haalJXOGtZMW55QmtDUmJWVnhER0k4CjZOV0ZoeTFGaUVVVGNJcms3WVZFQlFLQmdRREpHTVIrYWRFamtlRlUwNjVadkZUYmN0VFVPY3dzb1Foalc2akkKZVMyTThxakNYeE80NnhQMnVTeFNTWFJKV3FpckQ3NDRkUVRvRjRCaEdXS21veGI3M3pqSGxWaHcwcXhDMnJ4VQorZENxODE0VXVJR3BlOTBMdWU3QTFlRU9kRHB1WVdUczVzc1FmdTE3MG5CUWQrcEhzaHNFZkhhdmJjZkhyTGpQCjQzMmhVUUtCZ1FDZ3hMZG5Pd2JMaHZLVkhhdTdPVXQxbGpUT240SnB5bHpnb3hFRXpzaDhDK0ZKUUQ1bkFxZXEKZUpWSkNCd2VkallBSDR6MUV3cHJjWnJIN3IyUTBqT2ZFallwU1dkZGxXaWh4OTNYODZ0aG83UzJuUlYrN1hNcQpPVW9ZcVZ1WGlGMWdMM1NGeHZqMHhxV3l0d0NPTW5DZGFCb0M0Tkw3enJtL0lZOEUwSkw2MkE9PQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo="
+  ## When tls.certManager.enabled=false
+  ## nodeCert and clientCert will be used only when rootCA.key is empty.
+  ## Will be ignored and genSignedCert will be used to generate
+  ## node and client certs if rootCA.key is provided.
+  ## cert and key are base64 encoded content of certificate and key.
+  nodeCert:
+    cert: ""
+    key: ""
+  clientCert:
+    cert: ""
+    key: ""
+
+gflags:
+  master:
+    default_memory_limit_to_ram_ratio: 0.85
+  tserver: {}
+#   use_cassandra_authentication: false
+
+PodManagementPolicy: Parallel
+
+enableLoadBalancer: true
+
+domainName: "cluster.local"
+
+serviceEndpoints:
+  - name: "yb-master-ui"
+    type: LoadBalancer
+    annotations: {}
+    clusterIP: ""
+    ## Sets the Service's externalTrafficPolicy
+    externalTrafficPolicy: ""
+    app: "yb-master"
+    loadBalancerIP: ""
+    ports:
+      http-ui: "7000"
+
+  - name: "yb-tserver-service"
+    type: LoadBalancer
+    annotations: {}
+    clusterIP: ""
+    ## Sets the Service's externalTrafficPolicy
+    externalTrafficPolicy: ""
+    app: "yb-tserver"
+    loadBalancerIP: ""
+    ports:
+      tcp-yql-port: "9042"
+      tcp-yedis-port: "6379"
+      tcp-ysql-port: "5433"
+
+Services:
+  - name: "yb-masters"
+    label: "yb-master"
+    skipHealthChecks: false
+    memory_limit_to_ram_ratio: 0.85
+    ports:
+      http-ui: "7000"
+      tcp-rpc-port: "7100"
+
+  - name: "yb-tservers"
+    label: "yb-tserver"
+    skipHealthChecks: false
+    ports:
+      http-ui: "9000"
+      tcp-rpc-port: "9100"
+      tcp-yql-port: "9042"
+      tcp-yedis-port: "6379"
+      tcp-ysql-port: "5433"
+      http-ycql-met: "12000"
+      http-yedis-met: "11000"
+      http-ysql-met: "13000"
+
+## Should be set to true only if Istio is being used. This also adds
+## the Istio sidecar injection labels to the pods.
+## TODO: remove this once
+## https://github.com/yugabyte/yugabyte-db/issues/5641 is fixed.
+##
+istioCompatibility:
+  enabled: false
+
+## Settings required when using multicluster environment.
+multicluster:
+  ## Creates a ClusterIP service for each yb-master and yb-tserver
+  ## pod.
+  createServicePerPod: false
+  ## creates a ClusterIP service whos name does not have release name
+  ## in it. A common service across different clusters for automatic
+  ## failover. Useful when using new naming style.
+  createCommonTserverService: false
+
+  ## Enable it to deploy YugabyteDB in a multi-cluster services enabled
+  ## Kubernetes cluster (KEP-1645). This will create ServiceExport.
+  ## GKE Ref - https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services#registering_a_service_for_export
+  ## You can use this gist for the reference to deploy the YugabyteDB in a multi-cluster scenario.
+  ## Gist - https://gist.github.com/baba230896/78cc9bb6f4ba0b3d0e611cd49ed201bf
+  createServiceExports: false
+
+  ## Mandatory variable when createServiceExports is set to true.
+  ## Use: In case of GKE, you need to pass GKE Hub Membership Name.
+  ## GKE Ref - https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services#enabling
+  kubernetesClusterId: ""
+
+  ## mcsApiVersion is used for the MCS resources created by the
+  ## chart. Set to net.gke.io/v1 when using GKE MCS.
+  mcsApiVersion: "multicluster.x-k8s.io/v1alpha1"
+
+serviceMonitor:
+  ## If true, two ServiceMonitor CRs are created. One for yb-master
+  ## and one for yb-tserver
+  ## https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#servicemonitor
+  ##
+  enabled: false
+  ## interval is the default scrape_interval for all the endpoints
+  interval: 30s
+  ## extraLabels can be used to add labels to the ServiceMonitors
+  ## being created
+  extraLabels: {}
+    # release: prom
+
+  ## Configurations of ServiceMonitor for yb-master
+  master:
+    enabled: true
+    port: "http-ui"
+    interval: ""
+    path: "/prometheus-metrics"
+
+  ## Configurations of ServiceMonitor for yb-tserver
+  tserver:
+    enabled: true
+    port: "http-ui"
+    interval: ""
+    path: "/prometheus-metrics"
+  ycql:
+    enabled: true
+    port: "http-ycql-met"
+    interval: ""
+    path: "/prometheus-metrics"
+  ysql:
+    enabled: true
+    port: "http-ysql-met"
+    interval: ""
+    path: "/prometheus-metrics"
+  yedis:
+    enabled: true
+    port: "http-yedis-met"
+    interval: ""
+    path: "/prometheus-metrics"
+
+  commonMetricRelabelings:
+  # https://git.io/JJW5p
+  # Save the name of the metric so we can group_by since we cannot by __name__ directly...
+  - sourceLabels: ["__name__"]
+    regex: "(.*)"
+    targetLabel: "saved_name"
+    replacement: "$1"
+  # The following basically retrofit the handler_latency_* metrics to label format.
+  - sourceLabels: ["__name__"]
+    regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(.*)"
+    targetLabel: "server_type"
+    replacement: "$1"
+  - sourceLabels: ["__name__"]
+    regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(.*)"
+    targetLabel: "service_type"
+    replacement: "$2"
+  - sourceLabels: ["__name__"]
+    regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(_sum|_count)?"
+    targetLabel: "service_method"
+    replacement: "$3"
+  - sourceLabels: ["__name__"]
+    regex: "handler_latency_(yb_[^_]*)_([^_]*)_([^_]*)(_sum|_count)?"
+    targetLabel: "__name__"
+    replacement: "rpc_latency$4"
+
+resources: {}
+
+nodeSelector: {}
+
+affinity: {}
+
+statefulSetAnnotations: {}
+
+networkAnnotation: {}
+
+commonLabels: {}
+
+master:
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#affinity-v1-core
+  ## This might override the default affinity from service.yaml
+  ## Example.
+  # affinity:
+  #   podAntiAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #     - labelSelector:
+  #         matchExpressions:
+  #         - key: app
+  #           operator: In
+  #           values:
+  #           - "yb-master"
+  #       topologyKey: kubernetes.io/hostname
+  affinity: {}
+
+  ## Extra environment variables passed to the Master pods.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core
+  ## Example:
+  # extraEnv:
+  # - name: NODE_IP
+  #   valueFrom:
+  #     fieldRef:
+  #       fieldPath: status.hostIP
+  extraEnv: []
+
+  # secretEnv variables are used to expose secrets data as env variables in the master pod.
+  # TODO Add namespace also to support copying secrets from other namespace.
+  # secretEnv:
+  # - name: MYSQL_LDAP_PASSWORD
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: secretName
+  #       key: password
+  secretEnv: []
+
+  ## Annotations to be added to the Master pods.
+  podAnnotations: {}
+
+  ## Labels to be added to the Master pods.
+  podLabels: {}
+
+  ## Tolerations to be added to the Master pods.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#toleration-v1-core
+  ## Example:
+  # tolerations:
+  # - key: dedicated
+  #   operator: Equal
+  #   value: experimental
+  #   effect: NoSchedule
+  tolerations: []
+
+  ## Extra volumes
+  ## extraVolumesMounts are mandatory for each extraVolumes.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volume-v1-core
+  ## Example:
+  # extraVolumes:
+  # - name: custom-nfs-vol
+  #   persistentVolumeClaim:
+  #     claimName: some-nfs-claim
+  extraVolumes: []
+
+  ## Extra volume mounts
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volumemount-v1-core
+  ## Example:
+  # extraVolumeMounts:
+  # - name: custom-nfs-vol
+  #   mountPath: /home/yugabyte/nfs-backup
+  extraVolumeMounts: []
+
+
+tserver:
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#affinity-v1-core
+  ## This might override the default affinity from service.yaml
+  ## Example.
+  # affinity:
+  #   podAntiAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #     - labelSelector:
+  #         matchExpressions:
+  #         - key: app
+  #           operator: In
+  #           values:
+  #           - "yb-tserver"
+  #       topologyKey: kubernetes.io/hostname
+  affinity: {}
+
+  ## Extra environment variables passed to the TServer pods.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core
+  ## Example:
+  # extraEnv:
+  # - name: NODE_IP
+  #   valueFrom:
+  #     fieldRef:
+  #       fieldPath: status.hostIP
+  extraEnv: []
+
+  # secretEnv variables are used to expose secrets data as env variables in the tserver pods.
+  # TODO Add namespace also to support copying secrets from other namespace.
+  # secretEnv:
+  # - name: MYSQL_LDAP_PASSWORD
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: secretName
+  #       key: password
+  secretEnv: []
+
+  ## Annotations to be added to the TServer pods.
+  podAnnotations: {}
+
+  ## Labels to be added to the TServer pods.
+  podLabels: {}
+
+  ## Tolerations to be added to the TServer pods.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#toleration-v1-core
+  ## Example:
+  # tolerations:
+  # - key: dedicated
+  #   operator: Equal
+  #   value: experimental
+  #   effect: NoSchedule
+  tolerations: []
+
+  ## Sets the --server_broadcast_addresses flag on the TServer, no
+  ## preflight checks are done for this address. You might need to add
+  ## `use_private_ip: cloud` to the gflags.master and gflags.tserver.
+  serverBroadcastAddress: ""
+
+  ## Extra volumes
+  ## extraVolumesMounts are mandatory for each extraVolumes.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volume-v1-core
+  ## Example:
+  # extraVolumes:
+  # - name: custom-nfs-vol
+  #   persistentVolumeClaim:
+  #     claimName: some-nfs-claim
+  extraVolumes: []
+
+  ## Extra volume mounts
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volumemount-v1-core
+  ## Example:
+  # extraVolumeMounts:
+  # - name: custom-nfs-vol
+  #   path: /home/yugabyte/nfs-backup
+  extraVolumeMounts: []
+
+helm2Legacy: false
+
+ip_version_support: "v4_only" # v4_only, v6_only are the only supported values at the moment
+
+# For more https://docs.yugabyte.com/latest/reference/configuration/yugabyted/#environment-variables
+authCredentials:
+  ysql:
+    user: ""
+    password: ""
+    database: ""
+  ycql:
+    user: ""
+    password: ""
+    keyspace: ""
+
+oldNamingStyle: true
+
+preflight:
+  # Set to true to skip disk IO check, DNS address resolution, and
+  # port bind checks
+  skipAll: false
+  # Set to true to skip port bind checks
+  skipBind: false
+
+  ## Set to true to skip ulimit verification
+  ## SkipAll has higher priority
+  skipUlimit: false
+
+## Pod securityContext
+## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context
+## The following configuration runs YB-Master and YB-TServer as a non-root user
+podSecurityContext:
+  enabled: false
+  ## Mark it false, if you want to stop the non root user validation
+  runAsNonRoot: true
+  fsGroup: 10001
+  runAsUser: 10001
+  runAsGroup: 10001
+
+## Added to handle old universe which has volume annotations
+## K8s universe <= 2.5 to >= 2.6
+legacyVolumeClaimAnnotations: false

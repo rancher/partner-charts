@@ -1,0 +1,43 @@
+{{- if eq .Values.webhook.tls.mode "generated" }}
+{{- $containerConfig := dict "ContainerConfig" .Values.certificatePrehook -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-header-injector-cert-setup
+  labels:
+    app.kubernetes.io/component: http-header-injector-cert-hook-setup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ include "http-header-injector.app.name" . }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": before-hook-creation{{- if not .Values.debug -}},hook-succeeded{{- end }}
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: http-header-injector-setup
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ include "http-header-injector.app.name" . }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/cert-hook-config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: "{{ include "http-header-injector.cert-serviceaccount.name" . }}"
+      {{- include "http-header-injector.image.pullSecrets" . | nindent 6 }}
+      volumes:
+        - name: "{{ include "http-header-injector.cert-config.name" . }}"
+          configMap:
+            name: "{{ include "http-header-injector.cert-config.name" . }}"
+            defaultMode: 0777
+      containers:
+        - name: webhook-cert-setup
+          image: "{{ include "http-header-injector.image.registry" (merge $containerConfig .) }}/{{ .Values.certificatePrehook.image.repository }}:{{ .Values.certificatePrehook.image.tag }}"
+          imagePullPolicy: {{ .Values.certificatePrehook.image.pullPolicy }}
+          volumeMounts:
+            - name: "{{ include "http-header-injector.cert-config.name" . }}"
+              mountPath: /scripts
+              readOnly: true
+          command: ["/scripts/generate-cert.sh"]
+      restartPolicy: Never
+  backoffLimit: 0
+{{- end }}

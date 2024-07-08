@@ -1,0 +1,40 @@
+{{- if and (not (include "deploy-nia" .)) .Values.nodeAnalyzer.deploy (not .Values.gke.autopilot) (or .Values.nodeAnalyzer.runtimeScanner.deploy .Values.secure.vulnerabilityManagement.newEngineOnly) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sysdig.fullname" . }}-runtime-scanner
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+data:
+  api_endpoint: https://{{ required "A valid .Values.nodeAnalyzer.apiEndpoint is required" .Values.nodeAnalyzer.apiEndpoint }}
+  cluster_name: {{ required "A valid .Values.clusterName is required" .Values.clusterName }}
+  {{- if hasKey .Values.nodeAnalyzer "sslVerifyCertificate" }}
+  ssl_verify_certificate: "{{ .Values.nodeAnalyzer.sslVerifyCertificate }}"
+  {{- end }}
+  debug: "{{ .Values.nodeAnalyzer.debug | default false }}"
+  {{- if .Values.nodeAnalyzer.httpProxy }}
+  http_proxy: {{ .Values.nodeAnalyzer.httpProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.httpsProxy }}
+  https_proxy: {{ .Values.nodeAnalyzer.httpsProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.noProxy }}
+  no_proxy: {{ .Values.nodeAnalyzer.noProxy }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.runtimeScanner.settings.eveEnabled }}
+  eve_enabled: "true"
+  {{- end -}}
+  {{- if hasKey .Values.nodeAnalyzer.runtimeScanner "eveConnector" }}
+  eve_integration_enabled: "true"
+  {{- end -}}
+  {{- if hasKey .Values.nodeAnalyzer.runtimeScanner "settings" }}
+  prom_port: {{ .Values.nodeAnalyzer.runtimeScanner.settings.prometheusPort | default 25001 | quote }}
+  {{- end -}}
+
+  {{- if .Values.nodeAnalyzer.runtimeScanner.settings.maxImageSizeAllowed }}
+  max_image_size_allowed: {{ .Values.nodeAnalyzer.runtimeScanner.settings.maxImageSizeAllowed | quote }}
+  {{- end -}}
+  {{- if .Values.nodeAnalyzer.runtimeScanner.settings.maxFileSizeAllowed }}
+  analyzer.maxFileSizeAllowed: {{ .Values.nodeAnalyzer.runtimeScanner.settings.maxFileSizeAllowed | quote }}
+  {{- end -}}
+{{- end }}

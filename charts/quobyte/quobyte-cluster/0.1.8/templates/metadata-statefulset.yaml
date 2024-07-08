@@ -1,0 +1,160 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: quobyte-meta
+spec:
+  selector:
+    matchLabels:
+      app: quobyte-meta # has to match .spec.template.metadata.labels
+  serviceName: "quobyte-meta"
+  replicas: {{ .Values.quobyte.replicas }} # by default is 4 
+  template:
+    metadata:
+      labels:
+        app: quobyte-meta # has to match .spec.selector.matchLabels
+      annotations:
+        timestamp: "{{ now }}"
+    spec:
+      terminationGracePeriodSeconds: 10
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+      - name: quobyte-meta-pre 
+        image: {{ .Values.quobyte.image }}
+        env:
+          - name: NODENAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: QUOBYTE_DATA_PORT 
+            value: "7863"
+          - name: QUOBYTE_META_PORT
+            value: "7862"
+          - name: QUOBYTE_REG_PORT 
+            value: "7861"
+          - name: QUOBYTE_API_PORT
+            value: "7860" 
+          - name: QUOBYTE_S3_PORT
+            value: "8484" 
+          - name: QUOBYTE_SERVICE
+            value: metadata
+          - name: CLOUD_INSTALL
+            value: "1" 
+          - name: CLUSTER_NS
+            value: {{ .Release.Namespace }}
+          - name: LIMIT_OPEN_FILES
+            value: "{{ .Values.quobyte.maxopenfiles }}"
+          - name: LIMIT_MAX_PROCESSES
+            value: "{{ .Values.quobyte.maxprocs }}"
+        volumeMounts:
+          - name: config
+            mountPath: /etc/quobyte
+          {{- range .Values.quobyte.metadatadisks }}
+          - name: {{ .name }}
+            mountPath: {{ .mountpoint }}
+          {{- end }}
+        command:
+              - /bin/sh 
+              - -xc
+              - |
+                touch /etc/quobyte/$QUOBYTE_SERVICE.cfg
+                echo test.device_dir=/var/lib/quobyte/devices >> /etc/quobyte/metadata.cfg
+                echo rpc.bind.address=${MY_POD_IP} >> /etc/quobyte/metadata.cfg
+                echo hostname=${HOSTNAME} >> /etc/quobyte/metadata.cfg
+                for j in $(ls -d /var/lib/quobyte/devices/metadata*)
+                do
+                  i=$(basename $j)
+                  if [ ! -e /var/lib/quobyte/devices/${i}/QUOBYTE_DEV_SETUP ];then
+                    /usr/bin/qmkdev -d -t METADATA /var/lib/quobyte/devices/${i}
+                  fi
+                done
+      containers:
+      - name: quobyte
+        image: {{ .Values.quobyte.image }}
+        imagePullPolicy: Always
+        env:
+          - name: NODENAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: QUOBYTE_DATA_PORT 
+            value: "7863"
+          - name: QUOBYTE_META_PORT
+            value: "7862"
+          - name: QUOBYTE_REG_PORT 
+            value: "7861"
+          - name: QUOBYTE_API_PORT
+            value: "7860" 
+          - name: QUOBYTE_S3_PORT
+            value: "8484" 
+          - name: CLOUD_INSTALL
+            value: "1" 
+          - name: QUOBYTE_SERVICE
+            value: metadata
+          - name: QUOBYTE_REGISTRY
+            value: _quobyte._tcp.quobyte.{{ .Release.Namespace }}.svc.cluster.local
+          - name: CLUSTER_NS
+            value: {{ .Release.Namespace }}
+          - name: LIMIT_OPEN_FILES
+            value: "{{ .Values.quobyte.maxopenfiles }}"
+          - name: LIMIT_MAX_PROCESSES
+            value: "{{ .Values.quobyte.maxprocs }}"
+        ports:
+        - containerPort: 7862
+          name: quobyte-meta
+        volumeMounts:
+          - name: config
+            mountPath: /etc/quobyte
+          {{- range .Values.quobyte.metadatadisks }}
+          - name: {{ .name }}
+            mountPath: {{ .mountpoint }}
+          {{- end }}
+      {{- if .Values.nodepoolname }}
+      nodeSelector:
+           storage-node-pool: {{ .Values.nodepoolname }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - quobyte
+              topologyKey: "kubernetes.io/hostname"
+  volumeClaimTemplates:
+  - metadata:
+      name: config
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+{{- range .Values.quobyte.metadatadisks }}
+  - metadata:
+      name: {{ .name }}
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "faster"
+      resources:
+        requests:
+          storage: {{ .size }}
+{{- end }}

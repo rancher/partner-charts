@@ -1,0 +1,79 @@
+# Name of the nodepool in which the Quobyte services will be deployed.
+# A separate nodepool can be used for performance isolation to avoid
+# other workloads from impacting your storage.
+# You can create a nodepool by labeling worker nodes
+# "kubectl label nodes <your-node-name> storage-node-pool=quobyte"
+## nodepoolname: quobyte
+
+# Configuration for the Quobyte services, i.e. the Quobyte cluster providing storage.
+quobyte:
+  # Loadbalancer to make the Quobyte webconsole accessible.
+  # If set to true an internal IP will be used, if set to false an external IP will be used
+  # the exact semantics of internal/external depend on your k8s config or provider.
+  lbinternal: false 
+  
+  # Configuration for the persistent disks used by the Quobyte services.
+  # Storage provisioner depending to the cloud environment:
+  # storageProvisioner: "kubernetes.io/aws-ebs"
+  # storageProvisioner: "kubernetes.io/azure-disk" 
+  storageProvisioner: "kubernetes.io/gce-pd"
+  # Storage type, also depending on the used environment:
+  # flashStorage: "gp2"           # AWS general purpose SSD
+  # flashStorage: "Standard_LRS"  # Azure "Standard Locally Redundant Storage"
+  # flashStorage: "pd-ssd"        # GCE SSD storage
+  flashStorage: "pd-ssd"
+  # See also: 
+  # https://kubernetes.io/docs/concepts/storage/storage-classes/#gce-pd
+  # https://kubernetes.io/docs/concepts/storage/storage-classes/#aws-ebs
+  # https://learn.microsoft.com/en-us/rest/api/storagerp/srp_sku_types
+  
+  # Minimum number of replicas per Quobyte services, minimum is 3.
+  # Your nodepool must have at least 3 nodes.
+  replicas: 3
+  
+  # Data disks attached to each Quobyte data services, minimum is one data disk,
+  # maximum is 16. Please note that adding more data disks will increase capacity,
+  # but not necessarily the performance of your Quobyte cluster.
+  # The name MUST start with "data".
+  # The mount point MUST start with "/var/lib/quobyte/devices/data..." and the last
+  # part MUST match the disk name. E.g. if the name is "data5" the mountpoint
+  # must be "/var/lib/quobyte/devices/data5".
+  # The minimum capacity of a disk must be 100Gi, recommended size depends on the
+  # cloud environment, e.g. 840Gi for Google Persistent SSDs.
+  datadisks:
+    - name: data0
+      mountpoint: /var/lib/quobyte/devices/data0
+      size: "840Gi"
+    - name: data1
+      mountpoint: /var/lib/quobyte/devices/data1
+      size: "840Gi"
+  
+  # Metadata disks attached to each Quobyte metadata service, minimum is one
+  # metadata disk. Similar to datadisks, names MUST start with "metadata".
+  # Minimum capacity is 100Gi, recommended size depends on the cloud environment.
+  # Please make sure to use SSDs or media with similar peformance characteristics.
+  metadatadisks:
+    - name: metadata0
+      mountpoint: /var/lib/quobyte/devices/metadata0
+      size: "100Gi"
+      
+  # Set enabled to start the Quobyte S3 service. Requires a properly
+  # configured domain name.
+  # As S3 is an HTTP-based protocol, it requires a correct DNS hostname setup. 
+  # Generally the S3 service will be available under a specific hostname such as s3.example.com. 
+  # Buckets can be addressed as a subdomain of the host e.g., <bucket name>.s3.example.com.
+  #
+  # HTTP requires a setup of both the S3 hostname and a wildcard hostname for subdomains in your DNS
+  # infrastructure which points to the machine or machines running the S3 Proxy. 
+  # So at a minimum, there are two CNAME records that point to a machine running the S3 proxy
+  s3:
+    enabled: false 
+    dnsname: s3.example.com
+  
+  webconsoleport: 8080
+  image: quay.io/quobyte/quobyte-server:3 
+  # Maximum number of open file descriptors per container,
+  # must be set to 999,999 or more.
+  maxopenfiles: "1048576"
+  # Maximum number of processes, must be set to 16,000 or more.
+  maxprocs: "16384"

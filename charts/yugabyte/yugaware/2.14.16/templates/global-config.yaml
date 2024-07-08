@@ -1,0 +1,23 @@
+# Copyright (c) YugaByte, Inc.
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-yugaware-global-config
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  {{- if .Values.postgres.external.host }}
+  postgres_db: {{ .Values.postgres.external.dbname | b64enc | quote }}
+  postgres_user: {{ .Values.postgres.external.user | b64enc | quote }}
+  postgres_password: {{ .Values.postgres.external.pass | b64enc | quote }}
+  {{- else }}
+  postgres_db: {{ "yugaware" | b64enc | quote }}
+  postgres_user: {{ "postgres" | b64enc | quote }}
+  postgres_password: {{ include "getOrGeneratePasswordConfigMapToSecret" (dict "Namespace" .Release.Namespace "Name" (printf "%s%s" .Release.Name "-yugaware-global-config") "Key" "postgres_password") | quote }}
+  {{- end }}
+  app_secret: {{ randAlphaNum 64 | b64enc | b64enc | quote }}

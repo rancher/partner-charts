@@ -1,0 +1,49 @@
+{{- if .Values.securityContext.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-init
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  init-permissions.sh: |
+    #!/bin/bash
+
+    set -xe -o pipefail
+
+    data_directory="/opt/yugabyte/yugaware/data"
+    if [[ -d "${data_directory}/keys/" ]]; then
+      pemfiles=$(find "${data_directory}/keys/" -name "*.pem" -exec stat -c "%a" {} + | uniq | tr '\n' ',')
+      IFS="," read -r -a pemfile_perms <<< "${pemfiles}"
+
+      trigger=false
+      echo "Finding pem files with permissions different than 400, and setting their permissions to 400."
+
+      for pemfile in  "${pemfile_perms[@]}"; do
+        if [[ "${pemfile}" != *400* ]]; then
+          echo "Found a pem file with permissions ${pemfile}"
+          trigger=true
+          break
+        fi
+      done
+
+      if ${trigger}; then
+        echo "Creating copy of data/keys directory"
+        cp -r "${data_directory}/keys" "${data_directory}/new_keys"
+
+        echo "Setting permission of all pem files to 400"
+        find "${data_directory}/new_keys/" -name "*.pem" -exec chmod 400 {} +
+
+        echo "Renaming existing keys directory"
+        mv "${data_directory}/keys" "${data_directory}/keys-$(date +%s)"
+
+        echo "Renaming new keys directory"
+        mv "${data_directory}/new_keys" "${data_directory}/keys"
+      else
+        echo "All pem files already have permission set to 400"
+      fi
+    fi
+{{- end }}

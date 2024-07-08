@@ -1,0 +1,17 @@
+{{- if and (not (include "deploy-nia" .)) .Values.nodeAnalyzer.deploy (not .Values.gke.autopilot) (or .Values.nodeAnalyzer.runtimeScanner.deploy .Values.secure.vulnerabilityManagement.newEngineOnly) .Values.nodeAnalyzer.runtimeScanner.eveConnector.deploy }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sysdig.fullname" . }}-eveconnector
+  labels:
+{{ include "sysdig.labels" . | indent 4 }}
+data:
+  api_endpoint: https://{{ required "A valid .Values.nodeAnalyzer.apiEndpoint is required" .Values.nodeAnalyzer.apiEndpoint }}
+  cluster_name: {{ required "A valid .Values.clusterName is required" .Values.clusterName }}
+  {{- if hasKey .Values.nodeAnalyzer "sslVerifyCertificate" }}
+  ssl_verify_certificate: "{{ .Values.nodeAnalyzer.sslVerifyCertificate }}"
+  {{- end }}
+  {{- if hasKey .Values.nodeAnalyzer.runtimeScanner "eveConnector" }}
+  cert_dns_name: {{ include "eveconnector.host" . | quote }}
+  {{- end }}
+{{- end }}

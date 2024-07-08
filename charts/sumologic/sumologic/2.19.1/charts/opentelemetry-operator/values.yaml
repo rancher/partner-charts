@@ -1,0 +1,147 @@
+# Default values for opentelemetry-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+## Provide a name in place of opentelemetry-operator.
+##
+nameOverride: ""
+
+## Reference one or more secrets to be used when pulling images from authenticated repositories.
+imagePullSecrets: []
+
+## Provide OpenTelemetry Operator manager container image and resources.
+##
+manager:
+  image:
+    repository: ghcr.io/open-telemetry/opentelemetry-operator/opentelemetry-operator
+    tag: v0.63.1
+  collectorImage:
+    repository: otel/opentelemetry-collector-contrib
+    tag: 0.64.1
+  ports:
+    metricsPort: 8080
+    webhookPort: 9443
+    healthzPort: 8081
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  ## Adds additional environment variables
+  ## e.g ENV_VAR: env_value
+  env:
+    ENABLE_WEBHOOKS: "true"
+
+  # -- Create the manager ServiceAccount
+  serviceAccount:
+    create: true
+    annotations: {}
+    # name: nameOverride
+
+  ## Enable ServiceMonitor for Prometheus metrics scrape
+  serviceMonitor:
+    enabled: false
+    extraLabels: {}
+    metricsEndpoints:
+    - port: metrics
+
+  podAnnotations: {}
+
+  prometheusRule:
+    enabled: false
+    groups: []
+    # Create default rules for monitoring the manager
+    defaultRules:
+      enabled: false
+
+    # additional labels for the PrometheusRule
+    extraLabels: {}
+
+
+  ## List of additional cli arguments to configure the manager
+  ## for example: --target-allocator-image, --labels, etc.
+  extraArgs: []
+
+  ## Enable leader election mechanism for protecting against split brain if multiple operator pods/replicas are started.
+  ## See more at https://docs.openshift.com/container-platform/4.10/operators/operator_sdk/osdk-leader-election.html
+  leaderElection:
+    enabled: true
+
+## Provide OpenTelemetry Operator kube-rbac-proxy container image.
+##
+kubeRBACProxy:
+  enabled: true
+  image:
+    repository: gcr.io/kubebuilder/kube-rbac-proxy
+    tag: v0.11.0
+  ports:
+    proxyPort: 8443
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi
+
+  ## List of additional cli arguments to configure the kube-rbac-proxy
+  ## for example: --tls-cipher-suites, --tls-min-version, etc.
+  extraArgs: []
+
+## Admission webhooks make sure only requests with correctly formatted rules will get into the Operator.
+## They also enable the sidecar injection for OpenTelemetryCollector and Instrumentation CR's
+admissionWebhooks:
+  create: true
+  failurePolicy: Fail
+  secretName: ""
+
+  ## Customize webhook timeout duration
+  timeoutSeconds: 10
+
+  ## Provide selectors for your objects
+  namespaceSelector: {}
+  objectSelector: {}
+
+  ## Provide the issuer kind and name to do the cert auth job.
+  ## By default, OpenTelemetry Operator will use self-signer issuer.
+  certManager:
+    # false means helm will create self-signd cert and secret for you.
+    enabled: true
+    issuerRef: {}
+      # kind:
+      # name:
+
+## Create the provided Roles and RoleBindings
+##
+role:
+  create: true
+
+## Create the provided ClusterRoles and ClusterRoleBindings
+##
+clusterRole:
+  create: true
+
+affinity: {}
+tolerations: []
+nodeSelector: {}
+hostNetwork: false
+
+# Allows for pod scheduler prioritisation
+priorityClassName: ""
+
+## SecurityContext holds pod-level security attributes and common container settings.
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+securityContext:
+  runAsGroup: 65534
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+testFramework:
+  image:
+    repository: busybox
+    tag: latest

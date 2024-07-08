@@ -1,0 +1,93 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- if .Values.yugaware.service.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-yugaware-ui
+  {{- if .Values.yugaware.service.annotations }}
+  annotations:
+{{ toYaml .Values.yugaware.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+spec:
+{{- if eq .Release.Service "Tiller" }}
+  clusterIP:
+{{- else }}
+{{- if .Values.yugaware.service.clusterIP }}
+  clusterIP: .Values.yugaware.service.clusterIP
+{{- end }}
+{{- end }}
+  ports:
+{{- if .Values.tls.enabled }}
+  - name: ui-tls
+    port: 443
+    targetPort: 8443
+{{- end }}
+  - name: ui
+    port: 80
+    targetPort: 8080
+  - name: metrics
+    port: 9090
+  selector:
+    app: {{ .Release.Name }}-yugaware
+  type: "{{ .Values.yugaware.service.type }}"
+  {{- if and (eq .Values.yugaware.service.type "LoadBalancer") (.Values.yugaware.service.ip) }}
+  loadBalancerIP: "{{ .Values.yugaware.service.ip }}"
+  {{- end }}
+{{- end }}
+{{- if .Values.yugaware.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-yugaware
+  {{- if .Values.yugaware.serviceMonitor.annotations }}
+  annotations:
+{{ toYaml .Values.yugaware.serviceMonitor.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+spec:
+  endpoints:
+    - port: ui # Scrape the Platform itself instead of bundled Prometheus
+      path: api/v1/prometheus_metrics
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-yugaware
+{{- end }}
+{{- if .Values.postgres.service.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  {{- if .Values.postgres.service.annotations }}
+  annotations:
+{{ toYaml .Values.postgres.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+spec:
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+  selector:
+    app: {{ .Release.Name }}-yugaware
+  type: {{ .Values.postgres.service.type }}
+  {{- if and (eq .Values.postgres.service.type "LoadBalancer") (.Values.postgres.service.ip) }}
+  loadBalancerIP: "{{ .Values.postgres.service.ip }}"
+  {{- end }}
+{{- end }}

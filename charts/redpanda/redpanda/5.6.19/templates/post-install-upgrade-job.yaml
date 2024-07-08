@@ -1,0 +1,100 @@
+{{/*
+Licensed to the Apache Software Foundation (ASF) under one or more
+contributor license agreements.  See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The ASF licenses this file to You under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+{{- if .Values.post_install_job.enabled }}
+{{- $values := .Values }}
+{{- $sasl := $values.auth.sasl }}
+{{- $root := deepCopy . }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "redpanda.fullname" . }}-configuration
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{- with include "full.labels" . }}
+  {{- . | nindent 4 }}
+{{- end }}
+{{- with .Values.post_install_job.labels }}
+  {{- toYaml . | nindent 4 }}
+{{- end }}
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-10"
+{{- with .Values.post_install_job.annotations }}
+  {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  template:
+    metadata:
+      generateName: "{{ .Release.Name }}-post-"
+      labels:
+        app.kubernetes.io/name: {{ template "redpanda.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/component: {{ (include "redpanda.name" .) | trunc 50  }}-post-install
+{{- with .Values.commonLabels }}
+  {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+    {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with ( include "post-install-job-affinity" . ) }}
+      affinity: {{- . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+    {{- end }}
+      restartPolicy: Never
+      securityContext: {{ include "pod-security-context" . | nindent 8 }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+    {{- end }}
+      containers:
+      - name: {{ template "redpanda.name" . }}-post-install
+        image: {{ .Values.image.repository }}:{{ template "redpanda.tag" . }}
+        {{- if not ( empty (include "enterprise-secret" . ) ) }}
+        env:
+          - name: REDPANDA_LICENSE
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "enterprise-secret-name" . }}
+                key: {{ include "enterprise-secret-key" . }}
+        {{- end }}
+        command: ["bash","-c"]
+        args:
+          - |
+            set -e
+        {{- if (include "redpanda-atleast-22-2-0" . | fromJson).bool }}
+          {{- if not (empty (include "enterprise-secret" . )) }}
+            rpk cluster license set "$REDPANDA_LICENSE"
+          {{- else if not (empty (include "enterprise-license" . )) }}
+            rpk cluster license set {{ include "enterprise-license" . | quote }}
+          {{- end }}
+        {{- end }}
+        {{- with .Values.post_install_job.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext: {{ include "container-security-context" . | nindent 10 }}
+        volumeMounts: {{- include "default-mounts" . | nindent 10 }}
+      volumes: {{ include "default-volumes" . | nindent 8 }}
+      serviceAccountName: {{ include "redpanda.serviceAccountName" . }}
+{{- end -}}

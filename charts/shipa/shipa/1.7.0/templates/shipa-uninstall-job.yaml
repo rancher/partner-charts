@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "shipa.fullname" . }}-uninstall
+  labels: {{- include "shipa.uninstall-labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+    sidecar.istio.io/inject: "false"
+spec:
+  template:
+    metadata:
+      name: "{{ template "shipa.fullname" . }}-uninstall-job-{{ .Release.Revision }}"
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      {{- if .Values.rbac.enabled }}
+      serviceAccountName: {{ template "shipa.fullname" . }}-uninstall
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
+      restartPolicy: Never
+      containers:
+        - name: cleanup
+        {{- if .Values.cli.image }}
+          image: "{{ .Values.cli.image }}"
+        {{- else }}
+          image: "{{ .Values.images.shipaRepositoryDirname }}/{{ .Values.cli.repositoryBasename }}:{{ .Values.cli.tag }}"
+        {{- end }}
+          command:
+            - /scripts/uninstall-job.sh
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SELECTOR
+              value: "shipa.io/is-shipa=true"
+            - name: NAMESPACE_MOD
+              value: "-A"
+            - name: RELEASE_NAME
+              value: {{ template "shipa.fullname" . }}
+            - name: RELEASE_NAMESPACE
+              value: {{ .Release.Namespace }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            defaultMode: 0755
+            name: {{ template "shipa.fullname" . }}-uninstall-job-config

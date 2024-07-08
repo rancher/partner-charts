@@ -1,0 +1,270 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "k8s-triliovault-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app:  {{ template "k8s-triliovault-operator.fullname" . }}
+    release: "{{ .Release.Name }}"
+    {{- include "k8s-triliovault-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/instance: {{ template "k8s-triliovault-operator.appName" . }}
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  selector:
+    matchLabels:
+      app: {{ template "k8s-triliovault-operator.fullname" . }}
+      release: "{{ .Release.Name }}"
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      {{- if .Values.podAnnotations }}
+      annotations:
+        {{- range $key, $value := .Values.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+      labels:
+        app: {{ template "k8s-triliovault-operator.fullname" . }}
+        release: "{{ .Release.Name }}"
+        {{- include "k8s-triliovault-operator.labels" . | nindent 8 }}
+        app.kubernetes.io/instance: {{ template "k8s-triliovault-operator.appName" . }}
+        {{- range $key, $value := .Values.podLabels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+    spec:
+      hostNetwork: {{ .Values.podSpec.hostNetwork }}
+      hostIPC: {{ .Values.podSpec.hostIPC }}
+      hostPID: {{ .Values.podSpec.hostPID }}
+      {{- if .Values.priorityClassName }}
+      {{ template "k8s-triliovault-operator.priorityClassValidator" .}}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.securityContext }}
+      securityContext:
+      {{- toYaml .Values.podSpec.securityContext | nindent 8 }}
+      {{- end }}
+      {{- if include "k8s-triliovault-operator.imagePullSecret" . }}
+      imagePullSecrets: 
+      - name: {{ template "k8s-triliovault-operator.imagePullSecret" . }}
+      {{- end }}
+      containers:
+        - name: k8s-triliovault-operator
+          image: {{ .Values.registry }}/{{ index .Values "k8s-triliovault-operator" "repository" }}:{{ .Values.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          env:
+            {{- if .Values.proxySettings.PROXY_ENABLED }}
+            - name: HTTP_PROXY
+              value: {{ .Values.proxySettings.HTTP_PROXY }}
+            - name: HTTPS_PROXY
+              value: {{ .Values.proxySettings.HTTPS_PROXY }}
+            - name: NO_PROXY
+              value: {{ .Values.proxySettings.NO_PROXY }}
+            {{- if .Values.proxySettings.CA_BUNDLE_CONFIGMAP }}
+            - name: PROXY_CA_CONFIGMAP
+              value: {{ .Values.proxySettings.CA_BUNDLE_CONFIGMAP }}
+            {{- end }}
+            {{- end }}
+            - name: MASTER_ENCRYPTION_KEY_NAMESPACE
+              value: {{ .Values.masterEncryptionKeyConfig.namespace | default .Release.Namespace }}
+            - name: MASTER_ENCRYPTION_KEY_NAME
+              value: {{ .Values.masterEncryptionKeyConfig.name }}
+            {{- if .Values.observability.enabled }}
+            - name: OBSERVABILITY_SECRET_NAME
+              value: {{ .Values.observability.name }}
+            - name: OBSERVABILITY_SECRET_NAMESPACE
+              value: {{ .Values.observability.namespace | default .Release.Namespace }}
+            {{- end}}
+            - name: INSTALL_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: REGISTRY
+              value: {{ .Values.registry }}
+            - name: RELATED_IMAGE_INGRESS_CONTROLLER
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "ingress-controller" "image"}}:{{ index .Values "relatedImages" "ingress-controller" "tag" }}
+            - name: RELATED_IMAGE_KUBE_CERTGEN
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "kube-certgen" "image"}}:{{ index .Values "relatedImages" "kube-certgen" "tag" }}
+            - name: RELATED_IMAGE_METAMOVER
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.metamover.image }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_CONTROL_PLANE
+              value: {{ .Values.registry }}/{{index .Values "relatedImages" "control-plane" "image" }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_WEB
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.web.image }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_WEB_BACKEND
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "web-backend" "image" }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_EXPORTER
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.exporter.image }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_ADMISSION_WEBHOOK
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "admission-webhook" "image" }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_ANALYZER
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.analyzer.image }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_DATAMOVER
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.datamover.image }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_DATASTORE_ATTACHER
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "datastore-attacher" "image" }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_BACKUP_SCHEDULER
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "backup-scheduler" "image" }}:{{ .Values.relatedImages.tags.tvk  }}
+            - name: RELATED_IMAGE_BACKUP_CLEANER
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "backup-cleaner" "image" }}:{{ .Values.relatedImages.tags.tvk  }}
+            - name: RELATED_IMAGE_TARGET_BROWSER
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "target-browser" "image" }}:{{ .Values.relatedImages.tags.tvk  }}
+            - name: RELATED_IMAGE_BACKUP_RETENTION
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "backup-retention" "image" }}:{{ .Values.relatedImages.tags.tvk  }}
+            - name: RELATED_IMAGE_HOOK
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.hook.image }}:{{ .Values.relatedImages.tags.tvk  }}
+            - name: RELATED_IMAGE_RESOURCE_CLEANER
+              value: {{ .Values.registry }}/{{  index .Values "relatedImages" "resource-cleaner" "image" }}:{{ .Values.relatedImages.tags.tvk  }}
+            - name: RELATED_IMAGE_TVK_INIT
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "tvk-init" "image" }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: RELATED_IMAGE_DEX
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.dex.image }}:{{ .Values.relatedImages.dex.tag }}
+            - name: RELATED_IMAGE_MINIO
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.minio.image }}:{{ .Values.relatedImages.minio.tag }}
+            - name: RELATED_IMAGE_NATS
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.nats.image }}:{{ .Values.relatedImages.nats.tag }}
+            - name: RELATED_IMAGE_SERVICE_MANAGER
+              value: {{ .Values.registry }}/{{index .Values "relatedImages" "service-manager" "image" }}:{{ .Values.relatedImages.tags.event }}
+            - name: RELATED_IMAGE_SYNCER
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.syncer.image }}:{{ .Values.relatedImages.tags.event }}
+            - name: RELATED_IMAGE_WATCHER
+              value: {{ .Values.registry }}/{{ .Values.relatedImages.watcher.image }}:{{ .Values.relatedImages.tags.event }}
+            - name: RELATED_IMAGE_CONTINUOUS_RESTORE
+              value: {{ .Values.registry }}/{{ index .Values "relatedImages" "continuous-restore" "image" }}:{{ .Values.relatedImages.tags.tvk }}
+            - name: ADMISSION_MUTATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-mutating-webhook-configuration
+            - name: ADMISSION_VALIDATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-validating-webhook-configuration
+            - name: RELEASE_VERSION
+              value: !!str {{ .Chart.AppVersion }}
+            - name: OPERATOR_INSTANCE_NAME
+              value: {{ template "k8s-triliovault-operator.appName" . }}
+            {{- if .Values.podAnnotations }}
+            - name: POD_ANNOTATIONS
+              value: {{ .Values.podAnnotations | toPrettyJson | quote }}
+            {{- end }}
+            {{- if .Values.podLabels }}
+            - name: POD_LABELS
+              value: {{ .Values.podLabels | toPrettyJson | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+          {{- if and .Values.proxySettings.PROXY_ENABLED .Values.proxySettings.CA_BUNDLE_CONFIGMAP }}
+          - name: proxy-ca-cert
+            mountPath: /proxy-certs
+            readOnly: true
+          {{- end }}
+          {{- if .Values.tls.enable }}
+          - name: helm-tls-certs
+            mountPath: /root/.helm
+            readOnly: true
+          {{- if .Values.tls.verify }}
+          - name: helm-tls-ca
+            mountPath: /root/.helm/ca.crt
+            readOnly: true
+          {{- end }}
+          {{- end }}
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: webhook-certs
+            readOnly: true
+          {{- if .Values.securityContext }}
+          securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          resources:
+            limits:
+              cpu: 200m
+              memory: 512Mi
+            requests:
+              cpu: 10m
+              memory: 256Mi
+      initContainers:
+        - name: webhook-init
+          image: {{ .Values.registry }}/{{ index .Values "operator-webhook-init" "repository" }}:{{ .Values.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          {{- if .Values.securityContext }}
+          securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          env:
+            {{- if .Values.proxySettings.PROXY_ENABLED }}
+            - name: HTTP_PROXY
+              value: {{ .Values.proxySettings.HTTP_PROXY }}
+            - name: HTTPS_PROXY
+              value: {{ .Values.proxySettings.HTTPS_PROXY }}
+            - name: NO_PROXY
+              value: {{ .Values.proxySettings.NO_PROXY }}
+            {{- if .Values.proxySettings.CA_BUNDLE_CONFIGMAP }}
+            - name: PROXY_CA_CONFIGMAP
+              value: {{ .Values.proxySettings.CA_BUNDLE_CONFIGMAP }}
+            {{- end }}
+            {{- end }}
+            - name: MASTER_ENCRYPTION_KEY_NAMESPACE
+              value: {{ .Values.masterEncryptionKeyConfig.namespace | default .Release.Namespace }}
+            - name: MASTER_ENCRYPTION_KEY_NAME
+              value: {{ .Values.masterEncryptionKeyConfig.name }}
+            - name: RELEASE_VERSION
+              value: !!str {{ .Chart.AppVersion }}
+            - name: ADMISSION_MUTATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-mutating-webhook-configuration
+            - name: ADMISSION_VALIDATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-validating-webhook-configuration
+            - name: NAMESPACE_VALIDATION_CONFIG
+              value: {{ template "k8s-triliovault-operator.name" . }}-ns-validating-webhook-configuration
+            - name: WEBHOOK_SERVICE
+              value: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-service
+            - name: WEBHOOK_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: SECRET_NAME
+              value: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-certs
+          {{- if and .Values.proxySettings.PROXY_ENABLED .Values.proxySettings.CA_BUNDLE_CONFIGMAP }}
+          volumeMounts:
+          - name: proxy-ca-cert
+            mountPath: /proxy-certs
+            readOnly: true
+          {{- end }}
+      serviceAccountName: {{ template "k8s-triliovault-operator.serviceAccountName" . }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{- .Values.nodeSelector | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+      {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      volumes:
+      {{- if .Values.tls.enable }}
+      - name: helm-tls-certs
+        secret:
+          secretName: {{ .Values.tls.secretName }}
+          defaultMode: 0400
+      {{- if .Values.tls.verify }}
+      - name: helm-tls-ca
+        configMap:
+          name: {{ template "k8s-triliovault-operator.fullname" . }}-helm-tls-ca-config
+          defaultMode: 0600
+      {{- end }}
+      {{- end }}
+      - name: webhook-certs
+        secret:
+          defaultMode: 420
+          secretName: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-certs

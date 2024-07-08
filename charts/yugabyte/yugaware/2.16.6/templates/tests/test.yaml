@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-yugaware-test
+  labels:
+    app: {{ .Release.Name }}-yugaware-test
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  imagePullSecrets:
+  - name: {{ .Values.image.pullSecret }}
+  containers:
+    - name: yugaware-test
+      image: {{ include "full_yugaware_image" . }}
+      command:
+        - '/bin/bash'
+        - '-ec'
+        {{- if .Values.tls.enabled }}
+        - >
+           curl --head -k https://{{ .Release.Name }}-yugaware-ui
+        {{- else }}
+        - >
+            curl --head http://{{ .Release.Name }}-yugaware-ui
+        {{- end }}
+  restartPolicy: Never
