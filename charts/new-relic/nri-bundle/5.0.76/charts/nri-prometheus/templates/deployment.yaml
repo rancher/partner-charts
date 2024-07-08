@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "newrelic.common.naming.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- /* We cannot use the common library here because of a legacy issue */}}
+      {{- /* `selector` is inmutable and the previous chart did not have all the idiomatic labels */}}
+      app.kubernetes.io/name: {{ include "newrelic.common.naming.name" . }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "newrelic.common.labels.podLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "newrelic.common.serviceAccount.name" . }}
+      {{- with include "newrelic.common.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.image.pullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: nri-prometheus
+        {{- with include "newrelic.common.securityContext.container" . }}
+        securityContext:
+          {{- . | nindent 10 }}
+        {{- end }}
+        image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+          - "--configfile=/etc/nri-prometheus/config.yaml"
+        ports:
+          - containerPort: 8080
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nri-prometheus/
+        env:
+          - name: "LICENSE_KEY"
+            valueFrom:
+                secretKeyRef:
+                  name: {{ include "newrelic.common.license.secretName" . }}
+                  key: {{ include "newrelic.common.license.secretKeyName" . }}
+          {{- if (include "newrelic.common.nrStaging" .) }}
+          - name: "METRIC_API_URL"
+            value: "https://staging-metric-api.newrelic.com/metric/v1/infra"
+          {{- else if (include "newrelic.common.fedramp.enabled" .) }}
+          - name: "METRIC_API_URL"
+            value: "https://gov-metric-api.newrelic.com/metric/v1"
+          {{- end }}
+          {{- with include "newrelic.common.proxy" . }}
+          - name: EMITTER_PROXY
+            value: {{ . | quote }}
+          {{- end }}
+          {{- with include "newrelic.common.verboseLog" . }}
+          - name: "VERBOSE"
+            value: {{ . | quote }}
+          {{- end }}
+          - name: "BEARER_TOKEN_FILE"
+            value: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          - name: "CA_FILE"
+            value: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        {{- if .Values.resources }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- end }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "newrelic.common.naming.fullname" . }}
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.nodeSelector" . }}
+      nodeSelector:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.affinity" . }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}

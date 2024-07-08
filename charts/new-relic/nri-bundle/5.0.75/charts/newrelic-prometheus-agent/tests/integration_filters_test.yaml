@@ -1,0 +1,119 @@
+suite: test configmap with IntegrationFilter
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: config with IntegrationFilter true
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: false
+      config:
+        kubernetes:
+          integrations_filter:
+            enabled: true
+        # Set empty to make this test simple
+        static_targets:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+            kubernetes:
+              jobs:
+              - job_name_prefix: default
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      prometheus.io/scrape: true
+                  pod: true
+              - integrations_filter:
+                  enabled: false
+                job_name_prefix: newrelic
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      newrelic.io/scrape: true
+                  pod: true
+              integrations_filter:
+                app_values:
+                - redis
+                - traefik
+                - calico
+                - nginx
+                - coredns
+                - kube-dns
+                - etcd
+                - cockroachdb
+                - velero
+                - harbor
+                - argocd
+                enabled: true
+                source_labels:
+                - app.kubernetes.io/name
+                - app.newrelic.io/name
+                - k8s-app
+
+  - it: config with IntegrationFilter false
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: false
+      config:
+        kubernetes:
+          integrations_filter:
+            enabled: false
+        # Set empty to make this test simple
+        static_targets:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+            kubernetes:
+              jobs:
+              - job_name_prefix: default
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      prometheus.io/scrape: true
+                  pod: true
+              - integrations_filter:
+                  enabled: false
+                job_name_prefix: newrelic
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      newrelic.io/scrape: true
+                  pod: true
+              integrations_filter:
+                app_values:
+                - redis
+                - traefik
+                - calico
+                - nginx
+                - coredns
+                - kube-dns
+                - etcd
+                - cockroachdb
+                - velero
+                - harbor
+                - argocd
+                enabled: false
+                source_labels:
+                - app.kubernetes.io/name
+                - app.newrelic.io/name
+                - k8s-app

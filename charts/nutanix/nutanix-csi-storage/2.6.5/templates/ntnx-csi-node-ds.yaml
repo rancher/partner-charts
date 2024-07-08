@@ -1,0 +1,153 @@
+# Copyright 2021 Nutanix Inc
+#
+# example usage: kubectl create -f <this_file>
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: nutanix-csi-node
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: nutanix-csi-node
+  updateStrategy:
+    type: "RollingUpdate"
+    rollingUpdate:
+      maxUnavailable: 10%
+  template:
+    metadata:
+      labels:
+        app: nutanix-csi-node
+    spec:
+      serviceAccount: nutanix-csi-node
+      hostNetwork: true
+      containers:
+        - name: driver-registrar
+          image: {{ .Values.sidecars.registrar.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --v=2
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: {{ .Values.kubeletDir }}/plugins/{{ include "nutanix-csi-storage.drivername" . }}/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 100m
+              memory: 20Mi
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi/
+            - name: registration-dir
+              mountPath: /registration
+        - name: nutanix-csi-node
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+          image: {{ .Values.node.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args :
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(NODE_ID)"
+            - "--drivername={{ include "nutanix-csi-storage.drivername" . }}"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: {{ .Values.kubeletDir }}
+              # needed so that any mounts setup inside this container are
+              # propagated back to the host machine.
+              mountPropagation: "Bidirectional"
+            - mountPath: /dev
+              name: device-dir
+            - mountPath: /etc/iscsi
+              name: iscsi-dir
+            - mountPath: /host
+              name: root-dir
+              # This is needed because mount is run from host using chroot.
+              mountPropagation: "Bidirectional"
+          ports:
+            - containerPort: 9808
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-endpoint
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+            failureThreshold: 3
+        - name: liveness-probe
+          resources:
+            requests:
+              cpu: 5m
+              memory: 20Mi
+          volumeMounts:
+            - mountPath: /csi
+              name: plugin-dir
+          image: {{ .Values.sidecars.livenessprobe.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+            - --http-endpoint=:9808
+      priorityClassName: system-cluster-critical
+    {{- with (.Values.node.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with (.Values.node.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletDir }}/plugins_registry/
+            type: Directory
+        - name: plugin-dir
+          hostPath:
+            path: {{ .Values.kubeletDir }}/plugins/{{ include "nutanix-csi-storage.drivername" . }}/
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: {{ .Values.kubeletDir }}
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+        - name: iscsi-dir
+          hostPath:
+            path: /etc/iscsi
+            {{- if eq .Values.kindtest true }}
+            type: DirectoryOrCreate
+            {{- else }}
+            type: Directory
+            {{- end }}
+        - name: root-dir
+          hostPath:
+            path: /
+            type: Directory

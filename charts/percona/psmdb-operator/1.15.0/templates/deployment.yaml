@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "psmdb-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "psmdb-operator.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "psmdb-operator.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ include "psmdb-operator.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "psmdb-operator.fullname" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - containerPort: 60000
+            protocol: TCP
+            name: metrics
+          command:
+          - percona-server-mongodb-operator
+          env:
+            - name: LOG_STRUCTURED
+              value: "{{ .Values.logStructured }}"
+            - name: LOG_LEVEL
+              value: "{{ .Values.logLevel }}"
+            - name: WATCH_NAMESPACE
+              {{- if .Values.watchAllNamespaces }}
+              value: ""
+              {{- else }}
+              value: "{{ default .Release.Namespace .Values.watchNamespace }}"
+              {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: {{ default "percona-server-mongodb-operator" .Values.operatorName }}
+            - name: RESYNC_PERIOD
+              value: "{{ .Values.env.resyncPeriod }}"
+            - name: DISABLE_TELEMETRY
+              value: "{{ .Values.disableTelemetry }}"
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: metrics
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: metrics
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

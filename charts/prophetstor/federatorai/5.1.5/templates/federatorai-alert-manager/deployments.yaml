@@ -1,0 +1,121 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alert-manager
+  name: federatorai-alert-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alert-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alert-manager
+    spec:
+      affinity:
+{{- if .Values.federatoraiAlertManager.affinity }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.affinity "context" .) | nindent 8 }}
+{{- end }}
+      containers:
+        - command:
+            - /opt/federatorai/alert-manager/bin/alertmgr
+          env:
+            - name: ALERT_DATAHUB_HOST
+              value: alameda-datahub.federatorai.svc
+            - name: ALERT_DATAHUB_PORT
+              value: "50050"
+            - name: ALERT_RABBITMQ_HOST
+              value: alameda-rabbitmq.federatorai.svc
+            - name: ALERT_RABBITMQ_PORT
+              value: "5672"
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+{{- if .Values.federatoraiAlertManager.image }}
+          image: {{ .Values.federatoraiAlertManager.image }}
+{{- else }}
+          image: {{ .Values.global.imageRegistry }}/federatorai-alert-manager:{{ .Values.global.imageTag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - /opt/federatorai/alert-manager/bin/mgrctl
+                - probe
+                - --type
+                - liveness
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 30
+          name: alert-manager
+          readinessProbe:
+            exec:
+              command:
+                - /opt/federatorai/alert-manager/bin/mgrctl
+                - probe
+                - --type
+                - readiness
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 30
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/log/alameda
+              name: federatorai-alert-manager-log-storage
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
+      securityContext:
+        fsGroup: 1001
+{{- if .Values.federatoraiAlertManager.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
+      serviceAccount: federatorai-alert-manager
+      serviceAccountName: federatorai-alert-manager
+      tolerations:
+{{- if .Values.federatoraiAlertManager.tolerations }}
+{{- include "render-value" ( dict "value" .Values.federatoraiAlertManager.tolerations "context" .) | nindent 6 }}
+{{- end }}
+      volumes:
+        - emptyDir: {}
+          name: federatorai-alert-manager-data-storage
+        - name: federatorai-alert-manager-log-storage
+          persistentVolumeClaim:
+            claimName: federatorai-alert-manager-log.pvc

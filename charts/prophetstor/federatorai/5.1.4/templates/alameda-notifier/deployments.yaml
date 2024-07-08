@@ -1,0 +1,121 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+{{- if .Values.global.commonAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.commonAnnotations "context" .) | nindent 4 }}
+{{- end }}
+  labels:
+{{- if .Values.global.commonLabels }}
+{{- include "render-value" ( dict "value" .Values.global.commonLabels "context" .) | nindent 4 }}
+{{- end }}
+    app.kubernetes.io/part-of: federatorai
+    app: alameda
+    component: alameda-notifier
+  name: alameda-notifier
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alameda
+      component: alameda-notifier
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+{{- if .Values.global.podAnnotations }}
+{{- include "render-value" ( dict "value" .Values.global.podAnnotations "context" .) | nindent 8 }}
+{{- end }}
+      labels:
+{{- if .Values.global.podLabels }}
+{{- include "render-value" ( dict "value" .Values.global.podLabels "context" .) | nindent 8 }}
+{{- end }}
+        app.kubernetes.io/part-of: federatorai
+        app: alameda
+        component: alameda-notifier
+    spec:
+      affinity:
+{{- if .Values.alamedaNotifier.affinity }}
+{{- include "render-value" ( dict "value" .Values.alamedaNotifier.affinity "context" .) | nindent 8 }}
+{{- end }}
+      containers:
+        - env:
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: ALAMEDA_NOTIFIER_DATAHUB_ADDRESS
+              value: alameda-datahub.{{ .Release.Namespace }}.svc:50050
+            - name: ALAMEDA_NOTIFIER_RABBITMQ_URL
+              value: amqp://admin:adminpass@alameda-rabbitmq.{{ .Release.Namespace }}.svc:5672
+            - name: FEDERATORAI_MAXIMUM_LOG_SIZE
+              value: "1932735283"
+{{- if .Values.alamedaNotifier.image }}
+          image: {{ .Values.alamedaNotifier.image }}
+{{- else }}
+          image: {{ .Values.global.imageRegistry }}/alameda-notifier-ubi:{{ .Values.global.imageTag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          livenessProbe:
+            exec:
+              command:
+                - /usr/local/bin/notifier
+                - --liveness-probe
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: alameda-notifier
+          readinessProbe:
+            exec:
+              command:
+                - /usr/local/bin/notifier
+                - --readiness-probe
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+{{- if .Values.global.resourcesLimitsEnabled }}
+            limits:
+{{- include "render-value" ( dict "value" .Values.alamedaNotifier.resources.limits "context" .) | nindent 14 }}
+{{- end }}
+{{- if .Values.global.resourcesRequestsEnabled }}
+            requests:
+{{- include "render-value" ( dict "value" .Values.alamedaNotifier.resources.requests "context" .) | nindent 14 }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/log/alameda
+              name: alameda-notifier-log-storage
+      imagePullSecrets:
+{{- if .Values.global.imagePullSecrets }}
+{{ include "render-value" ( dict "value" .Values.global.imagePullSecrets "context" .) | nindent 8 }}
+{{- end }}
+      securityContext:
+        fsGroup: 1001
+{{- if .Values.alamedaNotifier.podSecurityContext }}
+{{- include "render-value" ( dict "value" .Values.alamedaNotifier.podSecurityContext "context" .) | nindent 8 }}
+{{- end }}
+      serviceAccount: alameda-notifier
+      serviceAccountName: alameda-notifier
+      tolerations:
+{{- if .Values.alamedaNotifier.tolerations }}
+{{- include "render-value" ( dict "value" .Values.alamedaNotifier.tolerations "context" .) | nindent 6 }}
+{{- end }}
+      volumes:
+        - emptyDir: {}
+          name: alameda-notifier-data-storage
+        - name: alameda-notifier-log-storage
+          persistentVolumeClaim:
+            claimName: alameda-notifier-log.pvc

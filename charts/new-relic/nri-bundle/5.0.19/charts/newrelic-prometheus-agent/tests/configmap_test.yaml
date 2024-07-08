@@ -1,0 +1,572 @@
+suite: test configmap
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: config with defaults
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: replace
+                regex: timeseries_write_(.*)
+                replacement: counter
+                separator: ;
+                source_labels:
+                - __name__
+                target_label: newrelic_metric_type
+              - action: replace
+                regex: sql_byte(.*)
+                replacement: counter
+                separator: ;
+                source_labels:
+                - __name__
+                target_label: newrelic_metric_type
+            static_targets:
+              jobs:
+              - extra_metric_relabel_config:
+                - action: keep
+                  regex: prometheus_agent_active_series|prometheus_target_interval_length_seconds|prometheus_target_scrape_pool_targets|prometheus_remote_storage_samples_pending|prometheus_remote_storage_samples_in_total|prometheus_remote_storage_samples_retried_total|prometheus_agent_corruptions_total|prometheus_remote_storage_shards|prometheus_sd_kubernetes_events_total|prometheus_agent_checkpoint_creations_failed_total|prometheus_agent_checkpoint_deletions_failed_total|prometheus_remote_storage_samples_dropped_total|prometheus_remote_storage_samples_failed_total|prometheus_sd_kubernetes_http_request_total|prometheus_agent_truncate_duration_seconds_sum|prometheus_build_info|process_resident_memory_bytes|process_virtual_memory_bytes|process_cpu_seconds_total
+                  source_labels:
+                  - __name__
+                job_name: self-metrics
+                skip_sharding: true
+                targets:
+                - localhost:9090
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+            kubernetes:
+              jobs:
+              - job_name_prefix: default
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      prometheus.io/scrape: true
+                  pod: true
+              - integrations_filter:
+                  enabled: false
+                job_name_prefix: newrelic
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      newrelic.io/scrape: true
+                  pod: true
+              integrations_filter:
+                app_values:
+                - redis
+                - traefik
+                - calico
+                - nginx
+                - coredns
+                - kube-dns
+                - etcd
+                - cockroachdb
+                - velero
+                - harbor
+                - argocd
+                enabled: true
+                source_labels:
+                - app.kubernetes.io/name
+                - app.newrelic.io/name
+                - k8s-app
+
+  - it: staging is enabled
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      nrStaging: true
+      metric_type_override:
+        enabled: false
+      config:
+        static_targets:  # Set empty to make this test simple
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "newrelic_remote_write:\n  staging: true"  # We do not want to test the whole YAML
+
+  - it: fedramp is enabled
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      fedramp:
+        enabled: true
+      metric_type_override:
+        enabled: false
+      config:
+        static_targets:  # Set empty to make this test simple
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "newrelic_remote_write:\n  fedramp:\n    enabled: true"  # We do not want to test the whole YAML
+
+  - it: config including remote_write most possible sections
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      nrStaging: true
+      config:
+        newrelic_remote_write:
+          proxy_url: http://proxy.url
+          remote_timeout: 30s
+          tls_config:
+            insecure_skip_verify: true
+          queue_config:
+            retry_on_http_429: false
+          extra_write_relabel_configs:
+            - source_labels:
+              - __name__
+              - instance
+              regex: node_memory_active_bytes;localhost:9100
+              action: drop
+        extra_remote_write:
+          - url: "https://second.remote.write"
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: replace
+                regex: timeseries_write_(.*)
+                replacement: counter
+                separator: ;
+                source_labels:
+                - __name__
+                target_label: newrelic_metric_type
+              - action: replace
+                regex: sql_byte(.*)
+                replacement: counter
+                separator: ;
+                source_labels:
+                - __name__
+                target_label: newrelic_metric_type
+              - action: drop
+                regex: node_memory_active_bytes;localhost:9100
+                source_labels:
+                - __name__
+                - instance
+              proxy_url: http://proxy.url
+              queue_config:
+                retry_on_http_429: false
+              remote_timeout: 30s
+              staging: true
+              tls_config:
+                insecure_skip_verify: true
+            extra_remote_write:
+              - url: https://second.remote.write
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: config including remote_write.extra_write_relabel_configs and not metric relabels
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: false
+      config:
+        newrelic_remote_write:
+          extra_write_relabel_configs:
+            - source_labels:
+                - __name__
+                - instance
+              regex: node_memory_active_bytes;localhost:9100
+              action: drop
+
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: drop
+                regex: node_memory_active_bytes;localhost:9100
+                source_labels:
+                - __name__
+                - instance
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: cluster_name is set from global
+    set:
+      licenseKey: license-key-test
+      global:
+       cluster: "test"
+      metric_type_override:
+        enabled: false
+      config:
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: test
+              scrape_interval: 30s
+  - it: cluster_name local value has precedence over global precedence
+    set:
+      licenseKey: license-key-test
+      global:
+        cluster: "test"
+      cluster: "test2"
+      metric_type_override:
+        enabled: false
+      config:
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: test2
+              scrape_interval: 30s
+  - it: cluster_name is not overwritten from customAttributes
+    set:
+      licenseKey: license-key-test
+      global:
+        cluster: "test"
+      cluster: "test2"
+      customAttributes:
+        cluster_name: "test3"
+      metric_type_override:
+        enabled: false
+      config:
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: test2
+              scrape_interval: 30s
+
+  - it: cluster_name has precedence over extra labels has precedence over customAttributes
+    set:
+      licenseKey: license-key-test
+      cluster: test
+      customAttributes:
+        attribute: "value"
+        one: error
+        cluster_name: "different"
+      metric_type_override:
+        enabled: false
+      config:
+        common:
+          external_labels:
+            one: two
+            cluster_name: "different"
+          scrape_interval: 15
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                attribute: value
+                cluster_name: test
+                one: two
+              scrape_interval: 15
+
+  - it: config including static_targets overwritten with most possible sections
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: false
+      config:
+        static_targets:
+          jobs:
+            - job_name: my-custom-target-authorization-full
+              targets:
+                - "192.168.3.1:2379"
+              params:
+                q: [ "puppies" ]
+                oe: [ "utf8" ]
+              scheme: "https"
+              body_size_limit: 100MiB
+              sample_limit: 2000
+              target_limit: 2000
+              label_limit: 2000
+              label_name_length_limit: 2000
+              label_value_length_limit: 2000
+              scrape_interval: 15s
+              scrape_timeout: 15s
+              tls_config:
+                insecure_skip_verify: true
+                ca_file: /path/to/ca.crt
+                key_file: /path/to/key.crt
+                cert_file: /path/to/cert.crt
+                server_name: server.name
+                min_version: TLS12
+              authorization:
+                type: Bearer
+                credentials: "fancy-credentials"
+              extra_relabel_config:
+                - source_labels: [ '__name__', 'instance' ]
+                  regex: node_memory_active_bytes;localhost:9100
+                  action: drop
+              extra_metric_relabel_config:
+                - source_labels: [ '__name__', 'instance' ]
+                  regex: node_memory_active_bytes;localhost:9100
+                  action: drop
+        extra_scrape_configs:
+          - job_name: extra-scrape-config
+            static_configs:
+              - targets:
+                  - "192.168.3.1:2379"
+                labels:
+                  label1: value1
+                  label2: value2
+            scrape_interval: 15s
+            scrape_timeout: 15s
+            tls_config:
+              insecure_skip_verify: true
+              ca_file: /path/to/ca.crt
+              key_file: /path/to/key.crt
+              cert_file: /path/to/cert.crt
+              server_name: server.name
+              min_version: TLS12
+            authorization:
+              type: Bearer
+              credentials: "fancy-credentials"
+            relabel_configs:
+              - source_labels: [ '__name__', 'instance' ]
+                regex: node_memory_active_bytes;localhost:9100
+                action: drop
+            metric_relabel_configs:
+              - source_labels: [ '__name__', 'instance' ]
+                regex: node_memory_active_bytes;localhost:9100
+                action: drop
+        # Set empty to make this test simple
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            static_targets:
+              jobs:
+              - authorization:
+                  credentials: fancy-credentials
+                  type: Bearer
+                body_size_limit: 100MiB
+                extra_metric_relabel_config:
+                - action: drop
+                  regex: node_memory_active_bytes;localhost:9100
+                  source_labels:
+                  - __name__
+                  - instance
+                extra_relabel_config:
+                - action: drop
+                  regex: node_memory_active_bytes;localhost:9100
+                  source_labels:
+                  - __name__
+                  - instance
+                job_name: my-custom-target-authorization-full
+                label_limit: 2000
+                label_name_length_limit: 2000
+                label_value_length_limit: 2000
+                params:
+                  oe:
+                  - utf8
+                  q:
+                  - puppies
+                sample_limit: 2000
+                scheme: https
+                scrape_interval: 15s
+                scrape_timeout: 15s
+                target_limit: 2000
+                targets:
+                - 192.168.3.1:2379
+                tls_config:
+                  ca_file: /path/to/ca.crt
+                  cert_file: /path/to/cert.crt
+                  insecure_skip_verify: true
+                  key_file: /path/to/key.crt
+                  min_version: TLS12
+                  server_name: server.name
+            extra_scrape_configs:
+              - authorization:
+                  credentials: fancy-credentials
+                  type: Bearer
+                job_name: extra-scrape-config
+                metric_relabel_configs:
+                - action: drop
+                  regex: node_memory_active_bytes;localhost:9100
+                  source_labels:
+                  - __name__
+                  - instance
+                relabel_configs:
+                - action: drop
+                  regex: node_memory_active_bytes;localhost:9100
+                  source_labels:
+                  - __name__
+                  - instance
+                scrape_interval: 15s
+                scrape_timeout: 15s
+                static_configs:
+                - labels:
+                    label1: value1
+                    label2: value2
+                  targets:
+                  - 192.168.3.1:2379
+                tls_config:
+                  ca_file: /path/to/ca.crt
+                  cert_file: /path/to/cert.crt
+                  insecure_skip_verify: true
+                  key_file: /path/to/key.crt
+                  min_version: TLS12
+                  server_name: server.name
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: kubernetes config section custom values
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: false
+      config:
+        kubernetes:
+          integrations_filter:
+            enabled: false
+          jobs:
+            - job_name_prefix: pod-job
+              target_discovery:
+                pod: true
+                endpoints: false
+                filter:
+                  annotations:
+                    custom/scrape-pod: true
+            - job_name_prefix: endpoints-job
+              target_discovery:
+                pod: false
+                endpoints: true
+                filter:
+                  annotations:
+                    custom/scrape-endpoints: true
+        # Set empty to make this test simple
+        static_targets:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+            kubernetes:
+              jobs:
+              - job_name_prefix: pod-job
+                target_discovery:
+                  endpoints: false
+                  filter:
+                    annotations:
+                      custom/scrape-pod: true
+                  pod: true
+              - job_name_prefix: endpoints-job
+                target_discovery:
+                  endpoints: true
+                  filter:
+                    annotations:
+                      custom/scrape-endpoints: true
+                  pod: false
+              integrations_filter:
+                app_values:
+                - redis
+                - traefik
+                - calico
+                - nginx
+                - coredns
+                - kube-dns
+                - etcd
+                - cockroachdb
+                - velero
+                - harbor
+                - argocd
+                enabled: false
+                source_labels:
+                - app.kubernetes.io/name
+                - app.newrelic.io/name
+                - k8s-app
+
+  - it: sharding empty not propagated
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      sharding:
+      metric_type_override:
+        enabled: false
+      config:
+        kubernetes:
+        static_targets:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: sharding config custom values
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      sharding:
+        total_shards_count: 2
+      metric_type_override:
+        enabled: false
+      config:
+        kubernetes:
+        static_targets:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+            sharding:
+              total_shards_count: 2

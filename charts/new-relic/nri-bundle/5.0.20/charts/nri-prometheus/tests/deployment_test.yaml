@@ -1,0 +1,82 @@
+suite: test deployment
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+
+release:
+  name: release
+
+tests:
+  - it: adds defaults.
+    set:
+      licenseKey: fakeLicense
+      cluster: test
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.[app.kubernetes.io/instance]
+          value: release
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels.[app.kubernetes.io/name]
+          value: nri-prometheus
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: nri-prometheus
+        template: templates/deployment.yaml
+      - isNotEmpty:
+          path: spec.template.metadata.annotations.[checksum/config]
+        template: templates/deployment.yaml
+
+  - it: adds METRIC_API_URL when nrStaging is true.
+    set:
+      licenseKey: fakeLicense
+      cluster: test
+      nrStaging: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "METRIC_API_URL"
+            value: "https://staging-metric-api.newrelic.com/metric/v1/infra"
+        template: templates/deployment.yaml
+
+  - it: adds FedRamp endpoint when FedRamp is enabled.
+    set:
+      licenseKey: fakeLicense
+      cluster: test
+      fedramp:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "METRIC_API_URL"
+            value: "https://gov-metric-api.newrelic.com/metric/v1"
+        template: templates/deployment.yaml
+
+  - it: adds proxy when enabled.
+    set:
+      licenseKey: fakeLicense
+      cluster: test
+      proxy: "https://my-proxy:9999"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "EMITTER_PROXY"
+            value: "https://my-proxy:9999"
+        template: templates/deployment.yaml
+
+  - it: set priorityClassName.
+    set:
+      licenseKey: fakeLicense
+      cluster: test
+      priorityClassName: foo
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: foo
+        template: templates/deployment.yaml
+

@@ -1,0 +1,139 @@
+suite: test configmap for sinks
+templates:
+  - templates/configmap.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has the correct sinks when default values used
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+              - name: newRelicInfra
+                config:
+                  agentEndpoint: http://localhost:8001/v1/data
+                  clusterName: a-cluster
+                  agentHTTPTimeout: 30s
+            captureDescribe: true
+            describeRefresh: 24h
+            captureEvents: true
+
+  - it: honors agentHTTPTimeout
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+      agentHTTPTimeout: 10s
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+              - name: newRelicInfra
+                config:
+                  agentEndpoint: http://localhost:8001/v1/data
+                  clusterName: a-cluster
+                  agentHTTPTimeout: 10s
+            captureDescribe: true
+            describeRefresh: 24h
+            captureEvents: true
+
+  - it: has the correct sinks defined in local values
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+      sinks:
+        stdout: true
+        newRelicInfra: false
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+              - name: stdout
+            captureDescribe: true
+            describeRefresh: 24h
+            captureEvents: true
+
+  - it: allows enabling/disabling event scraping
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+      scrapers:
+        events:
+          enabled: false
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+              - name: newRelicInfra
+                config:
+                  agentEndpoint: http://localhost:8001/v1/data
+                  clusterName: a-cluster
+                  agentHTTPTimeout: 30s
+            captureDescribe: true
+            describeRefresh: 24h
+            captureEvents: false
+
+  - it: allows enabling/disabling description scraping
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+      scrapers:
+        descriptions:
+          enabled: false
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+              - name: newRelicInfra
+                config:
+                  agentEndpoint: http://localhost:8001/v1/data
+                  clusterName: a-cluster
+                  agentHTTPTimeout: 30s
+            captureDescribe: false
+            describeRefresh: 24h
+            captureEvents: true
+
+  - it: allows changing description resync intervals
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+      scrapers:
+        descriptions:
+          resyncPeriod: 4h
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+              - name: newRelicInfra
+                config:
+                  agentEndpoint: http://localhost:8001/v1/data
+                  clusterName: a-cluster
+                  agentHTTPTimeout: 30s
+            captureDescribe: true
+            describeRefresh: 4h
+            captureEvents: true
+
+  - it: has another document generated with the proper config set
+    set:
+      licenseKey: us-whatever
+      cluster: a-cluster
+      sinks:
+        stdout: false
+        newRelicInfra: false
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            sinks:
+            captureDescribe: true
+            describeRefresh: 24h
+            captureEvents: true

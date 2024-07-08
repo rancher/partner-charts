@@ -1,0 +1,357 @@
+# IMPORTANT: Specify your New Relic API key here.
+# licenseKey:
+#
+# Optionally, specify a cluster name and log records can
+# be filtered by cluster.
+# cluster:
+#
+# or Specify secret which contains New Relic API key
+# customSecretName: secret_name
+# customSecretLicenseKey: secret_key
+#
+# The previous values can also be set as global so that they
+# can be shared by other newrelic product's charts
+#
+# global:
+#   licenseKey:
+#   cluster:
+#   customSecretName:
+#   customSecretLicenseKey:
+#
+# IMPORTANT: if you use a kubernetes secret to specify the license,
+# you have to manually provide the correct endpoint depending on
+# whether your account is for the EU region or not.
+#
+# endpoint: https://log-api.newrelic.com/log/v1
+
+fluentBit:
+  logLevel: "info"
+  path: "/var/log/containers/*.log"
+  linuxMountPath: /var
+  windowsPath: "C:\\var\\log\\containers\\*.log"
+  db: "/var/log/flb_kube.db"
+  windowsDb: "C:\\var\\log\\flb_kube.db"
+  criEnabled: true
+  k8sBufferSize: "32k"
+  k8sLoggingExclude: "Off"
+  retryLimit: 5
+  sendMetrics: false
+  extraEnv: []
+  # extraEnv:
+  # - name: HTTPS_PROXY
+  #   value: http://example.com:3128
+  # - name: METADATA_NAME
+  #   valueFrom:
+  #     fieldRef:
+  #       fieldPath: metadata.name
+
+  # Indicates how fluent-bit database is persisted
+  persistence:
+    # Define the persistent mode for fluent-bit db, allowed options are `hostPath` (default), `none`, `persistentVolume`.
+    # - `hostPath` will use hostPath to store the db file on the node disk.
+    # - `none` will disable the fluent-bit db file, this could cause log duplication or data loss in case fluent-bit gets restarted.
+    # - `persistentVolume` will use a ReadWriteMany persistent volume to store the db file. This will override `fluentBit.db` path and use `/db/${NODE_NAME}-fb.db` file instead.
+    mode: "hostPath"
+
+    # In case persistence.mode is set to persistentVolume this will be needed
+    persistentVolume:
+      # The storage class should allow ReadWriteMany mode
+      storageClass:
+      # Volume and claim size.
+      size: 10Gi
+      # If dynamicProvisioning is enabled the chart will create only the PersistentVolumeClaim
+      dynamicProvisioning: true
+      # If an existingVolume is provided, we'll use it instead creating a new one
+      existingVolume:
+      # If an existingVolumeClaim is provided, we'll use it instead creating a new one
+      existingVolumeClaim:
+      # In case you need to add annotations to the created volume or claim
+      annotations:
+        volume: {}
+        claim: {}
+      # In case you need to specify any other option to your volume or claim
+      extra:
+        volume:
+        #  nfs:
+        #    path: /tmp/
+        #    server: 1.1.1.1
+        claim: {}
+
+
+  # New Relic default configuration for fluent-bit.conf (service, inputs, filters, outputs)
+  # and parsers.conf (parsers). The configuration below is not configured for lowDataMode and will
+  # send all attributes.  If custom configuration is required, update these variables.
+  config:
+    # Note that Prometheus metric collection needs the HTTP server to be online at port 2020 (see fluentBit.config.metricInstrumentation)
+    service: |
+      [SERVICE]
+          Flush         1
+          Log_Level     ${LOG_LEVEL}
+          Daemon        off
+          Parsers_File  parsers.conf
+          HTTP_Server   On
+          HTTP_Listen   0.0.0.0
+          HTTP_Port     2020
+
+    inputs: |
+      [INPUT]
+          Name              tail
+          Alias             pod-logs-tailer
+          Tag               kube.*
+          Path              ${PATH}
+          multiline.parser  ${LOG_PARSER}
+          DB                ${FB_DB}
+          Mem_Buf_Limit     7MB
+          Skip_Long_Lines   On
+          Refresh_Interval  10
+
+#    extraInputs: |
+#      [INPUT]
+#          Name   dummy
+#          Tag    dummy.log
+
+    filters: |
+      [FILTER]
+          Name                kubernetes
+          Alias               kubernetes-enricher
+          Match               kube.*
+          # We need the full DNS suffix as Windows only supports resolving names with this suffix
+          # See: https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
+          Kube_URL            https://kubernetes.default.svc.cluster.local:443
+          Buffer_Size         ${K8S_BUFFER_SIZE}
+          K8S-Logging.Exclude ${K8S_LOGGING_EXCLUDE}
+
+      [FILTER]
+          Name           record_modifier
+          Alias          node-attributes-enricher
+          Match          *
+          Record         cluster_name ${CLUSTER_NAME}
+
+#    extraFilters: |
+#      [FILTER]
+#          Name   grep
+#          Match  *
+#          Exclude log lvl=debug*
+
+    lowDataModeFilters: |
+      [FILTER]
+          Name           kubernetes
+          Match          kube.*
+          Alias          kubernetes-enricher
+          # We need the full DNS suffix as Windows only supports resolving names with this suffix
+          # See: https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
+          Kube_URL       https://kubernetes.default.svc.cluster.local:443
+          Buffer_Size    ${K8S_BUFFER_SIZE}
+          K8S-Logging.Exclude ${K8S_LOGGING_EXCLUDE}
+          Labels         Off
+          Annotations    Off
+
+      [FILTER]
+          Name           nest
+          Match          *
+          Alias          kubernetes-attribute-lifter
+          Operation      lift
+          Nested_under   kubernetes
+
+      [FILTER]
+          Name           record_modifier
+          Match          *
+          Alias          node-attributes-enricher-filter
+          Record         cluster_name ${CLUSTER_NAME}
+          Allowlist_key  container_name
+          Allowlist_key  namespace_name
+          Allowlist_key  pod_name
+          Allowlist_key  stream
+          Allowlist_key  message
+          Allowlist_key  log
+
+    outputs: |
+      [OUTPUT]
+          Name           newrelic
+          Match          *
+          Alias          newrelic-logs-forwarder
+          licenseKey     ${LICENSE_KEY}
+          endpoint       ${ENDPOINT}
+          lowDataMode    ${LOW_DATA_MODE}
+          sendMetrics    ${SEND_OUTPUT_PLUGIN_METRICS}
+          Retry_Limit    ${RETRY_LIMIT}
+
+#    extraOutputs: |
+#      [OUTPUT]
+#          Name null
+#          Match *
+
+#    parsers: |
+#      [PARSER]
+#          Name         my_custom_parser
+#          Format       json
+#          Time_Key     time
+#          Time_Format  %Y-%m-%dT%H:%M:%S.%L
+#          Time_Keep    On
+    metricInstrumentation: |
+      [INPUT]
+          name prometheus_scrape
+          Alias fb-metrics-collector
+          host 127.0.0.1
+          port 2020
+          tag fb_metrics
+          metrics_path /api/v2/metrics/prometheus
+          scrape_interval 10s
+
+      [OUTPUT]
+          Name                 prometheus_remote_write
+          Match                fb_metrics
+          Alias                fb-metrics-forwarder
+          Host                 ${METRICS_HOST}
+          Port                 443
+          Uri                  /prometheus/v1/write?prometheus_server=${CLUSTER_NAME}
+          Header               Authorization Bearer ${LICENSE_KEY}
+          Tls                  On
+          # Windows pods using prometheus_remote_write currently have issues if TLS verify is On
+          Tls.verify           Off
+          # User-defined labels
+          add_label            app fluent-bit
+          add_label            cluster_name ${CLUSTER_NAME}
+          add_label            hostname ${HOSTNAME}
+          add_label            node_name ${NODE_NAME}
+          add_label            source kubernetes
+
+image:
+  repository: newrelic/newrelic-fluentbit-output
+#  registry: my_registry
+  tag: ""
+  pullPolicy: IfNotPresent
+  ## See https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod
+  pullSecrets: []
+#    - name: regsecret
+
+# By default, the Linux DaemonSet will always be deployed, while the Windows DaemonSet(s) won't.
+enableLinux: true
+enableWindows: false
+# For every entry in this Windows OS list, we will create an independent DaemonSet which will get deployed
+# on Windows nodes running each specific Windows version and build number. Note that
+# Windows containers can only be executed on hosts running the exact same Windows version and build number,
+# because Kubernetes only supports process isolation and not Hyper-V isolation (as of September 2021)
+windowsOsList:
+  # We aim to support (limited to LTSC2019/LTSC2022 using GitHub actions, see https://github.com/actions/runner-images/tree/main/images/win):
+  # https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#windows-os-version-support
+  - version: ltsc2019
+    imageTagSuffix: windows-ltsc-2019
+    buildNumber: 10.0.17763
+  - version: ltsc2022
+    imageTagSuffix: windows-ltsc-2022
+    buildNumber: 10.0.20348
+
+# Default set of resources assigned to the DaemonSet pods
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 250m
+    memory: 64Mi
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  pspEnabled: false
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create:
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  # Specify any annotations to add to the ServiceAccount
+  annotations: {}
+
+# Optionally configure ports to expose metrics on /api/v1/metrics/prometheus
+# See - https://docs.fluentbit.io/manual/administration/monitoring
+exposedPorts: []
+#  - containerPort: 2020
+#    hostPort: 2020
+#    name: metrics
+#    protocol: TCP
+
+# If you wish to provide additional labels to apply to the pod(s), specify
+# them here
+# podLabels:
+
+# Pod scheduling priority
+# Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# priorityClassName: high-priority
+
+# Node affinity rules
+# Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+#
+# IMPORTANT #
+# ######### #
+# When .Values.global.fargate == true, the chart will automatically add the required affinity rules to exclude
+# the DaemonSet from Fargate nodes. There is no need to manually touch this property achieve this.
+# This automatic exclusion will, however, not take place if this value is overridden: Setting this to a
+# non-empty value WHEN deploying in EKS Fargate (global.fargate == true) requires the user to manually
+# include in their custom ruleset an exclusion for nodes with "eks.amazonaws.com/compute-type: fargate", as
+# the New Relic DaemonSet MUST NOT be deployed on fargate nodes, as the operator takes care of injecting it
+# as a sidecar instead.
+# Please refer to the daemonset.yaml template for more details on how to achieve this.
+nodeAffinity: {}
+
+# Node labels for pod assignment
+# Ref: https://kubernetes.io/docs/user-guide/node-selection/
+# Note that the Linux DaemonSet already contains a node selector label based on their OS (kubernetes.io/os: linux).
+nodeSelector: {}
+
+# Note that the Windows DaemonSet already contains a node selector label based on their OS (kubernetes.io/os: windows).
+# and build number (node.kubernetes.io/windows-build: {{ .buildNumber }}, to ensure that each version of the DaemonSet
+# gets deployed only on those Windows nodes running the exact same Windows version and build number. Note that
+# Windows containers can only be executed on hosts running the exact same Windows version and build number.
+windowsNodeSelector: {}
+
+# These are default tolerations to be able to run the New Relic Kubernetes integration.
+tolerations:
+  - operator: "Exists"
+    effect: "NoSchedule"
+  - operator: "Exists"
+    effect: "NoExecute"
+
+updateStrategy: RollingUpdate
+
+# Sends data to staging, can be set as a global.
+# global.nrStaging
+nrStaging: false
+
+daemonSet:
+  # Annotations to add to the DaemonSet.
+  annotations: {}
+
+# Annotations to add to the resulting Pods of the DaemonSet.
+podAnnotations: {}
+
+# When low data mode is enabled only minimal attributes are added to the logs. Kubernetes labels and
+# annotations are not included. The plugin.type, plugin.version and plugin.source attributes are minified
+# into the plugin.source attribute.
+# Can be set as a global: global.lowDataMode
+# lowDataMode: false
+
+extraVolumes: []
+# - name: systemdlog
+#   hostPath:
+#     path: /run/log/journal
+
+extraVolumeMounts: []
+# - name: systemdlog
+#   mountPath: /run/log/journal
+
+initContainers:
+#  - name: init
+#    image: busybox
+#    command: ["sh", "-c", 'echo "hello world"']
+
+windows:
+  initContainers:
+#    - name: init
+#       image: ...
+#       command: [...]
+
+# -- Sets pod dnsConfig. Can also be configured with `global.dnsConfig`
+dnsConfig: {}

@@ -1,0 +1,205 @@
+{{- if and (.Values.controlPlane.enabled) (not (include "newrelic.fargate" .)) }}
+apiVersion: apps/v1
+kind: {{ .Values.controlPlane.kind }}
+metadata:
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nriKubernetes.labels" . | nindent 4 }}
+  name: {{ include "nriKubernetes.controlplane.fullname" . }}
+  {{- $legacyAnnotation:= fromYaml (include "newrelic.compatibility.annotations" .) -}}
+  {{- with  include "newrelic.compatibility.valueWithFallback" (dict "legacy" $legacyAnnotation "supported" .Values.controlPlane.annotations )}}
+  annotations: {{ . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if eq .Values.controlPlane.kind "DaemonSet"}}
+  {{- with .Values.updateStrategy }}
+  updateStrategy: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  {{- if eq .Values.controlPlane.kind "Deployment"}}
+  {{- with .Values.strategy }}
+  strategy: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "newrelic.common.labels.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controlplane
+  template:
+    metadata:
+      annotations:
+        checksum/nri-kubernetes: {{ include (print $.Template.BasePath "/controlplane/scraper-configmap.yaml") . | sha256sum }}
+        checksum/agent-config: {{ include (print $.Template.BasePath "/controlplane/agent-configmap.yaml") . | sha256sum }}
+        {{- if include "newrelic.common.license.secret" . }}{{- /* If the is secret to template */}}
+        checksum/license-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "nriKubernetes.labels.podLabels" . | nindent 8 }}
+        app.kubernetes.io/component: controlplane
+    spec:
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.images.pullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+      hostNetwork: {{ include "nriKubernetes.controlPlane.hostNetwork.value" . }}
+      {{- if include "nriKubernetes.controlPlane.hostNetwork" . }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "nriKubernetes.controlplane.fullname.serviceAccount" . }}
+
+      {{- if .Values.controlPlane.initContainers }}
+      initContainers: {{- tpl (.Values.controlPlane.initContainers | toYaml) . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: controlplane
+          image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.images.integration "context" .) }}
+          imagePullPolicy: {{ .Values.images.integration.pullPolicy }}
+          {{- with include "nriKubernetes.securityContext.container" . | fromYaml }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: "NRI_KUBERNETES_SINK_HTTP_PORT"
+              value: {{ get (fromYaml (include "nriKubernetes.controlPlane.agentConfig" .)) "http_server_port" | quote }}
+            - name: "NRI_KUBERNETES_CLUSTERNAME"
+              value: {{ include "newrelic.common.cluster" . }}
+            - name: "NRI_KUBERNETES_VERBOSE"
+              value: {{ include "newrelic.common.verboseLog.valueAsBoolean" . | quote }}
+
+            - name: "NRI_KUBERNETES_NODENAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+            - name: "NRI_KUBERNETES_NODEIP"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "status.hostIP"
+
+            {{- with .Values.controlPlane.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.controlPlane.extraEnvFrom }}
+          envFrom: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: nri-kubernetes-config
+              mountPath: /etc/newrelic-infra/nri-kubernetes.yml
+              subPath: nri-kubernetes.yml
+            {{- with .Values.controlPlane.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.controlPlane.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+        - name: forwarder
+          image: {{ include "newrelic.common.images.image" ( dict "imageRoot" .Values.images.forwarder "context" .) }}
+          imagePullPolicy: {{ .Values.images.forwarder.pullPolicy }}
+          {{- with include "nriKubernetes.securityContext.container" . | fromYaml }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ get (fromYaml (include "nriKubernetes.controlPlane.agentConfig" .)) "http_server_port" }}
+          env:
+            - name: "NRIA_LICENSE_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newrelic.common.license.secretName" . }}
+                  key: {{ include "newrelic.common.license.secretKeyName" . }}
+
+            - name: "NRIA_DNS_HOSTNAME_RESOLUTION"
+              value: "false"
+
+            - name: "K8S_NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            {{- if .Values.useNodeNameAsDisplayName }}
+            - name: "NRIA_DISPLAY_NAME"
+            {{- if .Values.prefixDisplayNameWithCluster }}
+              value: "{{ include "newrelic.common.cluster" . }}:$(K8S_NODE_NAME)"
+            {{- else }}
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+            {{- end }}
+            {{- end }}
+
+            {{- with .Values.controlPlane.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.controlPlane.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /var/db/newrelic-infra/data
+              name: forwarder-tmpfs-data
+            - mountPath: /var/db/newrelic-infra/user_data
+              name: forwarder-tmpfs-user-data
+            - mountPath: /tmp
+              name: forwarder-tmpfs-tmp
+            - name: config
+              mountPath: /etc/newrelic-infra.yml
+              subPath: newrelic-infra.yml
+            {{- with .Values.controlPlane.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.controlPlane.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: nri-kubernetes-config
+          configMap:
+            name: {{ include "nriKubernetes.controlplane.fullname" . }}
+            items:
+              - key: nri-kubernetes.yml
+                path: nri-kubernetes.yml
+        - name: forwarder-tmpfs-data
+          emptyDir: {}
+        - name: forwarder-tmpfs-user-data
+          emptyDir: {}
+        - name: forwarder-tmpfs-tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ include "nriKubernetes.controlplane.fullname.agent" . }}
+            items:
+              - key: newrelic-infra.yml
+                path: newrelic-infra.yml
+        {{- with .Values.controlPlane.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with include "nriKubernetes.controlPlane.affinity" . }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "nriKubernetes.controlPlane.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        kubernetes.io/os: linux
+        {{- with .Values.controlPlane.nodeSelector | default (fromYaml (include "newrelic.common.nodeSelector" .)) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end -}}
+{{- end }}

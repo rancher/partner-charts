@@ -1,0 +1,57 @@
+suite: test image
+templates:
+  - templates/statefulset.yaml
+  - templates/configmap.yaml
+tests:
+  - it: configurator image is set
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      images:
+        configurator:
+          tag: "test"
+          pullPolicy: Never
+        prometheus:
+          tag: "test-2"
+    asserts:
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "newrelic/newrelic-prometheus-configurator:test"
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: "Never"
+        template: templates/statefulset.yaml
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].image
+          value: "quay.io/prometheus/prometheus:test-2"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "IfNotPresent"
+        template: templates/statefulset.yaml
+
+  - it: has a linux node selector by default
+    set:
+      licenseKey: license-key-test
+      cluster: my-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+        template: templates/statefulset.yaml
+
+  - it: has a linux node selector and additional selectors
+    set:
+      licenseKey: license-key-test
+      cluster: my-cluster
+      nodeSelector:
+        aCoolTestLabel: aCoolTestValue
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            aCoolTestLabel: aCoolTestValue
+        template: templates/statefulset.yaml

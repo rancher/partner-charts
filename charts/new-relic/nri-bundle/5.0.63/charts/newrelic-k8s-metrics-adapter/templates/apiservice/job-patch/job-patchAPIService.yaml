@@ -1,0 +1,54 @@
+{{- if (and (not .Values.customTLSCertificate) (not .Values.certManager.enabled)) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "newrelic-k8s-metrics-adapter.name.apiservice-patch" . }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+spec:
+  template:
+    metadata:
+      name: {{ include "newrelic-k8s-metrics-adapter.name.apiservice-patch" . }}
+      labels:
+        {{- include "newrelic.common.labels" . | nindent 8 }}
+    spec:
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.image.pullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: patch
+          image: {{ include "newrelic.common.images.image" ( dict "defaultRegistry" "registry.k8s.io" "imageRoot" .Values.apiServicePatchJob.image "context" .) }}
+          imagePullPolicy: {{ .Values.apiServicePatchJob.image.pullPolicy }}
+          args:
+            - patch
+            - --namespace={{ .Release.Namespace }}
+            - --secret-name={{ include "newrelic-k8s-metrics-adapter.name.apiservice" . }}
+            - --apiservice-name=v1beta1.external.metrics.k8s.io
+            {{- with .Values.apiServicePatchJob.volumeMounts }}
+          volumeMounts:
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+      {{- with .Values.apiServicePatchJob.volumes }}
+      volumes:
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "newrelic-k8s-metrics-adapter.name.apiservice.serviceAccount" . }}
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000
+      {{- with include "newrelic.common.nodeSelector" . }}
+      nodeSelector:
+        {{- . | nindent 8 -}}
+      {{- end }}
+      {{- with include "newrelic.common.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}
+{{- end }}
