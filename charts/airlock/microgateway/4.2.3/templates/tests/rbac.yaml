@@ -1,0 +1,107 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+subjects:
+- kind: ServiceAccount
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+    - microgateway.airlock.com
+  resources:
+    - sidecargateways
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway"
+  verbs:
+    - get
+    - list
+    - watch
+    - delete
+- apiGroups:
+    - microgateway.airlock.com
+  resources:
+    - sidecargateways
+  verbs:
+    - create
+- apiGroups:
+    - ""
+  resources:
+    - events
+  verbs:
+    - list
+- apiGroups:
+    - "apps"
+  resources:
+    - deployments
+  resourceNames:
+    - "{{ include "airlock-microgateway.operator.fullname" . }}"
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - "apps"
+  resources:
+    - statefulsets
+    - statefulsets/scale
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+  verbs:
+    - get
+    - list
+    - watch
+    - patch
+- apiGroups:
+    - ""
+  resources:
+    - pods
+    - pods/log
+    - pods/status
+    - pods/attach
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-backend-0"
+    - "{{ include "airlock-microgateway.fullname" . }}-test-valid-request"
+    - "{{ include "airlock-microgateway.fullname" . }}-test-injection-request"
+  verbs:
+    - get
+    - list
+    - create
+    - watch
+    - delete
+- apiGroups:
+    - ""
+  resources:
+    - pods
+  verbs:
+    - create
+{{- end -}}

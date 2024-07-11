@@ -1,0 +1,200 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "airlock-microgateway.fullname" . }}-test-install"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: test-install
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+    {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+  - name: test
+    image: "bitnami/kubectl:{{ .Capabilities.KubeVersion.Major }}.{{ .Capabilities.KubeVersion.Minor }}"
+    securityContext:
+      {{- include "airlock-microgateway.restrictedSecurityContext" . | nindent 6 }}
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+
+      clean_up() {
+        echo ""
+        echo "### Clean up test resources"
+        kubectl delete --ignore-not-found=true -n {{ .Release.Namespace }} sidecargateways.microgateway.airlock.com {{ include "airlock-microgateway.fullname" . }}-test-sidecargateway || true
+        echo ""
+        echo "### Scale down '{{ include "airlock-microgateway.fullname" . }}-test-backend'"
+        kubectl scale -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --replicas=0 --timeout=30s
+        sleep 3s
+        echo ""
+      }
+
+      fail() {
+        echo ""
+        echo "### Error: ${1}"
+        echo ""
+        echo 'Microgateway Sidecargateway status:'
+        kubectl get -n {{ .Release.Namespace }} sidecargateway.microgateway.airlock.com/{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway -o jsonpath-as-json='{.status}' || true
+        echo ""
+        echo ""
+        echo "Pod '{{ include "airlock-microgateway.fullname" . }}-test-backend-0':"
+        kubectl describe -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 || true
+        echo ""
+        echo ""
+        echo 'Logs of Nginx container:'
+        kubectl logs -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -c nginx --tail 5 || true
+        echo ""
+        echo ""
+        # Wait for engine logs
+        sleep 10s
+        echo 'Logs of Microgateway Engine container:'
+        kubectl logs -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -c airlock-microgateway-engine --tail 5 || true
+        exit 1
+      }
+
+      create_sidecargateway() {
+        # create SidecarGateway resource for testing purposes
+        kubectl delete --ignore-not-found=true -n {{ .Release.Namespace }} sidecargateways.microgateway.airlock.com {{ include "airlock-microgateway.fullname" . }}-test-sidecargateway || true
+        kubectl apply -f - <<EOF
+        apiVersion: microgateway.airlock.com/v1alpha1
+        kind: SidecarGateway
+        metadata:
+          name: "{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway"
+          namespace: {{ .Release.Namespace }}
+          labels:
+            app.kubernetes.io/component: test-install
+            {{- include "airlock-microgateway.sharedLabels" . | nindent 12 }}
+            {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 12 }}
+        spec:
+          podSelector:
+            matchLabels:
+              app: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+              {{- include "airlock-microgateway.sharedLabels" . | nindent 14 }}
+              {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 14 }}
+          applications:
+            - containerPort: 8080
+      EOF
+      }
+
+      curl() {
+        kubectl delete pod --ignore-not-found=true -n {{ .Release.Namespace }} {{ include "airlock-microgateway.fullname" . }}-test-valid-request
+        kubectl -n {{ .Release.Namespace }} run {{ include "airlock-microgateway.fullname" . }}-test-valid-request --restart=Never --image=cgr.dev/chainguard/curl \
+        --override-type=strategic \
+        --overrides='
+        {
+          "apiVersion": "v1",
+          "spec": {
+            "containers": [
+              {
+                "name": "{{ include "airlock-microgateway.fullname" . }}-test-valid-request",
+                "securityContext": {{ include "airlock-microgateway.restrictedSecurityContext" . | fromYaml | toJson }}
+              }
+            ]
+          }
+        }' \
+        -- "$@"
+        local i=0
+        while [ $i -lt 90 ] && ! kubectl logs -n {{ .Release.Namespace }} {{ include "airlock-microgateway.fullname" . }}-test-valid-request >/dev/null 2>&1; do sleep 1s; i=$((i+1)); done
+        kubectl logs -f -n {{ .Release.Namespace }} {{ include "airlock-microgateway.fullname" . }}-test-valid-request
+        kubectl delete pod --ignore-not-found=true -n {{ .Release.Namespace }} {{ include "airlock-microgateway.fullname" . }}-test-valid-request
+      }
+
+      trap clean_up EXIT
+
+      echo "### Waiting for Microgateway Deployments to be ready"
+      if ! kubectl rollout status -n {{ .Release.Namespace }} --timeout=90s \
+        deployments/{{ include "airlock-microgateway.operator.fullname" . }}; then
+        fail 'Timout occurred'
+      fi
+      echo ""
+
+      echo "### Scale '{{ include "airlock-microgateway.fullname" . }}-test-backend' to '1' replica"
+      # scale to zero replicas to ensure no pods are present from previous runs
+      kubectl scale -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --replicas=0 --timeout=10s
+      kubectl scale -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --replicas=1 --timeout=10s
+      echo ""
+
+      echo "### Waiting for backend pod"
+      i=0
+      while true; do
+        if kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0; then
+          break
+        elif [ $i -gt 3 ]; then
+          fail 'Pod not ready'
+        fi
+        sleep 2s
+        i=$((i+1))
+      done
+
+      echo "### Checking Microgateway Engine sidecar container was injected"
+      if ! kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -o jsonpath='{.spec.containers[?(@.name=="airlock-microgateway-engine")]}' | grep -q "airlock-microgateway-engine"; then
+        fail 'Microgateway Engine sidecar container not injected'
+      fi
+      echo "True"
+      echo ""
+
+      echo "### Checking for valid license"
+      i=0
+      while true; do
+        if [ "$(kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -o jsonpath='{.metadata.labels.sidecar\.microgateway\.airlock\.com/licensed}')" = 'true' ]; then
+          break
+        elif [ $i -gt 30 ]; then
+          fail 'Microgateway license is missing or invalid'
+        fi
+        sleep 2s
+        i=$((i+1))
+      done
+      echo "True"
+      echo ""
+
+      echo "### Create SidecarGateway resource for testing"
+      if ! create_sidecargateway ; then
+        fail 'Creation of SidecarGateway resource failed'
+      fi
+      echo ""
+
+      echo "### Waiting for '{{ include "airlock-microgateway.fullname" . }}-test-backend' to be ready"
+      if ! kubectl rollout status -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --timeout=90s; then
+        fail 'Timout occurred'
+      fi
+      echo ""
+
+      echo "### Waiting  for 'engine-config-valid' condition"
+      if ! kubectl wait -n {{ .Release.Namespace }} pods --field-selector=metadata.name={{ include "airlock-microgateway.fullname" . }}-test-backend-0 --timeout=90s --for=condition=microgateway.airlock.com/engine-config-valid=True; then
+        fail 'Configuration was never accepted by the Microgateway Engine'
+      fi
+      sleep 5s
+      echo ""
+      echo ""
+
+      echo "### Checking whether a valid request is successful and returns HTTP status code '200'"
+      out=$(curl -vsS --retry 3 --retry-connrefused --connect-timeout 10 "http://{{ include "airlock-microgateway.fullname" . }}-test-service:8080/" || true)
+      echo "Response:"
+      echo "${out}"
+      if ! echo "${out}" | grep -q "200 OK"; then
+        fail 'A valid request was not successful'
+      fi
+      echo ""
+      echo ""
+
+      echo "### Checking whether a request with an injection attack is blocked and returns HTTP status code '400'"
+      out=$(curl -vsS --retry 3 --retry-connrefused --connect-timeout 10 "http://{{ include "airlock-microgateway.fullname" . }}-test-service:8080/?token='%20UnION%20all%20select%20A" || true)
+      echo "Response:"
+      echo "${out}"
+      if ! echo "${out}" | grep -q "400 Bad Request"; then
+        fail 'A malicious request was not blocked'
+      fi
+      echo ""
+      echo ""
+
+      echo "### Installation of '{{ include "airlock-microgateway.fullname" . }}' succeeded"
+      exit 0
+  serviceAccountName: "{{ include "airlock-microgateway.fullname" . }}-tests"
+{{- end -}}
