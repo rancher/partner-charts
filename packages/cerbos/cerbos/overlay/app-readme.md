@@ -1,4 +1,4 @@
-##Cerbos
+## Cerbos
 
 Implement roles and permissions in your application in minutes with Cerbos. Cerbos is a plug and play collaborative authorization service for developer, product and security teams.
 
