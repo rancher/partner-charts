@@ -47,6 +47,15 @@ for inclusion in Rancher Partner charts. The Helm chart must:
 Testing these requirements will ensure that Rancher users can deploy your
 software correctly and easily.
 
+### Removal
+
+Charts will be removed from this repo if technical requirements are not met, if
+a serious security problem arises, or if the vendor's SUSE "Ready" partnership
+is no longer active. In these cases, the pull request that removes the chart
+will indicate an alternative source (e.g. the corresponding upstream project or
+[Rancher Prime Application Collection](https://apps.rancher.io)) if one is
+available.
+
 ## Workflow
 
 #### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. 
