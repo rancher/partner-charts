@@ -1,0 +1,62 @@
+# -- Ingest license key to use
+# licenseKey:
+
+controllerManager:
+  replicas: 1
+
+  kubeRbacProxy:
+    image:
+      repository: gcr.io/kubebuilder/kube-rbac-proxy
+      tag: v0.14.0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 5m
+        memory: 64Mi
+
+  manager:
+    image:
+      repository: newrelic/k8s-agents-operator
+      tag:
+      pullPolicy:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    serviceAccount:
+      create: true
+    # -- Source: https://docs.openshift.com/container-platform/4.10/operators/operator_sdk/osdk-leader-election.html
+    # -- Enable leader election mechanism for protecting against split brain if multiple operator pods/replicas are started
+    leaderElection:
+      enabled: true
+
+kubernetesClusterDomain: cluster.local
+
+metricsService:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  type: ClusterIP
+
+webhookService:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  type: ClusterIP
+
+# -- Source: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+# -- SecurityContext holds pod-level security attributes and common container settings
+securityContext:
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+
+# -- Admission webhooks make sure only requests with correctly formatted rules will get into the Operator
+admissionWebhooks:
+  create: true
