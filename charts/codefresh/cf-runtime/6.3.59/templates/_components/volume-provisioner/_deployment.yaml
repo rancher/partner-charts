@@ -1,0 +1,67 @@
+{{- define "dind-volume-provisioner.resources.deployment" -}}
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dind-volume-provisioner.fullname" . }}
+  labels:
+    {{- include "dind-volume-provisioner.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicasCount }}
+  strategy:
+    type: {{ .Values.updateStrategy.type }}
+  selector:
+    matchLabels:
+      {{- include "dind-volume-provisioner.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dind-volume-provisioner.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver ) . | nindent 8 }}
+      serviceAccountName: {{ include "dind-volume-provisioner.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: dind-volume-provisioner
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+        command:
+          - /usr/local/bin/dind-volume-provisioner
+          - -v=4
+          - --resync-period=50s
+        env:
+        {{- include "dind-volume-provisioner.environment-variables" . | nindent 8 }}
+        ports:
+        - name: http
+          containerPort: 8080
+        resources:
+          {{- toYaml .Values.resources | nindent 12  }}
+        volumeMounts:
+        {{- include "dind-volume-provisioner.volumeMounts.calculated" . | nindent 8 }}
+        {{- with .Values.extraVolumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      volumes:
+      {{- include "dind-volume-provisioner.volumes.calculated" . | nindent 6 }}
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end -}}
