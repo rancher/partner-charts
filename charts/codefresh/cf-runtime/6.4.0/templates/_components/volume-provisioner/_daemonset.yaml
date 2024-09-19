@@ -1,0 +1,98 @@
+{{- define "dind-volume-provisioner.resources.daemonset" -}}
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{ $localVolumeParentDir := .Values.storage.local.volumeParentDir  }}
+{{- if eq .Values.storage.backend "local" }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "dind-lv-monitor.fullname" . }}
+  labels:
+    {{- include "dind-lv-monitor.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "dind-lv-monitor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dind-lv-monitor.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver ) . | nindent 8 }}
+      serviceAccountName: {{ include "dind-volume-provisioner.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.volumePermissions.enabled }}
+      initContainers:
+      - name: volume-permissions
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.volumePermissions.image "context" .) }}
+        imagePullPolicy: {{ .Values.volumePermissions.image.pullPolicy | default "Always" }}
+        command:
+         - /bin/sh
+        args:
+         - -ec
+         - |
+           chown -R {{ .Values.podSecurityContext.runAsUser }}:{{ .Values.podSecurityContext.fsGroup }} {{ $localVolumeParentDir }}
+        volumeMounts:
+        - mountPath: {{ $localVolumeParentDir }}
+          name: dind-volume-dir
+        {{- if eq ( toString ( .Values.volumePermissions.securityContext.runAsUser )) "auto" }}
+        securityContext: {{- omit .Values.volumePermissions.securityContext "runAsUser" | toYaml | nindent 10 }}
+        {{- else }}
+        securityContext: {{- .Values.volumePermissions.securityContext | toYaml | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.volumePermissions.resources | nindent 10 }}
+      {{- end }}
+      containers:
+      - name: dind-lv-monitor
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+        {{- if .Values.containerSecurityContext.enabled }}
+        securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 10 }}
+        {{- end }}
+        command:
+          - /home/dind-volume-utils/bin/local-volumes-agent
+        env:
+          {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" .Values.env "context" .) | nindent 10 }}
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: VOLUME_PARENT_DIR
+            value: {{ $localVolumeParentDir }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10  }}
+        volumeMounts:
+        - mountPath: {{ $localVolumeParentDir }}
+          readOnly: false
+          name: dind-volume-dir
+        {{- with .Values.extraVolumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      volumes:
+      - name: dind-volume-dir
+        hostPath:
+          path: {{ $localVolumeParentDir }}
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}
+{{- end -}}
