@@ -188,6 +188,7 @@ Options for `upstream.yaml`
 | ArtifactHubRepo | ArtifactHubPackage | Defines the repo to access on Artifact Hub
 | AutoInstall | | Allows setting a required additional chart to deploy prior to current chart, such as a dedicated CRDs chart
 | ChartMetadata | | Allows setting/overriding the value of any valid [Chart.yaml variable](https://helm.sh/docs/topics/charts/#the-chartyaml-file)
+| Deprecated | | Whether the package is deprecated. Deprecated packages will not integrate any new chart versions from upstream
 | DisplayName | | Sets the name the chart will be listed under in the Rancher UI
 | Experimental | | Adds the 'experimental' annotation which adds a flag on the UI entry
 | Fetch | HelmChart, HelmRepo | Selects set of charts to pull from upstream.<br />- **latest** will pull only the latest chart version *default*<br />- **newer** will pull all newer versions than currently stored<br />- **all** will pull all versions
