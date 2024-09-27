@@ -47,15 +47,6 @@ for inclusion in Rancher Partner charts. The Helm chart must:
 Testing these requirements will ensure that Rancher users can deploy your
 software correctly and easily.
 
-### Removal
-
-Charts will be removed from this repo if technical requirements are not met, if
-a serious security problem arises, or if the vendor's SUSE "Ready" partnership
-is no longer active. In these cases, the pull request that removes the chart
-will indicate an alternative source (e.g. the corresponding upstream project or
-[Rancher Prime Application Collection](https://apps.rancher.io)) if one is
-available.
-
 ## Workflow
 
 #### 1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository, clone your fork, checkout the **main-source** branch and pull the latest changes. 
@@ -336,3 +327,18 @@ git commit -m "Migrating <vendor> <chart> chart"
 git push origin <your branch>
 ```
 #### 11. Open a pull request  to the `main-source` branch for review
+
+## Deprecation and Removal Policy
+
+Charts may be removed from this repository for a number of reasons:
+
+- Technical requirements are not met
+- A serious security problem is discovered
+- The vendor's SUSE "Ready" partnership is no longer active
+
+In these cases, the chart will first be deprecated. While a chart is deprecated,
+no new versions of the chart will be added to this repository. The chart will
+be left in the deprecated state for a minimum of 3 months, and then it will be
+removed. The pull requests that deprecate and remove the chart will indicate an
+alternative source (e.g. the corresponding upstream project or [Rancher Prime
+Application Collection](https://apps.rancher.io)) if one is available.
