@@ -1,0 +1,48 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ template "k8s-agents-operator.fullname" . }}-validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ template "k8s-agents-operator.fullname" . }}-serving-cert
+  labels:
+  {{- include "k8s-agents-operator.labels" . | nindent 4 }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: '{{ template "k8s-agents-operator.fullname" . }}-webhook-service'
+      namespace: '{{ .Release.Namespace }}'
+      path: /validate-newrelic-com-v1alpha1-instrumentation
+  failurePolicy: Fail
+  name: vinstrumentationcreateupdate.kb.io
+  rules:
+  - apiGroups:
+    - newrelic.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - instrumentations
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: '{{ template "k8s-agents-operator.fullname" . }}-webhook-service'
+      namespace: '{{ .Release.Namespace }}'
+      path: /validate-newrelic-com-v1alpha1-instrumentation
+  failurePolicy: Ignore
+  name: vinstrumentationdelete.kb.io
+  rules:
+  - apiGroups:
+    - newrelic.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - DELETE
+    resources:
+    - instrumentations
+  sideEffects: None
