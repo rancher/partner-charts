@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}-scripts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{ include "sawtooth.labels" . | nindent 4 }}
+data:
+  validator-env: |-
+    #!/bin/bash
+
+    BIN_DIR="/usr/local/bin"
+
+    function get_genesis_node() {
+      kubectl get configmap {{ include "common.names.fullname" . }}-genesis -o jsonpath='{.data.node}'
+    }
+
+    # Function to extract the numeric index from a pod name
+    function extract_index() {
+      local name="$1"
+      # Extract the number after the last hyphen
+      echo "${name##*-}"
+    }
+
+    # Function to get the node name for a pod
+    function get_node_for_pod() {
+      local pod_name="$1"
+      local index=$(extract_index "$pod_name")
+      LOCAL_NODES_START={{ .Values.sawtooth.multi_cluster.local_nodes.start | default 0 }}
+      OFFSET_INDEX=$((index + LOCAL_NODES_START))
+      echo "{{ include "common.names.fullname" . }}-$OFFSET_INDEX"
+    }
+
+    # Function to get all local pods
+    function get_local_pods() {
+      kubectl get pods -l 'app={{ include "common.names.fullname" . }},component=sawtooth' \
+        -o custom-columns=NAME:.metadata.name --no-headers=true | sort -t '-' -k3 -n
+    }
+
+    # Function to get all local nodes
+    function get_all_local_nodes() {
+      get_local_pods | while read -r pod; do
+        get_node_for_pod "$pod"
+      done
+    }
+
+    function get_all_peered_nodes() {
+      {{- $root := . }}
+      {{- if and (default false $root.Values.sawtooth.multi_cluster.enabled) (gt (len (default (list) $root.Values.sawtooth.multi_cluster.peered_nodes)) 0) }}
+        {{- range $peer := $root.Values.sawtooth.multi_cluster.peered_nodes }}
+            NODE_INDEX={{ $peer.index }}
+            echo "{{ include "common.names.fullname" $root }}-$NODE_INDEX"
+         {{- end }}
+      {{- else }}
+        # No peered nodes
+        :
+      {{- end }}
+    }
+
+
+    # Build local_host_list
+    local_host_list=()
+    while read -r node; do
+      local_host_list+=("$node")
+    done < <(get_all_local_nodes)
+
+    # Build peered_host_list
+    peered_host_list=()
+    while read -r node; do
+      if [ -n "$node" ]; then
+        peered_host_list+=("$node")
+      fi
+    done < <(get_all_peered_nodes)
+
+    # Combine to create host_list
+    host_list=("${local_host_list[@]}" "${peered_host_list[@]}")
+
+    # Identify current pod's node name using hostname
+    MY_NODE_NAME=$(get_node_for_pod "$(hostname)")
+
+    echo "Current Node Name: $MY_NODE_NAME"
+
+    # Initialize SEEDS and PEERS
+    SEEDS=""
+    PEERS=""
+    export DELAY=0
+
+    # Populate SEEDS and PEERS excluding the current node
+    for node in "${host_list[@]}"; do
+      if [ "$node" != "$MY_NODE_NAME" ]; then
+        SEEDS="$SEEDS --seeds tcp://$node:{{ .Values.sawtooth.ports.sawnet }}"
+        PEERS="$PEERS --peers tcp://$node:{{ .Values.sawtooth.ports.sawnet }}"
+      else
+        ((DELAY += 1))
+      fi
+    done
+
+    export SEEDS
+    export PEERS
+
+    echo "SEEDS: $SEEDS"
+    echo "PEERS: $PEERS"
+
+    # Set ADJUSTED_NODE_NAME
+    export ADJUSTED_NODE_NAME="$MY_NODE_NAME"
+
+    SET_GENESIS_NODE=${host_list[0]}
+
+    GENESIS_NODE=$(get_genesis_node)
+    while [ -z "$GENESIS_NODE" ]; do
+      sleep "$(echo $RANDOM | cut -c1-2)"
+      GENESIS_NODE=$(get_genesis_node)
+      if [ -z "$GENESIS_NODE" ]; then
+        "${BIN_DIR}/upsert_cm.sh" {{ include "common.names.fullname" . }}-genesis node "$SET_GENESIS_NODE"
+      fi
+    done
+    GENESIS_NODE=$(get_genesis_node)
+
+    # Upsert validator public and secret keys
+    "${BIN_DIR}/upsert_cm.sh" validator-public "$MY_NODE_NAME" "$(cat /etc/sawtooth/keys/validator.pub)"
+    "${BIN_DIR}/upsert_cm.sh" validator-secret "$MY_NODE_NAME" "$(cat /etc/sawtooth/keys/validator.priv)"
+
+    {{- if .Values.sawtooth.genesis.enabled }}
+    if [ "$GENESIS_NODE" = "$NODE_NAME" ]; then
+      export RUN_GENESIS=1
+      echo "This node ($NODE_NAME) is the Genesis node."
+      if [ ! -r /etc/sawtooth/initialized ]; then
+        PODCOUNT=$(get_local_pods | wc -l)
+        KEYCOUNT=$("${BIN_DIR}/get_local_public_keys.sh" "{{ .Release.Namespace }}" | wc -l)
+        echo "Waiting for all pods to be ready. Current PODCOUNT: $PODCOUNT, KEYCOUNT: $KEYCOUNT"
+        while [ "$PODCOUNT" != "$KEYCOUNT" ]; do
+          sleep "$DELAY"
+          PODCOUNT=$(get_local_pods | wc -l)
+          KEYCOUNT=$("${BIN_DIR}/get_local_public_keys.sh" "{{ .Release.Namespace }}" | wc -l)
+          echo "Still waiting. PODCOUNT: $PODCOUNT, KEYCOUNT: $KEYCOUNT"
+        done
+        echo "All pods are ready. PODCOUNT: $PODCOUNT, KEYCOUNT: $KEYCOUNT"
+      fi
+    else
+      export RUN_GENESIS=0
+      echo "This node ($NODE_NAME) is not the Genesis node."
+    fi
+    {{- end }}

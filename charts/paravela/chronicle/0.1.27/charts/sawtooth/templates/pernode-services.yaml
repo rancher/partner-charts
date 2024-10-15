@@ -1,0 +1,62 @@
+{{- /*
+This template generates per-node services for Sawtooth nodes.
+When multi_cluster.enabled is true, services are created only for local nodes.
+*/ -}}
+
+{{- $consensus := int .Values.sawtooth.consensus -}}
+{{- $statefulsetEnabled := .Values.sawtooth.statefulset.enabled -}}
+{{- if or $statefulsetEnabled (eq $consensus 100) -}}
+
+{{- $multiClusterEnabled := .Values.sawtooth.multi_cluster.enabled | default false -}}
+{{- $replicas := int (include "sawtooth.replicas" .) -}}
+
+{{- $localNodesStart := int (default 0 .Values.sawtooth.multi_cluster.local_nodes.start) -}}
+
+{{- /* Calculate the end index based on localNodesStart and replicas */ -}}
+{{- $localNodesEnd := add $localNodesStart $replicas | int -}}
+
+# Generating {{ $replicas }} per-node services starting from index {{ $localNodesStart }}
+{{- $ctx := . }}
+{{- range $i := until $replicas }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "sawtooth.labels" $ctx | nindent 4 }}
+    per-node: {{ include "common.names.fullname" $ctx }}-{{ $i }}
+    component: sawtooth
+  name: {{ include "common.names.fullname" $ctx }}-{{ add $i $localNodesStart }}
+  namespace: {{ $.Release.Namespace }}
+  {{- if and $multiClusterEnabled (include "utils.is_eks" $) }}
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+  {{- end }}
+spec:
+  selector:
+    {{- include "sawtooth.labels.matchLabels" $ctx | nindent 4 }}
+    statefulset.kubernetes.io/pod-name: {{ include "common.names.fullname" $ctx }}-{{ $i }}
+  {{ if $multiClusterEnabled }}
+  type: LoadBalancer
+  {{ else }}
+  type: ClusterIP
+  {{ end }}
+  publishNotReadyAddresses: true
+  ports:
+    - port: {{ include "sawtooth.ports.rest" $ctx }}
+      protocol: TCP
+      targetPort: {{ include "sawtooth.ports.rest" $ctx }}
+      name: rest-api
+    - port: {{ include "sawtooth.ports.sawnet" $ctx }}
+      protocol: TCP
+      targetPort: {{ include "sawtooth.ports.sawnet" $ctx }}
+      name: sawnet
+    - port: {{ include "sawtooth.ports.sawcomp" $ctx }}
+      protocol: TCP
+      targetPort: {{ include "sawtooth.ports.sawcomp" $ctx }}
+      name: sawcomp
+
+{{- end }}
+---
+# no enodes
+{{- end -}}
