@@ -1,0 +1,97 @@
+{{ include "check.validatePrometheusConfig" .}}
+{{- if .Values.prometheus.server.enabled -}}
+{{- $cluster_domain := "" -}}
+{{- with .Values.cluster.domainName -}}
+  {{- $cluster_domain = printf ".%s" . -}}
+{{- end -}}
+{{- $rbac := .Values.prometheus.rbac.create -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Release.Name }}-{{ .Values.prometheus.server.configMapOverrideName }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 1m
+      scrape_timeout: 10s
+      evaluation_interval: 1m
+    scrape_configs:
+      - job_name: httpServiceDiscovery
+        http_sd_configs:
+          - url: {{ printf "http://metering-svc.%s.svc%s:8000/v0/listScrapeTargets" .Release.Namespace $cluster_domain }}
+{{- if .Values.kanisterPodMetricSidecar.enabled }}
+      - job_name: pushAggregator
+        honor_timestamps: true
+        metrics_path: /v0/push-metric-agg/metrics
+        static_configs:
+          - targets:
+              - {{ printf "metering-svc.%s.svc%s:8000" .Release.Namespace $cluster_domain }}
+{{- end -}}
+{{- if .Values.prometheus.scrapeCAdvisor }}
+      - job_name: 'kubernetes-cadvisor'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+{{- end}}
+      - job_name: prometheus
+        metrics_path: {{ .Values.prometheus.server.baseURL }}metrics
+        static_configs:
+          - targets:
+              - "localhost:9090"
+            labels:
+              app: prometheus
+              component: server
+      - job_name: k10-pods
+        scheme: http
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              own_namespace: true
+            selectors:
+              - role: pod
+                label: "component=executor"
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: 8\d{3}
+{{- if ne .Values.metering.mode "airgap" }}
+      - job_name: k10-grafana
+        scheme: http
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              own_namespace: true
+            selectors:
+              - role: pod
+                label: "component=grafana"
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: 3000
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: grafana_http_request_duration_seconds_count
+            action: keep
+{{- end}}
+{{- end -}}
