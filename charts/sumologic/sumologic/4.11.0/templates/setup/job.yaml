@@ -1,0 +1,112 @@
+{{ $notificationEmails := list }}
+{{ if kindIs "string" .Values.sumologic.setup.monitors.notificationEmails }}
+{{ $notificationEmails = append $notificationEmails .Values.sumologic.setup.monitors.notificationEmails }}
+{{ else }}
+{{ $notificationEmails = concat $notificationEmails .Values.sumologic.setup.monitors.notificationEmails }}
+{{ end }}
+{{- if .Values.sumologic.setupEnabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sumologic.metadata.name.setup.job" . }}
+  namespace: {{ template "sumologic.namespace"  . }}
+  annotations:
+{{ include "sumologic.annotations.app.setup.helmsh" "3" | indent 4 }}
+  labels:
+    app: {{ template "sumologic.labels.app.setup.job" . }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+    {{- include "sumologic.labels.app.setup.pods" . | nindent 4 }}
+spec:
+  ttlSecondsAfterFinished: {{ .Values.sumologic.setup.job.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      annotations:
+{{- if .Values.sumologic.podAnnotations }}
+{{ toYaml .Values.sumologic.podAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.sumologic.setup.job.podAnnotations }}
+{{ toYaml .Values.sumologic.setup.job.podAnnotations | indent 8 }}
+{{- end }}
+      labels:
+{{- include "sumologic.labels.app.setup.pods" . | nindent 8 }}
+{{- if .Values.sumologic.podLabels }}
+{{ toYaml .Values.sumologic.podLabels | indent 8 }}
+{{- end }}
+{{- if .Values.sumologic.setup.job.podLabels }}
+{{ toYaml .Values.sumologic.setup.job.podLabels | indent 8 }}
+{{- end }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ template "sumologic.metadata.name.setup.roles.serviceaccount" . }}
+{{- if not (empty (include "setup.job.nodeSelector" .)) }}
+      nodeSelector:
+{{ include "setup.job.nodeSelector" . | indent 8 }}
+{{- end }}
+{{- if not (empty (include "setup.job.tolerations" .)) }}
+      tolerations:
+{{ include "setup.job.tolerations" . | indent 8 }}
+{{- end }}
+{{- if not (empty (include "setup.job.affinity" .)) }}
+      affinity:
+{{ include "setup.job.affinity" . | indent 8 }}
+{{- end }}
+      volumes:
+      - name: setup
+        configMap:
+          name: {{ template "sumologic.metadata.name.setup.configmap" . }}
+          defaultMode: 0777
+      - name: custom
+        configMap:
+          name: {{ template "sumologic.metadata.name.setup.configmap-custom" . }}
+          defaultMode: 0777
+      containers:
+      - name: setup
+        image: {{ .Values.sumologic.setup.job.image.repository }}:{{ .Values.sumologic.setup.job.image.tag }}
+        imagePullPolicy: {{ .Values.sumologic.setup.job.image.pullPolicy }}
+        command: ["/etc/terraform/setup.sh"]
+        resources:
+          {{- toYaml .Values.sumologic.setup.job.resources | nindent 10 }}
+        volumeMounts:
+        - name: setup
+          mountPath: /etc/terraform
+        - name: custom
+          mountPath: /customer-scripts
+        envFrom:
+        - secretRef:
+            name: {{ .Values.sumologic.envFromSecret | default (include "sumologic.metadata.name.setup.secret" .)}}
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SUMOLOGIC_BASE_URL
+{{- if eq (include "sumologic-mock.local-mode-enabled" .) "true" }}
+          value: http://{{ template "sumologic-mock.hostname" . }}:{{ template "sumologic-mock.port" . }}/terraform/api/
+{{- else }}
+          value: {{ .Values.sumologic.endpoint }}
+{{- end }}
+        - name: SUMOLOGIC_COLLECTOR_NAME
+          value: {{ include "terraform.collector.name" . }}
+        - name: SUMOLOGIC_SECRET_NAME
+          value: "{{ template "terraform.secret.name" }}"
+        - name: CHART_VERSION
+          value: "{{ .Chart.Version }}"
+        - name: SUMOLOGIC_MONITORS_ENABLED
+          value: "{{ .Values.sumologic.setup.monitors.enabled }}"
+        - name: SUMOLOGIC_MONITORS_STATUS
+          value: "{{ .Values.sumologic.setup.monitors.monitorStatus }}"
+{{- if not (empty $notificationEmails) }}
+        - name: SUMOLOGIC_MONITORS_NOTIFICATIONS_RECIPIENTS
+          value: |
+            {{ toRawJson $notificationEmails }}
+{{- end }}
+        - name: SUMOLOGIC_DASHBOARDS_ENABLED
+          value: "{{ .Values.sumologic.setup.dashboards.enabled }}"
+        {{- include "proxy-env-variables" . | nindent 8 -}}
+{{- if .Values.sumologic.setup.debug }}
+        - name: DEBUG_MODE
+          value: "true"
+{{- end }}
+      securityContext:
+        runAsUser: 1000
+{{- end }}
