@@ -202,7 +202,6 @@ Options for `upstream.yaml`
 | Namespace | | Addes the 'namespace' annotation which hard-codes a deployment namespace for the chart
 | PackageVersion | | Used to generate new patch version of chart
 | ReleaseName | | Sets the value of the release-name Rancher annotation. Defaults to the chart name
-| TrackVersions | HelmChart, HelmRepo | Allows selection of multiple *Major.Minor* versions to track from upstream independently.
 | Vendor | | Sets the vendor name providing the chart
 
 ## Examples
@@ -221,10 +220,6 @@ HelmChart: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
 Fetch: newer
-TrackVersions:
-  - 0.4
-  - 1.0
-  - 1.1
 ChartMetadata:
   kubeVersion: '>=1.21-0'
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg
