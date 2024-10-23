@@ -1,0 +1,27 @@
+{{- if and .Values.useYugabyteDB .Values.yugabytedb.service.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-yugabyted-ui
+  {{- if .Values.yugabytedb.service.annotations }}
+  annotations:
+{{ toYaml .Values.yugabytedb.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+spec:
+  ports:
+  - name: yugabyted-ui
+    port: {{ .Values.yugabytedb.service.yugabytedUiPort }}
+    targetPort: 15433
+  selector:
+    app: {{ .Release.Name }}-yugaware
+  type: {{ .Values.yugabytedb.service.type }}
+  {{- if and (eq .Values.yugabytedb.service.type "LoadBalancer") (.Values.yugabytedb.service.loadBalancerIP ) }}
+  loadBalancerIP: "{{ .Values.yugabytedb.service.loadBalancerIP }}"
+  {{- end }}
+{{- end }}
