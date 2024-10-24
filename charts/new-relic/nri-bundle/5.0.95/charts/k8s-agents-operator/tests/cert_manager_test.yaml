@@ -1,0 +1,85 @@
+suite: cert-manager
+templates:
+  - templates/certmanager.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: creates cert-manager resources if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+  - it: creates Issuer if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - equal:
+          path: kind
+          value: Issuer
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-selfsigned-issuer
+      - exists:
+          path: spec.selfSigned
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-selfsigned-issuer
+  - it: creates Certificate in default domain if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - equal:
+          path: kind
+          value: Certificate
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-serving-cert
+      - equal:
+          path: spec.dnsNames
+          value:
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc.cluster.local
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-serving-cert
+  - it: creates Certificate in custom domain if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+      kubernetesClusterDomain: kubey.test
+    asserts:
+      - equal:
+          path: kind
+          value: Certificate
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-serving-cert
+      - equal:
+          path: spec.dnsNames
+          value:
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc.kubey.test
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-serving-cert

@@ -188,7 +188,7 @@ Options for `upstream.yaml`
 | ArtifactHubRepo | ArtifactHubPackage | Defines the repo to access on Artifact Hub
 | AutoInstall | | Allows setting a required additional chart to deploy prior to current chart, such as a dedicated CRDs chart
 | ChartMetadata | | Allows setting/overriding the value of any valid [Chart.yaml variable](https://helm.sh/docs/topics/charts/#the-chartyaml-file)
-| Deprecated | | Whether the package is deprecated. Deprecated packages will not integrate any new chart versions from upstream
+| Deprecated | | Whether the package is deprecated. Deprecated packages will not integrate any new chart versions from upstream. Do not set this field directly; instead, use `partner-charts-ci deprecate`.
 | DisplayName | | Sets the name the chart will be listed under in the Rancher UI
 | Experimental | | Adds the 'experimental' annotation which adds a flag on the UI entry
 | Fetch | HelmChart, HelmRepo | Selects set of charts to pull from upstream.<br />- **latest** will pull only the latest chart version *default*<br />- **newer** will pull all newer versions than currently stored<br />- **all** will pull all versions
@@ -198,11 +198,10 @@ Options for `upstream.yaml`
 | GitSubdirectory | GitRepo | Allows selection of a subdirectory of the upstream git repo to pull the chart from
 | HelmChart | HelmRepo | Defines which chart to pull from the upstream Helm repo
 | HelmRepo | HelmChart | Defines the upstream Helm repo to pull from
-| Hidden | | Adds the 'hidden' annotation which hides the chart from the Rancher UI
+| Hidden | | Adds the 'hidden' annotation which hides the chart from the Rancher UI. Do not set this field directly unless the package is new; instead, use `partner-charts-ci hide`.
 | Namespace | | Addes the 'namespace' annotation which hard-codes a deployment namespace for the chart
 | PackageVersion | | Used to generate new patch version of chart
 | ReleaseName | | Sets the value of the release-name Rancher annotation. Defaults to the chart name
-| TrackVersions | HelmChart, HelmRepo | Allows selection of multiple *Major.Minor* versions to track from upstream independently.
 | Vendor | | Sets the vendor name providing the chart
 
 ## Examples
@@ -221,10 +220,6 @@ HelmChart: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
 Fetch: newer
-TrackVersions:
-  - 0.4
-  - 1.0
-  - 1.1
 ChartMetadata:
   kubeVersion: '>=1.21-0'
   icon: https://www.kubewarden.io/images/icon-kubewarden.svg

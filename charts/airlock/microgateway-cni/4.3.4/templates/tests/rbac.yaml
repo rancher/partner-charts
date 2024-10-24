@@ -1,0 +1,64 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway-cni.labelsWithoutComponent" . | nindent 4 }}
+    app.kubernetes.io/component: tests
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway-cni.labelsWithoutComponent" . | nindent 4 }}
+    app.kubernetes.io/component: tests
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+subjects:
+- kind: ServiceAccount
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway-cni.labelsWithoutComponent" . | nindent 4 }}
+    app.kubernetes.io/component: tests
+rules:
+- apiGroups:
+  - "apps"
+  resources:
+  - daemonsets
+  resourceNames:
+    - {{ include "airlock-microgateway-cni.fullname" . }}
+  verbs:
+  - get
+  - watch
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  verbs:
+  - get
+  - list
+{{- if .Values.rbac.createSCCRole }}
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - privileged
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+{{- end -}}
+{{- end -}}

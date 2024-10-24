@@ -1,0 +1,28 @@
+{{- define "runner.environment-variables.defaults" }}
+AGENT_MODE: InCluster
+SELF_DEPLOYMENT_NAME:
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+{{- end }}
+
+{{- define "runner.environment-variables.calculated" }}
+AGENT_ID: {{ include "runtime.runtime-environment-spec.agent-name" . }}
+CODEFRESH_HOST: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+CODEFRESH_IN_CLUSTER_RUNTIME: {{ include "runtime.runtime-environment-spec.runtime-name" . }}
+CODEFRESH_TOKEN:
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "runner.fullname" . }}
+      key: agent-codefresh-token
+DOCKER_REGISTRY: {{ .Values.global.imageRegistry }}
+{{- end }}
+
+{{- define "runner.environment-variables" }}
+{{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- $defaults := (include "runner.environment-variables.defaults" . | fromYaml) }}
+{{- $calculated := (include "runner.environment-variables.calculated" . | fromYaml) }}
+{{- $overrides := .Values.env }}
+{{- $mergedValues := mergeOverwrite (merge $defaults $calculated) $overrides }}
+{{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $mergedValues "context" .) }}
+{{- end }}
