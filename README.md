@@ -97,9 +97,12 @@ git push origin <your_branch>
 
 
 ## Testing your configuration
-If you would like to test your configuration using the CI tool, simply run the provided script in `scripts/pull-scripts` to download the binary. The 'auto' function is what will be run to download and store your chart.
 
-#### 1. Download the binary
+If you would like to test your configuration, download `partner-charts-ci`
+using `scripts/pull-scripts`. The `update` function can be used to download and
+integrate your chart.
+
+#### 1. Download `partner-charts-ci`
 ```bash
 scripts/pull-scripts
 ```
@@ -108,11 +111,11 @@ You can confirm the package entry with `bin/partner-charts-ci list` which will l
 ```bash
 export PACKAGE=<vendor>/<chart>
 ```
-#### 3. Run the 'auto' or 'stage' function
-The 'auto' subcommand will run the complete CI process.
-The 'stage' subcommand will do the same process but will not create a git commit when it completes.
+#### 3. Run the `update` subcommand
+The `update` subcommand will go through the CI process. Append the `--commit`
+flag if you want it to create a git commit when it completes.
 ```bash
-bin/partner-charts-ci auto
+bin/partner-charts-ci update --commit
 ```
 #### 4. Validate your changes
 ```bash
@@ -124,7 +127,7 @@ bin/partner-charts-ci validate
 a) Get scripts: scripts/pull-scripts
 b) List and find your company name/chart: bin/partner-charts-ci list | grep <vendor>
 c) set PACKAGE variable to your company/chart: export PACKAGE=<vendor>/<chart-name> or export PACKAGE=<vendor>
-d) Run bin/partner-charts-ci stage or auto # the new charts should be downloaded
+d) Run bin/partner-charts-ci update # the new charts should be downloaded
 ```
 2.  In your local `partner-charts` directory start a python3 http server:
 ```bash
@@ -298,7 +301,7 @@ git rm -r charts/<chart>
 #### 6. Stage your changes (To make sure the config works, and to setup the new charts and assets directories)
 ```bash
 export PACKAGE=<vendor>/<chart>
-bin/partner-charts-ci stage
+bin/partner-charts-ci update
 ```
 #### 7. Move the old assets files to the new directory (Sometimes this is unchanged but most times it does change)
 ```bash
