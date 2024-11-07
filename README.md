@@ -36,7 +36,7 @@ Once your software is certified SUSE "Ready", there are a few more requirements
 for inclusion in Rancher Partner charts. The Helm chart must:
 
 * be Helm 3 compatible
-* be in a hosted [Helm](https://helm.sh/docs/topics/chart_repository/)
+* be in a public [Helm](https://helm.sh/docs/topics/chart_repository/)
   (recommended) or Git repository that we can reference
 * have the following Rancher specific add-ons (More details on this below)
     * kubeVersion set in the chart's metadata
