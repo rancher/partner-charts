@@ -1,0 +1,93 @@
+# Default values for k8s-agents-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- This set this license key to use. Can be configured also with `global.licenseKey`
+licenseKey: ""
+
+controllerManager:
+  replicas: 1
+
+  kubeRbacProxy:
+    image:
+      repository: gcr.io/kubebuilder/kube-rbac-proxy
+      tag: v0.16.0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 5m
+        memory: 64Mi
+
+  manager:
+    image:
+      repository: newrelic/k8s-agents-operator
+      tag:
+      pullPolicy:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    serviceAccount:
+      create: true
+    # -- Source: https://docs.openshift.com/container-platform/4.10/operators/operator_sdk/osdk-leader-election.html
+    # -- Enable leader election mechanism for protecting against split brain if multiple operator pods/replicas are started
+    leaderElection:
+      enabled: true
+
+kubernetesClusterDomain: cluster.local
+
+metricsService:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  type: ClusterIP
+
+webhookService:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  type: ClusterIP
+
+# -- Source: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+# -- SecurityContext holds pod-level security attributes and common container settings
+securityContext:
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+
+# -- Admission webhooks make sure only requests with correctly formatted rules will get into the Operator
+admissionWebhooks:
+  create: true
+
+  ## TLS Certificate Option 1: Use Helm to automatically generate self-signed certificate.
+  ## certManager must be disabled and autoGenerateCert must be enabled.
+  autoGenerateCert:
+    # -- If true and certManager.enabled is false, Helm will automatically create a self-signed cert and secret for you.
+    enabled: true
+    # -- If set to true, new webhook key/certificate is generated on helm upgrade.
+    recreate: true
+    # -- Cert validity period time in days.
+    certPeriodDays: 365
+
+  ## TLS Certificate Option 2: Use certManager to generate self-signed certificate.
+  certManager:
+    # -- If true and autoGenerateCert.enabled is false, cert-manager will create a self-signed cert and secret for you.
+    enabled: false
+
+  ## TLS Certificate Option 3: Use your own self-signed certificate.
+  ## certManager and autoGenerateCert must be disabled and certFile, keyFile, and caFile must be set.
+  ## The chart reads the contents of the file paths with the helm .Files.Get function.
+  ## Refer to this doc https://helm.sh/docs/chart_template_guide/accessing_files/ to understand
+  ## limitations of file paths accessible to the chart.
+  # -- Path to your own PEM-encoded certificate.
+  certFile: ""
+  # -- Path to your own PEM-encoded private key.
+  keyFile: ""
+  # -- Path to the CA cert.
+  caFile: ""
