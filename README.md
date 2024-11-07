@@ -1,12 +1,11 @@
-# partner-charts
+# Rancher Partner Charts Repository
 
-Rancher Partner Charts is a collection of Helm charts from SUSE partners that
-are certified to run on Rancher-supported Kubernetes distributions. These charts
-are served from this repository so that users can deploy these charts directly
-from the Apps view in Rancher Manager.
+The Rancher Partner Charts Repository is a collection of Helm charts from
+SUSE partners that are certified to run on Rancher-supported Kubernetes
+distributions. Users can deploy these charts directly from the Apps view in
+Rancher Manager. Minor Rancher-specific modifications are added to them in order
+to provide the best possible experience using them from within Rancher.
 
-Rancher-specific modifications are applied to these charts, and overlay files
-may be added as well. 
 
 ## SUSE Ready Partnership
 
