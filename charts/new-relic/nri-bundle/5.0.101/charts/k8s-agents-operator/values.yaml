@@ -1,0 +1,132 @@
+# Default values for k8s-agents-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- This set this license key to use. Can be configured also with `global.licenseKey`
+licenseKey: ""
+
+# -- Additional labels for chart pods
+podLabels: {}
+# -- Additional labels for chart objects
+labels: {}
+# -- Annotations to be added to the deployment.
+podAnnotations: {}
+
+# -- Sets pod's priorityClassName. Can be configured also with `global.priorityClassName`
+priorityClassName: ""
+
+# -- Sets pod's dnsConfig. Can be configured also with `global.dnsConfig`
+dnsConfig: {}
+
+# -- Sets all pods' node selector. Can be configured also with `global.nodeSelector`
+nodeSelector: {}
+# -- Sets all pods' tolerations to node taints. Can be configured also with `global.tolerations`
+tolerations: []
+# -- Sets all pods' affinities. Can be configured also with `global.affinity`
+affinity: {}
+# -- Sets all security contexts (at pod level).
+# -- Source: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+# -- SecurityContext holds pod-level security attributes and common container settings
+podSecurityContext:
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+# -- Sets all security context (at container level). Can be configured also with `global.securityContext.container`
+containerSecurityContext: {}
+
+kubernetesClusterDomain: cluster.local
+
+controllerManager:
+  replicas: 1
+
+  manager:
+    image:
+      # -- Sets the repository and image to use for the manager. Please ensure you're using trusted New Relic images.
+      repository: newrelic/k8s-agents-operator
+      # -- Sets the manager image version to retrieve. Could be a tag i.e. "v0.17.0" or a SHA digest i.e. "sha256:e2399e70e99ac370ca6a3c7e5affa9655da3b246d0ada77c40ed155b3726ee2e"
+      version:
+      pullPolicy:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    # -- Sets security context (at container level) for the manager. Overrides `containerSecurityContext` and `global.containerSecurityContext`
+    containerSecurityContext: {}
+    # -- Source: https://docs.openshift.com/container-platform/4.10/operators/operator_sdk/osdk-leader-election.html
+    # -- Enable leader election mechanism for protecting against split brain if multiple operator pods/replicas are started
+    leaderElection:
+      enabled: true
+
+  kubeRbacProxy:
+    image:
+      # -- Sets the repository and image to use for kube-rbac-proxy. Please ensure you're using a trusted image.
+      repository: gcr.io/kubebuilder/kube-rbac-proxy
+      # -- Sets the kube-rbac-proxy image version to retrieve. Could be a tag i.e. "v0.16.0" or a SHA digest i.e. "sha256:771a9a173e033a3ad8b46f5c00a7036eaa88c8d8d1fbd89217325168998113ea"
+      version: sha256:771a9a173e033a3ad8b46f5c00a7036eaa88c8d8d1fbd89217325168998113ea
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 5m
+        memory: 64Mi
+    # -- Sets security context (at container level) for kubeRbacProxy. Overrides `containerSecurityContext` and `global.containerSecurityContext`
+    containerSecurityContext: {}
+
+# -- Settings controlling ServiceAccount creation
+# @default -- See `values.yaml`
+serviceAccount:
+  # serviceAccount.create -- (bool) Specifies whether a ServiceAccount should be created
+  # @default -- `true`
+  create:
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  # Specify any annotations to add to the ServiceAccount
+  annotations:
+
+metricsService:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  type: ClusterIP
+
+webhookService:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  type: ClusterIP
+
+# -- Admission webhooks make sure only requests with correctly formatted rules will get into the Operator
+admissionWebhooks:
+  create: true
+
+  ## TLS Certificate Option 1: Use Helm to automatically generate self-signed certificate.
+  ## certManager must be disabled and autoGenerateCert must be enabled.
+  autoGenerateCert:
+    # -- If true and certManager.enabled is false, Helm will automatically create a self-signed cert and secret for you.
+    enabled: true
+    # -- If set to true, new webhook key/certificate is generated on helm upgrade.
+    recreate: true
+    # -- Cert validity period time in days.
+    certPeriodDays: 365
+
+  ## TLS Certificate Option 2: Use certManager to generate self-signed certificate.
+  certManager:
+    # -- If true and autoGenerateCert.enabled is false, cert-manager will create a self-signed cert and secret for you.
+    enabled: false
+
+  ## TLS Certificate Option 3: Use your own self-signed certificate.
+  ## certManager and autoGenerateCert must be disabled and certFile, keyFile, and caFile must be set.
+  ## The chart reads the contents of the file paths with the helm .Files.Get function.
+  ## Refer to this doc https://helm.sh/docs/chart_template_guide/accessing_files/ to understand
+  ## limitations of file paths accessible to the chart.
+  # -- Path to your own PEM-encoded certificate.
+  certFile: ""
+  # -- Path to your own PEM-encoded private key.
+  keyFile: ""
+  # -- Path to the CA cert.
+  caFile: ""
