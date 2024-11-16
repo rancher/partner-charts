@@ -1,0 +1,222 @@
+Thank you for installing Kasten’s K10 Data Management Platform {{ .Chart.Version }}!
+{{- if .Values.fips.enabled }}
+
+You are operating in FIPS mode.
+{{- end }}
+
+Documentation can be found at https://docs.kasten.io/.
+
+How to access the K10 Dashboard:
+
+{{- if .Values.ingress.create }}
+
+You are using the system's default ingress controller. Please ask your
+administrator for instructions on how to access the cluster.
+
+WebUI location:  https://{{ default "Your ingress endpoint" .Values.ingress.host }}/{{ default .Release.Name .Values.ingress.urlPath }}
+
+In addition,
+{{- end }}
+
+{{- if .Values.route.enabled }}
+WebUI location: https://{{ default "k10-route endpoint" .Values.route.host}}/{{ default .Release.Name .Values.route.path }}/
+
+In addition,
+{{- end }}
+
+{{- if .Values.externalGateway.create }}
+{{- if .Values.externalGateway.fqdn.name }}
+
+The K10 Dashboard is accessible via {{ if or .Values.secrets.tlsSecret (and .Values.secrets.apiTlsCrt .Values.secrets.apiTlsKey) .Values.externalGateway.awsSSLCertARN }}https{{ else }}http{{ end }}://{{ .Values.externalGateway.fqdn.name }}/{{ .Release.Name }}/#/
+
+In addition,
+{{- else }}
+
+The K10 Dashboard is accessible via a LoadBalancer. Find the service's EXTERNAL IP using:
+  `kubectl get svc gateway-ext --namespace {{ .Release.Namespace }} -o wide`
+And use it in following URL
+ `http://SERVICE_EXTERNAL_IP/{{ .Release.Name }}/#/`
+
+In addition,
+{{- end }}
+{{- end }}
+
+To establish a connection to it use the following `kubectl` command:
+
+`kubectl --namespace {{ .Release.Namespace }} port-forward service/gateway 8080:{{ .Values.gateway.service.externalPort }}`
+
+The Kasten dashboard will be available at: `http{{ if or .Values.secrets.tlsSecret (and .Values.secrets.apiTlsCrt .Values.secrets.apiTlsKey) .Values.externalGateway.awsSSLCertARN }}s{{ end }}://127.0.0.1:8080/{{ .Release.Name }}/#/`
+{{ if and ( .Values.metering.awsManagedLicense )  ( not .Values.metering.licenseConfigSecretName ) }}
+
+IAM Role created during installation need to have permissions that allow K10 to
+perform operations on EBS and, if needed, EFS and S3. Please create a policy
+with required permissions, and use the commands below to attach the policy to
+the service account.
+
+`ROLE_NAME=$(kubectl get serviceaccount {{ .Values.serviceAccount.name }} -n {{ .Release.Namespace }} -ojsonpath="{.metadata.annotations['eks\.amazonaws\.com/role-arn']}" | awk -F '/' '{ print $(NF) }')`
+`aws iam attach-role-policy --role-name "${ROLE_NAME}" --policy-arn <POLICY NAME>`
+
+Refer to `https://docs.kasten.io/latest/install/aws-containers-anywhere/aws-containers-anywhere.html#attaching-permissions-for-eks-installations`
+for more information.
+
+{{ end }}
+
+{{- if .Values.restore }}
+{{- if or (empty .Values.restore.copyImagePullSecrets) (.Values.restore.copyImagePullSecrets) }}
+--------------------
+Removal warning: The helm field `restore.copyImagePullSecrets` has been removed in version 6.0.12. K10 no longer copies the `imagePullSecret` to the application namespace.
+--------------------
+{{- end }}
+{{- end }}
+
+{{- if or (not (empty .Values.garbagecollector.importRunActions)) (not (empty .Values.garbagecollector.backupRunActions)) (not (empty .Values.garbagecollector.retireActions)) }}
+Deprecation warning: The `garbagecollector.importRunActions`, `garbagecollector.backupRunActions`, `garbagecollector.retireActions`
+blocks within the helm chart values have been replaced with `garbagecollector.actions`.
+{{- end }}
+
+{{- if .Values.secrets.azureADEndpoint  }}
+--------------------
+Deprecation warning: The helm field `secret.azureADEndpoint` is deprecated and will be removed in upcoming release, we recommend you to use correct respective field, i.e., `secrets.microsoftEntraIDEndpoint`.
+--------------------
+{{- end }}
+
+
+{{- if .Values.secrets.azureADResourceID  }}
+--------------------
+Deprecation warning: The helm field `secret.azureADResourceID` is deprecated and will be removed in upcoming release, we recommend you to use correct respective field, i.e., `secrets.microsoftEntraIDResourceID`
+--------------------
+{{- end }}
+
+{{- if .Values.grafana.enabled }}
+--------------------
+Deprecation warning: Grafana will no longer be included in the Veeam Kasten installation process from the upcoming release 7.5.0. Upon upgrading to this (7.5.0) version, the integrated version of Grafana will be removed. It is important to install Grafana separately and follow the procedure described in our knowledge base article (https://www.veeam.com/kb4635) to configure the Kasten dashboards and alerts before upgrading Kasten to version 7.5.0.
+--------------------
+{{- end }}
+
+{{- if or .Values.kanisterPodCustomLabels .Values.kanisterPodCustomAnnotations }}
+--------------------
+Deprecation warning: The Helm values `kanisterPodCustomLabels` and `kanisterPodCustomAnnotations` are deprecated and will be removed in an upcoming release. Please use `global.podLabels` and `global.podAnnotations` to set labels and annotations to all the Kasten pods globally.
+--------------------
+{{- end }}
+
+{{- if or .Values.secrets.apiTlsCrt .Values.secrets.apiTlsKey }}
+--------------------
+Deprecation warning: The Helm values `secrets.apiTlsCrt` and `secrets.apiTlsKey` are deprecated and will be removed in an upcoming release. Please use `secrets.tlsSecret` to specify the name of a secret of type `kubernetes.io/tls`. This reduces the security risk of caching the certificates and keys in the shell history.
+--------------------
+{{- end }}
+
+{{- if .Values.executorReplicas }}
+--------------------
+Deprecation warning: The Helm value 'executorReplicas' is deprecated and will be removed in an upcoming release. Please use 'limiter.executorReplicas' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanisterPodMetricSidecar.enabled }}
+--------------------
+Deprecation warning: The Helm value 'kanisterPodMetricSidecar.enabled' is deprecated and will be removed in an upcoming release. Please use 'workerPodMetricSidecar.enabled' instead.
+--------------------
+{{- end }}
+{{- if .Values.services.executor.workerCount }}
+--------------------
+Deprecation warning: The Helm value 'services.executor.workerCount' is deprecated and will be removed in an upcoming release. Please use 'limiter.executorThreads' instead.
+--------------------
+{{- end }}
+{{- if .Values.services.executor.maxConcurrentRestoreCsiSnapshots }}
+--------------------
+Deprecation warning: The Helm value 'services.executor.maxConcurrentRestoreCsiSnapshots' is deprecated and will be removed in an upcoming release. Please use 'limiter.csiSnapshotRestoresPerAction' instead.
+--------------------
+{{- end }}
+{{- if .Values.services.executor.maxConcurrentRestoreGenericVolumeSnapshots }}
+--------------------
+Deprecation warning: The Helm value 'services.executor.maxConcurrentRestoreGenericVolumeSnapshots' is deprecated and will be removed in an upcoming release. Please use 'limiter.volumeRestoresPerAction' instead.
+--------------------
+{{- end }}
+{{- if .Values.services.executor.maxConcurrentRestoreWorkloads }}
+--------------------
+Deprecation warning: The Helm value 'services.executor.maxConcurrentRestoreWorkloads' is deprecated and will be removed in an upcoming release. Please use 'limiter.workloadRestoresPerAction' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.backupTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.backupTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.blueprintBackup' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.restoreTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.restoreTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.blueprintRestore' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.deleteTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.deleteTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.blueprintDelete' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.hookTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.hookTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.blueprintHooks' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.checkRepoTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.checkRepoTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.checkRepoPodReady' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.statsTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.statsTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.statsPodReady' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.efsPostRestoreTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.efsPostRestoreTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.efsRestorePodReady' instead.
+--------------------
+{{- end }}
+{{- if .Values.kanister.podReadyWaitTimeout }}
+--------------------
+Deprecation warning: The Helm value 'kanister.podReadyWaitTimeout' is deprecated and will be removed in an upcoming release. Please use 'timeout.workerPodReady' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.concurrentSnapConversions }}
+--------------------
+Deprecation warning: The Helm value 'limiter.concurrentSnapConversions' is deprecated and will be removed in an upcoming release. Please use 'limiter.snapshotExportsPerAction' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.genericVolumeSnapshots }}
+--------------------
+Deprecation warning: The Helm value 'limiter.genericVolumeSnapshots' is deprecated and will be removed in an upcoming release. Please use 'limiter.genericVolumeBackupsPerCluster' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.genericVolumeCopies }}
+--------------------
+Deprecation warning: The Helm value 'limiter.genericVolumeCopies' is deprecated and will be removed in an upcoming release. Please use 'limiter.snapshotExportsPerCluster' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.genericVolumeRestores }}
+--------------------
+Deprecation warning: The Helm value 'limiter.genericVolumeRestores' is deprecated and will be removed in an upcoming release. Please use 'limiter.volumeRestoresPerCluster' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.csiSnapshots }}
+--------------------
+Deprecation warning: The Helm value 'limiter.csiSnapshots' is deprecated and will be removed in an upcoming release. Please use 'limiter.csiSnapshotsPerCluster' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.providerSnapshots }}
+--------------------
+Deprecation warning: The Helm value 'limiter.providerSnapshots' is deprecated and will be removed in an upcoming release. Please use 'limiter.directSnapshotsPerCluster' instead.
+--------------------
+{{- end }}
+{{- if .Values.limiter.imageCopies }}
+--------------------
+Deprecation warning: The Helm value 'limiter.imageCopies' is deprecated and will be removed in an upcoming release. Please use 'limiter.imageCopiesPerCluster' instead.
+--------------------
+{{- end }}
+{{- if .Values.maxJobWaitDuration }}
+--------------------
+Deprecation warning: The Helm value 'maxJobWaitDuration' is deprecated and will be removed in an upcoming release. Please use 'timeout.jobWait' instead.
+--------------------
+{{- end }}
+{{- if .Values.forceRootInKanisterHooks }}
+--------------------
+Deprecation warning: The Helm value 'forceRootInKanisterHooks' is deprecated and will be removed in an upcoming release. Please use 'forceRootInBlueprintActions' instead.
+--------------------
+{{- end }}

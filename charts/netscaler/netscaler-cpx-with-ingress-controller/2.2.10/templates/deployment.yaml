@@ -1,0 +1,479 @@
+apiVersion: apps/v1
+{{- if or .Values.cpxBgpRouter .Values.daemonSet }}
+kind: DaemonSet
+{{- else }}
+kind: Deployment
+{{- end }}
+metadata:
+  name: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+{{- if not ( or .Values.cpxBgpRouter .Values.daemonSet ) }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  template:
+    metadata:
+      name: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+      labels:
+        app: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+        adc: "citrix"
+      annotations:
+{{- if .Values.analyticsConfig.timeseries.metrics.enableNativeScrape }}
+        netscaler.prometheus/scrape: "true"
+        netscaler.prometheus/port: {{ .Values.mgmtHttpPort | quote }}
+{{- end }}
+{{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "netscaler-cpx-ingress-controller.serviceAccountName" . }}
+{{- if .Values.cpxBgpRouter }}
+      hostNetwork: true
+{{- end }}
+{{- if .Values.hostName }}
+      hostname: {{ .Values.hostName }}-{{ .Release.Namespace }}
+{{- end }}
+      containers:
+        - name: cpx-ingress
+          image: "{{ tpl .Values.image . }}"
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          tty: true
+          securityContext:
+             privileged: true
+          env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+{{- if .Values.cpxLicenseAggregator }}
+          - name: "CLA"
+            value: {{ .Values.cpxLicenseAggregator | quote }}
+{{- else if .Values.ADMSettings.licenseServerIP }}
+          - name: "LS_IP"
+            value: {{ .Values.ADMSettings.licenseServerIP | quote }}
+          - name: "LS_PORT"
+            value: {{ .Values.ADMSettings.licenseServerPort | quote }}
+{{- end }}
+          - name: "EULA"
+            value: "{{ .Values.license.accept }}"
+          - name: "KUBERNETES_TASK_ID"
+            value: ""
+{{- if not .Values.cpxBgpRouter }}
+          - name: "MGMT_HTTP_PORT"
+            value: {{ .Values.mgmtHttpPort | quote }}
+          - name: "MGMT_HTTPS_PORT"
+            value: {{ .Values.mgmtHttpsPort | quote }}
+{{- end }}
+{{- if .Values.cpxBgpRouter }}
+          - name: NS_NETMODE
+            value: HOST
+{{- if .Values.nsIP }}
+          - name: "NS_IP"
+            value: "{{ .Values.nsIP }}"
+{{- end }}
+{{- if .Values.nsGateway }}
+          - name: "NS_GATEWAY"
+            value: "{{ .Values.nsGateway }}"
+{{- end }}
+{{- end }}
+{{- if .Values.ADMSettings.ADMIP }}
+          - name: "NS_MGMT_SERVER"
+            value: {{ .Values.ADMSettings.ADMIP | quote }}
+          - name: "NS_HTTP_PORT"
+            value: {{ .Values.mgmtHttpPort | quote }}
+          - name: "NS_HTTPS_PORT"
+            value: {{ .Values.mgmtHttpsPort | quote }}
+{{- end }}
+##Need to set env var BANDWIDTH in order to provide Bandwidth license to NetScaler CPX from ADM or CPX License Aggregator
+{{- if or .Values.ADMSettings.licenseServerIP .Values.cpxLicenseAggregator }}
+{{- if .Values.ADMSettings.bandWidthLicense }}
+          - name: "BANDWIDTH"
+            value: {{ .Values.ADMSettings.bandWidth | quote }}
+{{- end }}
+##for multiple-PE support, need to set CPX_CORES
+{{- if or .Values.ADMSettings.vCPULicense .Values.ADMSettings.bandWidthLicense }}
+          - name: "CPX_CORES"
+            value: {{ .Values.ADMSettings.cpxCores | default 1 | quote }}
+          - name: "EDITION"
+            value: {{ .Values.ADMSettings.licenseEdition }}
+{{- end }}
+{{- if .Values.ADMSettings.platform }}
+          - name: "CPX_CORES"
+            value: {{ .Values.ADMSettings.cpxCores | default 1 | quote }}
+          - name: "PLATFORM"
+            value: "CP1000"
+{{- end }}
+{{- end }}
+{{- if or (.Values.ADMSettings.ADMIP) (.Values.ADMSettings.licenseServerIP) }}
+          - name: NS_MGMT_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ required "Provide Secret for ADM/LicenseServer credentials" .Values.ADMSettings.loginSecret }}
+                key: username
+          - name: NS_MGMT_PASS
+            valueFrom:
+              secretKeyRef:
+                name: {{ required "Provide Secret for ADM/LicenseServer credentials" .Values.ADMSettings.loginSecret }}
+                key: password
+{{- end }}
+{{- if .Values.exporter.required }}
+          - name: "METRICS_EXPORTER_PORT"
+            value: {{ .Values.exporter.ports.containerPort | quote }}
+{{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /var/deviceinfo
+              name: shared-data
+            - mountPath: /cpx/
+              name: cpx-volume
+            - mountPath: /cpx/conf
+              name: cpx-volume-conf
+            - mountPath: /cpx/bootup_conf
+              name: bootupconfig-volume
+{{- if .Values.enableStartupProbe }}
+          startupProbe:
+          {{- toYaml .Values.startupProbe | nindent 12 }}
+{{- end }}
+{{- if .Values.enableLivenessProbe }}
+          livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 12 }}
+{{- end }}
+{{- if .Values.nsic.required }}
+        # Add nsic as a sidecar
+        - name: nsic
+          image: "{{ tpl .Values.nsic.image . }}"
+          imagePullPolicy: {{ .Values.nsic.pullPolicy }}
+          env:
+{{- if .Values.nsic.enableLivenessProbe }}
+          - name: "LIVENESS_FILE_PATH"
+            value: '/tmp/liveness_path.log'
+{{- end }}
+          - name: "ENABLE_LIVENESS_PROBE"
+            value: {{ .Values.nsic.enableLivenessProbe | quote }}
+{{- if .Values.analyticsConfig.timeseries.metrics.enableNativeScrape }}
+          - name: "PROM_USER"
+            valueFrom:
+             secretKeyRef:
+              name: {{ required "Provide Secret for read only user for native Prometheus mode" .Values.nsic.prometheusCredentialSecret }}
+              key: username
+          - name: "PROM_PASSWORD"
+            valueFrom:
+             secretKeyRef:
+              name: {{ required "Provide Secret for read only user for native Prometheus mode" .Values.nsic.prometheusCredentialSecret }}
+              key: password
+{{- end }}
+          - name: "EULA"
+            value: "{{ .Values.license.accept }}"
+{{- if .Values.cpxBgpRouter }}
+          - name: "NS_IP"
+            value: {{ .Values.nsIP | default  "192.168.1.2" | quote }}
+{{- else }}
+          - name: "NS_IP"
+            value: "127.0.0.1"
+{{- end }}
+{{- if .Values.rbacRole }}
+          - name: "SCOPE"
+            value: "local"
+{{- end }}
+          - name: "NS_APPS_NAME_PREFIX"
+            value: {{ .Values.entityPrefix | default "k8s"| quote }}
+          - name: "NS_DEPLOYMENT_MODE"
+            value: "SIDECAR"
+{{- if and .Values.openshift .Values.routeLabels }}
+          - name: "ROUTE_LABELS"
+            value: {{ .Values.routeLabels | quote}}
+{{- end }}
+{{- if and .Values.openshift .Values.namespaceLabels }}
+          - name: "NAMESPACE_LABELS"
+            value: {{ .Values.namespaceLabels | quote }}
+{{- end }}
+{{- if .Values.openshift }}
+          - name: "PLATFORM"
+            value: "OPENSHIFT"
+{{- else }}
+          - name: "PLATFORM"
+            value: "KUBERNETES"
+{{- end  }}
+{{- if .Values.cpxBgpRouter }}
+{{- if eq (upper .Values.nsProtocol) "HTTPS" }}
+          - name: NS_PROTOCOL
+            value: HTTPS
+          - name: NS_PORT
+            value: "9443"
+{{- else }}
+          - name: NS_PROTOCOL
+            value: HTTP
+          - name: NS_PORT
+            value: "9080"
+{{- end }}
+{{- if .Values.bgpPort }}
+          - name: "BGP_PORT"
+            value: {{ .Values.bgpPort | quote }}
+{{- end }}
+{{- end }}
+          - name: "NS_ENABLE_MONITORING"
+            value: "YES"
+{{- if .Values.logProxy }}
+          - name: "NS_LOGPROXY"
+            value: {{ .Values.logProxy | quote }}
+{{- end }}
+{{- if .Values.ingressIP }}
+          - name: "NS_VIP"
+            value: {{ .Values.ingressIP | quote }}
+{{- end }}
+{{- if .Values.nitroReadTimeout }}
+          - name: "NS_NITRO_READ_TIMEOUT"
+            value: "{{ .Values.nitroReadTimeout }}"
+{{- end }}
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: spec.nodeName
+{{- if .Values.kubernetesURL }}
+          - name: "kubernetes_url"
+            value: "{{ .Values.kubernetesURL }}"
+{{- end }}
+{{- if .Values.disableOpenshiftRoutes }}
+          - name: "DISABLE_OPENSHIFT_ROUTES"
+            value: "{{ .Values.disableOpenshiftRoutes }}"
+{{- end }}
+{{- if .Values.nsConfigDnsRec }}
+          - name: "NS_CONFIG_DNS_REC"
+            value: "{{ .Values.nsConfigDnsRec }}"
+{{- end }}
+{{- if .Values.nsSvcLbDnsRec }}
+          - name: "NS_SVC_LB_DNS_REC"
+            value: "{{ .Values.nsSvcLbDnsRec }}"
+{{- end }}
+{{- if .Values.optimizeEndpointBinding }}
+          - name: "OPTIMIZE_ENDPOINT_BINDING"
+            value: "{{ .Values.optimizeEndpointBinding }}"
+{{- end }} 
+{{- if .Values.cpxBgpRouter }}
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add:
+              - NET_ADMIN
+{{- end }}
+          args:
+            - --configmap
+              {{ .Release.Namespace }}/{{ include "cpxconfigmap.fullname" . }}
+{{- if .Values.ipam }}
+            - --ipam
+              citrix-ipam-controller
+{{- end }}
+{{- if .Values.disableAPIServerCertVerify }}
+            - --disable-apiserver-cert-verify
+              {{ .Values.disableAPIServerCertVerify }}
+{{- end }}
+{{- if .Values.cpxBgpRouter }}
+            - --deployment-type
+              kube-bgp-router
+{{- end }}
+{{- if .Values.ingressClass }}
+            - --ingress-classes
+{{- range .Values.ingressClass}}
+              {{.}}
+{{- end }}
+{{- end }}
+{{- if .Values.defaultSSLCertSecret }}
+            - --default-ssl-certificate
+              {{ .Release.Namespace }}/{{ .Values.defaultSSLCertSecret }}
+{{- end }}
+{{- if .Values.defaultSSLSNICertSecret }}
+            - --default-ssl-sni-certificate
+              {{ .Release.Namespace }}/{{ .Values.defaultSSLSNICertSecret }}
+{{- end }}
+{{- if .Values.updateIngressStatus }}
+            - --update-ingress-status
+              yes
+{{- end }}
+          volumeMounts:
+            - mountPath: /var/deviceinfo
+              name: shared-data
+{{- if .Values.nsic.enableReadinessProbe }}
+          readinessProbe:
+          {{- toYaml .Values.nsic.readinessProbe | nindent 12 }}
+{{- end }}
+{{- if .Values.nsic.enableLivenessProbe }}
+          livenessProbe:
+          {{- toYaml .Values.nsic.livenessProbe | nindent 12 }}
+{{- end }}
+          resources:
+            {{- toYaml .Values.nsic.resources | nindent 12 }}
+{{- end }}
+{{- if .Values.exporter.required }}
+        - name: exporter
+          image: "{{ tpl .Values.exporter.image . }}"
+          imagePullPolicy: {{ .Values.exporter.pullPolicy }}
+          args:
+            - "--secure=no"
+{{- if .Values.cpxBgpRouter }}
+            - --target-nsip={{ .Values.nsIP | default "192.168.1.2" }}:9080
+{{- else }}
+            - "--target-nsip=127.0.0.1"
+{{- end }}
+            - "--port={{ .Values.exporter.ports.containerPort }}"
+          env:
+          - name: "NS_DEPLOYMENT_MODE"
+            value: "SIDECAR"
+          securityContext:
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /var/deviceinfo
+              name: shared-data
+          resources:
+            {{- toYaml .Values.exporter.resources | nindent 12 }}
+{{- end }}
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+        - name: cpx-volume
+          emptyDir: {}
+        - name: cpx-volume-conf
+          emptyDir: {}
+        - name: bootupconfig-volume
+          configMap:
+            name: {{ include "bootupconfigmap.fullname" . }}
+{{- if and .Values.nodeSelector.key .Values.nodeSelector.value }}
+      nodeSelector:
+        {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}
+{{- end }}
+{{- if .Values.tolerations }}
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+
+---
+{{- if .Values.cpxBgpRouter }}
+{{- if .Values.exporter.required }}
+apiVersion: v1
+kind: Service
+metadata:
+   name: {{ include "cpxexporter.fullname" . }}
+   labels:
+     app: {{ include "cpxexporter.fullname" . }}
+     service-type: {{ include "cpxservicemonitorlabel" . }}
+spec:
+   type: ClusterIP
+   ports:
+   - port: {{ .Values.exporter.ports.containerPort }}
+     targetPort: {{ .Values.exporter.ports.containerPort }}
+     name: exporter-port
+   selector:
+     app: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+{{- end }}
+{{- else }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cpxservice.fullname" . }}
+  labels:
+    app: cpx-service
+    service-type: {{ include "cpxservicemonitorlabel" . }}
+    cpx: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+{{- if .Values.serviceAnnotations }}
+  annotations:
+{{- with .Values.serviceAnnotations }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}
+spec:
+{{- if or .Values.serviceType.loadBalancer.enabled .Values.serviceType.nodePort.enabled }}
+  externalTrafficPolicy: {{ .Values.serviceSpec.externalTrafficPolicy }}
+{{- end }}
+{{- if .Values.serviceType.loadBalancer.enabled }}
+  type: LoadBalancer
+{{- if .Values.serviceSpec.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.serviceSpec.loadBalancerIP }}
+{{- end }}
+{{- else if .Values.serviceType.nodePort.enabled }}
+  type: NodePort
+{{- end }}
+{{- if and .Values.serviceType.loadBalancer.enabled .Values.serviceSpec.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+{{- range .Values.serviceSpec.loadBalancerSourceRanges}}
+    - {{.}}
+{{- end }}
+{{- end }}
+  ports:
+{{- if .Values.servicePorts }}
+{{- with .Values.servicePorts }}
+{{ toYaml . | indent 2 }}
+{{- end }}
+{{- else }}
+  - port: 80
+    protocol: TCP
+    name: http
+{{- if and .Values.serviceType.nodePort.enabled .Values.serviceType.nodePort.httpPort }}
+    nodePort: {{ .Values.serviceType.nodePort.httpPort }}
+{{- end }}
+  - port: 443
+    protocol: TCP
+    name: https
+{{- if and .Values.serviceType.nodePort.enabled .Values.serviceType.nodePort.httpsPort }}
+    nodePort: {{ .Values.serviceType.nodePort.httpsPort}}
+{{- end }}
+{{- end }}
+{{- if .Values.exporter.required }}
+  - port: {{ .Values.exporter.ports.containerPort }}
+    targetPort: {{ .Values.exporter.ports.containerPort }}
+    name: exporter-port
+{{- end }}
+  selector:
+    app: {{ include "netscaler-cpx-ingress-controller.fullname" . }}
+{{- end }}
+
+---
+
+{{- if .Values.exporter.required }}
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cpxservicemonitor.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    servicemonitor: netscaler-cpx
+    {{- with .Values.exporter.serviceMonitorExtraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  endpoints:
+  - interval: 30s
+    port: exporter-port
+  selector:
+    matchLabels:
+      service-type: {{ include "cpxservicemonitorlabel" . }}
+  namespaceSelector:
+    matchNames:
+    - monitoring
+    - default
+    - {{ .Release.Namespace }}
+
+{{- end }}
