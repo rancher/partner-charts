@@ -1,0 +1,103 @@
+{{- define "runner.resources.deployment" -}}
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "runner.fullname" . }}
+  labels:
+    {{- include "runner.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicasCount }}
+  strategy:
+    type: {{ .Values.updateStrategy.type }}
+  selector:
+    matchLabels:
+      {{- include "runner.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "runner.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver ) . | nindent 8 }}
+      serviceAccountName: {{ include "runner.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      initContainers:
+      - name: init
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.init.image "context" .) }}
+        imagePullPolicy: {{ .Values.init.image.pullPolicy | default "IfNotPresent" }}
+        command:
+        - /bin/bash
+        args:
+        - -ec
+        - | {{ .Files.Get "files/init-runtime.sh" | nindent 10 }}
+        env:
+        {{- include "runner-init.environment-variables" . | nindent 8 }}
+        {{- with .Values.init.resources }}
+        resources:
+          {{- toYaml . | nindent 10  }}
+        {{- end }}
+      containers:
+      - name: runner
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+        env:
+        {{- include "runner.environment-variables" . | nindent 8 }}
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          httpGet:
+            path: /health
+            port: http
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10  }}
+        {{- end }}
+        {{- with .Values.extraVolumeMounts }}
+        volumeMounts:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if .Values.sidecar.enabled }}
+      - name: reconcile-runtime
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.sidecar.image "context" .) }}
+        imagePullPolicy: {{ .Values.sidecar.image.pullPolicy | default "IfNotPresent" }}
+        command:
+        - /bin/bash
+        args:
+        - -ec
+        - | {{ .Files.Get "files/reconcile-runtime.sh" | nindent 10 }}
+        env:
+        {{- include "runner-sidecar.environment-variables" . | nindent 8 }}
+        {{- with .Values.sidecar.resources }}
+        resources:
+          {{- toYaml . | nindent 10  }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end -}}
