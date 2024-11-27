@@ -1,0 +1,61 @@
+suite: images
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has a default image version
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ".*nil.*"
+        template: templates/deployment.yaml
+      - notMatchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: ".*nil.*"
+        template: templates/deployment.yaml
+  - it: loads image and version
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          image:
+            repository: nr/test-1
+            version: "1.1.1"
+        kubeRbacProxy:
+          image:
+            repository: nr/test-2
+            version: "1.1.2"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: nr/test-1:1.1.1
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: nr/test-2:1.1.2
+        template: templates/deployment.yaml
+  - it: loads image and version using SHA digest
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          image:
+            repository: nr/test-1
+            version: "sha256:e2399e70e99ac370ca6a3c7e5affa9655da3b246d0ada77c40ed155b3726ee2e"
+        kubeRbacProxy:
+          image:
+            repository: nr/test-2
+            version: "sha256:771a9a173e033a3ad8b46f5c00a7036eaa88c8d8d1fbd89217325168998113ea"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: nr/test-1@sha256:e2399e70e99ac370ca6a3c7e5affa9655da3b246d0ada77c40ed155b3726ee2e
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: nr/test-2@sha256:771a9a173e033a3ad8b46f5c00a7036eaa88c8d8d1fbd89217325168998113ea
+        template: templates/deployment.yaml

@@ -1,0 +1,168 @@
+suite: test image compatibility layer
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: by default the tag is not nil
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ".*nil.*"
+      - notMatchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: ".*nil.*"
+
+  - it: templates image correctly from the new values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      images:
+        integration:
+          registry: ireg
+          repository: irep
+          tag: itag
+        agent:
+          registry: areg
+          repository: arep
+          tag: atag
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ireg/irep:itag
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: areg/arep:atag
+
+  - it: templates image correctly from old values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      image:
+        kubeEvents:
+          registry: ireg
+          repository: irep
+          tag: itag
+        infraAgent:
+          registry: areg
+          repository: arep
+          tag: atag
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ireg/irep:itag
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: areg/arep:atag
+
+  - it: old image values take precedence
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      images:
+        integration:
+          registry: inew
+          repository: inew
+          tag: inew
+        agent:
+          registry: anew
+          repository: anew
+          tag: anew
+      image:
+        kubeEvents:
+          registry: iold
+          repository: iold
+          tag: iold
+        infraAgent:
+          registry: aold
+          repository: aold
+          tag: aold
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: iold/iold:iold
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: aold/aold:aold
+
+  - it: pullImagePolicy templates correctly from the new values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      images:
+        integration:
+          pullPolicy: new
+        agent:
+          pullPolicy: new
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: new
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: new
+
+  - it: pullImagePolicy templates correctly from old values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      image:
+        kubeEvents:
+          pullPolicy: old
+        infraAgent:
+          pullPolicy: old
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: old
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: old
+
+  - it: old imagePullPolicy values take precedence
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      images:
+        integration:
+          pullPolicy: new
+        agent:
+          pullPolicy: new
+      image:
+        kubeEvents:
+          pullPolicy: old
+        infraAgent:
+          pullPolicy: old
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: old
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: old
+
+  - it: imagePullSecrets merge properly
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      global:
+        images:
+          pullSecrets:
+            - global: global
+      images:
+        pullSecrets:
+          - images: images
+      image:
+        pullSecrets:
+          - image: image
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - global: global
+            - image: image
+            - images: images
