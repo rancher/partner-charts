@@ -1,0 +1,67 @@
+{{- if eq (include "k10.isOpenShift" .) "true" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "k10.openShiftConsolePluginProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+    component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "k10.common.matchLabels" . | indent 6 }}
+      component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+  template:
+    metadata:
+    {{- if .Values.scc.create }}
+      annotations:
+        openshift.io/required-scc: {{ .Release.Name }}-scc
+    {{- end }}
+      labels:
+{{ include "k10.common.matchLabels" . | indent 8 }}
+        component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+    spec:
+      containers:
+        - image: {{ include "k10.ocpConsolePluginImage" . }}
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          name: nginx
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+            - containerPort: 9443
+              name: https
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          volumeMounts:
+            - mountPath: /etc/nginx
+              name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+            - mountPath: /etc/nginx/ssl
+              name: {{ template "k10.openShiftConsolePluginProxyTLSCertName" . }}
+      volumes:
+        - name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+          configMap:
+            defaultMode: 420
+            name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+        - name: {{ template "k10.openShiftConsolePluginProxyTLSCertName" . }}
+          secret:
+            defaultMode: 420
+            secretName: {{ template "k10.openShiftConsolePluginProxyTLSCertName" . }}
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: {{ template "serviceAccountName" . }}
+{{- end -}}
