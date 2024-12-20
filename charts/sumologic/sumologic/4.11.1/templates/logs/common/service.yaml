@@ -1,0 +1,34 @@
+{{- if eq (include "logs.otelcol.enabled" .) "true" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "sumologic.metadata.name.logs.service" . }}
+  namespace: {{ template "sumologic.namespace"  . }}
+  labels:
+    app: {{ template "sumologic.labels.app.logs.service" . }}
+    {{- include "sumologic.labels.scrape.logs" . | nindent 4 }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+{{- if .Values.metadata.serviceLabels }}
+{{ toYaml .Values.metadata.serviceLabels | indent 4 }}
+{{- end }}
+spec:
+  selector:
+    app: {{ template "sumologic.labels.app.logs.pod" . }}
+  ports:
+  - name: otlphttp
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  - name: otelcol-metrics
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  {{- if .Values.metadata.logs.statefulset.extraPorts }}
+    {{- range .Values.metadata.logs.statefulset.extraPorts }}
+  - name: {{ toYaml .name }}
+    port: {{ toYaml .containerPort }}
+    targetPort: {{ toYaml .containerPort }}
+    protocol: {{ toYaml .protocol }}
+    {{- end }}
+  {{- end }}
+{{- end }}
