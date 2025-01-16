@@ -1,0 +1,191 @@
+suite: securityContext
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: sets pod securityContext set to defaults when no values provided
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 65532
+        template: templates/deployment.yaml
+  - it: ignores pod securityContext from global by common-library
+    set:
+      licenseKey: us-whatever
+      global:
+        podSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 65532
+        template: templates/deployment.yaml
+  - it: appends pod securityContext from values by common-library
+    set:
+      licenseKey: us-whatever
+      podSecurityContext:
+        topLevelKey: topLevelValue
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 65532
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: sets pod securityContext from values by common-library overriding global values
+    set:
+      licenseKey: us-whatever
+      podSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        podSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 65532
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext set to defaults when no values provided
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+        template: templates/deployment.yaml
+      - notExists:
+          path: spec.template.spec.containers[1].securityContext
+        template: templates/deployment.yaml
+  - it: sets container securityContext from global by common-library
+    set:
+      licenseKey: us-whatever
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            globalKey: globalValue
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            globalKey: globalValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext from values by common-library
+    set:
+      licenseKey: us-whatever
+      containerSecurityContext:
+        topLevelKey: topLevelValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext from values by common-library overriding global values
+    set:
+      licenseKey: us-whatever
+      containerSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext from manager values
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          containerSecurityContext:
+            managerKey: managerValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            managerKey: managerValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext from kubeRbacProxy values
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        kubeRbacProxy:
+          containerSecurityContext:
+            kubeRbacProxyKey: kubeRbacProxyValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            kubeRbacProxyKey: kubeRbacProxyValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext from manager values overriding top level and global values
+    set:
+      licenseKey: us-whatever
+      containerSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+      controllerManager:
+        manager:
+          containerSecurityContext:
+            managerKey: managerValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            managerKey: managerValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext from kubeRbacProxy values overriding top level and global values
+    set:
+      licenseKey: us-whatever
+      containerSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+      controllerManager:
+        kubeRbacProxy:
+          containerSecurityContext:
+            kubeRbacProxyKey: kubeRbacProxyValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            kubeRbacProxyKey: kubeRbacProxyValue
+        template: templates/deployment.yaml
