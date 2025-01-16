@@ -66,8 +66,8 @@ downloads the right version for your machine to `bin/partner-charts-ci`.
 3. Create a pull request for your changes targeting the `main-source` branch in
 this repository. **Please ensure that your pull request only contains changes
 related to the package that you are adding.** The `PACKAGE` environment variable
-is useful for this; for more information please see the `partner-charts-ci`
-documentation.
+is useful for this; for more information please see the
+[`partner-charts-ci` documentation](https://github.com/rancher/partner-charts-ci?tab=readme-ov-file#4-run-partner-charts-ci-update).
 
 
 ### Who is responsible for maintaining the helm charts in this repository?
