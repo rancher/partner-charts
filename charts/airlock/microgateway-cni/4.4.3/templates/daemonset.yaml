@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "airlock-microgateway-cni.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway-cni.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "airlock-microgateway-cni.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        kubectl.kubernetes.io/default-container: cni-installer
+        {{- with mustMerge .Values.podAnnotations .Values.commonAnnotations}}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "airlock-microgateway-cni.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - args:
+            - --log-level
+            - "{{ .Values.config.logLevel }}"
+          env:
+            - name: CNI_NETWORK_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  key: plugin-conf.json
+                  name: {{ include "airlock-microgateway-cni.fullname" . }}
+            - name: CNI_BIN_DIR
+              value: /host/opt/cni/bin
+            - name: CNI_NET_DIR
+              value: /host/etc/cni/net.d
+            - name: KUBECONFIG_FILE_NAME
+              value: "{{ include "airlock-microgateway-cni.fullname" . }}-kubeconfig"
+            - name: INSTALL_MODE
+              value: {{ .Values.config.installMode }}
+            - name: REPAIR_MODE
+              value: {{ .Values.config.repairMode }}
+            - name: KUBERNETES_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          image: {{ include "airlock-microgateway-cni.image" .Values.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: cni-installer
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            exec:
+              command:
+                - /cni-installer
+                - probe
+            failureThreshold: 5
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            timeoutSeconds: 3
+          readinessProbe:
+            exec:
+              command:
+                - /cni-installer
+                - probe
+            failureThreshold: 1
+            periodSeconds: 60
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.privileged }}
+            capabilities:
+              drop:
+                - ALL
+            privileged: {{ .Values.privileged }}
+            readOnlyRootFilesystem: true
+            runAsGroup: 0
+            runAsNonRoot: false
+            runAsUser: 0
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /host/opt/cni/bin
+              name: cni-bin-dir
+            - mountPath: /host/etc/cni/net.d
+              name: cni-net-dir
+            - mountPath: /run/cni-installer
+              name: cni-installer-status
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 0
+        runAsGroup: 0
+        runAsNonRoot: false
+        runAsUser: 0
+      serviceAccountName: {{ include "airlock-microgateway-cni.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 5
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+      volumes:
+        - hostPath:
+            path: "{{ .Values.config.cniBinDir }}"
+            type: Directory
+          name: cni-bin-dir
+        - hostPath:
+            path: "{{ .Values.config.cniNetDir }}"
+            type: Directory
+          name: cni-net-dir
+        - emptyDir: {}
+          name: cni-installer-status
