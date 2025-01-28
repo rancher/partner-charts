@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mysql-galera.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mysql-galera-app
+    #tier: dbms
+spec:
+  # replication controller
+  serviceName: {{ include "mysql-galera.fullname" . }} # must match the headless service name for pod hostname resolution
+  replicas: {{ .Values.replicas | default 3 }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: mysql-galera-node
+      #tier: dbms
+  # pod template
+  template:
+    metadata:
+      labels:
+        app: mysql-galera-node
+        #tier: dbms
+    spec: # Pod spec
+    {{- if and (.Values.imageCredentials.username) (.Values.imageCredentials.password) }}
+      imagePullSecrets:
+      - name: regcred
+    {{- end }}
+      initContainers: # this might be minikube/hostpath-specific
+      - name: chown-datadir
+        image: busybox:latest
+        command:
+        - /bin/chown
+        - -R
+        - "1000"  # or whatever the mysqld UID is, use string "1000" not 1000 due to yaml
+        - /var/lib/mysql
+        volumeMounts:
+        - name: datadir # same as in containers and volumes
+          mountPath: /var/lib/mysql
+          readOnly: false
+      containers:
+      - name: mysql-galera-node
+        image: {{ template "mysql-galera.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.memory }}
+            cpu: {{ .Values.resources.requests.cpu }}
+        # Setting environment variables for the image
+        # 1. First get them from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: {{ include "mysql-galera.fullname" . }}-v1
+        # 2. Override from command line
+        env:
+        {{- range $key, $value := .Values.env }}
+        - name: {{ $key }}
+          value: "{{ $value }}"
+        {{- end }}
+        # 3. make some internal k8s parameters available to the image
+        - name: MEM_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: mysql-galera-node
+              resource: requests.memory
+        - name: MEM_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: mysql-galera-node
+              resource: limits.memory
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-galera
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-galera
+              key: MYSQL_PASSWORD
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-galera
+              key: MYSQL_ROOT_PASSWORD
+        ports:
+        - containerPort: 3306
+          name: client
+        - containerPort: 4567
+          name: replication
+        - containerPort: 4568
+          name: ist
+        - containerPort: 4444
+          name: sst
+        volumeMounts:
+        - name: custom-cnf
+          mountPath: /etc/mysql/conf.d/50-custom.cnf
+          subPath: 50-custom.cnf
+          readOnly: true
+        - name: datadir
+          mountPath: /var/lib/mysql # inside container
+          readOnly: false
+        readinessProbe:
+          exec:
+            command: [ sh, /var/lib/mysql/k8s_readiness_probe ]
+          initialDelaySeconds: 15
+          periodSeconds: 2
+          timeoutSeconds: 1
+      volumes:
+      - name: custom-cnf
+        configMap:
+          name: custom-cnf
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ ReadWriteOnce ]
+#      storageClassName: {{ include "mysql-galera.fullname" . }}-{{ .Values.storageClass }}-sc
+      resources:
+        requests:
+          storage: {{ .Values.resources.requests.storage }}

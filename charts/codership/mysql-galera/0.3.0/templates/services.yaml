@@ -1,0 +1,43 @@
+# Main MySQL client service
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "mysql-galera.fullname" . }}-client
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3306
+    protocol: TCP
+    nodePort: {{ .Values.service.port }} # external port
+    name: client
+  selector:
+    app: mysql-galera-node
+    #tier: dbms
+---
+# Headless replication service
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ include "mysql-galera.fullname" . }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 4567
+    targetPort: 4567
+    protocol: TCP
+    name: replication
+  - port: 4568
+    targetPort: 4568
+    protocol: TCP
+    name: ist
+  - port: 4444 # remove when switch from rsync to clone
+    targetPort: 4444
+    protocol: TCP
+    name: sst
+  selector:
+    app: mysql-galera-node
+    #tier: dbms
+  publishNotReadyAddresses: True
