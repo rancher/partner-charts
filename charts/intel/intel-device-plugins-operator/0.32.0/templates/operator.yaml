@@ -1,0 +1,731 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: inteldeviceplugins-leader-election-role
+  namespace: {{ .Release.Namespace | quote }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: inteldeviceplugins-gpu-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: inteldeviceplugins-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes/proxy
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - d1c7b6d5.intel.com
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - deviceplugin.intel.com
+  resources:
+  - dlbdeviceplugins
+  - dsadeviceplugins
+  - fpgadeviceplugins
+  - gpudeviceplugins
+  - iaadeviceplugins
+  - qatdeviceplugins
+  - sgxdeviceplugins
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - deviceplugin.intel.com
+  resources:
+  - dlbdeviceplugins/finalizers
+  - dsadeviceplugins/finalizers
+  - fpgadeviceplugins/finalizers
+  - gpudeviceplugins/finalizers
+  - iaadeviceplugins/finalizers
+  - qatdeviceplugins/finalizers
+  - sgxdeviceplugins/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - deviceplugin.intel.com
+  resources:
+  - dlbdeviceplugins/status
+  - dsadeviceplugins/status
+  - fpgadeviceplugins/status
+  - gpudeviceplugins/status
+  - iaadeviceplugins/status
+  - qatdeviceplugins/status
+  - sgxdeviceplugins/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - fpga.intel.com
+  resources:
+  - acceleratorfunctions
+  - fpgaregions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - privileged
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: inteldeviceplugins-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: inteldeviceplugins-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inteldeviceplugins-leader-election-rolebinding
+  namespace: {{ .Release.Namespace | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: inteldeviceplugins-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: inteldeviceplugins-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: inteldeviceplugins-manager-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: inteldeviceplugins-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: inteldeviceplugins-auth-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: inteldeviceplugins-controller-manager-metrics-service
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  ports:
+  - name: https
+    port: 8443
+    targetPort: https
+  selector:
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inteldeviceplugins-webhook-service
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  ports:
+  - port: 443
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
+{{- if .Values.privateRegistry.registrySecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-operator-private-registry
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ printf "{\"auths\": {\"%s\": {\"auth\": \"%s\"}}}" .Values.privateRegistry.registryUrl (printf "%s:%s" .Values.privateRegistry.registryUser .Values.privateRegistry.registrySecret | b64enc) | b64enc }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: inteldeviceplugins-controller-manager
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      {{- if .Values.privateRegistry.registrySecret }}
+      imagePullSecrets:
+      - name: {{ .Release.Name }}-operator-private-registry
+      {{- end }}
+      containers:
+      - args:
+        - "--metrics-bind-address=:8443"
+        - "--metrics-secure"
+        - "--health-probe-bind-address=:8081"
+        - "--leader-elect"
+        {{- if .Values.manager.devices }}
+        {{- range $key, $value := .Values.manager.devices }}
+          {{- if $value }}
+        - "--devices={{- $key }}"
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.controllerExtraArgs }}
+        {{- with .Values.controllerExtraArgs }}
+        {{- tpl . $ | trim | nindent 8 }}
+        {{- end }}
+        {{- end }}
+        env:
+        - name: DEVICEPLUGIN_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: "{{ .Values.manager.image.hub }}/intel-deviceplugin-operator:{{ .Values.manager.image.tag | default .Chart.AppVersion  }}"
+        imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      nodeSelector: {{- .Values.nodeSelector | toYaml | nindent 8 }}
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: inteldeviceplugins-serving-cert
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  dnsNames:
+  - inteldeviceplugins-webhook-service.{{ .Release.Namespace }}.svc
+  - inteldeviceplugins-webhook-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: inteldeviceplugins-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: inteldeviceplugins-selfsigned-issuer
+  namespace: {{ .Release.Namespace | quote }}
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/inteldeviceplugins-serving-cert
+  name: inteldeviceplugins-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-dlbdeviceplugin
+  failurePolicy: Fail
+  name: mdlbdeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dlbdeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-dsadeviceplugin
+  failurePolicy: Fail
+  name: mdsadeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dsadeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-fpgadeviceplugin
+  failurePolicy: Fail
+  name: mfpgadeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - fpgadeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-gpudeviceplugin
+  failurePolicy: Fail
+  name: mgpudeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - gpudeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-iaadeviceplugin
+  failurePolicy: Fail
+  name: miaadeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - iaadeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-qatdeviceplugin
+  failurePolicy: Fail
+  name: mqatdeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - qatdeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate-deviceplugin-intel-com-v1-sgxdeviceplugin
+  failurePolicy: Fail
+  name: msgxdeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - sgxdeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /pods
+  failurePolicy: Ignore
+  name: fpga.mutator.webhooks.intel.com
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /mutate--v1-pod
+  failurePolicy: Ignore
+  name: sgx.mutator.webhooks.intel.com
+  reinvocationPolicy: IfNeeded
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/inteldeviceplugins-serving-cert
+  name: inteldeviceplugins-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-dlbdeviceplugin
+  failurePolicy: Fail
+  name: vdlbdeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dlbdeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-dsadeviceplugin
+  failurePolicy: Fail
+  name: vdsadeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dsadeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-fpgadeviceplugin
+  failurePolicy: Fail
+  name: vfpgadeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - fpgadeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-gpudeviceplugin
+  failurePolicy: Fail
+  name: vgpudeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - gpudeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-iaadeviceplugin
+  failurePolicy: Fail
+  name: viaadeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - iaadeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-qatdeviceplugin
+  failurePolicy: Fail
+  name: vqatdeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - qatdeviceplugins
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: inteldeviceplugins-webhook-service
+      namespace: {{ .Release.Namespace | quote }}
+      path: /validate-deviceplugin-intel-com-v1-sgxdeviceplugin
+  failurePolicy: Fail
+  name: vsgxdeviceplugin.kb.io
+  rules:
+  - apiGroups:
+    - deviceplugin.intel.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - sgxdeviceplugins
+  sideEffects: None
