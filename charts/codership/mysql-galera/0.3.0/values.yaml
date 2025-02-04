@@ -1,0 +1,63 @@
+# Default values for mysql-galera.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Environment for the image (to be set at command line, overrides settings in config map)
+# e.g. --set env.MYSQL_USER="ggg"
+env: {}
+
+# Never go below 3
+replicas: 3
+
+image:
+  registry: docker.io
+  repository: "codership/mysql-galera"
+  pullPolicy: Always
+  tag: "8.0.40"
+  digest: ""
+
+imageCredentials:
+  registry: docker.io
+  username: ""
+  password: ""
+  email: info@galeracluster.com
+
+mysql:
+  rootpw: "" # will be used only in the case of database initialization
+  user:
+    name: "admin" # this account will be used for read-only liveness checks
+    passwd: "" # and a password for that account
+
+customConfig: |
+  # This is an additional configuration that will be added to the MySQL main configuration 
+  # It may be changed in the values.yaml file
+  [mysqld]
+  character-set-server=utf8mb4
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Minimum required resources per pod
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube.
+  # Below are bare minimums, anything less is not guaranteed to work.
+  # NOTE: make sure that your worker k8s nodes have more RAM than requested here
+  requests:
+    memory: 4Gi # 4G is the minimum for MySQL 8.0 to properly function
+    cpu: 1
+    storage: 2Gi
+
+# Where to expose MySQL client service to outside world
+service:
+  port: 30006
+
+# Autoscaling should be used with caution as persistent volume claims will
+# linger after scale down
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
