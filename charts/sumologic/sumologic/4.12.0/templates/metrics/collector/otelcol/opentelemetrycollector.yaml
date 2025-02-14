@@ -1,0 +1,140 @@
+{{- if and (eq (include "metrics.otelcol.enabled" .) "true") .Values.sumologic.metrics.collector.otelcol.enabled }}
+{{ $baseConfig := (tpl (.Files.Get "conf/metrics/collector/otelcol/config.yaml") .) | fromYaml }}
+{{ $mergeConfig := .Values.sumologic.metrics.collector.otelcol.config.merge }}
+{{ $overrideConfig := .Values.sumologic.metrics.collector.otelcol.config.override }}
+{{ $finalConfig := "" }}
+{{ if $overrideConfig }}
+{{ $finalConfig = $overrideConfig }}
+{{ else }}
+{{ $finalConfig = mergeOverwrite $baseConfig $mergeConfig }}
+{{ end }}
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: {{ template "sumologic.metadata.name.metrics.collector.opentelemetrycollector" . }}
+  namespace: {{ template "sumologic.namespace"  . }}
+  labels:
+    {{- include "sumologic.labels.metrics.opentelemetrycollector" . | nindent 4 }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+    {{- include "sumologic.label.scrape" . | nindent 4 }}
+    {{- if .Values.sumologic.podLabels }}
+    {{ toYaml .Values.sumologic.podLabels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.sumologic.metrics.collector.otelcol.podLabels }}
+    {{ toYaml .Values.sumologic.metrics.collector.otelcol.podLabels | nindent 4 }}
+    {{- end }}
+spec:
+  image: {{ template "sumologic.metrics.collector.image" . }}
+  mode: statefulset
+  replicas: {{ .Values.sumologic.metrics.collector.otelcol.replicaCount }}
+  serviceAccount: {{ template "sumologic.metadata.name.metrics.collector.serviceaccount" . }}
+  managementState: {{ template "sumologic.metrics.collector.otelcol.managementState" . }}
+  upgradeStrategy: {{ template "sumologic.metrics.collector.otelcol.upgradeStrategy" . }}
+  targetAllocator:
+{{- if .Values.sumologic.metrics.collector.otelcol.allocationStrategy }}
+    allocationStrategy: {{ .Values.sumologic.metrics.collector.otelcol.allocationStrategy }}
+{{- end }}
+    enabled: true
+    filterStrategy: relabel-config
+    prometheusCR:
+      enabled: true
+      scrapeInterval: {{ .Values.sumologic.metrics.collector.otelcol.scrapeInterval }}
+{{- if not (empty (include "metrics.collector.otelcol.serviceMonitorSelector" .)) }}
+      serviceMonitorSelector:
+        matchLabels:
+{{ include "metrics.collector.otelcol.serviceMonitorSelector" . | indent 10 }}
+{{ else }}
+      serviceMonitorSelector: 
+{{ toYaml .Values.sumologic.metrics.collector.otelcol.serviceMonitorSelector | nindent 8 }}
+{{- end }}
+{{- if not (empty (include "metrics.collector.otelcol.podMonitorSelector" .)) }}
+      podMonitorSelector:
+        matchLabels:
+{{ include "metrics.collector.otelcol.podMonitorSelector" . | indent 10 }}
+{{ else }}
+      podMonitorSelector:
+{{ toYaml .Values.sumologic.metrics.collector.otelcol.podMonitorSelector | nindent 8 }}
+{{- end }}
+    serviceAccount: {{ template "sumologic.metadata.name.metrics.targetallocator.serviceaccount" . }}
+{{- if not (empty (include "metrics.collector.otelcol.nodeSelector" .)) }}
+    nodeSelector:
+{{ include "metrics.collector.otelcol.nodeSelector" . | indent 6 }}
+{{- end }}
+    resources:
+      {{ .Values.sumologic.metrics.collector.otelcol.targetAllocator.resources | toYaml | nindent 6 }}
+{{- if not (empty (include "metrics.collector.otelcol.tolerations" .)) }}
+    tolerations:
+{{ include "metrics.collector.otelcol.tolerations" . | indent 6 }}
+{{- end }}
+{{- if not (empty (include "metrics.collector.otelcol.affinity" .)) }}
+    affinity:
+{{ include "metrics.collector.otelcol.affinity" . | indent 6 }}
+{{- end }}
+{{- if not (empty (include "metrics.collector.otelcol.nodeSelector" .)) }}
+  nodeSelector:
+{{ include "metrics.collector.otelcol.nodeSelector" . | indent 4 }}
+{{- end }}
+{{- if not (empty (include "metrics.collector.otelcol.tolerations" .)) }}
+  tolerations:
+{{ include "metrics.collector.otelcol.tolerations" . | indent 6 }}
+{{- end }}
+{{- if not (empty (include "metrics.collector.otelcol.affinity" .)) }}
+  affinity:
+{{ include "metrics.collector.otelcol.affinity" . | indent 6 }}
+{{- end }}
+{{- if .Values.sumologic.metrics.collector.otelcol.priorityClassName }}
+  priorityClassName: {{ .Values.sumologic.metrics.collector.otelcol.priorityClassName | quote }}
+{{- end }}
+{{- if eq (include "metrics.collector.autoscaling.enabled" .) "true" }}
+  autoscaler:
+    maxReplicas: {{ .Values.sumologic.metrics.collector.otelcol.autoscaling.maxReplicas }}
+    minReplicas: {{ .Values.sumologic.metrics.collector.otelcol.autoscaling.minReplicas }}
+    targetCPUUtilization: {{ .Values.sumologic.metrics.collector.otelcol.autoscaling.targetCPUUtilizationPercentage }}
+{{- if .Values.sumologic.metrics.collector.otelcol.autoscaling.targetMemoryUtilizationPercentage }}
+    targetMemoryUtilization: {{ .Values.sumologic.metrics.collector.otelcol.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
+{{- end }}
+  env:
+  - name: METADATA_METRICS_SVC
+    valueFrom:
+      configMapKeyRef:
+        name: sumologic-configmap
+        key: metadataMetrics
+  - name: NAMESPACE
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.namespace
+  - name: MY_POD_IP
+    valueFrom:
+      fieldRef:
+        apiVersion: v1
+        fieldPath: status.podIP
+  podAnnotations:
+    ## The operator adds this annotation by default, but we use our own ServiceMonitor
+    prometheus.io/scrape: "false"
+{{- if .Values.sumologic.podAnnotations -}}
+    {{ toYaml .Values.sumologic.podAnnotations | nindent 4 }}
+{{- end }}
+{{- if .Values.sumologic.metrics.collector.otelcol.podAnnotations -}}
+    {{ toYaml .Values.sumologic.metrics.collector.otelcol.podAnnotations | nindent 4 }}
+{{- end }}
+  podSecurityContext:
+    {{ .Values.sumologic.metrics.collector.otelcol.securityContext | toYaml | nindent 4 }}
+  ports:
+  - name: pprof
+    port: 1777
+  resources:
+    {{ .Values.sumologic.metrics.collector.otelcol.resources | toYaml | nindent 4 }}
+  volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: file-storage
+    emptyDir: {}
+  volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: file-storage
+    mountPath: /var/lib/storage/otc
+  config:
+{{- $finalConfig | toYaml | nindent 4 }}
+{{- end }}
