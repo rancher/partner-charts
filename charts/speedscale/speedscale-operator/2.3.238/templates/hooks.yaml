@@ -1,0 +1,95 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "4"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-operator-pre-install
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 30
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
+      creationTimestamp: null
+      labels:
+        {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 8}}
+        {{- end }}
+    spec:
+      containers:
+      - args:
+        - |-
+          # ensure valid settings before the chart reports a successfull install
+          {{- if .Values.http_proxy }}
+          HTTP_PROXY={{ .Values.http_proxy | quote }} \
+          {{- end }}
+          {{- if .Values.https_proxy }}
+          HTTPS_PROXY={{ .Values.https_proxy | quote }} \
+          {{- end }}
+          {{- if .Values.no_proxy }}
+          NO_PROXY={{ .Values.no_proxy | quote }} \
+          {{- end }}
+          speedctl init --overwrite \
+          --api-key $SPEEDSCALE_API_KEY \
+          --app-url $SPEEDSCALE_APP_URL
+
+          # in case we're in istio
+          curl -X POST http://127.0.0.1:15000/quitquitquit || true
+        command:
+        - sh
+        - -c
+        envFrom:
+        - secretRef:
+            name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
+            optional: false
+        image: '{{ .Values.image.registry }}/speedscale-cli:{{ .Values.image.tag }}'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: speedscale-cli
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsUser: 2100
+          runAsGroup: 2100
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            memory: "128M"
+            cpu: "1"
+          requests:
+            memory: "64M"
+            cpu: "100m"
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 2100
+        supplementalGroups: [2100]
+      {{- if .Values.affinity }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
