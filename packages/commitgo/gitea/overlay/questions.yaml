@@ -1,0 +1,495 @@
+questions:
+# Image Settings
+- variable: image.repository
+  default: "gitea/gitea"
+  type: string
+  label: Image Repository
+  required: true
+  group: "Image Settings"
+  description: "The repository to pull the Gitea image from"
+
+- variable: image.tag
+  default: "1.23.3"
+  type: string
+  label: Image Tag
+  required: true
+  group: "Image Settings"
+  description: "The version/tag of Gitea to deploy"
+
+# Admin User Settings
+- variable: gitea.admin.username
+  required: false
+  type: string
+  label: Admin Username
+  group: "Admin User Settings"
+- variable: gitea.admin.email
+  required: false
+  type: string
+  label: Admin Email
+  group: "Admin User Settings"
+- variable: gitea.admin.password
+  type: password
+  min_length: 10
+  label: Admin Password
+  group: "Admin User Settings"
+- variable: gitea.admin.existingSecret
+  type: secret
+  label: Existing Secret for Admin Password
+  description: If you have an existing Kubernetes Secret, you can define it here instead of entering a password.
+  group: "Admin User Settings"
+- variable: gitea.admin.passwordMode
+  type: enum
+  label: Admin Password Update Mode
+  description: Choose if you'd like the chart to manage the password, or manage it via application settings.
+  group: "Admin User Settings"
+  options:
+    - keepUpdated
+    - initialOnlyNoReset
+    - initialOnlyRequireReset
+
+# Database Settings
+- variable: database.type
+  type: enum
+  label: Database Type
+  required: true
+  default: "builtin-postgres-ha"
+  group: "Database Settings"
+  description: "Select the type of database to use"
+  options:
+    - "builtin-postgres-ha"
+    - "builtin-postgres"
+    - "external"
+
+# Built-in PostgreSQL HA
+- variable: postgresql-ha.enabled
+  show_if: "database.type=builtin-postgres-ha"
+  default: true
+  type: boolean
+  label: Enable PostgreSQL HA
+  group: "Database Settings"
+  description: "Enable the built-in PostgreSQL HA database"
+  show_subquestion_if: true
+  subquestions:
+  - variable: postgresql-ha.postgresql.password
+    type: password
+    label: PostgreSQL Password
+    description: "Password for the Gitea database user"
+    required: true
+  - variable: postgresql-ha.persistence.size
+    default: "10Gi"
+    type: string
+    label: PostgreSQL Storage Size
+    description: "Size of persistent volume for PostgreSQL"
+
+# Built-in PostgreSQL
+- variable: postgresql.enabled
+  show_if: "database.type=builtin-postgres"
+  default: true
+  type: boolean
+  label: Enable PostgreSQL
+  group: "Database Settings"
+  description: "Enable the built-in single-instance PostgreSQL database"
+  show_subquestion_if: true
+  subquestions:
+  - variable: postgresql.auth.password
+    type: password
+    label: PostgreSQL Password
+    description: "Password for the Gitea database user"
+    required: true
+  - variable: postgresql.primary.persistence.size
+    default: "10Gi"
+    type: string
+    label: PostgreSQL Storage Size
+    description: "Size of persistent volume for PostgreSQL"
+
+# Ensure these are explicitly disabled when not selected
+- variable: postgresql-ha.enabled
+  show_if: "database.type!=builtin-postgres-ha"
+  default: false
+  type: boolean
+  group: "Database Settings"
+  label: PostgreSQL HA Status
+  description: "Automatically disabled when not using PostgreSQL HA"
+
+- variable: postgresql.enabled
+  show_if: "database.type!=builtin-postgres"
+  default: false
+  type: boolean
+  group: "Database Settings"
+  label: PostgreSQL Status
+  description: "Automatically disabled when not using PostgreSQL"
+
+# External Database Configuration
+- variable: gitea.config.database.DB_TYPE
+  show_if: "database.type=external"
+  type: enum
+  label: External Database Type
+  group: "Database Settings"
+  options:
+    - "postgres"
+    - "mysql"
+    - "mssql"
+    - "sqlite3"
+  description: "Type of external database to use"
+  show_subquestion_if: "postgres||mysql||mssql"
+  subquestions:
+  - variable: gitea.config.database.HOST
+    type: string
+    label: Database Host
+    description: "External database host (e.g., my-db.example.com:5432)"
+  - variable: gitea.config.database.NAME
+    type: string
+    label: Database Name
+    default: "gitea"
+    description: "Name of the database to use"
+  - variable: gitea.config.database.USER
+    type: string
+    label: Database User
+    description: "Username for database connection"
+  - variable: gitea.config.database.PASSWD
+    type: password
+    label: Database Password
+    description: "Password for database connection"
+  - variable: gitea.config.database.SSL_MODE
+    type: enum
+    label: SSL Mode
+    options:
+      - "disable"
+      - "require"
+      - "verify-full"
+    default: "disable"
+    description: "SSL mode for database connection"
+
+# Cache Settings
+- variable: cache.type
+  type: enum
+  label: Cache Type
+  required: true
+  default: "builtin-redis-cluster"
+  group: "Cache Settings"
+  description: "Select the type of cache to use"
+  options:
+    - "builtin-redis-cluster"
+    - "builtin-redis"
+    - "external"
+    - "memory"
+
+# Built-in Redis Cluster
+- variable: redis-cluster.enabled
+  show_if: "cache.type=builtin-redis-cluster"
+  default: true
+  type: boolean
+  label: Enable Redis Cluster
+  group: "Cache Settings"
+  description: "Enable the built-in Redis cluster for caching"
+  show_subquestion_if: true
+  subquestions:
+  - variable: redis-cluster.cluster.nodes
+    default: 3
+    type: int
+    label: Redis Cluster Nodes
+    description: "Number of Redis cluster nodes"
+  - variable: redis-cluster.usePassword
+    default: false
+    type: boolean
+    label: Use Redis Password
+    description: "Enable password authentication for Redis"
+    show_subquestion_if: true
+    subquestions:
+    - variable: redis-cluster.password
+      type: password
+      label: Redis Password
+      description: "Password for Redis authentication"
+
+# Built-in Redis Standalone
+- variable: redis.enabled
+  show_if: "cache.type=builtin-redis"
+  default: true
+  type: boolean
+  label: Enable Redis Standalone
+  group: "Cache Settings"
+  description: "Enable the built-in Redis standalone instance"
+  show_subquestion_if: true
+  subquestions:
+  - variable: redis.architecture
+    default: "standalone"
+    type: enum
+    label: Redis Architecture
+    options:
+      - "standalone"
+      - "replication"
+    description: "Redis architecture mode"
+  - variable: redis.auth.enabled
+    default: false
+    type: boolean
+    label: Enable Authentication
+    description: "Enable password authentication"
+    show_subquestion_if: true
+    subquestions:
+    - variable: redis.auth.password
+      type: password
+      label: Redis Password
+      description: "Password for Redis authentication"
+
+# Ensure these are explicitly disabled when not selected
+- variable: redis-cluster.enabled
+  show_if: "cache.type!=builtin-redis-cluster"
+  default: false
+  type: boolean
+  group: "Cache Settings"
+  label: Redis Cluster Status
+  description: "Automatically disabled when not using Redis Cluster"
+
+- variable: redis.enabled
+  show_if: "cache.type!=builtin-redis"
+  default: false
+  type: boolean
+  group: "Cache Settings"
+  label: Redis Standalone Status
+  description: "Automatically disabled when not using Redis Standalone"
+
+# External Cache Configuration
+- variable: gitea.config.cache.ADAPTER
+  show_if: "cache.type=external"
+  type: enum
+  label: External Cache Type
+  group: "Cache Settings"
+  options:
+    - "redis"
+    - "memcache"
+  description: "Type of external cache to use"
+  show_subquestion_if: true
+  subquestions:
+  - variable: gitea.config.cache.HOST
+    type: string
+    label: Cache Host
+    description: "External cache host (e.g., redis://redis.example.com:6379 or memcache://memcached.example.com:11211)"
+  - variable: gitea.config.cache.PASSWORD
+    type: password
+    label: Cache Password
+    description: "Password for external cache (if required)"
+
+# Memory Cache Configuration
+- variable: gitea.config.cache.ADAPTER
+  show_if: "cache.type=memory"
+  default: "memory"
+  type: string
+  label: Memory Cache
+  group: "Cache Settings"
+  description: "Using in-memory cache (not recommended for production)"
+
+# Instance Settings
+- variable: gitea.config.server.APP_NAME
+  type: string
+  label: Application Name
+  required: false
+  default: "Gitea: Git with a cup of tea"
+  group: "Instance Settings"
+  description: "Application name, shown in the UI"
+
+- variable: gitea.config.server.DOMAIN
+  type: string
+  label: Gitea Domain
+  required: true
+  group: "Instance Settings"
+  description: "Domain name for your Gitea instance (e.g., git.example.com)"
+
+- variable: gitea.config.service.REQUIRE_SIGNIN_VIEW
+  type: boolean
+  label: Require Sign-in to View Pages
+  default: false
+  group: "Instance Settings"
+  description: "Require signing in to view any page"
+
+- variable: gitea.config.service.DISABLE_REGISTRATION
+  type: boolean
+  label: Disable Registration
+  default: false
+  group: "Instance Settings"
+  description: "Disable user registration, only allow admins to create accounts"
+
+# Service Settings
+- variable: service.http.type
+  default: "ClusterIP"
+  type: enum
+  label: Service Type for HTTP
+  group: "Service Settings"
+  options:
+    - "ClusterIP"
+    - "NodePort"
+    - "LoadBalancer"
+  description: "Kubernetes service type for web traffic"
+  show_subquestion_if: "NodePort"
+  subquestions:
+  - variable: service.http.nodePort
+    type: int
+    label: HTTP NodePort
+    description: "NodePort for HTTP service (if service type is NodePort)"
+    min: 30000
+    max: 32767
+
+- variable: service.ssh.type
+  default: "ClusterIP"
+  type: enum
+  label: Service Type for SSH
+  group: "Service Settings"
+  options:
+    - "ClusterIP"
+    - "NodePort"
+    - "LoadBalancer"
+  description: "Kubernetes service type for SSH traffic. Please note, that if IP of the SSH endpoint differs from the HTTP endpoint, you will need to manually configure a different domain for SSH connections."
+  show_subquestion_if: "NodePort"
+  subquestions:
+  - variable: service.ssh.nodePort
+    type: int
+    label: SSH NodePort
+    description: "NodePort for SSH service (if service type is NodePort)"
+    min: 30000
+    max: 32767
+
+# Ingress Settings
+- variable: ingress.enabled
+  default: false
+  type: boolean
+  label: Enable Ingress
+  group: "Ingress Settings"
+  description: "Enable ingress for Gitea"
+  show_subquestion_if: true
+  subquestions:
+  - variable: ingress.hosts[0].host
+    type: hostname
+    label: Ingress Hostname
+    description: "Hostname for the ingress"
+  - variable: ingress.tls
+    type: boolean
+    label: Enable TLS
+    description: "Enable TLS for the ingress"
+
+# Resource Settings
+- variable: resources.requests.cpu
+  default: "100m"
+  type: string
+  label: CPU Request
+  group: "Resource Settings"
+  description: "Minimum CPU resources for Gitea pods"
+
+- variable: resources.requests.memory
+  default: "512Mi"
+  type: string
+  label: Memory Request
+  group: "Resource Settings"
+  description: "Minimum memory resources for Gitea pods"
+
+- variable: persistence.size
+  default: "10Gi"
+  type: string
+  label: Storage Size
+  group: "Resource Settings"
+  description: "Size of persistent volume for Gitea data"
+
+# SMTP Settings
+- variable: gitea.config.mailer.ENABLED
+  default: false
+  type: boolean
+  label: Enable Email Service
+  group: "SMTP Settings"
+  description: "Enable email service for notifications"
+  show_subquestion_if: true
+  subquestions:
+  - variable: gitea.config.mailer.FROM
+    type: string
+    label: From Email Address
+    description: "Email address used as the sender"
+  - variable: gitea.config.mailer.PROTOCOL
+    type: enum
+    label: SMTP Protocol
+    options:
+      - "smtp"
+      - "smtps"
+      - "smtp+starttls"
+    default: "smtp"
+    description: "Protocol to use for sending emails"
+  - variable: gitea.config.mailer.SMTP_ADDR
+    type: string
+    label: SMTP Server Address
+    description: "SMTP server address (e.g., smtp.gmail.com)"
+  - variable: gitea.config.mailer.SMTP_PORT
+    type: string
+    label: SMTP Server Port
+    default: "587"
+    description: "SMTP server port"
+  - variable: gitea.config.mailer.USER
+    type: string
+    label: SMTP Username
+    description: "Username for SMTP authentication"
+  - variable: gitea.config.mailer.PASSWD
+    type: password
+    label: SMTP Password
+    description: "Password for SMTP authentication"
+
+# OAuth Settings
+- variable: gitea.config.oauth.ENABLED
+  default: false
+  type: boolean
+  label: Enable OAuth
+  group: "OAuth Settings"
+  description: "Enable OAuth authentication providers"
+  show_subquestion_if: true
+  subquestions:
+  - variable: gitea.config.oauth.GITHUB_ENABLED
+    type: boolean
+    label: Enable GitHub OAuth
+    description: "Enable GitHub as OAuth provider"
+    show_subquestion_if: true
+    subquestions:
+    - variable: gitea.config.oauth.GITHUB_CLIENT_ID
+      type: string
+      label: GitHub Client ID
+      description: "Client ID from GitHub OAuth app"
+    - variable: gitea.config.oauth.GITHUB_CLIENT_SECRET
+      type: password
+      label: GitHub Client Secret
+      description: "Client secret from GitHub OAuth app"
+  - variable: gitea.config.oauth.GITLAB_ENABLED
+    type: boolean
+    label: Enable GitLab OAuth
+    description: "Enable GitLab as OAuth provider"
+    show_subquestion_if: true
+    subquestions:
+    - variable: gitea.config.oauth.GITLAB_CLIENT_ID
+      type: string
+      label: GitLab Client ID
+      description: "Client ID from GitLab OAuth app"
+    - variable: gitea.config.oauth.GITLAB_CLIENT_SECRET
+      type: password
+      label: GitLab Client Secret
+      description: "Client secret from GitLab OAuth app"
+  - variable: gitea.config.oauth.GOOGLE_ENABLED
+    type: boolean
+    label: Enable Google OAuth
+    description: "Enable Google as OAuth provider"
+    show_subquestion_if: true
+    subquestions:
+    - variable: gitea.config.oauth.GOOGLE_CLIENT_ID
+      type: string
+      label: Google Client ID
+      description: "Client ID from Google OAuth app"
+    - variable: gitea.config.oauth.GOOGLE_CLIENT_SECRET
+      type: password
+      label: Google Client Secret
+      description: "Client secret from Google OAuth app"
+
+# Metrics and Monitoring
+- variable: gitea.config.metrics.ENABLED
+  default: false
+  type: boolean
+  label: Enable Metrics
+  group: "Metrics and Monitoring"
+  description: "Enable Prometheus metrics endpoint"
+  show_subquestion_if: true
+  subquestions:
+  - variable: gitea.config.metrics.TOKEN
+    type: password
+    label: Metrics Token
+    description: "Token for accessing the metrics endpoint (leave empty for no token)"
+
