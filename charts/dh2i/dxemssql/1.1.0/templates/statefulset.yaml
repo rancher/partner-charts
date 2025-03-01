@@ -1,0 +1,191 @@
+#DxEnterprise + MSSQL StatefulSet 
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dxemssql.fullname" . }}
+  labels:
+    {{- include "dxemssql.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "dxemssql.fullname" . }}
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "dxemssql.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dxemssql.labels" . | nindent 8 }}
+      annotations:
+{{ toYaml .Values.podAnnotations | indent 8 }}
+    spec:
+      {{- if .Values.serviceAccount }}
+      serviceAccount: {{.Values.serviceAccount}}
+      {{- end }}
+      securityContext:
+        {{- if .Capabilities.APIVersions.Has "route.openshift.io/v1" }}
+        # Microsoft-recommended security context for OpenShift
+        fsGroupChangePolicy: OnRootMismatch
+        {{- else }}
+        # Microsoft-recommended security context for everything other than OpenShift
+        fsGroup: 10001
+        {{- end }}
+      hostAliases:
+{{ toYaml .Values.hostAliases | indent 8 }}
+      dnsConfig:
+{{ toYaml .Values.dnsConfig | indent 8 }}
+      containers:
+      - name: sql
+        image: "{{ .Values.sqlImage.repository }}:{{ .Values.sqlImage.tag }}"
+        imagePullPolicy: {{ .Values.sqlImage.pullPolicy }}
+        {{- if .Capabilities.APIVersions.Has "route.openshift.io/v1" }}
+        # Required additional capability on OpenShift
+        securityContext:
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+        {{- end }}
+        env:
+        # Maintain backwards compatibility with old way of providing enivronment variables
+        # Default to using these values if they exist, otherwise, use the new env
+        {{- if not (coalesce .Values.sqlImage.env.ACCEPT_EULA .Values.ACCEPT_EULA) }}
+        {{- fail "You must accept the SQL Server EULA." }}
+        {{- end }}
+        {{- if not (coalesce .Values.sqlImage.env.MSSQL_PID .Values.MSSQL_PID) }}
+        {{- fail "You must provide a PID for SQL Server." }}
+        {{- end }}
+        {{- if not .Values.sqlImage.env.MSSQL_ENABLE_HADR }}
+        - name: MSSQL_ENABLE_HADR
+          value: "1"
+        {{- end }}
+        {{- if not .Values.mssqlSecret }}
+        - name: MSSQL_SA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "You must provide a secret key that contains MSSQL_SA_PASSWORD and DX_PASSKEY." .Values.secretKeys }}
+              key: MSSQL_SA_PASSWORD
+        {{- end }}
+        {{- range $v := list "MSSQL_AGENT_ENABLED" "MSSQL_ENABLE_HADR" "MSSQL_PID" "ACCEPT_EULA" }}
+        {{- if not (and $.Values.sqlImage.env (hasKey $.Values.sqlImage.env $v)) }}
+        {{- if hasKey $.Values $v }}
+        - name: {{ $v | quote }}
+          {{- if and (eq $v "ACCEPT_EULA") (not (get $.Values $v)) }}
+          value: null
+          {{- else }}
+          value: {{ get $.Values $v | toString | quote }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- range $k, $v := .Values.sqlImage.env }}
+        - name: {{ $k | toString | quote }}
+          {{- if and (eq $k "ACCEPT_EULA") (not $v) }}
+          value: null
+          {{- else }}
+          value: {{ $v | toString | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.mssqlSecret }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.mssqlSecret }}
+            optional: false
+        {{- end }}
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 12
+          tcpSocket:
+            port: 1433
+        volumeMounts:
+        - name: mssql
+          mountPath: "/var/opt/mssql"
+      - name: dxe
+        image: "{{ .Values.dxeImage.repository }}:{{ .Values.dxeImage.tag }}"
+        imagePullPolicy: {{ .Values.dxeImage.pullPolicy }}
+        env:
+        {{- if not (coalesce .Values.dxeImage.env.DX_ACCEPT_EULA .Values.DX_ACCEPT_EULA) }}
+        {{- fail "You must accept the DxEnterprise EULA." }}
+        {{- end }}
+        {{- if .Values.DX_LICENSE }}
+        # Backward-compatibility - pull DX_LICENSE from the old location in values.yaml
+        # Otherwise it comes from the secret
+        - name: DX_LICENSE
+          value: {{ .Values.DX_LICENSE | toString | quote }}
+        {{- end }}
+        {{- range $v := list "DX_ACCEPT_EULA" "DX_VHOST_NAME" "DX_AG_NAME" "DX_AG_OPTIONS" "DX_NEW_CLUSTER" "DX_USE_NAT" "DX_JOIN_TARGET" }}
+        {{- if not (and $.Values.dxeImage.env (hasKey $.Values.dxeImage.env $v)) }}
+        {{- if hasKey $.Values $v }}
+        - name: {{ $v | quote }}
+          # Replace false value for ACCEPT_EULA with an empty value
+          {{- if and (eq $v "DX_ACCEPT_EULA") (not (get $.Values $v)) }}
+          value: null
+          {{- else }}
+          value: {{ get $.Values $v | toString | quote }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- range $k, $v := .Values.dxeImage.env }}
+        - name: {{ $k | toString | quote }}
+          {{- if and (eq $k "DX_ACCEPT_EULA") (not $v) }}
+          value: null
+          {{- else }}
+          value: {{ $v | toString | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if not (and $.Values.dxeImage.env (hasKey $.Values.dxeImage.env "MSSQL_SA_PASSWORD")) }}
+        {{- if (and $.Values.sqlImage.env (hasKey $.Values.sqlImage.env "MSSQL_SA_PASSWORD")) }}
+        - name: MSSQL_SA_PASSWORD
+          # Get the SA password from the mssql environment
+          value: {{ get $.Values.sqlImage.env "MSSQL_SA_PASSWORD" | toString | quote }}
+        {{- else if $.Values.mssqlSecret }}
+        - name: MSSQL_SA_PASSWORD
+          # Get the SA password from the mssql secret
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mssqlSecret }}
+              key: MSSQL_SA_PASSWORD
+        {{- end }}
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ required "You must provide a secret key that contains DX_PASSKEY." .Values.secretKeys }}
+            optional: false
+        readinessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 12
+          exec:
+            command:
+            - sh
+            - -c
+            - "cat /opt/dh2i/sbin/ready | grep -q \"1\""
+        volumeMounts:
+        - name: dxe
+          mountPath: "/etc/dh2i"
+
+  volumeClaimTemplates:
+  - metadata:
+      name: dxe
+    spec:
+      {{- if .Values.dxeImage.volumeClaimConfiguration }}
+{{ toYaml .Values.dxeImage.volumeClaimConfiguration | nindent 6 }}
+      {{- else }}
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+      {{- end }}
+  - metadata:
+      name: mssql
+    spec:
+      {{- if .Values.sqlImage.volumeClaimConfiguration }}
+{{ toYaml .Values.sqlImage.volumeClaimConfiguration | nindent 6 }}
+      {{- else }}
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 8Gi
+      {{- end }}
