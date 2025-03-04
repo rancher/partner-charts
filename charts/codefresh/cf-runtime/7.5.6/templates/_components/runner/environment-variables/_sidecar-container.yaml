@@ -1,0 +1,22 @@
+{{- define "runner-sidecar.environment-variables.defaults" }}
+HOME: /tmp
+{{- end }}
+
+{{- define "runner-sidecar.environment-variables.calculated" }}
+API_HOST: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+USER_CODEFRESH_TOKEN: {{ include "runtime.installation-token-env-var-value" . | nindent 2 }}
+KUBE_CONTEXT: {{ include "runtime.runtime-environment-spec.context-name" . }}
+KUBE_NAMESPACE: {{ .Release.Namespace }}
+OWNER_NAME: {{ include "runner.fullname" . }}
+RUNTIME_NAME: {{ include "runtime.runtime-environment-spec.runtime-name" . }}
+CONFIGMAP_NAME: {{ printf "%s-%s" (include "runtime.fullname" .) "spec" }}
+{{- end }}
+
+{{- define "runner-sidecar.environment-variables" }}
+  {{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+  {{- $defaults := (include "runner-sidecar.environment-variables.defaults" . | fromYaml) }}
+  {{- $calculated := (include "runner-sidecar.environment-variables.calculated" . | fromYaml) }}
+  {{- $overrides := .Values.sidecar.env }}
+  {{- $mergedValues := mergeOverwrite (merge $defaults $calculated) $overrides }}
+  {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $mergedValues "context" .) }}
+{{- end }}
