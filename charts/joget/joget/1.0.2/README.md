@@ -9,19 +9,28 @@ This Helm chart bootstraps a Joget DX deployment on a Kubernetes cluster using t
 # Prerequisites
 
 - Kubernetes 1.22+
-- ReadWriteMany volumes for deployment scaling
+- ReadWriteMany volume for deployment scaling
 - Supported database (MySQL, PostgreSQL, Oracle, MS SQL Server) 
 
 # Installation
 
-## Add Joget Repo
+## Add Helm Repository
+
+1. Add Helm repository
+   
 ```sh
-helm repo add joget https://dev.joget.org/helm
+helm repo add joget https://jogetworkflow.github.io/helm-joget/charts/
+```
+
+1. Update Helm repositories
+
+```sh
+helm repo update
 ```
 
 ## Install Chart with Release Name `Joget`
 
-1. Create the flux namespace:
+1. Create the joget namespace:
 
    ```sh
    kubectl create namespace joget
@@ -30,7 +39,7 @@ helm repo add joget https://dev.joget.org/helm
 1. Run helm install:
 
    ```sh
-   helm install -i joget joget/joget --namespace joget
+   helm install joget joget/joget --namespace joget
    ```
 
 1. Perform [database setup](https://dev.joget.org/community/display/DX8/Setting+Up+Database)
