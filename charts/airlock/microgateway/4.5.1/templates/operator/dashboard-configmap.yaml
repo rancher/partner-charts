@@ -1,0 +1,28 @@
+{{- if .Values.dashboards.create -}}
+{{- range $instance  := (keys .Values.dashboards.instances | sortAlpha) -}}
+{{- $dashboard := get $.Values.dashboards.instances $instance -}}
+{{- if $dashboard.create }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "airlock-microgateway.fullname" $ }}-dashboard-{{ $instance | lower }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" $ | nindent 4 }}
+    {{- with $.Values.dashboards.config.grafana.dashboardLabel -}}
+      {{- .name | nindent 4 -}}: {{ .value | quote }}
+    {{- end }}
+  annotations:
+    {{- with $.Values.dashboards.config.grafana.folderAnnotation -}}
+      {{- .name | nindent 4 -}}: {{ .value | quote }}
+    {{- end }}
+    {{- with $.Values.commonAnnotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  {{- printf "%s.json" $instance | nindent 2 }}: |-
+    {{- ($.Files.Get (printf "dashboards/%s.json" $instance))  | nindent 4 -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,36 @@
+{{- if eq (include "k10.isOpenShift" .) "true" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+    component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+data:
+  nginx.conf: |
+    pid /var/run/nginx/nginx.pid;
+    error_log /dev/stdout info;
+    events {
+        worker_connections 1024;
+    }
+    http {
+        access_log /dev/stdout;
+        server {
+            listen 8080;
+            server_name {{ template "k10.openShiftConsolePluginProxyName" . }}.dashboardbff;
+            location / {
+                proxy_pass http://dashboardbff-svc.{{ .Release.Namespace }}:8000;
+            }
+        }
+        server {
+            listen 9443 ssl;
+            server_name {{ template "k10.openShiftConsolePluginProxyName" . }}.dashboardbff;
+            ssl_certificate /etc/nginx/ssl/tls.crt;
+            ssl_certificate_key /etc/nginx/ssl/tls.key;
+            location / {
+                proxy_pass http://dashboardbff-svc.{{ .Release.Namespace }}:8000;
+            }
+        }
+    }
+{{- end -}}

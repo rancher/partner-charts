@@ -1,0 +1,379 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+    component: {{ .Release.Name }}-controller
+    release: {{ .Release.Name }}
+    {{- if .Values.controller.labels }}
+    {{- toYaml .Values.controller.labels | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+      component: {{ .Release.Name }}-controller
+      release: {{ .Release.Name }}
+  replicas: {{ .Values.controller.replicas | default 1 }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-controller
+        component: {{ .Release.Name }}-controller
+        release: {{ .Release.Name }}
+        {{- if .Values.controller.podLabels }}
+        {{- toYaml .Values.controller.podLabels | nindent 8 }}
+        {{- end }}
+    {{- if .Values.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '{{ .Values.metrics.controllerPort | default 9090 }},{{ .Values.metrics.provisionerPort | default 9091 }},{{ .Values.metrics.resizerPort | default 9092 }},{{ .Values.metrics.snapshotterPort | default 9093 }},{{ .Values.metrics.attacherPort | default 9095 }}'
+    {{- end }}
+    spec:
+      {{- if or .Values.controller.affinity .Values.affinity }}
+      {{- $controllerAffinity := dict  -}}
+      {{- $_ := include "helm-toolkit.utils.merge" (tuple $controllerAffinity .Values.controller.affinity .Values.affinity) }}
+      affinity:
+        {{- toYaml $controllerAffinity | nindent 8}}
+      {{- end }}
+      {{- if or .Values.nodeSelector .Values.controller.nodeSelector}}
+      {{- $nodeSelector := dict -}}
+      {{- $_ := include "helm-toolkit.utils.merge" (tuple $nodeSelector .Values.controller.nodeSelector .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml $nodeSelector | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Release.Name }}-controller
+      {{- if or .Values.hostNetwork .Values.pluginConfig.mountProtocol.useNfs .Values.pluginConfig.mountProtocol.allowNfsFailback}}
+      hostNetwork: true
+      {{- end }}
+      containers:
+        - name: wekafs
+          securityContext:
+            privileged: true
+          image: {{ .Values.images.csidriver }}:v{{ .Values.images.csidriverTag }}
+          imagePullPolicy: Always
+          args:
+            - "--drivername=$(CSI_DRIVER_NAME)"
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+            - "--dynamic-path=$(CSI_DYNAMIC_PATH)"
+            - "--csimode=$(X_CSI_MODE)"
+            - "--newvolumeprefix={{ .Values.pluginConfig.objectNaming.volumePrefix | default "csivol-" | trunc 7 }}"
+            - "--newsnapshotprefix={{ .Values.pluginConfig.objectNaming.snapshotPrefix | default "csisnp-" | trunc 7 }}"
+            - "--seedsnapshotprefix={{ .Values.pluginConfig.objectNaming.seedSnapshotPrefix | default "csisnp-seed-" | trunc 12 }}"
+          {{- if .Values.pluginConfig.allowedOperations.autoCreateFilesystems | default true }}
+            - "--allowautofscreation"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowedOperations.autoExpandFilesystems | default true }}
+            - "--allowautofsexpansion"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowedOperations.snapshotDirectoryVolumes }}
+            - "--allowsnapshotsoflegacyvolumes"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowedOperations.snapshotVolumesWithoutQuotaEnforcement }}
+            - "--alwaysallowsnapshotvolumes"
+          {{- end }}
+          {{- if .Values.tracingUrl }}
+            - "--tracingurl={{ .Values.tracingUrl }}"
+          {{- end }}
+          {{- if .Values.metrics.enabled }}
+            - "--enablemetrics"
+            - "--metricsport={{ .Values.metrics.controllerPort | default 9090 }}"
+          {{- end }}
+          {{- if .Values.pluginConfig.allowInsecureHttps }}
+            - "--allowinsecurehttps"
+          {{- end }}
+          {{- if .Values.pluginConfig.mutuallyExclusiveMountOptions }}
+            {{- range  .Values.pluginConfig.mutuallyExclusiveMountOptions }}
+            - "--mutuallyexclusivemountoptions={{ . }}"
+            {{- end }}
+          {{- end}}
+          {{- if .Values.useJsonLogging }}
+            - "--usejsonlogging"
+          {{- end }}
+          {{- if .Values.controller.grpcRequestTimeoutSeconds }}
+            - "--grpcrequesttimeoutseconds={{ .Values.controller.grpcRequestTimeoutSeconds | default "5" }}"
+          {{- end }}
+          {{- if .Values.controller.concurrency }}
+            - "--concurrency.createVolume={{ .Values.controller.concurrency.createVolume | default "1" }}"
+            - "--concurrency.deleteVolume={{ .Values.controller.concurrency.deleteVolume | default "1" }}"
+            - "--concurrency.expandVolume={{ .Values.controller.concurrency.expandVolume | default "1" }}"
+            - "--concurrency.createSnapshot={{ .Values.controller.concurrency.createSnapshot | default "1" }}"
+            - "--concurrency.deleteSnapshot={{ .Values.controller.concurrency.deleteSnapshot | default "1" }}"
+          {{- end }}
+          {{- if .Values.pluginConfig.mountProtocol.useNfs | default false }}
+            - "--usenfs"
+          {{- end }}
+          {{- if .Values.pluginConfig.mountProtocol.allowNfsFailback | default false }}
+            - "--allownfsfailback"
+          {{- end }}
+          {{- if .Values.pluginConfig.mountProtocol.interfaceGroupName }}
+            - "--interfacegroupname={{ .Values.pluginConfig.mountProtocol.interfaceGroupName }}"
+          {{- end }}
+          {{- if .Values.pluginConfig.mountProtocol.clientGroupName }}
+            - "--clientgroupname={{ .Values.pluginConfig.mountProtocol.clientGroupName }}"
+          {{- end }}
+          {{- if .Values.pluginConfig.mountProtocol.nfsProtocolVersion }}
+            - "--nfsprotocolversion={{ .Values.pluginConfig.mountProtocol.nfsProtocolVersion | toString}}"
+          {{- end }}
+          {{- if (.Values.pluginConfig.skipGarbageCollection | default false) }}
+            - "--skipgarbagecollection"
+          {{- end }}
+          {{- if (.Values.pluginConfig.waitForObjectDeletion | default false) }}
+            - "--waitforobjectdeletion"
+          {{- end }}
+          {{- if .Values.pluginConfig.encryption.allowEncryptionWithoutKms}}
+            - "--allowencryptionwithoutkms"
+          {{- end}}
+          ports:
+            - containerPort: 9898
+              name: healthz
+              protocol: TCP
+          {{- if .Values.metrics.enabled }}
+            - containerPort: {{ .Values.metrics.controllerPort | default 9090 }}
+              name: metrics
+              protocol: TCP
+          {{- end }}
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: CSI_DRIVER_NAME
+              value: {{ required "Provide CSI Driver Name"  .Values.csiDriverName }}
+            - name: CSI_DRIVER_VERSION
+              value: {{ required "Provide CSI Driver version"  .Values.csiDriverVersion }}
+            - name: X_CSI_MODE
+              value: controller
+            - name: CSI_DYNAMIC_PATH
+              value: {{ required "Provide CSI Driver Dynamic Volume Creation Path"  .Values.dynamicProvisionPath }}
+            - name: X_CSI_DEBUG
+              value: "false"
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: KUBE_NODE_IP_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+            - mountPath: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+              mountPropagation: Bidirectional
+              name: plugins-dir
+            - mountPath: /var/lib/csi-wekafs-data
+              name: csi-data-dir
+            - mountPath: /dev
+              name: dev-dir
+            {{- if .Values.legacyVolumeSecretName }}
+            - mountPath: /legacy-volume-access
+              name: legacy-volume-access
+              readOnly: true
+            {{- end }}
+        - name: csi-attacher
+          image: {{ required "csi attacher sidercar image." .Values.images.attachersidecar }}
+          securityContext:
+            privileged: true
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--timeout=60s"
+            {{- if .Values.controller.configureAttacherLeaderElection }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+            {{- end }}
+            - "--worker-threads={{ .Values.controller.maxConcurrentRequests }}"
+            {{- if or .Values.metrics.enabled .Values.controller.configureAttacherLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.attacherPort | default 9095 }}"
+            {{- end }}
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          {{- if .Values.controller.configureAttacherLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.attacherPort | default 9095 }}
+              path: /healthz/leader-election
+          ports:
+            - containerPort: {{ .Values.metrics.attacherPort | default 9095 }}
+              name: pr-metrics
+              protocol: TCP
+          {{- end }}
+        - name: csi-provisioner
+          {{- if and .Values.hostNetwork (.Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints") }}
+          securityContext:
+              privileged: true
+          {{- end }}
+          image: {{ required "csi provisioner sidecar container image." .Values.images.provisionersidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--feature-gates=Topology=true"
+            - "--timeout=60s"
+            - "--prevent-volume-mode-conversion"
+          {{- if .Values.controller.configureProvisionerLeaderElection | default true }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+          {{- end }}
+            - "--worker-threads={{ .Values.controller.maxConcurrentRequests }}"
+            - "--retry-interval-start=10s"
+          {{- if or .Values.metrics.enabled .Values.controller.configureProvisionerLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.provisionerPort | default 9091 }}"
+          {{- end }}
+          {{- if .Values.controller.configureProvisionerLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.provisionerPort | default 9091 }}
+              path: /healthz/leader-election
+          {{- end }}
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: "/csi"
+          ports:
+            - containerPort: {{ .Values.metrics.provisionerPort }}
+              name: pr-metrics
+              protocol: TCP
+        - name: csi-resizer
+          {{- if and .Values.hostNetwork (.Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints") }}
+          securityContext:
+            privileged: true
+          {{- end }}
+          image: {{ required "csi attacher sidercar image." .Values.images.resizersidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=60s"
+          {{- if or .Values.metrics.enabled .Values.controller.configureResizerLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.resizerPort | default 9092 }}"
+          {{- end }}
+          {{- if .Values.controller.configureResizerLeaderElection | default true }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+          {{- end }}
+            - "--workers={{ .Values.controller.maxConcurrentRequests }}"
+            - "--retry-interval-start=10s"
+          {{- if .Values.controller.configureResizerLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.resizerPort | default 9092 }}
+              path: /healthz/leader-election
+          {{- end }}
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          ports:
+            - containerPort: {{ .Values.metrics.resizerPort }}
+              name: rs-metrics
+              protocol: TCP
+        - name: csi-snapshotter
+          {{- if and .Values.hostNetwork (.Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints") }}
+          securityContext:
+            privileged: true
+          {{- end }}
+          image: {{ required "csi snapshotter sidecar image." .Values.images.snapshottersidecar }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=60s"
+          {{- if .Values.controller.configureSnapshotterLeaderElection | default true }}
+            - "--leader-election"
+            - "--leader-election-namespace={{ .Release.Namespace }}"
+          {{- end }}
+            - "--worker-threads={{ .Values.controller.maxConcurrentRequests }}"
+            - "--retry-interval-start=10s"
+          {{- if or .Values.metrics.enabled .Values.controller.configureSnapshotterLeaderElection }}
+            - "--http-endpoint=:{{ .Values.metrics.snapshotterPort | default 9093 }}"
+          {{- end }}
+          {{- if .Values.controller.configureSnapshotterLeaderElection }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.metrics.snapshotterPort | default 9093 }}
+              path: /healthz/leader-election
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.metrics.snapshotterPort }}
+              name: sn-metrics
+              protocol: TCP
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+
+        - name: liveness-probe
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          image: {{ required "Provide Liveness Probe image." .Values.images.livenessprobesidecar }}
+          args:
+            - "--v={{ .Values.logLevel | default 5 }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--health-port=$(HEALTH_PORT)"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi.sock
+            - name: HEALTH_PORT
+              value: "9898"
+      {{- with .Values.controllerPluginTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds | default 30 }}
+      volumes:
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins/{{ .Release.Name }}-controller
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/pods
+            type: DirectoryOrCreate
+          name: mountpoint-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins_registry
+            type: Directory
+          name: registration-dir
+        - hostPath:
+            path: {{ .Values.kubeletPath | default "/var/lib/kubelet" }}/plugins
+            type: Directory
+          name: plugins-dir
+        - hostPath:
+            # 'path' is where PV data is persisted on host.
+            # using /tmp is also possible while the PVs will not available after plugin container recreation or host reboot
+            path: /var/lib/csi-wekafs-data/
+            type: DirectoryOrCreate
+          name: csi-data-dir
+        - hostPath:
+            path: /dev
+            type: Directory
+          name: dev-dir
+{{- if .Values.legacyVolumeSecretName }}
+        - name: legacy-volume-access
+          secret:
+            secretName: {{ .Values.legacyVolumeSecretName }}
+{{- end }}

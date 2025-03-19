@@ -1,0 +1,84 @@
+{{ if .Values.tracesGateway.enabled }}
+exporters:
+{{- if eq .Values.debug.instrumentation.tracesGateway.print true }}
+  debug:
+    verbosity: detailed
+{{- end }}
+
+  loadbalancing:
+    protocol:
+      otlp:
+        timeout: 10s
+        tls:
+          insecure: true
+        sending_queue:
+          enabled: true
+          num_consumers: 10
+          queue_size: 10_000
+    resolver:
+      dns:
+        hostname: '{{ include "tracesgateway.exporter.loadbalancing.endpoint" . }}'
+        port: '4317'
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "${env:MY_POD_IP}:4317"
+      http:
+        endpoint: "${env:MY_POD_IP}:4318"
+processors:
+  ## The memory_limiter processor is used to prevent out of memory situations on the collector.
+  memory_limiter:
+    ## check_interval is the time between measurements of memory usage for the
+    ## purposes of avoiding going over the limits. Defaults to zero, so no
+    ## checks will be performed. Values below 1 second are not recommended since
+    ## it can result in unnecessary CPU consumption.
+    check_interval: 5s
+
+    ## Maximum amount of memory, in %, targeted to be allocated by the process heap.
+    ## Note that typically the total memory usage of process will be about 50MiB higher
+    ## than this value.
+    limit_percentage: 90
+
+    ## Maximum spike expected between the measurements of memory usage, in %.
+    spike_limit_percentage: 20
+
+  ## The batch processor accepts spans and places them into batches grouped by node and resource
+  batch:
+    ## Number of spans after which a batch will be sent regardless of time
+    send_batch_size: 256
+    ## Maximum number of spans sent at once
+    send_batch_max_size: 512
+    ## Time duration after which a batch will be sent regardless of size
+    timeout: 5s
+    ## Never more than this many spans are being sent in a batch
+    # send_batch_max_size: 512
+extensions:
+  health_check:
+    endpoint: ${env:MY_POD_IP}:13133
+  pprof: {}
+
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters:
+        - loadbalancing
+{{- if eq .Values.debug.instrumentation.tracesGateway.print true }}
+        - debug
+{{- end }}
+  telemetry:
+    logs:
+      level: {{ .Values.tracesGateway.logLevel }}
+    metrics:
+      level: {{ .Values.tracesGateway.metricsLevel }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888
+{{- end }}

@@ -1,0 +1,33 @@
+{{- if .Values.operator.rbac.create }}
+{{- if empty .Values.operator.watchNamespaces }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "airlock-microgateway.operator.fullname" . }}-manager-{{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+{{ include "airlock-microgateway-operator.rbacRules" . -}}
+{{- else }}
+{{- range $namespace := (append .Values.operator.watchNamespaces .Release.Namespace | uniq) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "airlock-microgateway.operator.fullname" $ }}-manager
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" $ | nindent 4 }}
+  {{- with $.Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+{{ include "airlock-microgateway-operator.rbacRules" $ }}
+---
+{{- end -}}
+{{- end -}}
+{{- end -}}

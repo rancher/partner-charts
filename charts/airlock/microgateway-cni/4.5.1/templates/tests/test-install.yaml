@@ -1,0 +1,103 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-test-install"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway-cni.labelsWithoutComponent" . | nindent 4 }}
+    app.kubernetes.io/component: test-install
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+  - name: test
+    image: "bitnami/kubectl:{{ (semver .Capabilities.KubeVersion.Version).Major }}.{{ (semver .Capabilities.KubeVersion.Version).Minor }}"
+    securityContext:
+      allowPrivilegeEscalation: {{ .Values.privileged }}
+      capabilities:
+        drop:
+        - ALL
+      privileged: {{ .Values.privileged }}
+      readOnlyRootFilesystem: true
+      runAsGroup: 0
+      runAsNonRoot: false
+      runAsUser: 0
+      seccompProfile:
+        type: RuntimeDefault
+    volumeMounts:
+    - mountPath: /host/opt/cni/bin
+      name: cni-bin-dir
+      readOnly: true
+    - mountPath: /host/etc/cni/net.d
+      name: cni-net-dir
+      readOnly: true
+    command:
+    - sh
+    - -c
+    - |
+      set -eu
+
+      fail() {
+        echo "Error: ${1}"
+        echo ""
+        echo 'CNI installer logs:'
+        kubectl logs -n {{ .Release.Namespace }} daemonsets/{{ include "airlock-microgateway-cni.fullname" .}} -c cni-installer
+        exit 1
+      }
+
+      containsMGWCNIConf() {
+        cat "${1}" | grep -qe '"type":.*"{{ include "airlock-microgateway-cni.fullname" . }}"'
+      }
+
+      if ! kubectl rollout status --timeout=60s -n {{ .Release.Namespace }} daemonsets/{{ include "airlock-microgateway-cni.fullname" .}}; then
+        fail 'CNI DaemonSet rollout did not complete within timeout'
+      fi
+
+      echo "Checking whether CNI binary was installed"
+      if ! [ -f "/host/opt/cni/bin/{{ include "airlock-microgateway-cni.fullname" . }}" ]; then
+        fail 'CNI binary was not installed'
+      fi
+
+      echo "Checking whether CNI kubeconfig was installed"
+      if ! [ -f "/host/etc/cni/net.d/{{ include "airlock-microgateway-cni.fullname" . }}-kubeconfig" ]; then
+        fail 'CNI kubeconfig was not created'
+      fi
+
+      echo "Checking whether CNI configuration was written"
+      case {{ .Values.config.installMode }} in
+        "chained")
+          for file in "/host/etc/cni/net.d/"*.conflist; do
+            if containsMGWCNIConf "${file}"; then
+              echo "Success"
+              exit 0
+            fi
+          done
+          ;;
+        "standalone")
+          if containsMGWCNIConf "/host/etc/cni/net.d/{{ include "airlock-microgateway-cni.fullname" . }}.conflist"; then
+            echo "Success"
+            exit 0
+          fi
+          ;;
+        "manual")
+          echo "- Skipping because we are in 'manual' install mode"
+          echo "Success"
+          exit 0
+          ;;
+      esac
+
+      fail 'Configuration for plugin "{{ include "airlock-microgateway-cni.fullname" . }}" was not found'
+  serviceAccountName: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+  volumes:
+  - hostPath:
+      path: "{{ .Values.config.cniBinDir }}"
+      type: Directory
+    name: cni-bin-dir
+  - hostPath:
+      path: "{{ .Values.config.cniNetDir }}"
+      type: Directory
+    name: cni-net-dir
+{{- end -}}
