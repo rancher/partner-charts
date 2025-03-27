@@ -17,7 +17,7 @@ Once the Helm chart is fully deployed, add the ingress IP address to your DNS zo
 ### Login Kasm Admin Console
 The default admin username is `admin@kasm.local`. To retrieve the password, run the following kubectl command:
 
-```
+```bash
 kubectl get secret --namespace {namespace} kasm-secrets -o jsonpath="{.data.admin-password}" | base64 -d
 ```
 
@@ -25,9 +25,9 @@ kubectl get secret --namespace {namespace} kasm-secrets -o jsonpath="{.data.admi
 
 To retrieve the manager token, use the following kubectl command:
 
-``
+```bash
 kubectl get secret --namespace {namespace} kasm-secrets -o jsonpath="{.data.manager-token}" | base64 -d
-``
+```
 
 ### Install Agent
 
@@ -46,10 +46,8 @@ sudo bash kasm_release/install.sh --role agent --public-hostname [AGENT_HOSTNAME
 
 **Note:** To make the above command non-interactive, add the following flags:
 
-```bash
 - `--accept-eula`: Non-interactively accept the [Kasm End User License Agreement](https://kasmweb.com/assets/pdf/Kasm_Workspaces_EULA.pdf).
 - `--swap-size`: Create a swap partition on the agent server (in MB). Example value: `8192`. To skip the swap check, use the `--no-swap-check` flag instead. For more information, refer to the [Kasm Documentation](https://kasmweb.com/docs/latest/install/swap_warning.html).
-```
 
 ### Enable the Agent
 In the Kasm admin console, select **Infrastructure > Docker Agents** and using the arrow menu select **Edit** on the agent you just created. Make sure **Enabled** is selected and click **Save**.
