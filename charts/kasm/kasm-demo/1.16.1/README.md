@@ -4,7 +4,7 @@ The following will deploy Kasm in your Kubernetes cluster.
 
 ## Prerequisite
 1. StorageClass for Persistent Volume Claims (PVC): A StorageClass must be configured in the cluster to create Persistent Volume Claims (PVC) for the postgres-db.
-2. A Virtual Machine or Bare-Metal server that meets the [system requirements](https://kasmweb.com/docs/latest/install/system_requirements.html) for installingKasm agent.
+2. A Virtual Machine or Bare-Metal server that meets the [system requirements](https://kasmweb.com/docs/latest/install/system_requirements.html) for installing Kasm agent.
 
 ## Deploy Helm Chart
 Refer to the [values.yaml](https://helm.kasmweb.com/values.yaml) for available Helm values and their default configurations.
