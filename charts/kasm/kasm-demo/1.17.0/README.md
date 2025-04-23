@@ -35,8 +35,8 @@ Please ensure you have a Virtual Machine or Bare-Metal server that meets the [sy
 
 ```bash
 cd /tmp
-curl -O https://kasm-static-content.s3.amazonaws.com/kasm_release_1.16.1.98d6fa.tar.gz
-tar -xf kasm_release_1.16.1.98d6fa.tar.gz
+curl -O https://kasm-static-content.s3.amazonaws.com/kasm_release_1.17.0.bbc15c.tar.gz
+tar -xf kasm_release_1.17.0.bbc15c.tar.gz
 sudo bash kasm_release/install.sh --role agent --public-hostname [AGENT_HOSTNAME] --manager-hostname [MANAGER_HOSTNAME] --manager-token [MANAGER_TOKEN]
 ```
 
