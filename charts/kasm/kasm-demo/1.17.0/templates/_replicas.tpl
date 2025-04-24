@@ -6,9 +6,9 @@ Example usage:
 {{- define "replicas.preset" }}
   {{- $presetSizes := dict
     "proxy" (dict
-      "small" 2
-      "medium" 2
-      "large" 4
+      "small" 1
+      "medium" 4
+      "large" 8
     )
     "db" (dict
       "small" 1
@@ -16,14 +16,14 @@ Example usage:
       "large" 1
     )
     "api" (dict
-      "small" 3
-      "medium" 3
-      "large" 6
+      "small" 1
+      "medium" 4
+      "large" 8
     )
     "manager" (dict
-      "small" 2
-      "medium" 2
-      "large" 4
+      "small" 1
+      "medium" 4
+      "large" 8
     )
     "guac" (dict
       "small" 1
@@ -32,7 +32,7 @@ Example usage:
     )
     "rdp" (dict
       "small" 1
-      "medium" 1
+      "medium" 2
       "large" 3
     )
     "share" (dict
