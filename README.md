@@ -70,6 +70,14 @@ is useful for this; for more information please see the
 [`partner-charts-ci` documentation](https://github.com/rancher/partner-charts-ci?tab=readme-ov-file#4-run-partner-charts-ci-update).
 
 
+### How do I change the icon associated with my helm chart?
+
+Icons are located in the `assets/icons/` directory. You can see which of these
+icon files your helm chart uses by looking at the `icon` field of a version of
+your chart in `index.yaml`. In order to change the icon that your helm chart
+uses, simply replace this file and submit a pull request with this change.
+
+
 ### Who is responsible for maintaining the helm charts in this repository?
 
 Each SUSE partner organzation is responsible for maintaining the versions
