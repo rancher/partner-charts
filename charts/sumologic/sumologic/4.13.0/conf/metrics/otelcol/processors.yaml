@@ -1,0 +1,286 @@
+## Configuration for Batch Processor
+## The batch processor accepts spans and places them into batches grouped by node and resource
+batch:
+  ## Maximum number of spans sent at once
+  send_batch_max_size: 2_048
+  ## Number of spans after which a batch will be sent regardless of time
+  send_batch_size: 1_024
+  ## Time duration after which a batch will be sent regardless of size
+  timeout: 1s
+
+filter/drop_unnecessary_metrics:
+  error_mode: ignore
+  metrics:
+    metric:
+      # we let the metrics from annotations ("kubernetes-pods") through as they are
+      - resource.attributes["job"] != "pod-annotations" and IsMatch(name, "scrape_.*")
+{{- if .Values.sumologic.metrics.dropHistogramBuckets }}
+      # drop histograms we've extracted sums and counts from, but don't want the full thing
+      - (not IsMatch(name, {{ .Values.sumologic.metrics.allowHistogramRegex | quote }})) and (type == METRIC_DATA_TYPE_HISTOGRAM or type == METRIC_DATA_TYPE_EXPONENTIAL_HISTOGRAM or type == METRIC_DATA_TYPE_SUMMARY or IsMatch(name, ".*_bucket"))
+{{- end }}
+
+# Prometheus receiver puts all labels in record-level attributes, and we need them in resource
+groupbyattrs:
+  keys:
+    - container
+    - namespace
+    - pod
+    - service
+
+groupbyattrs/group_by_name:
+  keys:
+    - __name__
+    - job
+
+## The Kubernetes sprocessor automatically tags logs, metrics and traces with Kubernetes metadata like pod name, namespace name etc.
+{{ if .Values.metadata.metrics.useSumoK8sProcessor }}
+k8s_tagger:
+  extract:
+    delimiter: "_"
+    labels:
+      - key: "*"
+        tag_name: "pod_labels_%s"
+    metadata:
+      ## extract the following well-known metadata fields
+      - daemonSetName
+      - deploymentName
+      - nodeName
+      - replicaSetName
+      - serviceName
+      - statefulSetName
+  owner_lookup_enabled: true  # To enable fetching additional metadata using `owner` relationship
+  ## Has to be false to enrich metadata
+  passthrough: false
+  pod_association:
+    - from: build_hostname  # Pods are identified by Pod name and namespace
+{{ else }}
+k8sattributes:
+  wait_for_metadata: {{ .Values.metadata.metrics.waitForMetadata }}
+  wait_for_metadata_timeout: {{ .Values.metadata.metrics.waitForMetadataTimeout | quote }}
+  auth_type: "serviceAccount"
+  extract:
+    labels:
+      - key_regex: "(.*)"
+        tag_name: "pod_labels_$$1"
+        from: pod
+    metadata:
+      ## extract the following well-known metadata fields
+      - k8s.pod.name
+      - k8s.deployment.name
+      - k8s.daemonset.name
+      - k8s.replicaset.name
+      - k8s.statefulset.name
+      - k8s.namespace.name
+      - k8s.node.name
+  ## Has to be false to enrich metadata
+  passthrough: false
+  pod_association:
+    - sources:
+      - from: resource_attribute
+        name: k8s.pod.name
+      - from: resource_attribute
+        name: k8s.namespace.name
+{{ end }}
+
+## Configuration for Memory Limiter Processor
+## The memory_limiter processor is used to prevent out of memory situations on the collector.
+memory_limiter:
+  ## check_interval is the time between measurements of memory usage for the
+  ## purposes of avoiding going over the limits. Defaults to zero, so no
+  ## checks will be performed. Values below 1 second are not recommended since
+  ## it can result in unnecessary CPU consumption.
+  check_interval: 5s
+  ## Maximum amount of memory, in %, targeted to be allocated by the process heap.
+  limit_percentage: 90
+  ## Spike limit (calculated from available memory). Must be less than limit_percentage.
+  spike_limit_percentage: 20
+
+## Configuration for Metrics Transform Processor
+metricstransform:
+  transforms:
+    ## rename all prometheus_remote_write_$name metrics to $name
+    - action: update
+      include: ^prometheus_remote_write_(.*)$$
+      match_type: regexp
+      new_name: $$1
+
+## Configuration for Resource Processor
+resource:
+  attributes:
+    - action: upsert
+      from_attribute: namespace
+      key: k8s.namespace.name
+    - action: delete
+      key: namespace  # remove namespace to avoid duplication when attribute translation is enabled
+    - action: upsert
+      from_attribute: pod
+      key: k8s.pod.name
+    - action: delete
+      key: pod  # remove pod to avoid duplication when attribute translation is enabled
+    - action: upsert
+      from_attribute: container
+      key: k8s.container.name  # add container in OpenTelemetry convention to unify configuration for Source processor
+    - action: delete
+      key: container  # remove container to avoid duplication when attribute translation is enabled
+    - action: upsert
+      from_attribute: node
+      key: k8s.node.name  # add container in OpenTelemetry convention to unify configuration for Source processor
+    - action: delete
+      key: node  # remove container to avoid duplication when attribute translation is enabled
+    - action: upsert
+      from_attribute: service
+      key: prometheus_service
+    - action: delete
+      key: service
+    - action: upsert
+      from_attribute: service.name
+      key: job
+    - action: delete  # we don't want service.name to be set, as the schema processor translates it to "service"
+      key: service.name
+    - action: upsert
+      key: _origin  # add "_origin" metadata to metrics to keep the same format as for metrics from Fluentd
+      value: kubernetes
+    - action: upsert
+      key: cluster
+      value: {{ .Values.sumologic.clusterName | quote }}
+
+## NOTE: Drop these for now and and when proper configuration options
+## are exposed and source processor is configured then send them
+## as headers.
+resource/delete_source_metadata:
+  attributes:
+    - action: delete
+      key: _sourceCategory
+    - action: delete
+      key: _sourceHost
+    - action: delete
+      key: _sourceName
+resource/remove_k8s_pod_pod_name:
+  attributes:
+    - action: delete
+      key: k8s.pod.pod_name
+
+{{- if eq .Values.sumologic.metrics.sourceType "http" }}
+routing:
+  default_exporters:
+    - sumologic/default
+{{- if eq .Values.debug.metrics.metadata.print true }}
+    - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+    - sumologic/sumologic-mock-default
+{{- end }}
+  error_mode: ignore
+  table:
+    ## apiserver metrics
+    - exporters:
+        - sumologic/apiserver
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "apiserver"
+    ## control-plane metrics
+    - exporters:
+        - sumologic/control_plane
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "coredns"
+    - exporters:
+        - sumologic/control_plane
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "kube-etcd"
+    ## controller metrics
+    - exporters:
+        - sumologic/controller
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "kube-controller-manager"
+    ## kubelet metrics
+    - exporters:
+        - sumologic/kubelet
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "kubelet"
+    ## node metrics
+    - exporters:
+        - sumologic/node
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "node-exporter"
+    ## scheduler metrics
+    - exporters:
+        - sumologic/scheduler
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "kube-scheduler"
+    ## state metrics
+    - exporters:
+        - sumologic/state
+{{- if eq .Values.debug.metrics.metadata.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+        - sumologic/sumologic-mock-http
+{{- end }}
+      statement: route() where resource.attributes["job"] == "kube-state-metrics"
+{{- end }}
+
+## Configuration for Source Processor
+## Source processor adds Sumo Logic related metadata
+source:
+  collector: {{ .Values.sumologic.collectorName | default .Values.sumologic.clusterName | quote }}
+  exclude:
+    k8s.namespace.name: {{ include "metrics.excludeNamespaces" . }}
+
+## The Sumo Logic processor modifies the metadata on logs, metrics and traces sent to Sumo Logic
+## so that the Sumo Logic apps can make full use of the ingested data.
+sumologic:
+  add_cloud_namespace: false
+
+transform/remove_name:
+  error_mode: ignore
+  metric_statements:
+    - context: resource
+      statements:
+        - delete_key(attributes, "__name__")
+
+transform/set_name:
+  error_mode: ignore
+  metric_statements:
+    - context: datapoint
+      statements:
+        - set(attributes["__name__"], metric.name) where IsMatch(metric.name, "^cloudprovider_.*")
+
+{{- if .Values.sumologic.metrics.otelcol.extraProcessors }}
+{{- range $processor := .Values.sumologic.metrics.otelcol.extraProcessors }}
+{{ toYaml $processor }}
+{{- end }}
+{{- end }}
