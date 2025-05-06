@@ -41,7 +41,6 @@ for inclusion in this repository. Your software's helm chart must:
 * have `kubeVersion` set in the chart's metadata
 * contain an `app-readme.md` file (refer to the [`partner-charts-ci` documentation](https://github.com/rancher/partner-charts-ci) for more details)
 * be deployable from the current version of Rancher with the default values
-* define an icon
 
 Meeting these requirements ensures that Rancher users can easily deploy your
 software.
