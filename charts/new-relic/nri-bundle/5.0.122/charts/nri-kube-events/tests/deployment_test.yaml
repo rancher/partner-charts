@@ -1,0 +1,104 @@
+suite: test deployment images
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: deployment image uses pullSecrets
+    set:
+      cluster: my-cluster
+      licenseKey: us-whatever
+      images:
+        pullSecrets:
+          - name: regsecret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: regsecret
+
+  - it: deployment images use the proper image tag
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      images:
+        integration:
+          repository: newrelic/nri-kube-events
+          tag: "latest"
+        agent:
+          repository: newrelic/k8s-events-forwarder
+          tag: "latest"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: .*newrelic/nri-kube-events:latest$
+      - matchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: .*newrelic/k8s-events-forwarder:latest$
+
+
+  - it: by default the agent forwarder templates
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          any: true
+          content:
+            name: forwarder
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: my-release-nri-kube-events-agent-config
+              items:
+                - key: newrelic-infra.yml
+                  path: newrelic-infra.yml
+
+  - it: agent does not template if the sink is disabled
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      sinks:
+        newRelicInfra: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers
+          any: true
+          content:
+            name: forwarder
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: my-release-nri-kube-events-agent-config
+              items:
+                - key: newrelic-infra.yml
+                  path: newrelic-infra.yml
+
+  - it: has a linux node selector by default
+    set:
+      cluster: my-cluster
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+
+  - it: has a linux node selector and additional selectors
+    set:
+      cluster: my-cluster
+      licenseKey: us-whatever
+      nodeSelector:
+        aCoolTestLabel: aCoolTestValue
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            aCoolTestLabel: aCoolTestValue

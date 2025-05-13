@@ -1,0 +1,102 @@
+exporters:
+  sumologic:
+    client: {{ include "sumologic.sumo_client" . }}
+    endpoint: {{ include "sumologic.events.exporter.endpoint" . }}
+    log_format: {{ include "sumologic.events.exporter.format" . }}
+    sending_queue:
+      enabled: true
+{{- if .Values.sumologic.events.persistence.enabled }}
+      storage: file_storage
+{{- end }}
+
+{{- if eq .Values.debug.events.print true }}
+  debug:
+    verbosity: detailed
+{{- end }}
+
+{{- if eq (include "sumologic-mock.forward-events" .) "true" }}
+  sumologic/sumologic-mock:
+    client: {{ include "sumologic.sumo_client" . }}
+    endpoint: {{ include "sumologic-mock.receiver-endpoint" . }}
+    log_format: {{ include "sumologic.events.exporter.format" . }}
+    sending_queue:
+      enabled: true
+{{- end }}
+
+extensions:
+{{- if .Values.sumologic.events.persistence.enabled }}
+  file_storage:
+    directory: {{ .Values.sumologic.events.persistence.persistentVolume.path }}
+    timeout: 10s
+{{- end }}
+  health_check:
+    endpoint: ${env:MY_POD_IP}:13133
+  pprof: {}
+
+processors:
+  batch:
+    send_batch_max_size: 2_048
+    send_batch_size: 1024
+    timeout: 1s
+  resource/add_cluster:
+    attributes:
+      - action: upsert
+        key: cluster
+        value: {{ .Values.sumologic.clusterName | quote }}
+  source:
+    collector: {{ .Values.sumologic.collectorName | default .Values.sumologic.clusterName | quote }}
+    source_category: {{ .Values.sumologic.events.sourceCategory | default (printf "%s/%s"  (include "sumologic.clusterNameReplaceSpaceWithDash" .) (.Values.sumologic.events.sourceName )) | quote}}
+    source_category_prefix: ""
+    source_category_replace_dash: {{ .Values.sumologic.events.sourceCategoryReplaceDash | quote}}
+    source_name: {{ .Values.sumologic.events.sourceName | quote}}
+  sumologic:
+    add_cloud_namespace: false
+
+  ## Add timestamp to attributes
+  transform/add_timestamp:
+    log_statements:
+      - context: log
+        statements:
+          - set(time, Now()) where time_unix_nano == 0
+          - set(attributes["timestamp"], Int(time_unix_nano / 1000000))
+
+receivers:
+  raw_k8s_events: {}
+
+service:
+  extensions:
+    - health_check
+{{- if .Values.sumologic.events.persistence.enabled }}
+    - file_storage
+{{- end }}
+    - pprof
+  pipelines:
+    logs/events:
+      exporters:
+        - sumologic
+{{- if eq .Values.debug.events.print true }}
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-events" .) "true" }}
+        - sumologic/sumologic-mock
+{{- end }}
+      processors:
+        - resource/add_cluster
+        - source
+        - sumologic
+        - transform/add_timestamp
+        - batch
+      receivers:
+        - raw_k8s_events
+
+  telemetry:
+    logs:
+      level: {{ .Values.otelevents.logLevel }}
+    metrics:
+      level: {{ .Values.otelevents.metricsLevel }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888

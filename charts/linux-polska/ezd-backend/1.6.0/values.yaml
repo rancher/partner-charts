@@ -1,0 +1,206 @@
+# Default values for ezd-backend.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+global:
+  imageCredentials:
+    name: "" # credentials-registry-app
+    registry: "" # "https://index.docker.io/v1/"
+    username: ""
+    password: ""
+    email: ""
+
+  deployment:
+    platform: 'kubernetes'
+    type: 'custom'
+  rabbitmq:
+    deploy: true
+    custom:
+      consumpion: false
+  postgresql:
+    deploy: true
+    custom:
+      consumpion: false
+  redis:
+    deploy: true
+    custom:
+      consumpion: false
+
+rabbitmqConfig:
+  fullnameOverride: "lp-backend-rabbitmq" 
+  nameOverride: ""
+  auth:
+    username: ""
+    password: ""
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      host: "" 
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+  customConfig:
+    image: docker.io/sourcemation/rabbitmq-4-management:4.1.0
+    replicas: 2
+    rabbitmq:
+      additionalConfig: |
+        cluster_partition_handling = pause_minority
+        vm_memory_high_watermark_paging_ratio = 0.99
+        disk_free_limit.relative = 1.0
+        collect_statistics_interval = 10000
+    persistence:
+      storage: "10Gi"
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+    override:
+      statefulSet:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: rabbitmq
+                imagePullPolicy: Always
+              initContainers:
+              - name: setup-container
+                imagePullPolicy: Always
+
+postgresqlConfig:
+  fullnameOverride: "lp-backend-postgresql" 
+  nameOverride: ""
+  auth:
+    admPassword: ""
+    appPassword: ""
+  customConfig:
+    instances: 3
+    minSyncReplicas: 1
+    maxSyncReplicas: 2
+    replicationSlots:
+      highAvailability:
+        enabled: true
+    env:
+    - name: TZ
+      value: Europe/Warsaw
+    primaryUpdateStrategy: unsupervised
+    storage:
+      size: 2Gi
+      resizeInUseVolumes: True
+    walStorage:
+      size: 2Gi
+      resizeInUseVolumes: True
+    imageName: docker.io/sourcemation/cnpg-17:17.4.1
+    postgresql:
+      parameters:
+        pg_stat_statements.max: "10000"
+        pg_stat_statements.track: all
+        pgaudit.log: "all, -misc"
+        pgaudit.log_catalog: "off"
+        pgaudit.log_parameter: "on"
+        pgaudit.log_relation: "on"
+  
+        max_connections: "100"
+        superuser_reserved_connections: "3"
+  
+        shared_buffers: "512 MB"
+        work_mem: "32 MB"
+        maintenance_work_mem: "320 MB"
+        huge_pages: "off"
+        effective_cache_size: "1 GB"
+        effective_io_concurrency: "100" # concurrent IO only really activated if OS supports posix_fadvise function
+        random_page_cost: "1.25" # speed of random disk access relative to sequential access (1.0)
+  
+        # Monitoring
+        track_io_timing: "on"        # measure exact block IO times
+        track_functions: "pl"        # track execution times of pl-language procedures if any
+  
+        # Checkpointing: 
+        checkpoint_timeout : "15 min "
+        checkpoint_completion_target: "0.9"
+        max_wal_size: "1024 MB"
+        min_wal_size: "512 MB"
+  
+        # WAL writing
+        wal_compression: "on"
+        wal_buffers: "-1"    # auto-tuned by Postgres till maximum of segment size (16MB by default)
+        wal_writer_delay: "200ms"
+        wal_writer_flush_after: "1MB"
+        wal_keep_size: "3650 MB"
+  
+  
+        # Background writer
+        bgwriter_delay: "200ms"
+        bgwriter_lru_maxpages: "100"
+        bgwriter_lru_multiplier: "2.0"
+        bgwriter_flush_after: "0"
+  
+        # Parallel queries: 
+        max_worker_processes: "2"
+        max_parallel_workers_per_gather: "1"
+        max_parallel_maintenance_workers: "1"
+        max_parallel_workers: "2"
+        parallel_leader_participation: "on"
+  
+        # Advanced features 
+        enable_partitionwise_join: "on" 
+        enable_partitionwise_aggregate: "on"
+        jit: "on"
+        max_slot_wal_keep_size: "1000 MB"
+        track_wal_io_timing: "on"
+           
+      pg_hba:
+        - host all all all trust
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "2"
+      limits:
+        memory: "2Gi"
+        cpu: "2"  
+
+redisConfig:
+  fullnameOverride: "lp-backend-redis" 
+  nameOverride: ""
+  auth:
+    password: ""
+  customConfig:
+    kubernetesConfig:
+      image: docker.io/sourcemation/redis:7.4.3
+      imagePullPolicy: Always
+      imagePullSecrets:
+        - name: credentials-registry-app
+      redisSecret:
+        name: credentials-lp-backend-redis
+        key: password
+      resources:
+        requests:
+          cpu: 101m
+          memory: 128Mi
+        limits:
+          cpu: 101m
+          memory: 128Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+             storage: 1Gi
+    redisExporter:
+      enabled: false
+      image: docker.io/sourcemation/redis-exporter:1.70.0
+    securityContext:
+      runAsUser: 0
+      fsGroup: 1001

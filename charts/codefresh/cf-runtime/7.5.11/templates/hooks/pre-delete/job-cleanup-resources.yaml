@@ -1,0 +1,73 @@
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{ $values := .Values.runtime.patch }}
+{{- if and $values.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "runtime.fullname" . }}-cleanup
+  labels:
+    {{- include "runtime.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-delete
+    helm.sh/hook-delete-policy:  hook-succeeded,before-hook-creation
+    {{- with $values.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with $values.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  {{- with $values.backoffLimit }}
+  backoffLimit: {{ . | int }}
+  {{- end }}
+  template:
+    metadata:
+      name: {{ include "runtime.fullname" . }}-cleanup
+      labels:
+        {{- include "runtime.labels" . | nindent 8 }}
+    spec:
+      {{- if $values.rbac.enabled }}
+      serviceAccountName: {{ template "runtime.fullname" . }}-cleanup
+      {{- end }}
+      securityContext:
+        {{- toYaml $values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: cleanup
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" $values.image "context" .) }}
+        imagePullPolicy: {{ $values.image.pullPolicy | default "Always" }}
+        command:
+        - "/bin/bash"
+        args:
+        - -ec
+        - | {{ .Files.Get "files/cleanup-runtime.sh" | nindent 10 }}
+        env:
+        - name: AGENT_NAME
+          value: {{ include "runtime.runtime-environment-spec.agent-name" . }}
+        - name: RUNTIME_NAME
+          value: {{ include "runtime.runtime-environment-spec.runtime-name" . }}
+        - name: API_HOST
+          value: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+        - name: API_TOKEN
+          {{- include "runtime.installation-token-env-var-value" . | indent 10}}
+        - name: AGENT
+          value: {{ .Values.runtime.agent | quote }}
+        - name: AGENT_SECRET_NAME
+          value: {{ include "runner.fullname" . }}
+        - name: DIND_SECRET_NAME
+          value: codefresh-certs-server
+          {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $values.env "context" .) | nindent 8 }}
+      {{- with $values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      restartPolicy: OnFailure
+{{- end }}

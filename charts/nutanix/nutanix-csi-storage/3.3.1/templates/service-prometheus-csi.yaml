@@ -1,0 +1,59 @@
+# Copyright 2021 Nutanix Inc
+# 
+# example usage: kubectl create -f <this_file>
+#
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutanix-csi-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nutanix-csi-metrics
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: nutanix-csi-controller
+  ports:
+    - name: provisioner
+      port: {{ .Values.sidecars.provisioner.port }}
+      targetPort: {{ .Values.sidecars.provisioner.port }}
+      protocol: TCP
+    - name: attacher
+      port: {{ .Values.sidecars.attacher.port }}
+      targetPort: {{ .Values.sidecars.attacher.port }}
+      protocol: TCP
+    - name: resizer
+      port: {{ .Values.sidecars.resizer.port }}
+      targetPort: {{ .Values.sidecars.resizer.port }}
+      protocol: TCP
+    - name: snapshotter
+      port: {{ .Values.sidecars.snapshotter.port }}
+      targetPort: {{ .Values.sidecars.snapshotter.port }}
+      protocol: TCP
+{{- if eq .Values.servicemonitor.enabled true }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+{{- with .Values.servicemonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+  name: nutanix-csi-driver
+  namespace: {{ .Release.Namespace }}
+spec:
+  endpoints:
+  - interval: 30s
+    port: provisioner
+  - interval: 30s
+    port: resizer
+  - interval: 30s
+    port: attacher
+  - interval: 30s
+    port: snapshotter
+  selector:
+    matchLabels:
+      app: nutanix-csi-metrics
+{{- end }}
