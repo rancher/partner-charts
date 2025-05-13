@@ -95,6 +95,32 @@ data:
       '}';
 
   orchestrator.conf: |
+    # Nginx doesn't have a built in variable for the original request port. $server_port is only the port that nginx is listening on. It doesn't even take into account docker port mapping.
+    # We will try this to get around that limitation. Taken from: https://stackoverflow.com/a/77354255
+    
+    # Check if a X-Forwarded-Proto header (set by reverse-proxy) is already present. If not take the scheme used to call our nginx server.
+      map $http_x_forwarded_proto $x_forwarded_proto {
+      default $http_x_forwarded_proto;
+      ""      $scheme; # Note that if the reverse-proxy does not add a X-Forwarded-Proto header, it may be incorrect if the protocol used by the reverse proxy is not the same as the one on which your nginx server is listening. In this case you have no solution than harcode the correct value.
+    }
+    
+    # Set the default port of each scheme/protocol (80 for http, 443 for https)
+      map $x_forwarded_proto $default_http_port {
+      default 443;
+      "https" 443;
+    }
+    
+    # Extract the real port of the client request url (unfortunately nginx has no variable to get this info)
+      map $http_host $request_port {
+      default                 $default_http_port; # If port not explicitly defined in url take the default one associated to the calling scheme/protocol (80 for http, 443 for https)
+      "~^[^\:]+:(?<p>\d+)$"   $p;
+    }
+    
+    # Check if a X-Forwarded-Port header (set by reverse-proxy) is already present. If not take the port from the client request url
+      map $http_x_forwarded_port $x_forwarded_port {
+      default $http_x_forwarded_port;
+      ""      $request_port;
+    }
     server {
       listen 8443 ssl;
       server_name ubuntu-base;
@@ -123,6 +149,33 @@ data:
     }
 
   orchestrator_http.conf: |
+    # Nginx doesn't have a built in variable for the original request port. $server_port is only the port that nginx is listening on. It doesn't even take into account docker port mapping.
+    # We will try this to get around that limitation. Taken from: https://stackoverflow.com/a/77354255
+    
+    # Check if a X-Forwarded-Proto header (set by reverse-proxy) is already present. If not take the scheme used to call our nginx server.
+      map $http_x_forwarded_proto $x_forwarded_proto {
+      default $http_x_forwarded_proto;
+      ""      $scheme; # Note that if the reverse-proxy does not add a X-Forwarded-Proto header, it may be incorrect if the protocol used by the reverse proxy is not the same as the one on which your nginx server is listening. In this case you have no solution than harcode the correct value.
+    }
+    
+    # Set the default port of each scheme/protocol (80 for http, 443 for https)
+      map $x_forwarded_proto $default_http_port {
+      default 443;
+      "https" 443;
+    }
+    
+    # Extract the real port of the client request url (unfortunately nginx has no variable to get this info)
+      map $http_host $request_port {
+      default                 $default_http_port; # If port not explicitly defined in url take the default one associated to the calling scheme/protocol (80 for http, 443 for https)
+      "~^[^\:]+:(?<p>\d+)$"   $p;
+    }
+    
+    # Check if a X-Forwarded-Port header (set by reverse-proxy) is already present. If not take the port from the client request url
+      map $http_x_forwarded_port $x_forwarded_port {
+      default $http_x_forwarded_port;
+      ""      $request_port;
+    }
+
     server {
       listen 8080;
       server_name ubuntu-base;
@@ -198,6 +251,12 @@ metadata:
   annotations:
     helm.sh/hook: pre-install,pre-upgrade,post-delete
 data:
+  closest.conf: |
+    location /checkvalid {
+    return 200 'ok';
+    add_header Access-Control-Allow-Origin *;
+    add_header Content-Type text/plain;
+    }
   admin_api.conf: |
     location /api/admin/ {
       proxy_http_version	1.1;
@@ -206,8 +265,9 @@ data:
       proxy_set_header	Connection "upgrade";
       proxy_set_header	X-Real-IP $remote_addr;
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $scheme;
-
+      proxy_set_header	X-Forwarded-Proto $x_forwarded_proto;
+      proxy_set_header	X-Forwarded-Port $x_forwarded_port;
+  
       add_header Strict-Transport-Security "max-age=63072000" always;
 
       proxy_pass	http://kasm-api;
@@ -221,7 +281,9 @@ data:
       proxy_set_header	Connection "upgrade";
       proxy_set_header	X-Real-IP $remote_addr;
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $scheme;
+      proxy_set_header	X-Forwarded-Proto $x_forwarded_proto;
+      proxy_set_header	X-Forwarded-Port $x_forwarded_port;
+
 
       add_header Strict-Transport-Security "max-age=63072000" always;
 
