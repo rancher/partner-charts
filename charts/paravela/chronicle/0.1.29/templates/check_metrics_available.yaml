@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name:  {{ include "common.names.fullname" . }}-scripts
+data:
+  first_depth_charge.sh: |
+    #!/bin/bash
+    metrics=$(curl -s http://localhost:9000/metrics)
+    count=$(echo "$metrics" | grep '^depth_charge_round_trip_count' | awk '{print $2}')
+    if [[ -z "$count" ]] || [[ $count -eq 0 ]]; then
+      exit 1
+    fi
+  check_timeouts.sh: |
+    #!/bin/bash
+    metrics=$(curl -s http://localhost:9000/metrics)
+    timeouts=$(echo "$metrics" | grep '^depth_charge_timeouts' | awk '{print $2}' | tr -d '\r')
+    if [[ "$timeouts" =~ ^[0-9]+$ ]] && [[ "$timeouts" -ne 0 ]]; then
+      echo "Non-zero depth_charge_timeouts detected: $timeouts"
+      exit 1
+    else
+      echo "No non-zero depth_charge_timeouts detected."
+      exit 0
+    fi

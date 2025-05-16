@@ -1,0 +1,130 @@
+{{- if .Values.test.api.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common.names.fullname" . }}-api-test
+  labels: {{ include "chronicle.labels" . | nindent 4 }}
+    component: api-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName:  {{ include "lib.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      {{- if .Values.auth.required }}
+      {{ if not .Values.test.auth.token }}
+      {{ if not .Values.devIdProvider.enabled }}
+      {{ required "If 'auth.required' when using the api-test 'test.auth.token' must be provided or 'devIdProvider.enabled' must be set to 'true'!" .Values.devIdProvider.enabled }}
+      {{ end }}
+      initContainers:
+        - name: wait-for-id-provider
+          {{- include "lib.image" (dict "imageRoot" .Values.test.api.image "global" .Values.global ) | nindent 10 }}
+          command: [ "sh", "-c" ]
+          args:
+            - |
+              URL="{{ include "chronicle.id-provider.service.jwks.url" . }}"
+
+              wait_for_url() {
+                local url=$1
+                scheme=$(echo "$url" | cut -f 1 -d :)
+                hostAndPort=$(echo "$url" | cut -f 3 -d /)
+                HOST=$(echo "$hostAndPort" | cut -f 1 -d :)
+                port=$(echo "$hostAndPort" | awk -F: '{print $2}')
+
+                case $scheme in
+                  "http")
+                    defaultPort=80
+                    ;;
+                  "https")
+                    defaultPort=443
+                    ;;
+                  *)
+                    defaultPort=80
+                    ;;
+                esac
+
+                PORT=${port:-$defaultPort}
+                wait-for-it "$HOST:$PORT" --timeout=120
+              }
+
+              echo "Waiting for id-provider to be ready ..."
+              wait_for_url "$URL"
+
+              if [ $? -eq 0 ]; then
+                echo "Id-provider is ready. Exiting."
+                exit 0
+              else
+                echo "Timeout occurred. Please check if the correct URL has been provided."
+                exit 1
+              fi
+        - name: token-loader
+          image: alpine/k8s:1.24.13
+          command: [ "sh", "-ec" ]
+          args:
+            - |
+              echo "Waiting to ensure id-provider is ready ..."
+              sleep 20
+              echo "Getting token from id-provider ..."
+              kubectl exec {{ include "chronicle.id-provider.service" . }}-0 -c id-provider -- oauth-token > /shared-data/jwks-token
+              echo "Token loaded. Exiting."
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+      {{ end }}
+      {{- end }}
+      containers:
+        - name: test
+          {{- include "lib.image" (dict "imageRoot" .Values.test.api.image "global" .Values.global ) | nindent 10 }}
+          command: [ "sh", "-ec" ]
+          args:
+            - |
+              {{ if not .Values.test.auth.token }}
+              {{ if or .Values.auth.jwks.url .Values.auth.userinfo.url }}
+              echo "Auth endpoints provided but no token provided."
+              echo "Please provide 'test.auth.token' in the values.yaml file."
+              exit 1
+              {{ end }}
+              {{ end }}
+
+              API={{ include "chronicle.api.service" . }}
+              export PORT={{ .Values.port }}
+              echo "Waiting for API to be ready ..."
+              wait-for-it $API:$PORT --timeout=0
+              echo "Getting IP address for API ..."
+              getent hosts $API | cut -f 1 -d \ | head -n 1 > /shared-data/api-ip || exit 1
+
+              {{- if .Values.test.auth.token }}
+              echo "{{ .Values.test.auth.token }}" > /shared-data/jwks-token
+              {{- end }}
+
+              if [ -f "/shared-data/jwks-token" ]; then
+                echo "Found token."
+                sleep 5
+                export TOKEN=$(cat "/shared-data/jwks-token")
+              fi
+
+              export HOST=$(cat /shared-data/api-ip)
+              echo "Testing API with subscribe-submit-test..."
+              subscribe-submit-test
+              exit_code=$?
+              if [ $exit_code -eq 0 ]; then
+                echo "Test complete."
+                exit $exit_code
+              else
+                echo "Test failed."
+                exit $exit_code
+              fi
+          env:
+            - name: REQUIRE_AUTH
+              value: {{ .Values.auth.required | quote }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared-data
+      volumes: {{- include "lib.volumes" .Values.opa.tp.extraVolumes | nindent 8 }}
+        - name: shared-data
+          emptyDir: {}
+{{- end }}
