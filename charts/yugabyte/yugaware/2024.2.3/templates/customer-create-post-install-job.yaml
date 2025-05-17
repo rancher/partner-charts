@@ -1,0 +1,46 @@
+{{- if .Values.yugaware.defaultUser.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata: 
+  name: {{ include "yugaware.fullname" . }}-customer-create-job
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app: "customer-create"
+    release: {{ .Release.Name | quote }}
+    chart: "{{ .Chart.Name }}"
+    component: "{{ .Values.Component }}"
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ include "yugaware.fullname" . }}-customer-create-job
+      labels:
+        app: "customer-create"
+        release: {{ .Release.Name | quote }}
+        chart: "{{ .Chart.Name }}"
+        component: "{{ .Values.Component }}"
+    spec:
+      restartPolicy: Never
+      containers: 
+      - name: post-install-job
+        image: {{ include "full_yugaware_image" . }}
+        command:
+        - "curl"
+        - "-X"
+        - "POST"
+        - "--url"
+        - "{{ .Release.Name }}-yugaware-ui/api/register"
+        - "--header"
+        - "Content-Type: application/json"
+        - "--data"
+        - '{"email": "{{ .Values.yugaware.defaultUser.email}}", 
+{{- if eq .Values.yugaware.defaultUser.password ""}}
+{{- fail ".Values.yugaware.defaultUser.password cannot be empty string"}}
+{{- end }}
+"password": "{{ .Values.yugaware.defaultUser.password }}",
+"code": "operator",
+"name": "{{ .Values.yugaware.defaultUser.username }}"}'
+{{- end -}}
