@@ -1,0 +1,116 @@
+exporters:
+  otlphttp:
+    endpoint: http://${LOGS_METADATA_SVC}.${NAMESPACE}.svc.{{ .Values.sumologic.clusterDNSDomain }}.:4318
+    sending_queue:
+      queue_size: 10
+    # this improves load balancing at the cost of more network traffic
+    disable_keep_alives: true
+
+extensions:
+{{ if .Values.sumologic.logs.collector.otelcloudwatch.persistence.enabled }}
+  file_storage:
+    compaction:
+      directory: /var/lib/storage/otc
+      on_rebound: true
+    directory: /var/lib/storage/otc
+    timeout: 10s
+{{ end }}
+  health_check:
+    endpoint: ${env:MY_POD_IP}:13133
+  pprof: {}
+
+processors:
+  batch:
+    send_batch_max_size: 2000
+    send_batch_size: 1000
+    timeout: 1s
+  transform/set_source_identifier:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["cloudwatch.log.stream"], resource.attributes["cloudwatch.log.stream"])
+  groupbyattrs/stream:
+    keys:
+      - cloudwatch.log.stream
+  transform/parsejson:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(body, ParseJSON(body)) where IsMatch(body, "^{")
+          - merge_maps(attributes, body, "insert")
+          - set(body, "") where IsMatch(body, "^{")
+  transform/metadata:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["k8s.container.name"], resource.attributes["cloudwatch.log.stream"])
+          - set(attributes["k8s.pod.name"], resource.attributes["cloudwatch.log.stream"])
+          - set(attributes["k8s.namespace.name"], resource.attributes["cloudwatch.log.stream"])
+          - replace_pattern(attributes["k8s.pod.name"], "^.*kube\\.var\\.log\\.containers\\.([0-9a-zA-Z\\-]+)\\_.*", "$$1")
+          - replace_pattern(attributes["k8s.container.name"], "^.*kube\\.var\\.log\\.containers\\.[0-9a-zA-Z\\-]+\\_[a-zA-Z\\-]*\\_([a-zA-Z]*).*", "$$1")
+          - replace_pattern(attributes["k8s.namespace.name"], "^.*kube\\.var\\.log\\.containers\\.[0-9a-zA-Z\\-]+\\_([a-zA-Z\\-]*)_.*", "$$1")
+  logstransform/cloudwatch:
+    operators:
+      - id: merge-cri-lines
+        combine_field: attributes.log
+        combine_with: ""
+        is_last_entry: attributes.logtag == "F"
+        output: "merge-multiline-logs"
+        overwrite_with: newest
+        source_identifier: resource["cloudwatch.log.stream"]
+        type: recombine
+        ## Ensure we combine everything up to `is_last_entry` even on the file beginning
+        max_unmatched_batch_size: 0
+      - id: merge-multiline-logs
+        combine_field: attributes.log
+        combine_with: "\n"
+        is_first_entry: attributes.log matches {{ .Values.sumologic.logs.multiline.first_line_regex | quote }}
+        source_identifier: resource["cloudwatch.log.stream"]
+        type: recombine
+        max_unmatched_batch_size: 1
+receivers:
+  awscloudwatch:
+    region: {{ .Values.sumologic.logs.collector.otelcloudwatch.region }}
+    logs:
+      poll_interval: {{ .Values.sumologic.logs.collector.otelcloudwatch.pollInterval }}
+      groups:
+        named:
+{{ toYaml .Values.sumologic.logs.collector.otelcloudwatch.logGroups | indent 10 }}
+
+service:
+  extensions:
+    - health_check
+{{ if .Values.sumologic.logs.collector.otelcloudwatch.persistence.enabled }}
+    - file_storage
+{{ end }}
+    - pprof
+  pipelines:
+    logs/collector/otelcloudwatch:
+      receivers:
+        - awscloudwatch
+      processors:
+        - transform/set_source_identifier
+        - groupbyattrs/stream
+        - transform/parsejson
+        - logstransform/cloudwatch
+        - transform/metadata
+        - batch
+      exporters:
+        - otlphttp
+  telemetry:
+    logs:
+      level: {{ .Values.otellogs.logLevel | quote }}
+    metrics:
+      level: {{ .Values.otellogs.metricsLevel | quote }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888
+                without_type_suffix: true
+                without_units: true
+                without_scope_info: true

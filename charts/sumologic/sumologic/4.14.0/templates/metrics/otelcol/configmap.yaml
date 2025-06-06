@@ -1,0 +1,22 @@
+{{ if eq (include "metrics.otelcol.enabled" .) "true" }}
+{{ $baseConfig := (tpl (.Files.Get "conf/metrics/otelcol/config.yaml") .) | fromYaml }}
+{{ $mergeConfig := .Values.metadata.metrics.config.merge }}
+{{ $overrideConfig := .Values.metadata.metrics.config.override }}
+{{ $finalConfig := "" }}
+{{ if $overrideConfig }}
+{{ $finalConfig = $overrideConfig }}
+{{ else }}
+{{ $finalConfig = mergeOverwrite $baseConfig $mergeConfig }}
+{{ end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sumologic.metadata.name.metrics.configmap" . }}
+  namespace: {{ template "sumologic.namespace"  . }}
+  labels:
+    app: {{ template "sumologic.labels.app.metrics.configmap" . }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+data:
+  config.yaml: |
+  {{- $finalConfig | toYaml | nindent 4 }}
+{{- end }}

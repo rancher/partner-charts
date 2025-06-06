@@ -1,0 +1,30 @@
+{{ $tracesGatewayEnabled := .Values.tracesGateway.enabled }}
+{{ $tracesEnabled := .Values.sumologic.traces.enabled }}
+{{- if and $tracesEnabled $tracesGatewayEnabled -}}
+{{ $baseConfig := (tpl (.Files.Get "conf/instrumentation/traces.gateway.conf.yaml") .) | fromYaml }}
+{{ $mergeConfig := .Values.tracesGateway.config.merge }}
+{{ $overrideConfig := .Values.tracesGateway.config.override }}
+{{ $finalConfig := "" }}
+{{ if $overrideConfig }}
+{{ $finalConfig = $overrideConfig }}
+{{ else }}
+{{ $finalConfig = mergeOverwrite $baseConfig $mergeConfig }}
+{{ end }}
+{{ $valuesYamlConfig := .Values.tracesGateway.config }}
+{{ $useValuesYamlConfig := include "useDefaultConfig" $valuesYamlConfig | trim }}
+{{ if eq $useValuesYamlConfig "true" }}
+{{ $oldConfig := include "removeMergeAndOverrideKeys" .Values.tracesGateway.config | fromYaml }}
+{{ $finalConfig = mergeOverwrite $baseConfig $oldConfig }}
+{{ end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "sumologic.metadata.name.tracesgateway.configmap" . }}
+  namespace: {{ template "sumologic.namespace"  . }}
+  labels:
+    app: {{ template "sumologic.labels.app.tracesgateway.configmap" . }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+data:
+  traces.gateway.conf.yaml: |
+  {{- $finalConfig | toYaml | nindent 4 }}
+{{- end }}

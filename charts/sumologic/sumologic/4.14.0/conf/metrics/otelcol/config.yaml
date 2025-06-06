@@ -1,0 +1,69 @@
+exporters:
+{{ tpl (.Files.Get "conf/metrics/otelcol/exporters.yaml") . | indent 2 }}
+
+extensions:
+{{ if .Values.metadata.persistence.enabled }}
+  ## Configuration for File Storage extension
+  file_storage:
+    compaction:
+      directory: /tmp
+      on_rebound: true
+    directory: /var/lib/storage/otc
+    timeout: 10s
+{{ end }}
+  health_check:
+    endpoint: ${env:MY_POD_IP}:13133
+  pprof: {}
+
+processors:
+{{ tpl (.Files.Get "conf/metrics/otelcol/processors.yaml") . | indent 2 }}
+{{ if .Values.sumologic.metrics.enableDefaultFilters -}}
+{{ tpl (.Files.Get "conf/metrics/otelcol/default-filters.yaml") . | indent 2 }}
+{{ end -}}
+
+receivers:
+  ## Configuration for Telegraf Receiver
+  telegraf:
+    agent_config: |
+      [agent]
+        interval = "30s"
+        flush_interval = "30s"
+        omit_hostname = true
+      [[inputs.http_listener_v2]]
+        # wait longer than prometheus
+        read_timeout = "30s"
+        write_timeout = "30s"
+        service_address = ":9888"
+        data_format = "prometheusremotewrite"
+        paths = [
+{{ include "metric.endpoints" . | indent 10 }}
+        ]
+  otlp:
+    protocols:
+      http:
+        endpoint: ${env:MY_POD_IP}:4318
+
+service:
+  extensions:
+    - health_check
+{{ if .Values.metadata.persistence.enabled }}
+    - file_storage
+{{ end }}
+    - pprof
+  pipelines:
+    metrics:
+{{ tpl (.Files.Get "conf/metrics/otelcol/pipeline.yaml") . | indent 6 }}
+  telemetry:
+    logs:
+      level: {{ .Values.metadata.metrics.logLevel }}
+    metrics:
+      level: {{ .Values.metadata.metrics.metricsLevel }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888
+                without_type_suffix: true
+                without_units: true
+                without_scope_info: true

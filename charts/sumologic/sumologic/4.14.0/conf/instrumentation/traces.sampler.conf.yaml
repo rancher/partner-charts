@@ -1,0 +1,118 @@
+{{ if .Values.sumologic.traces.enabled }}
+exporters:
+{{- if eq .Values.debug.instrumentation.tracesSampler.print true }}
+  debug:
+    verbosity: detailed
+{{- end }}
+
+{{- if eq (include "sumologic-mock.forward-instrumentation" .) "true" }}
+  otlphttp/sumologic-mock:
+{{- if eq .Values.sumologic.traces.sourceType "http" }}
+    traces_endpoint: {{ include "sumologic-mock.receiver-endpoint" . }}
+{{- else }}
+    endpoint: {{ include "sumologic-mock.receiver-endpoint" . }}
+{{- end }}
+    compression: gzip
+{{- end }}
+
+  otlphttp:
+{{- if eq .Values.sumologic.traces.sourceType "http" }}
+    traces_endpoint: ${SUMO_ENDPOINT_DEFAULT_TRACES_SOURCE}
+{{- else }}
+    endpoint: ${SUMO_ENDPOINT_DEFAULT_OTLP_TRACES_SOURCE}
+{{- end }}
+    compression: gzip
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 10_000
+{{- if .Values.tracesSampler.persistence.enabled }}
+      storage: file_storage
+{{- end }}
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "${env:MY_POD_IP}:4317"
+      http:
+        endpoint: "${env:MY_POD_IP}:4318"
+processors:
+  ## The memory_limiter processor is used to prevent out of memory situations on the collector.
+  memory_limiter:
+    ## check_interval is the time between measurements of memory usage for the
+    ## purposes of avoiding going over the limits. Defaults to zero, so no
+    ## checks will be performed. Values below 1 second are not recommended since
+    ## it can result in unnecessary CPU consumption.
+    check_interval: 5s
+
+    ## Maximum amount of memory, in %, targeted to be allocated by the process heap.
+    ## Note that typically the total memory usage of process will be about 50MiB higher
+    ## than this value.
+    limit_percentage: 90
+
+    ## Maximum spike expected between the measurements of memory usage, in %.
+    spike_limit_percentage: 20
+
+  ## Smart cascading filtering rules with preset limits.
+  ## Please see https://github.com/SumoLogic/sumologic-otel-collector/tree/v0.99.0-sumo-0/pkg/processor/cascadingfilterprocessor
+  ## for details.
+  cascading_filter:
+    ## Max number of traces for which decisions are kept in memory
+    num_traces: 200000
+
+  ## The batch processor accepts spans and places them into batches grouped by node and resource
+  batch:
+    ## Number of spans after which a batch will be sent regardless of time
+    send_batch_size: 256
+    ## Never more than this many spans are being sent in a batch
+    send_batch_max_size: 512
+    ## Time duration after which a batch will be sent regardless of size
+    timeout: 5s
+
+extensions:
+  health_check:
+    endpoint: ${env:MY_POD_IP}:13133
+{{- if .Values.tracesSampler.persistence.enabled }}
+  ## Configuration for File Storage extension
+  file_storage:
+    directory: /var/lib/storage/tracessampler
+    timeout: 10s
+    compaction:
+      on_rebound: true
+      directory: /tmp
+{{- end }}
+  pprof: {}
+service:
+  extensions:
+    - health_check
+{{- if .Values.tracesSampler.persistence.enabled }}
+    - file_storage
+{{- end }}
+    - pprof
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, cascading_filter, batch]
+      exporters:
+        - otlphttp
+{{- if eq (include "sumologic-mock.forward-instrumentation" .) "true" }}
+        - otlphttp/sumologic-mock
+{{- end }}
+{{- if eq .Values.debug.instrumentation.tracesSampler.print true }}
+        - debug
+{{- end }}
+  telemetry:
+    logs:
+      level: {{ .Values.tracesSampler.logLevel }}
+    metrics:
+      level: {{ .Values.tracesSampler.metricsLevel }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888
+                without_type_suffix: true
+                without_units: true
+                without_scope_info: true
+{{- end }}
