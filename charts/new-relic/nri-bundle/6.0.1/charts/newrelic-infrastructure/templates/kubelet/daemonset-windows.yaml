@@ -1,0 +1,234 @@
+{{- if and (.Values.kubelet.enabled) (.Values.enableWindows) }}
+{{- range .Values.windowsOsList }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    kubernetes.io/os: windows
+    mode: unprivileged
+    {{- include "newrelic.common.labels" $ | nindent 4 }}
+  name: {{ join "-" (list (include "nriKubernetes.kubelet.fullname" $) .imageTagSuffix) }}
+  {{- $legacyAnnotation:= fromYaml (include "newrelic.compatibility.annotations" $) -}}
+  {{- with  include "newrelic.compatibility.valueWithFallback" (dict "legacy" $legacyAnnotation "supported" $.Values.kubelet.annotations )}}
+  annotations: {{ . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $.Values.updateStrategy }}
+  updateStrategy: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "newrelic.common.labels.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: kubelet
+  template:
+    metadata:
+      annotations:
+        checksum/nri-kubernetes: {{ include (print $.Template.BasePath "/kubelet/scraper-configmap.yaml") $ | sha256sum }}
+        checksum/agent-config: {{ include (print $.Template.BasePath "/kubelet/agent-configmap.yaml") $ | sha256sum }}
+        {{- if include "newrelic.common.license.secret" $ }}{{- /* If the is secret to template */}}
+        checksum/license-secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
+        {{- end }}
+        checksum/integrations_config: {{ include (print $.Template.BasePath "/kubelet/integrations-configmap.yaml") $ | sha256sum }}
+        {{- with $.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        app.kubernetes.io/component: kubelet
+        mode: unprivileged
+        {{- include "newrelic.common.labels.podLabels" $ | nindent 8 }}
+
+    spec:
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list $.Values.images.pullSecrets) "context" $) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.dnsConfig" $ }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.priorityClassName" $ }}
+      priorityClassName: {{ $ }}
+      {{- end }}
+      serviceAccountName: {{ include "newrelic.common.serviceAccount.name" $ }}
+      hostNetwork: false
+
+      {{- if $.Values.kubelet.initContainers }}
+      initContainers: {{- tpl ($.Values.kubelet.initContainers | toYaml) $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: kubelet
+          image: {{ .integrationImage | default (include "nriKubernetes.windowsIntegrationImage" $) }}
+          imagePullPolicy: {{ $.Values.images.integration.pullPolicy }}
+          securityContext:
+            windowsOptions:
+              runAsUserName: "ContainerUser"
+          env:
+            - name: "NRI_KUBERNETES_SINK_HTTP_PORT"
+              value: {{ get (fromYaml (include "nriKubernetes.kubelet.agentConfig" $)) "http_server_port" | quote }}
+            - name: "NRI_KUBERNETES_CLUSTERNAME"
+              value: {{ include "newrelic.common.cluster" $ }}
+            - name: "NRI_KUBERNETES_VERBOSE"
+              value: {{ include "newrelic.common.verboseLog.valueAsBoolean" $ | quote }}
+
+            - name: "NRI_KUBERNETES_NODENAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+            # Required to connect to the kubelet
+            - name: "NRI_KUBERNETES_NODEIP"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "status.hostIP"
+
+            {{- with $.Values.kubelet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.kubelet.extraEnvFrom }}
+          envFrom: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: nri-kubernetes-config
+              mountPath: /etc/newrelic-infra/nri-kubernetes.yml
+              subPath: nri-kubernetes.yml
+            {{- with $.Values.kubelet.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.kubelet.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+        - name: agent
+          image: {{ .agentImage | default (include "nriKubernetes.windowsInfraAgentImage" $)}}
+          args: [ "newrelic-infra" ]
+          imagePullPolicy: {{ $.Values.images.agent.pullPolicy }}
+          securityContext:
+            windowsOptions:
+              runAsUserName: "ContainerAdministrator"
+          ports:
+            - containerPort: {{ get (fromYaml (include "nriKubernetes.kubelet.agentConfig" $)) "http_server_port" }}
+          env:
+            - name: NRIA_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newrelic.common.license.secretName" $ }}
+                  key: {{ include "newrelic.common.license.secretKeyName" $ }}
+
+            - name: "NRIA_OVERRIDE_HOSTNAME_SHORT"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            - name: "NRIA_OVERRIDE_HOSTNAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            # Override NRIA_OVERRIDE_HOST_ROOT to empty if unprivileged. This must be done as an env var as the
+            # `k8s-events-forwarder` and `infrastructure-bundle` images ship this very same env var set to /host.
+            # Currently windows only runs in unprivileged mode.
+            - name: "NRIA_OVERRIDE_HOST_ROOT"
+              value: ""
+
+            - name: "NRI_KUBERNETES_NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+
+            {{- if $.Values.useNodeNameAsDisplayName }}
+            - name: "NRIA_DISPLAY_NAME"
+            {{- if $.Values.prefixDisplayNameWithCluster }}
+              value: "{{ include "newrelic.common.cluster" $ }}:$(NRI_KUBERNETES_NODE_NAME)"
+            {{- else }}
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "spec.nodeName"
+            {{- end }}
+            {{- end }}
+
+            {{- /* Needed to populate clustername in integration metrics */}}
+            - name: "CLUSTER_NAME"
+              value: {{ include "newrelic.common.cluster" $ }}
+            - name: "NRIA_PASSTHROUGH_ENVIRONMENT"
+              value: "CLUSTER_NAME"
+
+            {{- /* Needed for autodiscovery since hostNetwork=false, windows containers do not support Hostnetwork without a HostProcess container */}}
+            - name: "NRIA_HOST"
+              valueFrom:
+                fieldRef:
+                  apiVersion: "v1"
+                  fieldPath: "status.hostIP"
+
+            {{- with $.Values.kubelet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.kubelet.extraEnvFrom }}
+          envFrom: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: "C:\\Program Files\\New Relic\\newrelic-infra\\newrelic-infra.yml"
+              subPath: newrelic-infra.yml
+            - name: nri-integrations-cfg-volume
+              mountPath: "C:\\Program Files\\New Relic\\newrelic-infra\\integrations.d"
+            - name: agent-tmpfs-data
+              mountPath: "C:\\ProgramData\\New Relic\\newrelic-infra\\data"
+            - name: agent-tmpfs-user-data
+              mountPath: "C:\\ProgramData\\New Relic\\newrelic-infra\\user_data"
+            - name: agent-tmpfs-tmp
+              mountPath: "C:\\ProgramData\\New Relic\\newrelic-infra\\tmp"
+            {{- with $.Values.kubelet.extraVolumeMounts }}
+            {{- toYaml $ | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.kubelet.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: agent-tmpfs-data
+          emptyDir: {}
+        - name: agent-tmpfs-user-data
+          emptyDir: {}
+        - name: agent-tmpfs-tmp
+          emptyDir: {}
+        - name: nri-kubernetes-config
+          configMap:
+            name: {{ include "nriKubernetes.kubelet.fullname" $ }}
+            items:
+              - key: nri-kubernetes.yml
+                path: nri-kubernetes.yml
+        - name: config
+          configMap:
+            name: {{ include "nriKubernetes.kubelet.fullname.agent" $ }}
+            items:
+              - key: newrelic-infra.yml
+                path: newrelic-infra.yml
+        - name: nri-integrations-cfg-volume
+          configMap:
+            name: {{ include "nriKubernetes.kubelet.fullname.integrations" $ }}
+        {{- with $.Values.kubelet.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with include "nriKubernetes.kubelet.affinity" $ }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "nriKubernetes.kubelet.tolerations" $ }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        {{- if $.Values.kubelet.windowsNodeSelector }}
+          {{- toYaml $.Values.kubelet.windowsNodeSelector | nindent 10 -}}
+        {{- else }}
+        kubernetes.io/os: windows
+        # Windows containers can only be deployed on hosts with the same Windows version
+        node.kubernetes.io/windows-build: {{ .buildNumber }} 
+        {{- end }}
+---
+{{- end }}
+{{- end }}
