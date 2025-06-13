@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "instana-agent.labels" . | nindent 4 }}
+  name: instana-agent-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $existing := lookup "apps/v1" "Deployment" .Release.Namespace "instana-agent-controller-manager" }}
+      {{- if $existing }}
+      # Use existing selector labels from the deployment in the cluster
+      {{- $existing.spec.selector.matchLabels | toYaml | nindent 6 }}
+      {{- else }}
+      # For new installations, use the default selector labels
+      app.kubernetes.io/name: instana-agent-operator
+      {{- end }}
+  template:
+    metadata:
+      {{- if .Values.agent }}
+        {{- if .Values.agent.pod }}
+          {{- if .Values.agent.annotations }}
+            {{- with .Values.agent.pod.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      labels:
+        {{- $existing := lookup "apps/v1" "Deployment" .Release.Namespace "instana-agent-controller-manager" }}
+        {{- if $existing }}
+        # Use existing selector labels from the deployment in the cluster for the pod template
+        {{- $existing.spec.selector.matchLabels | toYaml | nindent 8 }}
+        # Additional labels can be added here that aren't part of the selector
+        {{- else }}
+        # For new installations, use the complete set of labels
+        {{- include "instana-agent.labels" . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.agent }}
+          {{- if .Values.agent.pod }}
+            {{- if .Values.agent.pod.labels }}
+              {{- with .Values.agent.pod.labels }}
+        {{- toYaml . | nindent 8 }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+    spec:
+      {{- if .Values.controllerManager }}
+        {{- if .Values.controllerManager.image }}
+          {{- if .Values.controllerManager.image.pullSecrets }}
+            {{- with .Values.controllerManager.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - ppc64le
+                      - s390x
+                      - arm64
+      containers:
+        - args:
+            - --leader-elect
+          command:
+            - /manager
+          {{- if .Values.controllerManager }}
+            {{- if .Values.controllerManager.image }}
+          image: {{ include "image" $.Values.controllerManager.image | quote }}
+          imagePullPolicy: {{ $.Values.controllerManager.image.pullPolicy | default "Always" }}
+            {{- else }}
+          image: icr.io/instana/instana-agent-operator:2.1.26
+            {{- end }}
+          {{- else }}
+          image: icr.io/instana/instana-agent-operator:2.1.26
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          name: manager
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+          {{- if and (hasKey .Values "controllerManager") (hasKey .Values.controllerManager "resources") }}
+            {{- toYaml .Values.controllerManager.resources | nindent 12 }}
+          {{- else }}
+            limits:
+              memory: 600Mi
+            requests:
+              cpu: 200m
+              memory: 200Mi
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: true
+      serviceAccountName: instana-agent-operator
+      terminationGracePeriodSeconds: 10
