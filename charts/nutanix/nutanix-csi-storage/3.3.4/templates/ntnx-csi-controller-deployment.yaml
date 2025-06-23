@@ -1,0 +1,276 @@
+# Copyright 2021 Nutanix Inc
+#
+# example usage: kubectl create -f <this_file>
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: nutanix-csi-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+spec:
+  replicas: {{ if .Values.singleNodeCluster  | default false }}1{{ else }}{{ required "controller.replicas must be set" .Values.controller.replicas }}{{ end }}
+  strategy:
+    {{ if .Values.singleNodeCluster  | default false}} 
+    type: Recreate 
+    {{- else }} 
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+    {{- end }}
+  selector:
+    matchLabels:
+      app: nutanix-csi-controller
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: nutanix-csi-plugin
+      labels:
+        app: nutanix-csi-controller
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - nutanix-csi-controller
+              topologyKey: kubernetes.io/hostname
+      serviceAccount: nutanix-csi-controller
+      hostNetwork: true
+      containers:
+        - name: csi-provisioner
+          {{- if semverCompare ">=1.20-0" .Capabilities.KubeVersion.Version }}
+          image: {{ .Values.sidecars.provisioner.image }}
+          {{- else }}
+          image: {{ .Values.sidecars.provisioner.imageLegacy }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=$(ADDRESS)
+            - --timeout=300s
+            - --worker-threads=16
+            # This adds PV/PVC metadata to create volume requests
+            - --extra-create-metadata=true
+            - --default-fstype=ext4
+            # This is used to collect CSI operation metrics
+            - --http-endpoint=:{{ .Values.sidecars.provisioner.port }}
+            {{- if eq .Values.ntnxInitConfigMap.usePC true }}
+            - --feature-gates=Topology=true
+            {{- else }}
+            - --feature-gates=Topology=false
+            {{- end }}
+            - --leader-election=true
+            - --v=2
+            - --prevent-volume-mode-conversion=true
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- with .Values.sidecars.provisioner.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-attacher
+          image: {{ .Values.sidecars.attacher.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=$(ADDRESS)
+            - --timeout=300s
+            - --worker-threads=16
+            - --http-endpoint=:{{ .Values.sidecars.attacher.port }}
+            - --v=2
+            - --leader-election=true
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- with .Values.sidecars.attacher.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-resizer
+          image: {{ .Values.sidecars.resizer.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --v=2
+            - --csi-address=$(ADDRESS)
+            - --timeout=300s
+            - --leader-election=true
+            # NTNX CSI dirver supports online volume expansion.
+            - --handle-volume-inuse-error=false
+            - --http-endpoint=:{{ .Values.sidecars.resizer.port }}
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- with .Values.sidecars.resizer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        # Checks whether to deploy snapshotter sidecar.
+        {{- if eq .Values.sidecars.snapshotter.deploy true }}
+        - name: csi-snapshotter
+          {{- if .Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1" }}
+          image: {{ .Values.sidecars.snapshotter.image }}
+          {{- else }}
+          image: {{ .Values.sidecars.snapshotter.imageBeta }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+          - --csi-address=$(ADDRESS)
+          - --leader-election=true
+          - --logtostderr=true
+          - --timeout=300s
+          - --http-endpoint=:{{ .Values.sidecars.snapshotter.port }}
+          env:
+          - name: ADDRESS
+            value: /csi/csi.sock
+          {{- with .Values.sidecars.snapshotter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          - name: socket-dir
+            mountPath: /csi
+        {{- end }}
+        - name: nutanix-csi-plugin
+          image: {{ .Values.controller.imageRepo }}/{{ .Values.controller.imageName }}:{{ .Values.controller.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+          args:
+            - --endpoint=$(CSI_ENDPOINT)
+            - --nodeid=$(NODE_ID)
+            - --drivername={{ include "nutanix-csi-storage.drivername" . }}
+            - --files-ro-volumes-clone-enabled=false
+            # this flag is applicable for PC based CSI driver only
+            - --force-detach-existing-client-for-sync-rep-vol=false
+            # - --capacity-bytes-threshold=50.0
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_CONTROLLER_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CSI_SECRET_DIR
+              value: {{ .Values.csiSecretDir }}
+            - name: CSI_CATEGORY_CONFIGMAP_NAME
+              value: {{ .Values.csiCategoryConfigmapName }}
+            - name: CSI_CATEGORY_CONFIGMAP_NAMESPACE
+              {{- if .Values.csiCategoryConfigmapNamespace }}
+              value: {{ .Values.csiCategoryConfigmapNamespace }}
+              {{- else }}
+              value: {{ .Release.Namespace }}
+              {{- end }}
+            - name: CSI_INIT_CONFIGMAP_NAME
+              value: {{  .Values.ntnxInitConfigMap.name }}
+            - name: CSI_INIT_CONFIGMAP_NAMESPACE
+              {{- if .Values.ntnxInitConfigMap.namespace }}
+              value: {{  .Values.ntnxInitConfigMap.namespace }}
+              {{- else }}
+              value: {{ .Release.Namespace }}
+              {{- end }}
+            - name: CSI_CATEGORYID_CONFIGMAP_NAME
+              value: {{ .Release.Name }}-category-id
+            - name: CSI_CATEGORYID_CONFIGMAP_NAMESPACE
+              value: {{  .Release.Namespace }}
+            - name: CSI_PLUGIN_TYPE
+              value: CONTROLLER_PLUGIN
+          {{- with .Values.controller.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /var/lib/csi/sockets/pluginproxy/
+              name: socket-dir
+            # This is needed for static NFS volume feature.
+            - mountPath: /host
+              name: root-dir
+            {{- if eq .Values.ntnxInitConfigMap.usePC true}}
+            - mountPath: {{ .Values.csiSecretDir }}
+              name: pc-secret
+              readOnly: true
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.controller.port }}
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-endpoint
+            initialDelaySeconds: {{ .Values.liveness.controller.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.liveness.controller.timeoutSeconds }}
+            periodSeconds: {{ .Values.liveness.controller.periodSeconds }}
+            failureThreshold: {{ .Values.liveness.controller.failureThreshold }}
+        - name: liveness-probe
+          {{- with .Values.sidecars.livenessprobe.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          image: {{ .Values.sidecars.livenessprobe.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+            - --http-endpoint=:{{ .Values.sidecars.livenessprobe.port }}
+        - args:
+          - "--v=5"
+          - "--csi-address=$(ADDRESS)"
+          - "--leader-election=false"
+          - "--http-endpoint=:{{ .Values.sidecars.healthmonitor.port }}"
+          - "--monitor-interval=1m0s"
+          env:
+            - name: ADDRESS
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+          image: {{ .Values.sidecars.healthmonitor.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          name: csi-external-health-monitor-controller
+          volumeMounts:
+            - mountPath: /var/lib/csi/sockets/pluginproxy/
+              name: socket-dir
+      priorityClassName: system-cluster-critical
+    {{- with (.Values.controller.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with (.Values.controller.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - emptyDir: {}
+          name: socket-dir
+        - hostPath:
+            path: /
+            type: Directory
+          name: root-dir
+        {{- if eq .Values.ntnxInitConfigMap.usePC true}}
+        - name: pc-secret
+          secret:
+            secretName: {{ .Values.pcSecretName }}
+        {{- end }}
+        
