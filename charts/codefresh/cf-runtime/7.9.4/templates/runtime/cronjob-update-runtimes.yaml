@@ -1,0 +1,92 @@
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{ $values := .Values.runtime.patch.cronjob }}
+{{- if and .Values.runtime.patch.enabled $values.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ coalesce .Values.runtime.patch.name (printf "%s-runtime-patch" (include "runtime.fullname" .)) }}
+  labels:
+    {{- include "runtime.labels" . | nindent 4 }}
+  annotations:
+    {{- with $values.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  schedule: {{ $values.schedule | default "0 0 * * *" }}
+  successfulJobsHistoryLimit: {{ $values.successfulJobsHistoryLimit | default 1 }}
+  failedJobsHistoryLimit: {{ $values.failedJobsHistoryLimit | default 1 }}
+  concurrencyPolicy: {{ $values.concurrencyPolicy | default "Forbid" }}
+  suspend: {{ $values.suspend | default false }}
+  {{- with $values.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ . | int }}
+  {{- end }}
+  {{- with $values.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . | int }}
+  {{- end }}
+  {{- with $values.completions }}
+  completions: {{ . | int }}
+  {{- end }}
+  jobTemplate:
+    spec:
+      {{- with $values.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          name: {{ coalesce .Values.runtime.patch.name (printf "%s-runtime-patch" (include "runtime.fullname" .)) }}
+          labels:
+            {{- include "runtime.labels" . | nindent 12 }}
+        spec:
+          securityContext:
+            {{- toYaml $values.podSecurityContext | nindent 12 }}
+          containers:
+          - name: patch-runtime
+            image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" $values.image "context" .) }}
+            imagePullPolicy: {{ $values.image.pullPolicy | default "Always" }}
+            command:
+            - "/bin/bash"
+            args:
+            - -ec
+            - |
+              {{- .Files.Get "files/patch-runtime.sh" | nindent 14 }}
+            env:
+            - name: API_KEY
+              {{- include "runtime.installation-token-env-var-value" . | indent 14 }}
+            - name: API_HOST
+              value: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+            - name: AGENT
+              value: {{  .Values.runtime.agent | quote }}
+              {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $values.env "context" .) | nindent 12 }}
+            volumeMounts:
+            - name: runtime-config
+              mountPath: /opt/codefresh/{{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}
+              subPath: {{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}
+            {{- range $runtimeIndex, $runtimeItem := .Values.extraRuntimes }}
+            - name: {{ printf "%s-runtime-config" ( include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) ) }}
+              mountPath: /opt/codefresh/runtime.d/system/{{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) }}
+              subPath: {{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) }}
+            {{- end }}
+          {{- with $values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          volumes:
+          - name: runtime-config
+            configMap:
+              name: {{ include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}-runtime-config
+          {{- range $runtimeIndex, $runtimeItem := .Values.extraRuntimes }}
+          - name: {{ printf "%s-runtime-config" ( include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) ) }}
+            configMap:
+                name: {{ printf "%s-runtime-config" ( include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) ) }}
+          {{- end }}
+          restartPolicy: Never
+    {{- end }}
