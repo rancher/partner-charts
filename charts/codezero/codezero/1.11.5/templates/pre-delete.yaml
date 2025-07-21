@@ -1,0 +1,47 @@
+{{- if semverCompare ">=2.7.4" .Chart.AppVersion }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}"
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: pre-delete-job
+        image: "c6oio/spaceagent:{{ .Values.spaceagent.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+        command: ["/spaceagent", "--delete-space"]
+        env:
+          - name: CZ_CLUSTER_CERT
+            value: /etc/ssl/certs/space/tls.pem
+          - name: CZ_CLUSTER_CERT_KEY
+            value: /etc/ssl/certs/space/tls.key
+          {{- if .Values.hub.url }}
+          - name: CZ_HUB_URL
+            value: {{ .Values.hub.url }}
+          {{- end }}
+        volumeMounts:
+          - mountPath: /etc/ssl/certs/space
+            name: space-cert
+            readOnly: true
+      volumes:
+        - name: space-cert
+          secret:
+            secretName: space-cert
+            optional: true
+{{- end }}
