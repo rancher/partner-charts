@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "operator.name" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "operator.podAnnotations" . | nindent 8 }}
+      labels:
+        {{- include "operator.podLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.operator.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ include "operator.name" . }}
+        image: "{{ include "image-path" (dict "root" . "image" .Values.operator.image) }}"
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        command:
+        - /operator
+        args:
+          - --leader-elect
+          - --health-probe-bind-address=:8081
+        env:
+          - name: CZ_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: CZ_ROUTER_IMAGE
+            value: "{{ include "image-path" (dict "root" . "image" .Values.router.image) }}"
+          - name: CZ_ROUTER_PRIVILEGED_ACCESS
+            value: "{{ .Values.router.privilegedAccess }}"
+          - name: CZ_ROUTER_REPLICAS
+            value: "{{ .Values.router.replicas }}"
+          {{- with .Values.router.topologySpreadConstraints }}
+          - name: "CZ_ROUTER_TOPOLOGY_SPREAD_CONSTRAINTS"
+            value: {{ . | toJson | quote }}
+          {{- end }}
+          {{- with .Values.router.podLabels}}
+          - name: "CZ_ROUTER_POD_LABELS"
+            value: {{ . | toJson | quote }}
+          {{- end }}
+          {{- with .Values.router.podAnnotations}}
+          - name: "CZ_ROUTER_POD_ANNOTATIONS"
+            value: {{ . | toJson | quote }}
+          {{- end }}
+          {{- with .Values.router.labels}}
+          - name: "CZ_ROUTER_LABELS"
+            value: {{ . | toJson | quote }}
+          {{- end }}
+          {{- with .Values.router.serviceLabels}}
+          - name: "CZ_ROUTER_SERVICE_LABELS"
+            value: {{ . | toJson | quote }}
+          {{- end }}
+        securityContext:
+          {{- toYaml .Values.operator.securityContext | nindent 12 }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      serviceAccountName: operator
+      terminationGracePeriodSeconds: 10
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

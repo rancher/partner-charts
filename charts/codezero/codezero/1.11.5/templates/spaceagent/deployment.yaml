@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "spaceagent.name" . }}
+  labels:
+    {{- include "spaceagent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.spaceagent.replicas }}
+  selector:
+    matchLabels:
+      {{- include "spaceagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "spaceagent.podAnnotations" . | nindent 8 }}
+      labels:
+        {{- include "spaceagent.podLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "spaceagent.name" . }}
+      securityContext:
+        {{- toYaml .Values.spaceagent.podSecurityContext | nindent 8 }}
+      {{- with .Values.spaceagent.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "spaceagent.name" . }}
+          securityContext:
+            {{- toYaml .Values.spaceagent.securityContext | nindent 12 }}
+          image: "{{ include "image-path" (dict "root" . "image" .Values.spaceagent.image) }}"
+          imagePullPolicy: {{ .Values.spaceagent.image.pullPolicy }}
+          env:
+            - name: CZ_SPACE_CA_CERT
+              value: /etc/ssl/certs/space/ca.pem
+            - name: CZ_CLUSTER_CERT
+              value: /etc/ssl/certs/space/tls.pem
+            - name: CZ_CLUSTER_CERT_KEY
+              value: /etc/ssl/certs/space/tls.key
+            {{- with .Values.hub.url }}
+            - name: CZ_HUB_URL
+              value: {{ . }}
+            {{- end }}
+            {{- with .Values.space.name }}
+            - name: CZ_HUB_SPACE_NAME
+              value: {{ . }}
+            {{- end }}
+            {{- with .Values.spaceagent.externalHost }}
+            - name: CZ_EXTERNAL_HOST
+              value: {{ . }}
+            {{- end }}
+            {{- if .Values.opa.enabled }}
+            - name: CZ_OPA_URL
+              value: {{ .Values.opa.url }}
+            {{- end }}
+            {{- with .Values.spaceagent.logLevel }}
+            - name: CZ_LOG_LEVEL
+              value: {{ . }}
+            {{- end }}
+            - name: CZ_TRACING_ENABLED
+              value: "{{ .Values.tracing.enabled }}"
+            - name: CZ_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CZ_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CZ_HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if gt (int .Values.spaceagent.replicas) 1}}
+            - name: CZ_SCALING_ENABLED
+              value: "true"
+            - name: CZ_REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: host
+            - name: CZ_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: password
+            {{- end }}
+          envFrom:
+            - secretRef:
+                {{- if eq .Values.org.secret "" }}
+                name: {{ include "spaceagent.name" . }}
+                {{- else }}
+                name: {{ .Values.org.secret }}
+                {{- end }}
+          ports:
+            - name: http
+              containerPort: 8800
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8800
+              scheme: HTTPS
+            initialDelaySeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8800
+              scheme: HTTPS
+            initialDelaySeconds: 1
+          resources:
+            {{- toYaml .Values.spaceagent.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /etc/ssl/certs/space
+              name: space-cert
+              readOnly: true
+      volumes:
+        - name: space-cert
+          secret:
+            secretName: space-cert
+            optional: true
+        {{- if gt (int .Values.spaceagent.replicas) 1}}
+        - name: redis
+          secret:
+            secretName: {{ .Values.spaceagent.redis.secret }}
+            optional: true
+        {{- end }}
+      {{- with .Values.spaceagent.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.spaceagent.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.spaceagent.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
