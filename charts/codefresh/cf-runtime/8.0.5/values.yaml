@@ -1,0 +1,1070 @@
+# -- String to partially override cf-runtime.fullname template (will maintain the release name)
+nameOverride: ""
+# -- String to fully override cf-runtime.fullname template
+fullnameOverride: ""
+# -- Global parameters
+# @default -- See below
+global:
+  # -- Global Docker image registry
+  imageRegistry: ""
+  # -- Global Docker registry secret names as array
+  imagePullSecrets: []
+  # -- URL of Codefresh Platform (required!)
+  codefreshHost: "https://g.codefresh.io"
+  # -- User token in plain text (required if `global.codefreshTokenSecretKeyRef` is omitted!)
+  # Ref: https://g.codefresh.io/user/settings (see API Keys)
+  # Minimal API key scopes: Runner-Installation(read+write), Agent(read+write), Agents(read+write)
+  codefreshToken: ""
+  # -- User token that references an existing secret containing API key (required if `global.codefreshToken` is omitted!)
+  codefreshTokenSecretKeyRef: {}
+  # E.g.
+  # codefreshTokenSecretKeyRef:
+  #   name: my-codefresh-api-token
+  #   key: codefresh-api-token
+
+  # -- Account ID (required!)
+  # Can be obtained here https://g.codefresh.io/2.0/account-settings/account-information
+  accountId: ""
+  # -- K8s context name (required!)
+  context: ""
+  # E.g.
+  # context: prod-ue1-runtime-1
+
+  # -- Agent Name (optional!)
+  # If omitted, the following format will be used `{{ .Values.global.context }}_{{ .Release.Namespace }}`
+  agentName: ""
+  # E.g.
+  # agentName: prod-ue1-runtime-1
+
+  # -- Runtime name (optional!)
+  # If omitted, the following format will be used `{{ .Values.global.context }}/{{ .Release.Namespace }}`
+  runtimeName: ""
+  # E.g.
+  # runtimeName: prod-ue1-runtime-1/namespace
+
+  # -- DEPRECATED Agent token in plain text.
+  # !!! MUST BE provided if migrating from < 6.x chart version
+  agentToken: ""
+  # -- DEPRECATED Agent token that references an existing secret containing API key.
+  # !!! MUST BE provided if migrating from < 6.x chart version
+  agentTokenSecretKeyRef: {}
+  # E.g.
+  # agentTokenSecretKeyRef:
+  #   name: my-codefresh-agent-secret
+  #   key: codefresh-agent-token
+# DEPRECATED -- Use `.Values.global.imageRegistry` instead
+dockerRegistry: ""
+# DEPRECATED -- Use `.Values.runtime` instead
+re: {}
+# -- Runner parameters
+# @default -- See below
+runner:
+  # -- Enable the runner
+  enabled: true
+  # -- Set runner deployment name
+  name: "" # e.g. "runner"
+  # -- Set number of pods
+  replicasCount: 1
+  # -- Upgrade strategy
+  updateStrategy:
+    type: RollingUpdate
+  # -- Set pod annotations
+  podAnnotations: {}
+  # -- Set image
+  image:
+    registry: quay.io
+    repository: codefresh/venona
+    tag: 2.0.6
+    digest: sha256:d00c6645039c3716e778217cc22fb44ae2324fd3349d8e782dd3a8af05dc0e2d
+  # -- Init container
+  init:
+    image:
+      registry: quay.io
+      repository: codefresh/cli
+      tag: 0.89.2-rootless
+      digest: sha256:ea37c7064a95a68269cb93f17e05501f87403706665319ed8f3c646c77e3880c
+    resources:
+      limits:
+        memory: 512Mi
+        cpu: '1'
+      requests:
+        memory: 256Mi
+        cpu: '0.2'
+  # -- Sidecar container
+  # Reconciles runtime spec from Codefresh API for drift detection
+  sidecar:
+    enabled: false
+    image:
+      registry: quay.io
+      repository: codefresh/kubectl
+      tag: 1.33.0
+      digest: sha256:da0c9d12b4772e6cd6c1ecb93883471e8785d4d61c9108c9f7d0dc9cc2f5a149
+    env:
+      RECONCILE_INTERVAL: 300
+    resources: {}
+  # -- Add additional env vars
+  env: {}
+  # E.g.
+  # env:
+  #   WORKFLOW_CONCURRENCY: 50 # The number of workflow creation and termination tasks the Runner can handle in parallel. Defaults to 50
+
+  # -- Service Account parameters
+  serviceAccount:
+    # -- Create service account
+    create: true
+    # -- Override service account name
+    name: ""
+    # -- Additional service account annotations
+    annotations: {}
+  # -- RBAC parameters
+  rbac:
+    # -- Create RBAC resources
+    create: true
+    # -- Add custom rule to the role
+    rules: []
+  # -- Set security context for the pod
+  # @default -- See below
+  podSecurityContext:
+    enabled: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  # -- Readiness probe configuration
+  # @default -- See below
+  readinessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 5
+  # -- Set requests and limits
+  resources: {}
+  # -- Set node selector
+  nodeSelector: {}
+  # -- Set tolerations
+  tolerations: []
+  # -- Set affinity
+  affinity: {}
+# -- Volume Provisioner parameters
+# @default -- See below
+volumeProvisioner:
+  # -- Enable volume-provisioner
+  enabled: true
+  # -- Set volume-provisioner deployment name
+  name: "" # e.g. "dind-volume-provisioner"
+  # -- Set number of pods
+  replicasCount: 1
+  # -- Upgrade strategy
+  updateStrategy:
+    type: Recreate
+  # -- Set pod annotations
+  podAnnotations: {}
+  # -- Set image
+  image:
+    registry: quay.io
+    repository: codefresh/dind-volume-provisioner
+    tag: 1.35.4
+    digest: sha256:94323807949da518a051fc8d95947da32f9276bfb78388cb133b2f38de818838
+  # -- Add additional env vars
+  env: {}
+  # E.g.
+  # env:
+  #   THREADINESS: 4 # The number of PVC requests the dind-volume-provisioner can process in parallel. Defaults to 4
+
+  # -- Service Account parameters
+  serviceAccount:
+    # -- Create service account
+    create: true
+    # -- Override service account name
+    name: ""
+    # -- Additional service account annotations
+    annotations: {}
+    # E.g.
+    #   serviceAccount:
+    #     annotations:
+    #       eks.amazonaws.com/role-arn: "arn:aws:iam::<ACCOUNT_ID>:role/<IAM_ROLE_NAME>"
+  # -- RBAC parameters
+  rbac:
+    # -- Create RBAC resources
+    create: true
+    # -- Add custom rule to the role
+    rules: []
+  # -- Set security context for the pod
+  # @default -- See below
+  podSecurityContext:
+    enabled: true
+    runAsUser: 3000
+    runAsGroup: 3000
+    fsGroup: 3000
+  # -- Set node selector
+  nodeSelector: {}
+  # -- Set resources
+  resources: {}
+  # -- Set tolerations
+  tolerations: []
+  # -- Set affinity
+  affinity: {}
+  # -- `dind-lv-monitor` DaemonSet parameters
+  # (local volumes cleaner)
+  # @default -- See below
+  dind-lv-monitor:
+    enabled: true
+    name: "" # e.g. "dind-lv-monitor"
+    image:
+      registry: quay.io
+      repository: codefresh/dind-volume-utils
+      tag: 1.30.1
+      digest: sha256:0e98fb2895b1a43f613e57f7be9e234808f0162175cabace51eb324d1a8c3c98
+    podAnnotations: {}
+    podSecurityContext:
+      enabled: false
+      runAsUser: 1000
+      fsGroup: 1000
+    containerSecurityContext: {}
+    env: {}
+    resources: {}
+    nodeSelector: {}
+    tolerations:
+      - key: 'codefresh/dind'
+        operator: 'Exists'
+        effect: 'NoSchedule'
+    volumePermissions:
+      enabled: false
+      image:
+        registry: docker.io
+        repository: alpine
+        tag: 3.18
+        digest: sha256:de0eb0b3f2a47ba1eb89389859a9bd88b28e82f5826b6969ad604979713c2d4f
+      resources: {}
+      securityContext:
+        runAsUser: 0 # auto
+  # `dind-volume-cleanup` CronJob parameters
+  # (external volumes cleaner)
+  # @default -- See below
+  dind-volume-cleanup:
+    enabled: true
+    name: "" # e.g. "dind-volume-cleanup"
+    image:
+      registry: quay.io
+      repository: codefresh/dind-volume-cleanup
+      tag: 1.2.0
+      digest: sha256:1af3e3ecc87bf2e26ba07ecef68f54ad100d7e3b5fcf074099f627fd5d917369
+    env: {}
+    concurrencyPolicy: Forbid
+    schedule: "*/10 * * * *"
+    successfulJobsHistory: 1
+    failedJobsHistory: 1
+    suspend: false
+    podAnnotations: {}
+    podSecurityContext:
+      enabled: true
+      fsGroup: 3000
+      runAsGroup: 3000
+      runAsUser: 3000
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+# Storage parameters for volume-provisioner
+# @default -- See below
+storage:
+  # -- Override storage class name for dind volumes
+  fullnameOverride: ""
+  # -- Set backend volume type (`local`/`ebs`/`ebs-csi`/`gcedisk`/`azuredisk`)
+  backend: local
+  # -- Set filesystem type (`ext4`/`xfs`)
+  fsType: "ext4"
+  # Storage parametrs example for local volumes on the K8S nodes filesystem (i.e. `storage.backend=local`)
+  # https://kubernetes.io/docs/concepts/storage/volumes/#local
+  # @default -- See below
+  local:
+    # -- Set volume path on the host filesystem
+    volumeParentDir: /var/lib/codefresh/dind-volumes
+  # Storage parameters example for aws ebs disks (i.e. `storage.backend=ebs`/`storage.backend=ebs-csi`)
+  # https://aws.amazon.com/ebs/
+  # https://codefresh.io/docs/docs/installation/codefresh-runner/#aws-backend-volume-configuration
+  # @default -- See below
+  ebs:
+    # -- Set EBS volume type (`gp2`/`gp3`/`io1`) (required)
+    volumeType: "gp2"
+    # -- Set EBS volumes availability zone (required)
+    availabilityZone: "us-east-1a"
+    # -- Enable encryption (optional)
+    encrypted: "false"
+    # -- Set KMS encryption key ID (optional)
+    kmsKeyId: ""
+    # -- Set AWS_ACCESS_KEY_ID for volume-provisioner (optional)
+    # Ref: https://codefresh.io/docs/docs/installation/codefresh-runner/#dind-volume-provisioner-permissions
+    accessKeyId: ""
+    # -- Existing secret containing AWS_ACCESS_KEY_ID.
+    accessKeyIdSecretKeyRef: {}
+    # E.g.
+    # accessKeyIdSecretKeyRef:
+    #   name:
+    #   key:
+
+    # -- Set AWS_SECRET_ACCESS_KEY for volume-provisioner (optional)
+    # Ref: https://codefresh.io/docs/docs/installation/codefresh-runner/#dind-volume-provisioner-permissions
+    secretAccessKey: ""
+    # -- Existing secret containing AWS_SECRET_ACCESS_KEY
+    secretAccessKeySecretKeyRef: {}
+    # E.g.
+    # secretAccessKeySecretKeyRef:
+    #   name:
+    #   key:
+  # E.g.
+  # ebs:
+  #   volumeType: gp3
+  #   availabilityZone: us-east-1c
+  #   encrypted: false
+  #   iops: "5000"
+  #   # I/O operations per second. Only effetive when gp3 volume type is specified.
+  #   # Default value - 3000.
+  #   # Max - 16,000
+  #   throughput: "500"
+  #   # Throughput in MiB/s. Only effective when gp3 volume type is specified.
+  #   # Default value - 125.
+  #   # Max - 1000.
+  # ebs:
+  #   volumeType: gp2
+  #   availabilityZone: us-east-1c
+  #   encrypted: true
+  #   kmsKeyId: "1234abcd-12ab-34cd-56ef-1234567890ab"
+  #   accessKeyId: "MYKEYID"
+  #   secretAccessKey: "MYACCESSKEY"
+
+  # Storage parameters example for gce disks
+  # https://cloud.google.com/compute/docs/disks#pdspecs
+  # https://codefresh.io/docs/docs/installation/codefresh-runner/#gke-google-kubernetes-engine-backend-volume-configuration
+  # @default -- See below
+  gcedisk:
+    # -- Set GCP volume backend type (`pd-ssd`/`pd-standard`)
+    volumeType: "pd-ssd"
+    # -- Set GCP volume availability zone
+    availabilityZone: "us-west1-a"
+    # -- Set Google SA JSON key for volume-provisioner (optional)
+    serviceAccountJson: ""
+    # -- Existing secret containing containing Google SA JSON key for volume-provisioner (optional)
+    serviceAccountJsonSecretKeyRef: {}
+    # E.g.
+    # gcedisk:
+    #   volumeType: pd-ssd
+    #   availabilityZone: us-central1-c
+    #   serviceAccountJson: |-
+    #          {
+    #           "type": "service_account",
+    #           "project_id": "...",
+    #           "private_key_id": "...",
+    #           "private_key": "...",
+    #           "client_email": "...",
+    #           "client_id": "...",
+    #           "auth_uri": "...",
+    #           "token_uri": "...",
+    #           "auth_provider_x509_cert_url": "...",
+    #           "client_x509_cert_url": "..."
+    #           }
+  # Storage parameters example for Azure Disks
+  # https://codefresh.io/docs/docs/installation/codefresh-runner/#install-codefresh-runner-on-azure-kubernetes-service-aks
+  # @default -- See below
+  azuredisk:
+    # -- Set storage type (`Premium_LRS`)
+    skuName: Premium_LRS
+    cachingMode: None
+    # availabilityZone: northeurope-1
+    # resourceGroup:
+    # DiskIOPSReadWrite: 500
+    # DiskMBpsReadWrite: 100
+  mountAzureJson: false
+# -- Set runtime parameters
+# @default -- See below
+runtime:
+  # -- Set annotation on engine Service Account
+  # Ref: https://codefresh.io/docs/docs/administration/codefresh-runner/#injecting-aws-arn-roles-into-the-cluster
+  serviceAccount:
+    create: true
+    annotations: {}
+    # E.g.
+    #   serviceAccount:
+    #     annotations:
+    #       eks.amazonaws.com/role-arn: "arn:aws:iam::<ACCOUNT_ID>:role/<IAM_ROLE_NAME>"
+  # -- Set parent runtime to inherit.
+  # Should not be changes. Parent runtime is controlled from Codefresh side.
+  runtimeExtends:
+    - system/default/hybrid/k8s_low_limits
+  # -- Runtime description
+  description: ""
+  # -- RBAC parameters
+  rbac:
+    # -- Create RBAC resources
+    create: true
+    # -- Add custom rule to the engine role
+    rules: []
+  # -- (for On-Premise only) Enable agent
+  agent: true
+  # -- (for On-Premise only) Set inCluster runtime
+  inCluster: true
+  # -- (for On-Premise only) Set kubeconfig name and path
+  kubeconfigFilePath: ""
+  kubeconfigName: ""
+  # -- (for On-Premise only) Assign accounts to runtime (list of account ids)
+  accounts: []
+  # -- Parameters for DinD (docker-in-docker) pod (aka "runtime" pod).
+  dind:
+    # -- Set dind image.
+    image:
+      registry: quay.io
+      repository: codefresh/dind
+      tag: 28.1.1-3.0.1 # use `latest-rootless/rootless/28.1.1-3.0.1-rootless` tags for rootless-dind
+      pullPolicy: IfNotPresent
+      digest: sha256:e6f8044b6963b3d1fbf728853aa31edff0bb26ce7613595d3b2a470482bd2cc3
+    # -- Set dind resources.
+    resources:
+      requests: null
+      limits:
+        cpu: 400m
+        memory: 800Mi
+    # -- Set termination grace period.
+    terminationGracePeriodSeconds: 30
+    # -- PV claim spec parametes.
+    pvcs:
+      # -- Default dind PVC parameters
+      dind:
+        # -- PVC name prefix.
+        # Keep `dind` as default! Don't change!
+        name: dind
+        # -- PVC storage class name.
+        # Change ONLY if you need to use storage class NOT from Codefresh volume-provisioner
+        storageClassName: '{{ include "dind-volume-provisioner.storageClassName" . }}'
+        # -- PVC size.
+        volumeSize: 16Gi
+        # -- PV reuse selector.
+        # Ref: https://codefresh.io/docs/docs/installation/codefresh-runner/#volume-reuse-policy
+        reuseVolumeSelector: codefresh-app,io.codefresh.accountName
+        reuseVolumeSortOrder: pipeline_id
+        # -- PV annotations.
+        annotations: {}
+        # E.g.:
+        # annotations:
+        #   codefresh.io/volume-retention: 7d
+    # -- Set additional env vars.
+    env: {}
+    # -- Set pod annotations.
+    podAnnotations: {}
+    # -- Set pod labels.
+    podLabels: {}
+    # -- Set node selector.
+    nodeSelector: {}
+    # -- Set affinity
+    affinity: {}
+    # -- Set tolerations.
+    tolerations: []
+    # -- Set security context for the pod.
+    podSecurityContext: {}
+    # -- Set container security context.
+    containerSecurityContext: {}
+    # -- Set scheduler name.
+    schedulerName: ""
+    # -- Set service account for pod.
+    serviceAccount: codefresh-engine
+    # -- Keep `true` as default!
+    userAccess: true
+    # -- Add extra volumes
+    userVolumes: {}
+    # E.g.:
+    # userVolumes:
+    #   regctl-docker-registry:
+    #     name: regctl-docker-registry
+    #     secret:
+    #       items:
+    #         - key: .dockerconfigjson
+    #           path: config.json
+    #       secretName: regctl-docker-registry
+    #       optional: true
+    # -- Add extra volume mounts
+    userVolumeMounts: {}
+    # E.g.:
+    # userVolumeMounts:
+    #   regctl-docker-registry:
+    #     name: regctl-docker-registry
+    #     mountPath: /home/appuser/.docker/
+    #     readOnly: true
+    volumePermissions:
+      enabled: false
+      image:
+        registry: docker.io
+        repository: alpine
+        tag: 3.18
+        digest: sha256:de0eb0b3f2a47ba1eb89389859a9bd88b28e82f5826b6969ad604979713c2d4f
+      resources: {}
+      securityContext:
+        runAsUser: 0 # auto
+  # -- Parameters for Engine pod (aka "pipeline" orchestrator).
+  engine:
+    # -- Set image.
+    image:
+      registry: quay.io
+      repository: codefresh/engine
+      tag: 1.178.3
+      pullPolicy: IfNotPresent
+      digest: sha256:c8e74362a3462a635cad70ac81877a7d3a0d4833cfaefb8d3b8b4b90e8c95159
+    # -- Set container command.
+    command:
+      - npm
+      - run
+      - start
+    # -- Set resources.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 1000m
+        memory: 2048Mi
+    # -- Set termination grace period.
+    terminationGracePeriodSeconds: 180
+    # -- Override docker image registry for runtime images.
+    runtimeImagesRegisty: ""
+    # -- Set system(base) runtime images.
+    # @default -- See below.
+    runtimeImages:
+      compose:
+        registry: quay.io
+        repository: codefresh/compose
+        tag: v2.37.0-1.5.4
+        digest: sha256:e74494370100678ccb1c1058e6ef3ddcf67b21fcd37da8b3482376c8282549ad
+      container-logger:
+        registry: quay.io
+        repository: codefresh/cf-container-logger
+        tag: 1.12.8
+        digest: sha256:6e376bb00e824827cb038e15160ccf0fead4f868197b75bbc80dbd6bc34af8d6
+      docker-builder:
+        registry: quay.io
+        repository: codefresh/cf-docker-builder
+        tag: 1.4.7
+        digest: sha256:1d02df4dcf703a97c7a64b147cd2c3f6ec2c708aad16be5abbd337f3c13a48ad
+      docker-puller:
+        registry: quay.io
+        repository: codefresh/cf-docker-puller
+        tag: 8.0.22
+        digest: sha256:914f071bcb1893bcb42c3f8907f8f3874f1f30db1a2ccaa4b825dab9bb157e60
+      docker-pusher:
+        registry: quay.io
+        repository: codefresh/cf-docker-pusher
+        tag: 6.0.20
+        digest: sha256:bad3773029a68f33953f1dc245cb92c386b5311a996340eea41fe6b9cc52a96c
+      docker-tag-pusher:
+        registry: quay.io
+        repository: codefresh/cf-docker-tag-pusher
+        tag: 1.3.19
+        digest: sha256:ec4416525bbf4912786035fbb2e1f26ae04f94559c535f02232b48eb0a1c5fa7
+      fs-ops:
+        registry: quay.io
+        repository: codefresh/fs-ops
+        tag: 1.2.10
+        digest: sha256:70d53821b9314d88e3571dfb096e8f577caf3e4c2199253621b8d0c85d20b8ad
+      git-cloner:
+        registry: quay.io
+        repository: codefresh/cf-git-cloner
+        tag: 10.3.2
+        digest: sha256:2e09eef18d5caddae708058ec63247825ac4e4ee5e5763986f65e1312fbcc449
+      kube-deploy:
+        registry: quay.io
+        repository: codefresh/cf-deploy-kubernetes
+        tag: 16.2.9
+        digest: sha256:35649b14eb43717d3752d08597ada77d3737b2508f1b8e1f52f67b7a0e5ff263
+      pipeline-debugger:
+        registry: quay.io
+        repository: codefresh/cf-debugger
+        tag: 1.3.9
+        digest: sha256:37975653b4ef5378bd1e38d453c7dac4721cba1c1977a5ca6118a67b98a47925
+      template-engine:
+        registry: quay.io
+        repository: codefresh/pikolo
+        tag: 0.14.6
+        digest: sha256:b3f499fcf93037e69fba599d2f292cfc9f28a158052dd57d5de9cdf9756f1f60
+      cosign-image-signer:
+        registry: quay.io
+        repository: codefresh/cf-cosign-image-signer
+        tag: 2.5.2-cf.1
+        digest: sha256:ad74291dc11833e13dbf7ae1919446dee2baedb16b96a8a3acc600b5499c716d
+      gc-builder:
+        registry: quay.io
+        repository: codefresh/cf-gc-builder
+        tag: 0.5.3
+        digest: sha256:33ac914e6b844909f188a208cf90e569358cafa5aaa60f49848f49d99bcaf875
+      default-qemu:
+        registry: docker.io
+        repository: tonistiigi/binfmt
+        tag: qemu-v9.2.2
+        digest: sha256:1b804311fe87047a4c96d38b4b3ef6f62fca8cd125265917a9e3dc3c996c39e6
+      alpine:
+        registry: docker.io
+        repository: alpine
+        tag: edge
+        digest: sha256:115729ec5cb049ba6359c3ab005ac742012d92bbaa5b8bc1a878f1e8f62c0cb8
+    # -- Legacy way to specify runtime images.
+    # runtimeImages:
+    #   COMPOSE_IMAGE: quay.io/codefresh/compose:v2.37.0-1.5.4@sha256:e74494370100678ccb1c1058e6ef3ddcf67b21fcd37da8b3482376c8282549ad
+    #   CONTAINER_LOGGER_IMAGE: quay.io/codefresh/cf-container-logger:1.12.5@sha256:9152151faf828dfd3bf52ea568b6d70bcc88ef99d5fa7d011f7b4d9beed652cc
+    #   DOCKER_BUILDER_IMAGE: quay.io/codefresh/cf-docker-builder:1.4.6@sha256:94683c11ac66705ef752b7d4c7f8fb57445cb96d4f1425a52b5b3a9428ec852b
+    #   DOCKER_PULLER_IMAGE: quay.io/codefresh/cf-docker-puller:8.0.21@sha256:fdcae9ab57fd5121409fd7f669795eda2ddcb94e4e50e08f4ff3830a9bf40064
+    #   DOCKER_PUSHER_IMAGE: quay.io/codefresh/cf-docker-pusher:6.0.19@sha256:3753503dcfee41065ffa6ca1527453604ce69fbf31fce5d356d679bf26579417
+    #   DOCKER_TAG_PUSHER_IMAGE: quay.io/codefresh/cf-docker-tag-pusher:1.3.17@sha256:d0f09428b74da4bcae581477db519e694669702bb42a55f4a7977014f2ed21b2
+    #   FS_OPS_IMAGE: quay.io/codefresh/fs-ops:1.2.10@sha256:70d53821b9314d88e3571dfb096e8f577caf3e4c2199253621b8d0c85d20b8ad
+    #   GIT_CLONE_IMAGE: quay.io/codefresh/cf-git-cloner:10.3.1@sha256:2a7854d00287a181c056ea932652ec8a21300ff729d2e6f5f5b517cf4a3f0abf
+    #   KUBE_DEPLOY: quay.io/codefresh/cf-deploy-kubernetes:16.2.9@sha256:35649b14eb43717d3752d08597ada77d3737b2508f1b8e1f52f67b7a0e5ff263
+    #   PIPELINE_DEBUGGER_IMAGE: quay.io/codefresh/cf-debugger:1.3.9@sha256:37975653b4ef5378bd1e38d453c7dac4721cba1c1977a5ca6118a67b98a47925
+    #   TEMPLATE_ENGINE: quay.io/codefresh/pikolo:0.14.6@sha256:b3f499fcf93037e69fba599d2f292cfc9f28a158052dd57d5de9cdf9756f1f60
+    #   CR_6177_FIXER: alpine:edge@sha256:115729ec5cb049ba6359c3ab005ac742012d92bbaa5b8bc1a878f1e8f62c0cb8
+    #   GC_BUILDER_IMAGE: quay.io/codefresh/cf-gc-builder:0.5.3@sha256:33ac914e6b844909f188a208cf90e569358cafa5aaa60f49848f49d99bcaf875
+    #   COSIGN_IMAGE_SIGNER_IMAGE: quay.io/codefresh/cf-cosign-image-signer:2.5.0-cf.1@sha256:f28c2f9f99cc963b190f260c3d5b7374512fcfb93cedf94ba7a0ea7caa2a5833
+    #   DEFAULT_QEMU_IMAGE: tonistiigi/binfmt:qemu-v9.2.2@sha256:1b804311fe87047a4c96d38b4b3ef6f62fca8cd125265917a9e3dc3c996c39e6
+    # -- Set additional env vars.
+    env:
+      # -- Interval to check the exec status in the container-logger
+      CONTAINER_LOGGER_EXEC_CHECK_INTERVAL_MS: 1000
+      # -- Timeout while doing requests to the Docker daemon
+      DOCKER_REQUEST_TIMEOUT_MS: 30000
+      # -- If "true", composition images will be pulled sequentially
+      FORCE_COMPOSE_SERIAL_PULL: false
+      # -- Level of logging for engine
+      LOGGER_LEVEL: debug
+      # -- Enable debug-level logging of outgoing HTTP/HTTPS requests
+      LOG_OUTGOING_HTTP_REQUESTS: false
+      # -- Enable emitting metrics from engine
+      METRICS_PROMETHEUS_ENABLED: true
+      # -- Enable legacy metrics
+      METRICS_PROMETHEUS_ENABLE_LEGACY_METRICS: false
+      # -- Enable collecting process metrics
+      METRICS_PROMETHEUS_COLLECT_PROCESS_METRICS: false
+      # -- Host for Prometheus metrics server
+      METRICS_PROMETHEUS_HOST: '0.0.0.0'
+      # -- Port for Prometheus metrics server
+      METRICS_PROMETHEUS_PORT: 9100
+      # -- The timeout till the engine waits for Prometheus to pull the latest metrics before engine shuts down (in milliseconds)
+      METRICS_PROMETHEUS_SCRAPE_TIMEOUT: '15000'
+      # -- Trusted QEMU images used for docker builds - when left blank defaults to .runtime.engine.runtimeImages.DEFAULT_QEMU_IMAGE value
+      TRUSTED_QEMU_IMAGES: 'tonistiigi/binfmt'
+    # -- Set workflow limits.
+    workflowLimits:
+      # -- Maximum time allowed to the engine to wait for the pre-steps (aka "Initializing Process") to succeed; seconds.
+      MAXIMUM_ALLOWED_TIME_BEFORE_PRE_STEPS_SUCCESS: 600
+      # -- Maximum time for workflow execution; seconds.
+      MAXIMUM_ALLOWED_WORKFLOW_AGE_BEFORE_TERMINATION: 86400
+      # -- Maximum time allowed to workflow to spend in "elected" state; seconds.
+      MAXIMUM_ELECTED_STATE_AGE_ALLOWED: 900
+      # -- Maximum retry attempts allowed for workflow.
+      MAXIMUM_RETRY_ATTEMPTS_ALLOWED: 20
+      # -- Maximum time allowed to workflow to spend in "terminating" state until force terminated; seconds.
+      MAXIMUM_TERMINATING_STATE_AGE_ALLOWED: 900
+      # -- Maximum time allowed to workflow to spend in "terminating" state without logs activity until force terminated; seconds.
+      MAXIMUM_TERMINATING_STATE_AGE_ALLOWED_WITHOUT_UPDATE: 300
+      # -- Time since the last health check report after which workflow is terminated; seconds.
+      TIME_ENGINE_INACTIVE_UNTIL_TERMINATION: 300
+      # -- Time since the last health check report after which the engine is considered unhealthy; seconds.
+      TIME_ENGINE_INACTIVE_UNTIL_UNHEALTHY: 60
+      # -- Time since the last workflow logs activity after which workflow is terminated; seconds.
+      TIME_INACTIVE_UNTIL_TERMINATION: 2700
+    # -- Set pod annotations.
+    podAnnotations: {}
+    # -- Set pod labels.
+    podLabels: {}
+    # -- Set node selector.
+    nodeSelector: {}
+    # -- Set affinity
+    affinity: {}
+    # -- Set tolerations.
+    tolerations: []
+    # -- Set scheduler name.
+    schedulerName: ""
+    # -- Set service account for pod.
+    serviceAccount: codefresh-engine
+    # -- Set extra env vars
+    userEnvVars: []
+    # E.g.
+    # userEnvVars:
+    # - name: GITHUB_TOKEN
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: github-token
+    #       key: token
+  # -- Parameters for `runtime-patch` post-upgrade/install hook
+  # @default -- See below
+  patch:
+    enabled: true
+    name: "" # e.g. "runtime-patch"
+    hook:
+      enabled: true
+      image:
+        registry: quay.io
+        repository: codefresh/cli
+        tag: 0.89.2-rootless
+        digest: sha256:ea37c7064a95a68269cb93f17e05501f87403706665319ed8f3c646c77e3880c
+      rbac:
+        enabled: true
+      annotations: {}
+      affinity: {}
+      nodeSelector: {}
+      podSecurityContext: {}
+      resources: {}
+      tolerations: []
+      ttlSecondsAfterFinished: 180
+      env:
+        HOME: /tmp
+    # -- CronJob to update the runtime on schedule
+    cronjob:
+      enabled: true
+      schedule: "0/5 * * * *" # Every 5 minutes
+      successfulJobsHistory: 1
+      failedJobsHistory: 1
+      image:
+        registry: quay.io
+        repository: codefresh/cli
+        tag: 0.89.2-rootless
+        digest: sha256:ea37c7064a95a68269cb93f17e05501f87403706665319ed8f3c646c77e3880c
+      affinity: {}
+      nodeSelector: {}
+      podSecurityContext: {}
+      resources: {}
+      tolerations: []
+  # -- Parameters for `gencerts-dind` post-upgrade/install hook
+  # @default -- See below
+  gencerts:
+    enabled: true
+    name: "" # e.g. "dind-gencerts"
+    image:
+      registry: quay.io
+      repository: codefresh/kubectl
+      tag: 1.33.0
+      digest: sha256:da0c9d12b4772e6cd6c1ecb93883471e8785d4d61c9108c9f7d0dc9cc2f5a149
+    rbac:
+      enabled: true
+    annotations: {}
+    affinity: {}
+    nodeSelector: {}
+    podSecurityContext: {}
+    resources: {}
+    tolerations: []
+    ttlSecondsAfterFinished: 180
+  # -- DinD pod daemon config
+  # @default -- See below
+  dindDaemon:
+    hosts:
+      - unix:///var/run/docker.sock
+      - tcp://0.0.0.0:1300
+    tlsverify: true
+    tls: true
+    tlscacert: /etc/ssl/cf-client/ca.pem
+    tlscert: /etc/ssl/cf/server-cert.pem
+    tlskey: /etc/ssl/cf/server-key.pem
+    insecure-registries:
+      - 192.168.99.100:5000
+    metrics-addr: 0.0.0.0:9323
+    experimental: true
+# App-Proxy parameters
+# Ref: https://codefresh.io/docs/docs/installation/codefresh-runner/#app-proxy-installation
+# @default -- See below
+appProxy:
+  # -- Enable app-proxy
+  enabled: false
+  # -- Set number of pods
+  replicasCount: 1
+  # -- Upgrade strategy
+  updateStrategy:
+    type: RollingUpdate
+  # -- Set pod annotations
+  podAnnotations: {}
+  # -- Set image
+  image:
+    registry: quay.io
+    repository: codefresh/cf-app-proxy
+    tag: 0.0.55
+    digest: sha256:47e56203a2b091986bce51bed5395aaccd8c4ec6e1a8f60060919f4f5fc0ab66
+  # -- Add additional env vars
+  env: {}
+  # Set app-proxy ingress parameters
+  # @default -- See below
+  ingress:
+    # -- Set path prefix for ingress (keep empty for default `/` path)
+    pathPrefix: ""
+    # -- Set ingress class
+    class: ""
+    # -- Set DNS hostname the ingress will use
+    host: ""
+    # -- Set k8s tls secret for the ingress object
+    tlsSecret: ""
+    # -- Set extra annotations for ingress object
+    annotations: {}
+    # E.g.
+    # ingress:
+    #   pathPrefix: "/cf-app-proxy"
+    #   class: "nginx"
+    #   host: "mydomain.com"
+    #   tlsSecret: "tls-cert-app-proxy"
+    #   annotations:
+    #     nginx.ingress.kubernetes.io/whitelist-source-range: 123.123.123.123/130
+  # -- Service Account parameters
+  serviceAccount:
+    # -- Create service account
+    create: true
+    # -- Override service account name
+    name: ""
+    # -- Use Role(true)/ClusterRole(true)
+    namespaced: true
+    # -- Additional service account annotations
+    annotations: {}
+  # -- RBAC parameters
+  rbac:
+    # -- Create RBAC resources
+    create: true
+    # -- Use Role(true)/ClusterRole(true)
+    namespaced: true
+    # -- Add custom rule to the role
+    rules: []
+  # -- Set security context for the pod
+  podSecurityContext: {}
+  # -- Readiness probe configuration
+  # @default -- See below
+  readinessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 5
+  # -- Set requests and limits
+  resources: {}
+  # -- Set node selector
+  nodeSelector: {}
+  # -- Set tolerations
+  tolerations: []
+  # -- Set affinity
+  affinity: {}
+# Monitor parameters
+# @default -- See below
+monitor:
+  # -- Enable monitor
+  # Ref: https://codefresh.io/docs/docs/installation/codefresh-runner/#install-monitoring-component
+  enabled: false
+  # -- Set number of pods
+  replicasCount: 1
+  # -- Upgrade strategy
+  updateStrategy:
+    type: RollingUpdate
+  # -- Set pod annotations
+  podAnnotations: {}
+  # -- Set image
+  image:
+    registry: quay.io
+    repository: codefresh/cf-k8s-agent
+    tag: 1.3.23
+    digest: sha256:4ada371e2eca5e80bb63583749737d8a17504d8ada3901fe1ef295e226a3e5d0
+  # -- Add additional env vars
+  env: {}
+  # -- Service Account parameters
+  serviceAccount:
+    # -- Create service account
+    create: true
+    # -- Override service account name
+    name: ""
+    # -- Additional service account annotations
+    annotations: {}
+  # -- RBAC parameters
+  rbac:
+    # -- Create RBAC resources
+    create: true
+    # -- Use Role(true)/ClusterRole(true)
+    namespaced: true
+    # -- Add custom rule to the role
+    rules: []
+  # -- Readiness probe configuration
+  # @default -- See below
+  readinessProbe:
+    failureThreshold: 5
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 5
+  podSecurityContext: {}
+  # -- Set node selector
+  nodeSelector: {}
+  # -- Set resources
+  resources: {}
+  # -- Set tolerations
+  tolerations: []
+  # -- Set affinity
+  affinity: {}
+# -- Add serviceMonitor
+# @default -- See below
+serviceMonitor:
+  main:
+    # -- Enable service monitor for dind pods
+    enabled: false
+    fullnameOverride: dind
+    selector:
+      matchLabels:
+        app: dind
+    endpoints:
+      - path: /metrics
+        targetPort: 9100
+        relabelings:
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+      - path: /metrics
+        targetPort: 9323
+        relabelings:
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+# -- Add podMonitor (for engine pods)
+# @default -- See below
+podMonitor:
+  main:
+    # -- Enable pod monitor for engine pods
+    enabled: false
+    fullnameOverride: engine
+    selector:
+      matchLabels:
+        app: runtime
+    podMetricsEndpoints:
+      - path: /metrics
+        targetPort: 9100
+  runner:
+    # -- Enable pod monitor for runner pod
+    enabled: false
+    fullnameOverride: runner
+    selector:
+      matchLabels:
+        codefresh.io/application: runner
+    podMetricsEndpoints:
+      - path: /metrics
+        targetPort: 8080
+  volume-provisioner:
+    # -- Enable pod monitor for volumeProvisioner pod
+    enabled: false
+    fullnameOverride: volume-provisioner
+    selector:
+      matchLabels:
+        codefresh.io/application: volume-provisioner
+    podMetricsEndpoints:
+      - path: /metrics
+        targetPort: 8080
+# -- Event exporter parameters
+# @default -- See below
+event-exporter:
+  # -- Enable event-exporter
+  enabled: false
+  # -- Set name for the event-exporter deployment
+  name: "" # e.g. "event-exporter"
+  # -- Set number of pods
+  replicasCount: 1
+  # -- Upgrade strategy
+  updateStrategy:
+    type: Recreate
+  # -- Set pod annotations
+  podAnnotations: {}
+  # -- Set image
+  image:
+    registry: docker.io
+    repository: codefresh/k8s-event-exporter
+    tag: latest
+    digest: sha256:cf52048f1378fb6659dffd1394d68fdf23a7ea709585dc14b5007f3e5a1b7584
+  # -- Add additional env vars
+  env: {}
+  # -- Service Account parameters
+  serviceAccount:
+    # -- Create service account
+    create: true
+    # -- Override service account name
+    name: ""
+    # -- Additional service account annotations
+    annotations: {}
+  # -- RBAC parameters
+  rbac:
+    # -- Create RBAC resources
+    create: true
+    # -- Add custom rule to the role
+    rules: []
+  # -- Set security context for the pod
+  # @default -- See below
+  podSecurityContext:
+    enabled: false
+  # -- Set node selector
+  nodeSelector: {}
+  # -- Set resources
+  resources: {}
+  # -- Set tolerations
+  tolerations: []
+  # -- Set affinity
+  affinity: {}
+# -- Ballast parameters
+# @default -- See below
+ballast:
+  dind:
+    enabled: false
+    # -- Set number of pods
+    replicasCount: 1
+    # -- Set pod annotations
+    podAnnotations: {}
+    # -- Set image
+    image:
+      registry: registry.k8s.io
+      repository: pause
+      tag: 3.10
+      digest: sha256:ee6521f290b2168b6e0935a181d4cff9be1ac3f505666ef0e3c98fae8199917a
+    # -- Add additional env vars
+    podSecurityContext: {}
+    # -- Set resources
+    resources: {}
+  engine:
+    enabled: false
+    # -- Set number of pods
+    replicasCount: 1
+    # -- Set pod annotations
+    podAnnotations: {}
+    # -- Set image
+    image:
+      registry: registry.k8s.io
+      repository: pause
+      tag: 3.10
+      digest: sha256:ee6521f290b2168b6e0935a181d4cff9be1ac3f505666ef0e3c98fae8199917a
+    # -- Add additional env vars
+    podSecurityContext: {}
+    # -- Set resources
+    resources: {}
+# -- Array of extra objects to deploy with the release
+extraResources: []
+# E.g.
+# extraResources:
+# - apiVersion: rbac.authorization.k8s.io/v1
+#   kind: ClusterRole
+#   metadata:
+#     name: codefresh-role
+#   rules:
+#     - apiGroups: [ "*"]
+#       resources: ["*"]
+#       verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# - apiVersion: v1
+#   kind: ServiceAccount
+#   metadata:
+#     name: codefresh-user
+#     namespace: "{{ .Release.Namespace }}"
+# - apiVersion: rbac.authorization.k8s.io/v1
+#   kind: ClusterRoleBinding
+#   metadata:
+#     name: codefresh-user
+#   roleRef:
+#     apiGroup: rbac.authorization.k8s.io
+#     kind: ClusterRole
+#     name: codefresh-role
+#   subjects:
+#   - kind: ServiceAccount
+#     name: codefresh-user
+#     namespace: "{{ .Release.Namespace }}"
+# - apiVersion: v1
+#   kind: Secret
+#   type: kubernetes.io/service-account-token
+#   metadata:
+#     name: codefresh-user-token
+#     namespace: "{{ .Release.Namespace }}"
+#     annotations:
+#       kubernetes.io/service-account.name: "codefresh-user"
+# -- Extra runtimes to create
+extraRuntimes: {}
