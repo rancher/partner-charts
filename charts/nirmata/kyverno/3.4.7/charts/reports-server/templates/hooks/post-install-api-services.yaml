@@ -1,0 +1,129 @@
+{{- if .Values.apiServicesManagement.migrateReportsServer.enabled -}}
+{{- if not .Values.templating.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "reports-server.fullname" . }}-post-install-install-api-services
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "reports-server.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "100"
+spec:
+  ttlSecondsAfterFinished: 100
+  backoffLimit: 2
+  template:
+    metadata:
+      {{- with .Values.jobConfigurations.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.jobConfigurations.podLabels }}
+      labels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccount: {{ include "reports-server.serviceAccountName" . }}
+      {{- with .Values.apiServicesManagement.podSecurityContext }}
+      securityContext:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      {{- with .Values.jobConfigurations.imagePullSecrets | default .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: kubectl
+          image: "{{ .Values.jobConfigurations.image.registry }}/{{ .Values.jobConfigurations.image.repository }}:{{ .Values.jobConfigurations.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.jobConfigurations.image.pullPolicy }}
+          command:
+            - /usr/bin/sh
+            - '-c'
+            - |-
+              set -euo pipefail
+              kubectl wait -n {{ $.Release.Namespace }} pod --for=condition=ready -l app.kubernetes.io/name={{ include "reports-server.name" . }} --timeout=120s
+              kubectl apply -f - <<EOF
+              {
+                "apiVersion": "apiregistration.k8s.io/v1",
+                "kind": "APIService",
+                "metadata": {
+                  "name": "v1alpha2.wgpolicyk8s.io",
+                  "namespace": {{ $.Release.Namespace | quote }},
+                  "labels": {
+                    "kube-aggregator.kubernetes.io/automanaged": "false"
+                  },
+                  "annotations": {
+                    "helm.sh/hook": "post-install"
+                  }
+                },
+                "spec": {
+                  "group": "wgpolicyk8s.io",
+                  "groupPriorityMinimum": 100,
+                  "insecureSkipTLSVerify": true,
+                  "service": {
+                    "name": {{ include "reports-server.fullname" . | quote }},
+                    "namespace": {{ $.Release.Namespace | quote }}
+                  },
+                  "version": "v1alpha2",
+                  "versionPriority": 100
+                }
+              }
+              EOF
+              kubectl apply -f - <<EOF
+              {
+                "apiVersion": "apiregistration.k8s.io/v1",
+                "kind": "APIService",
+                "metadata": {
+                  "name": "v1.reports.kyverno.io",
+                  "namespace": {{ $.Release.Namespace | quote }},
+                  "labels": {
+                    "kube-aggregator.kubernetes.io/automanaged": "false"
+                  },
+                  "annotations": {
+                    "helm.sh/hook": "post-install"
+                  }
+                },
+                "spec": {
+                  "group": "reports.kyverno.io",
+                  "groupPriorityMinimum": 100,
+                  "insecureSkipTLSVerify": true,
+                  "service": {
+                    "name": {{ include "reports-server.fullname" . | quote }},
+                    "namespace": {{ $.Release.Namespace | quote }}
+                  },
+                  "version": "v1",
+                  "versionPriority": 100
+                }
+              }
+              EOF
+          {{- with .Values.jobConfigurations.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.jobConfigurations.tolerations | default .Values.tolerations}}
+      tolerations:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.jobConfigurations.nodeSelector | default .Values.nodeSelector }}
+      nodeSelector:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.jobConfigurations.podAntiAffinity .Values.jobConfigurations.podAffinity .Values.jobConfigurations.nodeAffinity }}
+      affinity:
+        {{- with .Values.jobConfigurations.podAntiAffinity }}
+        podAntiAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.jobConfigurations.podAffinity }}
+        podAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.jobConfigurations.nodeAffinity }}
+        nodeAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+      {{- end }}
+{{- end -}}
+{{- end -}}

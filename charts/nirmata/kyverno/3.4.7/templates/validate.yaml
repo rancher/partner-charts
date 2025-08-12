@@ -1,0 +1,100 @@
+{{- if and (eq .Values.cleanupController.enabled true) (eq .Values.crds.groups.kyverno.cleanuppolicies false) }}
+{{- fail "CRD cleanuppolicies disabled while cleanupController enabled" }}
+{{- end }}
+{{- if and (eq .Values.cleanupController.enabled true) (eq .Values.crds.groups.kyverno.clustercleanuppolicies false) }}
+{{- fail "CRD clustercleanuppolicies disabled while cleanupController enabled" }}
+{{- end }}
+{{- if and (eq .Values.reportsController.enabled true) (eq .Values.reportsController.sanityChecks true) (eq .Values.crds.groups.wgpolicyk8s.clusterpolicyreports false) (eq .Values.crds.reportsServer.enabled false) }}
+{{- fail "CRD clusterpolicyreports disabled while reportsController enabled" }}
+{{- end }}
+{{- if and (eq .Values.reportsController.enabled true) (eq .Values.reportsController.sanityChecks true) (eq .Values.crds.groups.wgpolicyk8s.policyreports false) (eq .Values.crds.reportsServer.enabled false) }}
+{{- fail "CRD policyreports disabled while reportsController enabled" }}
+{{- end }}
+{{- if and (eq .Values.reportsController.enabled true) (eq .Values.reportsController.sanityChecks true) (eq .Values.crds.groups.reports.ephemeralreports false) (eq .Values.crds.reportsServer.enabled false) }}
+{{- fail "CRD ephemeralreports disabled while reportsController enabled" }}
+{{- end }}
+{{- if and (eq .Values.reportsController.enabled true) (eq .Values.reportsController.sanityChecks true) (eq .Values.crds.groups.reports.clusterephemeralreports false) (eq .Values.crds.reportsServer.enabled false) }}
+{{- fail "CRD clusterephemeralreports disabled while reportsController enabled" }}
+{{- end }}
+
+{{- if hasKey .Values "mode" -}}
+  {{- fail "mode is not supported anymore, please remove it from your release and use admissionController.replicas instead." -}}
+{{- end -}}
+
+{{- if eq (include "kyverno.namespace" .) "kube-system" -}}
+  {{- fail "Kyverno cannot be installed in namespace kube-system." -}}
+{{- end -}}
+
+
+{{- if and (eq .Values.crds.reportsServer.enabled true) (eq (include "kyverno.installReportsServer" .) "false") -}}
+  {{- $reportsServerPods := lookup "v1" "Pod" (include "kyverno.namespace" .) "" -}}
+  {{- $apiServices := lookup "apiregistration.k8s.io/v1" "APIService" "" "" -}}
+  
+  {{/* Only perform validation if lookup returned data (i.e., we're in install mode, not template mode) */}}
+  {{- if or $reportsServerPods $apiServices -}}
+    {{- $reportsServerRunning := false -}}
+    {{- range $reportsServerPods.items -}}
+      {{- if contains "reports-server" .metadata.name -}}
+        {{- if eq .status.phase "Running" -}}
+          {{- $reportsServerRunning = true -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    
+    {{- $reportsServerAPIAvailable := false -}}
+    {{- range $apiServices.items -}}
+      {{- if and .spec.service (contains "reports-server" .spec.service.name) -}}
+        {{- if .status.conditions -}}
+          {{- range .status.conditions -}}
+            {{- if and (eq .type "Available") (eq .status "True") -}}
+              {{- $reportsServerAPIAvailable = true -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    
+    {{- if not $reportsServerRunning -}}
+      {{- fail (join "\n" (list
+        ""
+        ""
+        "  +--------------------------------------------------------------------------------------------------------------------------------------+"
+        "  | Reports Server is enabled but no running reports-server pod was found.                                                               |"
+        "  | Please ensure the reports-server is deployed and running before proceeding.                                                          |"
+        "  +--------------------------------------------------------------------------------------------------------------------------------------+"
+        ""
+        ))
+      -}}
+    {{- end -}}
+    
+    {{- if not $reportsServerAPIAvailable -}}
+      {{- fail (join "\n" (list
+        ""
+        ""
+        "  +--------------------------------------------------------------------------------------------------------------------------------------+"
+        "  | Reports Server is enabled but the reports-server APIService is not available.                                                        |"
+        "  | Please ensure the reports-server APIService is registered and available before proceeding.                                            |"
+        "  +--------------------------------------------------------------------------------------------------------------------------------------+"
+        ""
+        ))
+      -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if not .Values.upgrade.fromV2 -}}
+  {{- $v2 := lookup "apps/v1" "Deployment" (include "kyverno.namespace" .) (include "kyverno.fullname" .) -}}
+  {{- if $v2 -}}
+    {{- fail (join "\n" (list
+      ""
+      ""
+      "  +--------------------------------------------------------------------------------------------------------------------------------------+"
+      "  | An earlier Helm installation of Kyverno was detected.                                                                                |"
+      "  | Given this chart version has significant breaking changes, the upgrade has been blocked.                                             |"
+      "  | Please review the release notes and chart README section and then, once prepared, set `upgrade.fromV2: true` once ready to proceed.  |"
+      "  +--------------------------------------------------------------------------------------------------------------------------------------+"
+      ""
+      ))
+    -}}
+  {{- end -}}
+{{- end -}}
