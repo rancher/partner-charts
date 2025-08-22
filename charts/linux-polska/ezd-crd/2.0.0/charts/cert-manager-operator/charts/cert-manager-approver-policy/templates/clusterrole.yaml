@@ -1,0 +1,48 @@
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    {{- include "cert-manager-approver-policy.labels" . | nindent 4 }}
+  name: {{ include "cert-manager-approver-policy.name" . }}
+rules:
+- apiGroups: ["policy.cert-manager.io"]
+  resources: ["certificaterequestpolicies"]
+  verbs: ["list", "watch"]
+
+- apiGroups: ["policy.cert-manager.io"]
+  resources: ["certificaterequestpolicies/status"]
+  verbs: ["patch"]
+
+- apiGroups: ["cert-manager.io"]
+  resources: ["certificaterequests"]
+  verbs: ["list", "watch"]
+
+- apiGroups: ["cert-manager.io"]
+  resources: ["certificaterequests/status"]
+  verbs: ["patch"]
+
+- apiGroups: ["cert-manager.io"]
+  resources: ["signers"]
+  verbs: ["approve"]
+  {{- with .Values.app.approveSignerNames }}
+  resourceNames:
+  {{- range . }}
+   - "{{ . }}"
+  {{- end  }}
+  {{- end }}
+
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["list", "watch"]

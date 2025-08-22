@@ -1,0 +1,60 @@
+{{- if .Values.operator.serviceMonitor.create }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "airlock-microgateway.operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" . | nindent 4 }}
+    {{- with .Values.operator.serviceMonitor.labels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "airlock-microgateway.operator.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - { key: "operator.microgateway.airlock.com/isLeader", operator: DoesNotExist }
+  endpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+      metricRelabelings:
+        - sourceLabels:
+            - __name__
+          regex: {{ include "airlock-microgateway.operator.metricsLeaderOnlyRegexPattern" . }}
+          action: drop
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "airlock-microgateway.operator.fullname" . }}-leader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" . | nindent 4 }}
+    {{- with .Values.operator.serviceMonitor.labels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "airlock-microgateway.operator.selectorLabels" . | nindent 6 }}
+      operator.microgateway.airlock.com/isLeader: "true"
+  endpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+      metricRelabelings:
+        - sourceLabels:
+            - __name__
+          regex: {{ include "airlock-microgateway.operator.metricsLeaderOnlyRegexPattern" . }}
+          action: keep
+{{- end -}}

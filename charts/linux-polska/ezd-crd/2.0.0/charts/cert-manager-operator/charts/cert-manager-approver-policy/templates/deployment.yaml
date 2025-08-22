@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cert-manager-approver-policy.name" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "cert-manager-approver-policy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "cert-manager-approver-policy.name" . }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "cert-manager-approver-policy.name" . }}
+        {{- include "cert-manager-approver-policy.labels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "cert-manager-approver-policy.name" . }}
+      containers:
+      - name: {{ include "cert-manager-approver-policy.name" . }}
+        image: "{{ template "image" (tuple .Values.image $.Chart.AppVersion) }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.app.webhook.port }}
+        - containerPort: {{ .Values.app.metrics.port }}
+        readinessProbe:
+          httpGet:
+            port: {{ .Values.app.readinessProbe.port }}
+            path: "/readyz"
+          initialDelaySeconds: 3
+          periodSeconds: 7
+        args:
+          - --log-format={{.Values.app.logFormat}}
+          - --log-level={{.Values.app.logLevel}}
+
+          {{- range .Values.app.extraArgs }}
+          - {{ . }}
+          {{- end  }}
+
+          - --metrics-bind-address=:{{.Values.app.metrics.port}}
+          - --readiness-probe-bind-address=:{{.Values.app.readinessProbe.port}}
+
+          - --webhook-host={{.Values.app.webhook.host}}
+          - --webhook-port={{.Values.app.webhook.port}}
+          - --webhook-service-name={{ include "cert-manager-approver-policy.name" . }}
+          - --webhook-ca-secret-namespace={{.Release.Namespace}}
+
+        {{- with .Values.volumeMounts }}
+        volumeMounts:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: { drop: ["ALL"] }
+          readOnlyRootFilesystem: true
+
+        {{- if or .Values.http_proxy .Values.https_proxy .Values.no_proxy }}
+        env:
+        {{- with .Values.http_proxy }}
+        - name: HTTP_PROXY
+          value: {{ . }}
+        {{- end }}
+        {{- with .Values.https_proxy }}
+        - name: HTTPS_PROXY
+          value: {{ . }}
+        {{- end }}
+        {{- with .Values.no_proxy }}
+        - name: NO_PROXY
+          value: {{ . }}
+        {{- end }}
+        {{- end }}
+
+      {{- with .Values.volumes }}
+      volumes:
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+
+      hostNetwork: {{ (or .Values.app.webhook.hostNetwork .Values.hostNetwork) }}
+      dnsPolicy: {{ (or .Values.app.webhook.dnsPolicy .Values.dnsPolicy) }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with (or .Values.app.webhook.nodeSelector .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (or .Values.app.webhook.tolerations .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (or .Values.app.webhook.affinity .Values.affinity) }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with  .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
