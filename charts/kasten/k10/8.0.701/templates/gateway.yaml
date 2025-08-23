@@ -1,0 +1,133 @@
+{{- $container_port := .Values.gateway.service.internalPort | default 8000 -}}
+{{- $service_port := .Values.gateway.service.externalPort -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    service: gateway
+{{ include "helm.labels" . | indent 4 }}
+  name: gateway
+spec:
+  ports:
+  - name: http
+    port: {{ $service_port }}
+    targetPort: {{ $container_port }}
+  selector:
+    service: gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+    component: gateway
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: gateway
+  template:
+    metadata:
+      annotations:
+        {{- include "k10.deploymentPodAnnotations" . | nindent 8 }}
+      labels:
+        {{- with merge (dict "requiredLabels" (dict "component" "gateway" "service" "gateway")) . }}
+          {{- include "k10.deploymentPodLabels" . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "get.serviceAccountForDeployment" (dict "deployment" "gateway" "Values" .Values) }}
+      {{- dict "main" . "k10_deployment_name" "gateway" | include "k10.priorityClassName" | indent 6}}
+      {{- include "k10.imagePullSecrets" . | indent 6 }}
+      containers:
+      - name: gateway
+        {{- dict "main" . "k10_service" "gateway" | include "serviceImage" | indent 8 }}
+        {{- if .Values.secrets.tlsSecret }}
+        volumeMounts:
+          - name: tls-volume
+            mountPath: "/etc/tls"
+            readOnly: true
+        {{- end }}
+        resources:
+          limits:
+            {{- if .Values.gateway.resources.limits }}
+            cpu: {{ .Values.gateway.resources.limits.cpu | quote }}
+            {{- else if .Values.global.resources.limits.cpu }}
+            cpu: {{ .Values.global.resources.limits.cpu | quote }}
+            {{- end }}
+            {{- if .Values.gateway.resources.limits.memory }}
+            memory: {{ .Values.gateway.resources.limits.memory | quote }}
+            {{- else if .Values.global.resources.limits.memory }}
+            memory: {{ .Values.global.resources.limits.memory | quote }}
+            {{- end }}
+            {{- if (index .Values.gateway.resources.limits "ephemeral-storage") }}
+            ephemeral-storage: {{ (index .Values.gateway.resources.limits "ephemeral-storage") | quote }}
+            {{- else if (index .Values.global.resources.limits "ephemeral-storage") }}
+            ephemeral-storage: {{ (index .Values.global.resources.limits "ephemeral-storage") | quote }}
+            {{- end }}
+          requests:
+            {{- if .Values.gateway.resources.requests.cpu }}
+            cpu: {{ .Values.gateway.resources.requests.cpu | quote }}
+            {{- else if .Values.global.resources.requests.cpu }}
+            cpu: {{ .Values.global.resources.requests.cpu | quote }}
+            {{- end }}
+            {{- if .Values.gateway.resources.requests.memory }}
+            memory: {{ .Values.gateway.resources.requests.memory | quote }}
+            {{- else if .Values.global.resources.requests.memory }}
+            memory: {{ .Values.global.resources.requests.memory | quote }}
+            {{- end }}
+            {{- if (index .Values.gateway.resources.requests "ephemeral-storage") }}
+            ephemeral-storage: {{ (index .Values.gateway.resources.requests "ephemeral-storage") | quote }}
+            {{- else if (index .Values.global.resources.requests "ephemeral-storage") }}
+            ephemeral-storage: {{ (index .Values.global.resources.requests "ephemeral-storage") | quote }}
+            {{- end }}
+        env:
+          - name: LOG_LEVEL
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: loglevel
+          - name: VERSION
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: version
+{{- if .Values.fips.enabled }}
+          {{- include "k10.enforceFIPSEnvironmentVariables" . | indent 10 }}
+{{- end }}
+          {{- with $capabilities := include "k10.capabilities" . }}
+          - name: K10_CAPABILITIES
+            value: {{ $capabilities | quote }}
+          {{- end }}
+          {{- with $capabilities_mask := include "k10.capabilities_mask" . }}
+          - name: K10_CAPABILITIES_MASK
+            value: {{ $capabilities_mask | quote }}
+          {{- end }}
+          {{- if eq (include "check.dexAuth" .) "true" }}
+          - name: {{ include "k10.gatewayEnableDex" . }}
+            value: "true"
+          {{- end }}
+        envFrom:
+        - configMapRef:
+            name: k10-gateway
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ $container_port }}
+            scheme: HTTP{{ if .Values.secrets.tlsSecret }}S{{ end }}
+          initialDelaySeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ $container_port }}
+            scheme: HTTP{{ if .Values.secrets.tlsSecret }}S{{ end }}
+      restartPolicy: Always
+      {{- if .Values.secrets.tlsSecret }}
+      volumes:
+        - name: tls-volume
+          secret:
+            secretName: {{ .Values.secrets.tlsSecret }}
+      {{- end }}

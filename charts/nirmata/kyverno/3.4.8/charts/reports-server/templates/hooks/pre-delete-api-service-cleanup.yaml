@@ -1,0 +1,112 @@
+{{- if .Values.apiServicesManagement.installApiServices.enabled -}}
+{{- if not .Values.templating.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "reports-server.fullname" . }}-pre-delete-api-services-cleanup
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "reports-server.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-delete
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded,hook-failed
+    helm.sh/hook-weight: "100"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      {{- with .Values.jobConfigurations.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+      {{- with .Values.jobConfigurations.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "reports-server.labels" . | nindent 8 }}
+    spec:
+      serviceAccount: {{ include "reports-server.serviceAccountName" . }}
+      {{- with .Values.jobConfigurations.podSecurityContext }}
+      securityContext:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      {{- with .Values.jobConfigurations.imagePullSecrets | default .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: kubectl
+          image: "{{ .Values.jobConfigurations.image.registry }}/{{ .Values.jobConfigurations.image.repository }}:{{ .Values.jobConfigurations.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.jobConfigurations.image.pullPolicy }}
+          command:
+            - /usr/bin/sh
+            - '-c'
+            - |-
+              set -euo pipefail
+              
+              echo "Starting cleanup of reports-server API services..."
+              
+              # Delete API services individually with retry logic
+              # This approach is more reliable than deleting multiple services at once
+              api_services="v1alpha2.wgpolicyk8s.io v1.reports.kyverno.io"
+              success_count=0
+              total_count=0
+              
+              for api_service in $api_services; do
+                total_count=$((total_count + 1))
+                echo "Attempting to delete API service: $api_service"
+                
+                attempt=1
+                while [ $attempt -le 3 ]; do
+                  if kubectl delete apiservice "$api_service" --ignore-not-found=true; then
+                    echo "Successfully deleted API service: $api_service"
+                    success_count=$((success_count + 1))
+                    break
+                  else
+                    echo "Attempt $attempt failed to delete API service: $api_service"
+                    if [ $attempt -lt 3 ]; then
+                      echo "Retrying in 2 seconds..."
+                      sleep 2
+                    else
+                      echo "WARNING: Failed to delete API service $api_service after 3 attempts"
+                    fi
+                  fi
+                  attempt=$((attempt + 1))
+                done
+              done
+              
+              echo "API services cleanup completed: $success_count/$total_count successful"
+              
+              # Exit successfully even if some deletions failed - cleanup is best effort during uninstall
+              exit 0
+          {{- with .Values.jobConfigurations.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.jobConfigurations.tolerations | default .Values.tolerations}}
+      tolerations:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.jobConfigurations.nodeSelector | default .Values.nodeSelector }}
+      nodeSelector:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.jobConfigurations.podAntiAffinity .Values.jobConfigurations.podAffinity .Values.jobConfigurations.nodeAffinity }}
+      affinity:
+        {{- with .Values.jobConfigurations.podAntiAffinity }}
+        podAntiAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.jobConfigurations.podAffinity }}
+        podAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.jobConfigurations.nodeAffinity }}
+        nodeAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+      {{- end }}
+{{- end -}}
+{{- end -}}

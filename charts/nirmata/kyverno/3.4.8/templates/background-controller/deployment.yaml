@@ -1,0 +1,249 @@
+{{- if .Values.backgroundController.enabled -}}
+{{- if not .Values.templating.debug -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "kyverno.background-controller.name" . }}
+  namespace: {{ template "kyverno.namespace" . }}
+  labels:
+    {{- include "kyverno.background-controller.labels" . | nindent 4 }}
+  {{- with .Values.backgroundController.annotations }}
+  annotations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ template "kyverno.deployment.replicas" .Values.backgroundController.replicas }}
+  revisionHistoryLimit: {{ .Values.backgroundController.revisionHistoryLimit }}
+  {{- with .Values.backgroundController.updateStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "kyverno.background-controller.matchLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kyverno.background-controller.labels" . | nindent 8 }}
+        {{- with .Values.backgroundController.podLabels }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
+        {{- end }}
+      {{- with .Values.backgroundController.podAnnotations }}
+      annotations: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.backgroundController.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.podSecurityContext }}
+      securityContext:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.nodeSelector | default .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.tolerations | default .Values.global.tolerations}}
+      tolerations:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backgroundController.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.backgroundController.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      {{- with .Values.backgroundController.dnsPolicy }}
+      dnsPolicy: {{ . }}
+      {{- end }}
+      {{- if or .Values.backgroundController.antiAffinity.enabled .Values.backgroundController.podAffinity .Values.backgroundController.nodeAffinity }}
+      affinity:
+        {{- if .Values.backgroundController.antiAffinity.enabled }}
+        {{- with .Values.backgroundController.podAntiAffinity }}
+        podAntiAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.backgroundController.podAffinity }}
+        podAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.backgroundController.nodeAffinity }}
+        nodeAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      serviceAccountName: {{ template "kyverno.background-controller.serviceAccountName" . }}
+      {{- if eq (include "kyverno.installReportsServer" .) "true" }}
+      initContainers:
+        - name: wait-for-reports-server
+          image: {{ .Values.global.kubectlImage }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for reports-server pod to be running..."
+              while true; do
+                # Check for pod with app.kubernetes.io/name=reports-server label
+                if kubectl get pods -n {{ template "kyverno.namespace" . }} -l app.kubernetes.io/name=reports-server --no-headers 2>/dev/null | grep -q "Running"; then
+                  echo "Reports-server pod is running!"
+                  break
+                else
+                  echo "Reports-server pod not running yet, waiting 10 seconds..."
+                  sleep 10
+                fi 
+              done
+              
+              echo "Waiting for reports-server APIServices to be available..."
+              while true; do
+                # Check specific APIServices that use kyverno-reports-server
+                all_available=true
+                for apiservice in "v1.reports.kyverno.io" "v1alpha2.wgpolicyk8s.io"; do
+                  if kubectl get apiservice "$apiservice" >/dev/null 2>&1; then
+                    status=$(kubectl get apiservice "$apiservice" -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "False")
+                    if [[ "$status" != "True" ]]; then
+                      echo "APIService $apiservice is not available"
+                      all_available=false
+                    fi
+                  fi
+                done
+                
+                if $all_available; then
+                  echo "All reports-server APIServices are available!"
+                  break
+                else
+                  echo "Some APIServices are not ready yet, waiting 10 seconds..."
+                  sleep 10
+                fi
+              done
+              echo "Reports-server is ready, proceeding with reports-controller startup..."
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 3000
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      {{- end }}
+      containers:
+        - name: controller
+          image: {{ include "kyverno.background-controller.image" (dict "globalRegistry" .Values.global.image.registry "image" .Values.backgroundController.image "defaultTag" .Chart.AppVersion "fipsEnabled" .Values.fipsEnabled) | quote }}
+          imagePullPolicy: {{ .Values.backgroundController.image.pullPolicy }}
+          ports:
+          - containerPort: {{ .Values.backgroundController.server.port }}
+            name: https
+            protocol: TCP
+          - containerPort: {{ .Values.backgroundController.metering.port }}
+            name: metrics
+            protocol: TCP
+          {{ if .Values.backgroundController.profiling.enabled }}
+          - containerPort: {{ .Values.backgroundController.profiling.port }}
+            name: profiling-port
+            protocol: TCP
+          {{- end }}
+          args:
+            {{- if .Values.backgroundController.tracing.enabled }}
+            - --enableTracing
+            - --tracingAddress={{ .Values.backgroundController.tracing.address }}
+            - --tracingPort={{ .Values.backgroundController.tracing.port }}
+            {{- with .Values.backgroundController.tracing.creds }}
+            - --tracingCreds={{ . }}
+            {{- end }}
+            {{- end }}
+            - --disableMetrics={{ .Values.backgroundController.metering.disabled }}
+            {{- if not .Values.backgroundController.metering.disabled }}
+            - --otelConfig={{ .Values.backgroundController.metering.config }}
+            - --metricsPort={{ .Values.backgroundController.metering.port }}
+            {{- with .Values.backgroundController.metering.collector }}
+            - --otelCollector={{ . }}
+            {{- end }}
+            {{- with .Values.backgroundController.metering.creds }}
+            - --transportCreds={{ . }}
+            {{- end }}
+            {{- end }}
+            {{- if or .Values.imagePullSecrets .Values.existingImagePullSecrets }}
+            - --imagePullSecrets={{- join "," (concat (keys .Values.imagePullSecrets) .Values.existingImagePullSecrets) }}
+            {{- end }}
+            - --resyncPeriod={{ .Values.backgroundController.resyncPeriod | default .Values.global.resyncPeriod }}
+            {{- include "kyverno.features.flags" (pick (mergeOverwrite (deepCopy .Values.features) .Values.backgroundController.featuresOverride)
+              "reporting"
+              "configMapCaching"
+              "deferredLoading"
+              "globalContext"
+              "logging"
+              "omitEvents"
+              "policyExceptions"
+            ) | nindent 12 }}
+            {{- range $key, $value := .Values.backgroundController.extraArgs }}
+            {{- if $value }}
+            - --{{ $key }}={{ $value }}
+            {{- end }}
+            {{- end }}
+            {{ if .Values.backgroundController.profiling.enabled }}
+            - --profile=true
+            - --profilePort={{ .Values.backgroundController.profiling.port }}
+            {{- end }}
+          env:
+          - name: KYVERNO_SERVICEACCOUNT_NAME
+            value: {{ template "kyverno.background-controller.serviceAccountName" . }}
+          - name: KYVERNO_DEPLOYMENT
+            value: {{ template "kyverno.background-controller.name" . }}
+          - name: INIT_CONFIG
+            value: {{ template "kyverno.config.configMapName" . }}
+          - name: METRICS_CONFIG
+            value: {{ template "kyverno.config.metricsConfigMapName" . }}
+          - name: KYVERNO_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: KYVERNO_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- with (concat .Values.global.extraEnvVars .Values.backgroundController.extraEnvVars) }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- with .Values.backgroundController.resources }}
+          resources:
+            {{- tpl (toYaml .) $ | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backgroundController.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume }}
+          volumeMounts:
+            - name: ca-certificates
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data }}
+              subPath: ca-certificates.crt
+              {{- end }}
+          {{- end }}
+      {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume }}
+      volumes:
+      {{- if or .Values.backgroundController.caCertificates.data .Values.global.caCertificates.data }}
+      - name: ca-certificates
+        configMap:
+          name: {{ include "kyverno.background-controller.caCertificatesConfigMapName" . }}
+          items:
+          - key: ca-certificates
+            path: ca-certificates.crt
+      {{- else if or .Values.backgroundController.caCertificates.volume .Values.global.caCertificates.volume }}
+      {{- with (.Values.backgroundController.caCertificates.volume | default .Values.global.caCertificates.volume) }}
+      - name: ca-certificates
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+{{- end -}}
+{{- end -}}
