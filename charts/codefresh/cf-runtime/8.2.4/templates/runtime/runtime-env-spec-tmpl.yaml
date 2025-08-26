@@ -1,0 +1,327 @@
+{{- define "runtime.runtime-environment-spec.template" }}
+{{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version -}}
+{{- $rootContext := deepCopy . }}
+{{- $kubeconfigFilePath := coalesce .Values.runtime.kubeconfigFilePath (printf "/etc/kubeconfig/%s" (include "runtime.runtime-environment-spec.runtime-name" .)) -}}
+{{- $name := coalesce .Values.runtime.kubeconfigName (include "runtime.runtime-environment-spec.runtime-name" .) -}}
+{{- $engineContext := .Values.runtime.engine -}}
+{{- $dindContext := .Values.runtime.dind -}}
+{{- $runtimeImageRegistry := .Values.runtime.engine.runtimeImagesRegisty -}}
+{{- if $runtimeImageRegistry }}
+  {{- $_ := set $rootContext.Values.global "imageRegistry" $runtimeImageRegistry }}
+{{- end }}
+{{- $runtimeVersion := coalesce .Values.version .Chart.Version -}}
+{{- $runtimeName := include "runtime.runtime-environment-spec.runtime-name" . -}}
+{{- $engineVersion := coalesce $engineContext.image.tag "latest" -}}
+{{- if $engineContext.image.digest }}
+  {{- $engineVersion = printf "%s@%s" $engineVersion $engineContext.image.digest -}}
+{{- end }}
+{{- $dindVersion := coalesce $dindContext.image.tag "latest" -}}
+{{- if $dindContext.image.digest }}
+  {{- $dindVersion = printf "%s@%s" $dindVersion $dindContext.image.digest -}}
+{{- end }}
+metadata:
+  name: {{ include "runtime.runtime-environment-spec.runtime-name" . }}
+  agent: {{ .Values.runtime.agent }}
+runtimeScheduler:
+  type: KubernetesPod
+  {{- if $engineContext.image }}
+  image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" $engineContext.image "context" .) | squote }}
+  {{- end }}
+  imagePullPolicy: {{ $engineContext.image.pullPolicy }}
+  {{- with $engineContext.command }}
+  command: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  envVars:
+  {{- with $engineContext.env }}
+    {{- range $key, $val := . }}
+    {{ $key }}: {{ $val | squote }}
+    {{- end }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "COMPOSE_IMAGE") }}
+    COMPOSE_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.COMPOSE_IMAGE) | squote }}
+  {{- else }}
+    COMPOSE_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "compose") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "CONTAINER_LOGGER_IMAGE" ) }}
+    CONTAINER_LOGGER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.CONTAINER_LOGGER_IMAGE) | squote }}
+  {{- else }}
+    CONTAINER_LOGGER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "container-logger") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "DEFAULT_QEMU_IMAGE") }}
+    DEFAULT_QEMU_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.DEFAULT_QEMU_IMAGE) | squote }}
+  {{- else }}
+    DEFAULT_QEMU_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "default-qemu") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "DOCKER_BUILDER_IMAGE") }}
+    DOCKER_BUILDER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.DOCKER_BUILDER_IMAGE) | squote }}
+  {{- else }}
+    DOCKER_BUILDER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "docker-builder") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "DOCKER_PULLER_IMAGE") }}
+    DOCKER_PULLER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.DOCKER_PULLER_IMAGE) | squote }}
+  {{- else }}
+    DOCKER_PULLER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "docker-puller") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "DOCKER_PUSHER_IMAGE") }}
+    DOCKER_PUSHER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.DOCKER_PUSHER_IMAGE) | squote }}
+  {{- else }}
+    DOCKER_PUSHER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "docker-pusher") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "DOCKER_TAG_PUSHER_IMAGE") }}
+    DOCKER_TAG_PUSHER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.DOCKER_TAG_PUSHER_IMAGE) | squote }}
+  {{- else }}
+    DOCKER_TAG_PUSHER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "docker-tag-pusher") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "FS_OPS_IMAGE") }}
+    FS_OPS_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.FS_OPS_IMAGE) | squote }}
+  {{- else }}
+    FS_OPS_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "fs-ops") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "GIT_CLONE_IMAGE") }}
+    GIT_CLONE_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.GIT_CLONE_IMAGE) | squote }}
+  {{- else }}
+    GIT_CLONE_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "git-cloner") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "KUBE_DEPLOY") }}
+    KUBE_DEPLOY: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.KUBE_DEPLOY) | squote }}
+  {{- else }}
+    KUBE_DEPLOY: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "kube-deploy") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "PIPELINE_DEBUGGER_IMAGE") }}
+    PIPELINE_DEBUGGER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.PIPELINE_DEBUGGER_IMAGE) | squote }}
+  {{- else }}
+    PIPELINE_DEBUGGER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "pipeline-debugger") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "TEMPLATE_ENGINE") }}
+    TEMPLATE_ENGINE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.TEMPLATE_ENGINE) | squote }}
+  {{- else }}
+    TEMPLATE_ENGINE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "template-engine") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "CR_6177_FIXER") }}
+    CR_6177_FIXER: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.CR_6177_FIXER) | squote }}
+  {{- else }}
+    CR_6177_FIXER: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "alpine") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "GC_BUILDER_IMAGE") }}
+    GC_BUILDER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.GC_BUILER_IMAGE) | squote }}
+  {{- else }}
+    GC_BUILDER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "gc-builder") "context" $rootContext) | squote }}
+  {{- end }}
+  {{- if (index $engineContext "runtimeImages" "COSIGN_IMAGE_SIGNER_IMAGE") }}
+    COSIGN_IMAGE_SIGNER_IMAGE: {{ include "runtime.runtimeImageName" (dict "registry" $runtimeImageRegistry "imageFullName" $engineContext.runtimeImages.COSIGN_IMAGE_SIGNER_IMAGE) | squote }}
+  {{- else }}
+    COSIGN_IMAGE_SIGNER_IMAGE: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" (index $engineContext "runtimeImages" "cosign-image-signer") "context" $rootContext) | squote }}
+  {{- end }}
+    RUNTIME_CHART_VERSION: {{ $runtimeVersion }}
+    CF_SERVICE_NAME: {{ printf "cf-classic-engine" }}
+    CF_SERVICE_VERSION: {{ $engineVersion }}
+    OTEL_RESOURCE_ATTRIBUTES: {{ printf "service.name=cf-classic-engine,service.version=%s,service.namespace=cf-classic-runtime,cf.classic.runtime.name=%s,cf.classic.runtime.version=%s" $engineVersion $runtimeName $runtimeVersion }}
+  {{- with $engineContext.userEnvVars }}
+  userEnvVars:  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $engineContext.workflowLimits }}
+  workflowLimits: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  cluster:
+    namespace: {{ .Release.Namespace }}
+    serviceAccount: {{ $engineContext.serviceAccount }}
+    {{- if .Values.runtime.agent }}
+    clusterProvider:
+      accountId: {{ .Values.global.accountId }}
+      selector: {{ include "runtime.runtime-environment-spec.context-name" . }}
+    {{- else }}
+      {{- if .Values.runtime.inCluster }}
+    inCluster: true
+    kubeconfigFilePath: null
+      {{- else }}
+    name: {{ $name }}
+    kubeconfigFilePath: {{ $kubeconfigFilePath }}
+      {{- end }}
+    {{- end }}
+    {{- with $engineContext.nodeSelector }}
+    nodeSelector: {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- with $engineContext.affinity }}
+  affinity:  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $engineContext.tolerations }}
+  tolerations:  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $engineContext.podAnnotations }}
+  annotations:
+    {{- range $key, $val := . }}
+    {{ $key }}: {{ $val | squote }}
+    {{- end }}
+  {{- end }}
+  {{- with $engineContext.podLabels }}
+  labels: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $engineContext.schedulerName }}
+  schedulerName: {{ $engineContext.schedulerName }}
+  {{- end }}
+  resources:
+  {{- if $engineContext.resources}}
+  {{- toYaml $engineContext.resources | nindent 4 }}
+  {{- end }}
+  {{- with $engineContext.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ . }}
+  {{- end }}
+dockerDaemonScheduler:
+  type: DindKubernetesPod
+  {{- if $dindContext.image }}
+  dindImage: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" $dindContext.image "context" .) | squote }}
+  {{- end }}
+  imagePullPolicy: {{ $dindContext.image.pullPolicy }}
+  {{- with $dindContext.userAccess }}
+  userAccess: {{ . }}
+  {{- end }}
+  envVars:
+  {{- with $dindContext.env }}
+    {{- range $key, $val := . }}
+    {{ $key }}: {{ $val | squote }}
+    {{- end }}
+  {{- end }}
+    OTEL_RESOURCE_ATTRIBUTES: {{ printf "service.name=cf-classic-dind,service.version=%s,service.namespace=cf-classic-runtime,cf.classic.runtime.name=%s,cf.classic.runtime.version=%s" $dindVersion $runtimeName $runtimeVersion }}
+  cluster:
+    namespace: {{ .Release.Namespace }}
+    serviceAccount: {{ $dindContext.serviceAccount }}
+    {{- if .Values.runtime.agent }}
+    clusterProvider:
+      accountId: {{ .Values.global.accountId }}
+      selector: {{ include "runtime.runtime-environment-spec.context-name" . }}
+    {{- else }}
+      {{- if .Values.runtime.inCluster }}
+    inCluster: true
+    kubeconfigFilePath: null
+      {{- else }}
+    name: {{ $name }}
+    kubeconfigFilePath: {{ $kubeconfigFilePath }}
+      {{- end }}
+    {{- end }}
+    {{- with $dindContext.nodeSelector }}
+    nodeSelector: {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- with $dindContext.affinity }}
+  affinity:  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $dindContext.tolerations }}
+  tolerations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $dindContext.podAnnotations }}
+  annotations:
+    {{- range $key, $val := . }}
+    {{ $key }}: {{ $val | squote }}
+    {{- end }}
+  {{- end }}
+  {{- with $dindContext.podLabels }}
+  labels: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $dindContext.schedulerName }}
+  schedulerName: {{ $dindContext.schedulerName }}
+  {{- end }}
+  {{- if $dindContext.pvcs }}
+  pvcs:
+  {{- range $index, $pvc := $dindContext.pvcs }}
+    - name: {{ $pvc.name }}
+      reuseVolumeSelector: {{ $pvc.reuseVolumeSelector | squote }}
+      reuseVolumeSortOrder: {{ $pvc.reuseVolumeSortOrder }}
+      storageClassName: {{ include (printf "%v.tplrender" $cfCommonTplSemver) (dict "Values" $pvc.storageClassName "context" $) }}
+      volumeSize: {{ $pvc.volumeSize | default "16Gi" }}
+      {{- with $pvc.annotations }}
+      annotations: {{ . | toYaml | nindent 8 }}
+      {{- end }}
+  {{- end }}
+  {{- end }}
+  defaultDindResources:
+  {{- with $dindContext.resources }}
+  {{- if not .requests }}
+    limits: {{- toYaml .limits | nindent 6 }}
+    requests: null
+  {{- else }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  {{- with $dindContext.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ . }}
+  {{- end }}
+  {{- with $dindContext.userVolumeMounts }}
+  userVolumeMounts: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $dindContext.userVolumes }}
+  userVolumes: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  clientCertPath: /etc/ssl/cf/
+  volumeMounts:
+    codefresh-certs-server:
+      name: codefresh-certs-server
+      mountPath: /etc/ssl/cf
+      readOnly: true
+    dind-config:
+      name: dind-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
+      readOnly: true
+  {{- with $dindContext.volumeMounts }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  volumes:
+    codefresh-certs-server:
+      name: codefresh-certs-server
+      secret:
+        secretName: codefresh-certs-server
+    dind-config:
+      name: dind-config
+      configMap:
+        name: codefresh-dind-config
+  {{- with $dindContext.volumes }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $dindContext.podSecurityContext }}
+  podSecurityContext: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $dindContext.containerSecurityContext }}
+  containerSecurityContext: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $dindContext.volumePermissions.enabled }}
+  initContainers:
+  - name: volume-permissions
+    image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" $dindContext.volumePermissions.image "context" .) }}
+    imagePullPolicy: {{ $dindContext.volumePermissions.image.pullPolicy | default "Always" }}
+    command:
+      - /bin/sh
+    args:
+      - -ec
+      - |
+        chown -R {{ $dindContext.containerSecurityContext.runAsUser }}:{{ $dindContext.podSecurityContext.fsGroup }} /home/rootless/.local/share/docker
+    volumeMounts:
+    - mountPath: /home/rootless/.local/share/docker
+      name: dind
+    {{- if eq ( toString ( $dindContext.volumePermissions.securityContext.runAsUser )) "auto" }}
+    securityContext: {{- omit $dindContext.volumePermissions.securityContext "runAsUser" | toYaml | nindent 6 }}
+    {{- else }}
+    securityContext: {{- $dindContext.volumePermissions.securityContext | toYaml | nindent 6 }}
+    {{- end }}
+    resources:
+      {{- toYaml $dindContext.volumePermissions.resources | nindent 6 }}
+  {{- end }}
+extends: {{- toYaml .Values.runtime.runtimeExtends | nindent 2 }}
+  {{- if .Values.runtime.description }}
+description: {{ .Values.runtime.description }}
+  {{- else }}
+description: null
+  {{- end }}
+{{- if and .Values.global.accountId .Values.runtime.agent }}
+accountId: {{ .Values.global.accountId }}
+{{- end }}
+{{- if not .Values.runtime.agent }}
+accounts: {{- toYaml .Values.runtime.accounts | nindent 2 }}
+{{- end }}
+{{- if .Values.appProxy.enabled }}
+appProxy:
+  externalIP: >-
+    {{ printf "https://%s%s" .Values.appProxy.ingress.host (.Values.appProxy.ingress.pathPrefix | default "/") }}
+{{- end }}
+{{- if not .Values.runtime.agent }}
+systemHybrid: true
+{{- end }}
+{{- end }}
