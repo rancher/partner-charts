@@ -1,4 +1,4 @@
-# Airlock Microgateway
+# Airlock Microgateway CNI
 
 ![Version: 4.2.3](https://img.shields.io/badge/Version-4.2.3-informational?style=flat-square) ![AppVersion: 4.2.3](https://img.shields.io/badge/AppVersion-4.2.3-informational?style=flat-square)
 
@@ -40,61 +40,43 @@ Check the official documentation at **[docs.airlock.com](https://docs.airlock.co
 The instructions below provide a quick start guide. Detailed information are provided in the **[manual](https://docs.airlock.com/microgateway/latest/)**.
 
 ## Prerequisites
-* [Airlock Microgateway CNI](https://artifacthub.io/packages/helm/airlock-microgateway-cni/microgateway-cni)
-* [Airlock Microgateway License](#obtain-airlock-microgateway-license)
-* [cert-manager](https://cert-manager.io/)
 * [helm](https://helm.sh/docs/intro/install/) (>= v3.8.0)
 
-In order to use Airlock Microgateway you need a license and the cert-manager. You may either request a community license free of charge or purchase a premium license.
-For an easy start in non-production environments, you may deploy the same cert-manager we are using internally for testing.
-### Obtain Airlock Microgateway License
-1. Either request a community or premium license
-   * Community license: [airlock.com/microgateway-community](https://airlock.com/en/microgateway-community)
-   * Premium license: [airlock.com/microgateway-premium](https://airlock.com/en/microgateway-premium)
-2. Check your inbox and save the license file microgateway-license.txt locally.
-
-> See [Community vs. Premium editions in detail](https://docs.airlock.com/microgateway/latest/#data/1675772882054.html) to choose the right license type.
-### Deploy cert-manager
-```bash
-# Install cert-manager
-kubectl apply -k https://github.com/airlock/microgateway/examples/utilities/cert-manager/?ref=4.2.3
-
-# Wait for the cert-manager to be up and running
-kubectl -n cert-manager wait --for=condition=ready --timeout=600s pod -l app.kubernetes.io/instance=cert-manager
-```
-
-## Deploy Airlock Microgateway Operator
-
-> This guide assumes a microgateway-license.txt file is present in the working directory.
-
-1. Install CRDs and Operator.
+## Deploy Airlock Microgateway CNI
+1. Install the CNI Plugin with Helm.
+   > **Note**: Certain environments such as OpenShift or GKE require non-default configurations when installing the CNI plugin. For the most common setups, values files are provided in the [chart folder](/deploy/charts/airlock-microgateway-cni).
    ```bash
-   # Create namespace
-   kubectl create namespace airlock-microgateway-system
-
-   # Install License
-   kubectl -n airlock-microgateway-system create secret generic airlock-microgateway-license --from-file=microgateway-license.txt
-
-   # Install Operator (CRDs are included via the standard Helm 3 mechanism, i.e. Helm will handle initial installation but not upgrades)
-   helm install airlock-microgateway -n airlock-microgateway-system oci://quay.io/airlockcharts/microgateway --version '4.2.3' --wait
+   # Standard setup
+   helm install airlock-microgateway-cni -n kube-system oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3'
+   kubectl -n kube-system rollout status daemonset -l app.kubernetes.io/instance=airlock-microgateway-cni
    ```
+   ```bash
+   # GKE setup
+   helm install airlock-microgateway-cni -n kube-system oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3' -f https://raw.githubusercontent.com/airlock/microgateway/4.2.3/deploy/charts/airlock-microgateway-cni/gke-values.yaml
+   kubectl -n kube-system rollout status daemonset -l app.kubernetes.io/instance=airlock-microgateway-cni
+   ```
+   ```bash
+   # OpenShift setup
+   helm install airlock-microgateway-cni -n openshift-operators oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3' -f https://raw.githubusercontent.com/airlock/microgateway/4.2.3/deploy/charts/airlock-microgateway-cni/openshift-values.yaml
+   kubectl -n openshift-operators rollout status daemonset -l app.kubernetes.io/instance=airlock-microgateway-cni
+   ```
+   **Important:** On OpenShift, all pods which should be protected by Airlock Microgateway must explicitly reference the Airlock Microgateway CNI NetworkAttachmentDefinition via the annotation `k8s.v1.cni.cncf.io/networks` (see [documentation](https://docs.airlock.com/microgateway/latest/#data/1658483168033.html) for details).
 
 2. (Recommended) You can verify the correctness of the installation with `helm test`.
    ```bash
-   helm upgrade airlock-microgateway -n airlock-microgateway-system --set tests.enabled=true --reuse-values oci://quay.io/airlockcharts/microgateway --version '4.2.3'
-   helm test airlock-microgateway -n airlock-microgateway-system --logs
-   helm upgrade airlock-microgateway -n airlock-microgateway-system --set tests.enabled=false --reuse-values oci://quay.io/airlockcharts/microgateway --version '4.2.3'
+   # Standard and GKE setup
+   helm upgrade airlock-microgateway-cni -n kube-system --set tests.enabled=true --reuse-values oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3'
+   helm test airlock-microgateway-cni -n kube-system --logs
+   helm upgrade airlock-microgateway-cni -n kube-system --set tests.enabled=false --reuse-values oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3'
+   ```
+   ```bash
+   # OpenShift setup
+   helm upgrade airlock-microgateway-cni -n openshift-operators --set tests.enabled=true --reuse-values oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3'
+   helm test airlock-microgateway-cni -n openshift-operators --logs
+   helm upgrade airlock-microgateway-cni -n openshift-operators --set tests.enabled=false --reuse-values oci://quay.io/airlockcharts/microgateway-cni --version '4.2.3'
    ```
 
-### Upgrading CRDs
-
-The `helm install/upgrade` command currently does not support upgrading CRDs that already exist in the cluster.
-CRDs should instead be manually upgraded before upgrading the Operator itself via the following command:
-```bash
-kubectl apply -k https://github.com/airlock/microgateway/deploy/charts/airlock-microgateway/crds/?ref=4.2.3 --server-side --force-conflicts
-```
-
-**Note**: Certain GitOps solutions such as e.g. Argo CD or Flux CD have their own mechanisms for automatically upgrading CRDs included with Helm charts.
+   Consult our [documentation](https://docs.airlock.com/microgateway/latest/#data/1699611533587.html) in case of any installation error.
 
 ## Support
 
@@ -107,45 +89,33 @@ For the community edition, check our **[Airlock community forum](https://forum.a
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| affinity | object | `{}` | Custom affinity for the DaemonSet to only deploy the CNI plugin on specific nodes. |
 | commonAnnotations | object | `{}` | Annotations to add to all resources. |
 | commonLabels | object | `{}` | Labels to add to all resources. |
-| crds.skipVersionCheck | bool | `false` | Whether to skip the sanity check which prevents installing/upgrading the helm chart in a cluster with outdated Airlock Microgateway CRDs. The check aims to prevent unexpected behavior and issues due to Helm v3 not automatically upgrading CRDs which are already present in the cluster when performing a "helm install/upgrade". |
-| engine.image.digest | string | `"sha256:9b0debeef611172aa5ca79c6b8cd045e56a3c883763ec62c0fa211bb86d35304"` | SHA256 image digest to pull (in the format "sha256:a3051f42d3013813b05f7513bb86ed6a3209cb3003f1bb2f7b72df249aa544d3"). Overrides tag when specified. |
-| engine.image.pullPolicy | string | `"IfNotPresent"` | Pull policy for this image. |
-| engine.image.repository | string | `"quay.io/airlock/microgateway-engine"` | Image repository from which to pull the Airlock Microgateway Engine image. |
-| engine.image.tag | string | `"4.2.3"` | Image tag to pull. |
-| engine.resources | object | `{}` | Resource restrictions to apply to the Airlock Microgateway Engine container. |
-| engine.sidecar.podMonitor.create | bool | `false` | Whether to create a PodMonitor resource for monitoring. |
-| engine.sidecar.podMonitor.labels | object | `{}` | Labels to add to the PodMonitor. |
+| config.cniBinDir | string | `"/opt/cni/bin"` | Directory where the CNI plugin binaries reside on the host. |
+| config.cniNetDir | string | `"/etc/cni/net.d"` | Directory where the CNI config files reside on the host. |
+| config.excludeNamespaces | list | `["kube-system"]` | Namespaces for which this CNI plugin should not apply any modifications. |
+| config.installMode | string | `"chained"` | Whether to install the CNI plugin as a `chained` plugin (default, required with most interface CNI providers), as a `standalone` plugin (required for use with Multus CNI, e.g. on OpenShift) or in `manual` mode, where no CNI network configuration is written. |
+| config.logLevel | string | `"info"` | Log level for the CNI installer and plugin. |
 | fullnameOverride | string | `""` | Allows overriding the name to use as full name of resources. |
+| image.digest | string | `"sha256:82b5924866840f783cce2e9b4095b7710a0e1cbf555498e8723ca811ca916290"` | SHA256 image digest to pull (in the format "sha256:7144f7bab3d4c2648d7e59409f15ec52a18006a128c733fcff20d3a4a54ba44a"). Overrides tag when specified. |
+| image.pullPolicy | string | `"IfNotPresent"` | Pull policy for this image. |
+| image.repository | string | `"quay.io/airlock/microgateway-cni"` | Image repository from which to pull the Airlock Microgateway CNI image. |
+| image.tag | string | `"4.2.3"` | Image tag to pull. |
 | imagePullSecrets | list | `[]` | ImagePullSecrets to use when pulling images. |
-| license.secretName | string | `"airlock-microgateway-license"` | Name of the secret containing the "microgateway-license.txt" key. |
-| nameOverride | string | `""` | Allows overriding the name to use instead of "microgateway". |
-| networkValidator.image.digest | string | `"sha256:a212cef6665b2464a41307162fa96e9623aa45c3fa32c39d320eae8b730d81e0"` | SHA256 image digest to pull (in the format "sha256:a212cef6665b2464a41307162fa96e9623aa45c3fa32c39d320eae8b730d81e0"). Overrides tag when specified. |
-| networkValidator.image.pullPolicy | string | `"IfNotPresent"` | Pull policy for this image. |
-| networkValidator.image.repository | string | `"cgr.dev/chainguard/busybox"` | Image repository from which to pull the busybox image for the Airlock Microgateway Network Validator init-container. |
-| networkValidator.image.tag | string | `""` | Image tag to pull. |
-| operator.affinity | object | `{}` | Custom affinity to apply to the operator Deployment. Used to influence the scheduling. |
-| operator.config.logLevel | string | `"info"` | Operator application log level. |
-| operator.image.digest | string | `"sha256:a429dfdb636e76bfbee7c59cfbe53d5f396c1f5603d5cb187f6283301ba4d7ba"` | SHA256 image digest to pull (in the format "sha256:c79ee3f85862fb386e9dd62b901b607161d27807f512d7fbdece05e9ee3d7c63"). Overrides tag when specified. |
-| operator.image.pullPolicy | string | `"IfNotPresent"` | Pull policy for this image. |
-| operator.image.repository | string | `"quay.io/airlock/microgateway-operator"` | Image repository from which to pull the Airlock Microgateway Operator image. |
-| operator.image.tag | string | `"4.2.3"` | Image tag to pull. |
-| operator.nodeSelector | object | `{}` | Custom nodeSelector to apply to the operator Deployment in order to constrain its Pods to certain nodes. |
-| operator.podAnnotations | object | `{}` | Annotations to add to all Pods. |
-| operator.podLabels | object | `{}` | Labels to add to all Pods. |
-| operator.rbac.create | bool | `true` | Whether to create RBAC resources which are required for the Airlock Microgateway Operator to function. |
-| operator.replicaCount | int | `2` | Number of replicas for the operator Deployment. |
-| operator.resources | object | `{}` | Resource restrictions to apply to the operator container. |
-| operator.serviceAccount.annotations | object | `{}` | Annotations to add to the ServiceAccount. |
-| operator.serviceAccount.create | bool | `true` | Whether a ServiceAccount should be created. |
-| operator.serviceAccount.name | string | `""` | Name of the ServiceAccount to use. If not set and create is true, a name is generated using the fullname template. |
-| operator.serviceAnnotations | object | `{}` | Annotations to add to the Service. |
-| operator.serviceLabels | object | `{}` | Labels to add to the Service. |
-| operator.serviceMonitor.create | bool | `false` | Whether to create a ServiceMonitor resource for monitoring. |
-| operator.serviceMonitor.labels | object | `{}` | Labels to add to the ServiceMonitor. |
-| operator.tolerations | list | `[]` | Custom tolerations to apply to the operator Deployment in order to allow its Pods to run on tainted nodes. |
-| operator.updateStrategy | object | `{"type":"RollingUpdate"}` | Specifies the operator update strategy. |
+| multusNetworkAttachmentDefinition.create | bool | `false` | Whether a NetworkAttachmentDefinition CR should be created, which can be used for applying the CNI plugin to Pods. |
+| multusNetworkAttachmentDefinition.namespace | string | `"default"` | Namespace in which the NetworkAttachmentDefinition is deployed. Note: If namespace is set to a custom value, referencing the created NetworkAttachmentDefinition from other namespaces may not work if Multus namespace isolation is enabled. https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.0.2/docs/configuration.md#namespace-isolation |
+| nameOverride | string | `""` | Allows overriding the name to use instead of "microgateway-cni". |
+| nodeSelector | object | `{"kubernetes.io/os":"linux"}` | NodeSelector to apply to the CNI DaemonSet in order to only deploy the CNI plugin on specific nodes. |
+| podAnnotations | object | `{}` | Annotations to add to all Pods. |
+| podLabels | object | `{}` | Labels to add to all Pods. |
+| privileged | bool | `false` | Whether the DaemonSet should run in privileged mode. Must be enabled for environments which require it for writing files to the host (e.g. OpenShift). |
+| rbac.create | bool | `true` | Whether to create RBAC resources which are required for the CNI plugin to function. |
+| rbac.createSCCRole | OpenShift | `false` | Whether to create RBAC resources which allow the CNI installer to use the "privileged" security context constraint. |
+| resources | object | `{"requests":{"cpu":"10m","memory":"100Mi"}}` | Resource restrictions to apply to the CNI installer container. |
+| serviceAccount.annotations | object | `{}` | Annotations to add to the ServiceAccount. |
+| serviceAccount.create | bool | `true` | Whether a ServiceAccount should be created. |
+| serviceAccount.name | string | `""` | Name of the ServiceAccount to use. If not set and create is true, a name is generated using the fullname template. |
 | tests.enabled | bool | `false` | Whether additional resources required for running `helm test` should be created (e.g. Roles and ServiceAccounts). If set to false, `helm test` will not run any tests. |
 
 ## License

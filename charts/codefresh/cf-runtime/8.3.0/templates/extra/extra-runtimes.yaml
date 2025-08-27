@@ -1,0 +1,36 @@
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- $extraRuntimes := .Values.extraRuntimes }}
+
+{{- range $runtimeIndex, $runtimeItem := $extraRuntimes }}
+{{- $rootContext := deepCopy $ }}
+{{- $_ := set $rootContext.Values.runtime "accounts" (list) }}
+{{- $runtimeItem = (mergeOverwrite $rootContext.Values.runtime $runtimeItem) }}
+{{- $_ := set $rootContext.Values "runtime" $runtimeItem }}
+
+{{- $runtimeName := required "runtimeName is required for extra runtime" $runtimeItem.runtimeName }}
+{{- if eq $runtimeName $rootContext.Values.global.runtimeName }}
+  {{- fail "extra runtimeName cannot be the same as global.runtimeName" }}
+{{- else }}
+  {{- $_ := set $rootContext.Values.global "runtimeName" $runtimeItem.runtimeName }}
+{{- end }}
+
+{{- if or (not (kindIs "slice" $runtimeItem.runtimeExtends)) (eq (len $runtimeItem.runtimeExtends) 0) }}
+  {{- fail "runtimeExtends must be a non-empty list" }}
+{{- end }}
+
+{{- if not (hasPrefix "system/" $runtimeItem.runtimeName) }}
+  {{- fail "extra runtime name must start with 'system/'" }}
+{{- end }}
+
+{{- $runtimeFile := printf "%s.yaml" (include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName)) }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ printf "%s-runtime-config" ( trimPrefix "system/" $runtimeItem.runtimeName | replace "_" "-" ) }}
+  labels:
+    {{- include "runtime.labels" $ | nindent 4 }}
+data:
+  {{ $runtimeFile }}: |
+    {{ include "runtime.runtime-environment-spec.template" $rootContext | nindent 4 | trim }}
+{{- end -}}
