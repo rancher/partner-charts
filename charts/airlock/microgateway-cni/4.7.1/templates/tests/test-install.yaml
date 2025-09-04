@@ -1,0 +1,84 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-test-install"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway-cni.labelsWithoutComponent" . | nindent 4 }}
+    app.kubernetes.io/component: test-install
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  {{- with .Values.affinity }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+  - name: test
+    image: {{ include "airlock-microgateway-cni.image" .Values.image }}
+    args:
+      - "helm-test"
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+    env:
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: RELEASE_NAMESPACE
+      value: "{{ .Release.Namespace }}"
+    - name: CNI_DAEMONSET_NAME
+      value: "{{ include "airlock-microgateway-cni.fullname" . }}"
+    - name: CNI_BINARY_PATH
+      value: "/host/opt/cni/bin/{{ include "airlock-microgateway-cni.fullname" . }}"
+    - name: CNI_CONFIG_DIR
+      value: "/host/etc/cni/net.d"
+    - name: CNI_INSTALL_MODE
+      value: "{{ .Values.config.installMode }}"
+    - name: CNI_KUBECONFIG_PATH
+      value: "/host/etc/cni/net.d/{{ include "airlock-microgateway-cni.fullname" . }}-kubeconfig"
+    - name: CNI_TYPE
+      value: "{{ include "airlock-microgateway-cni.fullname" . }}"
+    securityContext:
+      allowPrivilegeEscalation: {{ .Values.privileged }}
+      capabilities:
+        drop:
+        - ALL
+      privileged: {{ .Values.privileged }}
+      readOnlyRootFilesystem: true
+      runAsGroup: 0
+      runAsNonRoot: false
+      runAsUser: 0
+      seccompProfile:
+        type: RuntimeDefault
+    volumeMounts:
+    - mountPath: /host/opt/cni/bin
+      name: cni-bin-dir
+      readOnly: true
+    - mountPath: /host/etc/cni/net.d
+      name: cni-net-dir
+      readOnly: true
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}
+  serviceAccountName: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+  volumes:
+  - hostPath:
+      path: "{{ .Values.config.cniBinDir }}"
+      type: Directory
+    name: cni-bin-dir
+  - hostPath:
+      path: "{{ .Values.config.cniNetDir }}"
+      type: Directory
+    name: cni-net-dir
+{{- end -}}

@@ -1,0 +1,57 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "airlock-microgateway.fullname" . }}-test-install"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: test-install
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    sidecar.istio.io/inject: "false"
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+    {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+  - name: test
+    image: {{ include "airlock-microgateway.image" .Values.operator.image }}
+    args:
+      - "helm-test"
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+    env:
+      - name: HELM_RELEASE_NAME
+        value: "{{ .Release.Name }}"
+      - name: HELM_FULL_NAME
+        value: "{{ include "airlock-microgateway.fullname" . }}"
+      - name: RELEASE_NAMESPACE
+        value: "{{ .Release.Namespace }}"
+
+      - name: BACKEND_STATEFULSET_NAME
+        value: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+      - name: BACKEND_SERVICE_NAME
+        value: "{{ include "airlock-microgateway.fullname" . }}-test-service"
+      - name: OPERATOR_DEPLOYMENT_NAME
+        value: "{{ include "airlock-microgateway.operator.fullname" . }}"
+      - name: SIDECAR_GATEWAY_NAME
+        value: "{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway"
+
+      - name: GATEWAY_API_ENABLED
+        value: "{{ .Values.operator.gatewayAPI.enabled | toString }}"
+      - name: SIDECAR_GATEWAY_ENABLED
+        value: "{{ .Values.operator.sidecarGateway.enabled | toString }}"
+      - name: WATCH_NAMESPACE_SELECTOR
+        value: "{{ include "airlock-microgateway.watchNamespaceSelector.labelQuery" .Values.operator.watchNamespaceSelector }}"
+    securityContext:
+      {{- include "airlock-microgateway.restrictedSecurityContext" . | nindent 6 }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  serviceAccountName: "{{ include "airlock-microgateway.fullname" . }}-tests"
+{{- end -}}
