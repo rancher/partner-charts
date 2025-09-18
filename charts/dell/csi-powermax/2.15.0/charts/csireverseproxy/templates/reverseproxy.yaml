@@ -1,0 +1,76 @@
+{{- if ne .Values.deployAsSidecar true }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-reverseproxy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-reverseproxy
+  template:
+    metadata:
+      labels:
+        name: {{ .Release.Name }}-reverseproxy
+    spec:
+      serviceAccountName: {{ .Release.Name }}-reverseproxy
+      containers:
+        - name: csireverseproxy
+          image: {{ required "Must provided an image for reverseproxy container." .Values.image }}
+          imagePullPolicy: Always
+          env:
+              {{- $useRevProxySecret := and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+            - name: X_CSI_REVPROXY_USE_SECRET
+              value: {{ $useRevProxySecret | quote }}
+              {{- if $useRevProxySecret }}
+            - name: X_CSI_REVPROXY_SECRET_FILEPATH
+              value: "/etc/powermax/config"
+            - name: X_CSI_POWERMAX_CONFIG_PATH
+              value: "/powermax-config-params/driver-config-params.yaml"
+              {{- else }}
+            - name: X_CSI_REVPROXY_CONFIG_DIR
+              value: /etc/config/configmap
+            - name: X_CSI_REVPROXY_CONFIG_FILE_NAME
+              value: config.yaml
+              {{- end }}
+            - name: X_CSI_REVPROXY_IN_CLUSTER
+              value: "true"
+            - name: X_CSI_REVPROXY_TLS_CERT_DIR
+              value: /app/tls
+            - name: X_CSI_REVPROXY_WATCH_NAMESPACE
+              value: {{ .Release.Namespace }}
+          volumeMounts:
+              {{- if and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+            - name: powermax-reverseproxy-secret
+              mountPath: /etc/powermax
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+              {{- else }}
+            - name: configmap-volume
+              mountPath: /etc/config/configmap
+              {{- end }}
+            - name: tls-secret
+              mountPath: /app/tls
+            - name: cert-dir
+              mountPath: /app/certs
+      volumes:
+          {{- if and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+        - name: powermax-reverseproxy-secret
+          secret:
+            secretName: {{ required "Must provide defaultCredentialsSecret secret name." .Values.global.defaultCredentialsSecret }}
+        - name: powermax-config-params
+          configMap:
+            name: {{ .Release.Name }}-config-params
+          {{- else }}
+        - name: configmap-volume
+          configMap:
+            name: {{ .Release.Name }}-reverseproxy-config
+            optional: true
+          {{- end }}
+        - name: tls-secret
+          secret:
+            secretName: {{ .Values.tlsSecret }}
+        - name: cert-dir
+          emptyDir:
+{{- end }}
