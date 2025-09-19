@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nsoe.fullname" . }}-config
+data:
+  lstreamd_default.conf: |
+    {
+{{- if .Values.json_trans_rate_limiting.enabled }}
+        "transRateLimitEnabled": "yes",
+        "transRateLimit": {{ .Values.json_trans_rate_limiting.limit | quote }},
+        "transQueueLimit": {{ .Values.json_trans_rate_limiting.queuelimit | quote }},
+        "transRateLimitWindow": {{ .Values.json_trans_rate_limiting.window | quote }},
+{{- end}}
+        "Endpoints": {
+{{- if .Values.ns_tracing.enabled }}
+          "ZIPKIN": {
+              "ServerUrl": {{ .Values.ns_tracing.server  | default "zipkin:9411/api/v1/spans" | quote }},
+              "RecordType": {
+                "HTTP": "all",
+                "TCP": "all",
+                "SWG": "all"
+              },
+              "ProcessAlways": "yes",
+              "ProcessorMode": "avro",
+              "SkipAvro": "yes",
+              "FileSizeMax": "40",
+              "ProcessYieldTimeOut": "500"
+{{- if or .Values.kafka.enabled .Values.elasticsearch.enabled .Values.splunk.enabled}}
+          },
+{{- else}}
+          }
+{{- end}}
+{{- end}}
+{{- if .Values.kafka.enabled }}
+          "KAFKA": {
+              "DataFormat": {{ .Values.kafka.dataFormat | default "AVRO" | upper | quote }},
+              "ServerUrl": {{ .Values.kafka.broker | quote }},
+              "KafkaTopic": {{ .Values.kafka.topic  | default "HTTP" | quote }},
+              "RecordType": {
+                  "HTTP": "all",
+                  "TCP": "all",
+                  "SWG": "all",
+                  "VPN": "all",
+                  "NGS": "all",
+                  "ICA": "all",
+                  "APPFW": "none",
+                  "BOT": "none",
+                  "VIDEOOPT": "none",
+                  "BURST_CQA": "none",
+                  "SLA": "none",
+                  "MONGO": "none"
+              },
+              "TimeSeries": {
+                  "EVENTS": {{ .Values.kafka.events | default "no" | quote }},
+                  "AUDITLOGS": {{ .Values.kafka.auditlogs | default "no" | quote }}
+              },
+              "ProcessAlways": "yes",
+              "FileSizeMax": "40",
+              "ProcessYieldTimeOut": "500",
+              "FileStorageLimit": "1000",
+              "SkipAvro": "no",
+              "AvroCompress": "yes"
+          }
+{{- else if .Values.elasticsearch.enabled }}
+          "ES": {
+              "ServerUrl": {{ .Values.elasticsearch.server | default "elasticsearch:9200" | quote }},
+              "IndexPrefix": {{ .Values.elasticsearch.indexprefix | default "adc_nsoe" | quote }},
+              "IndexInterval": "daily",
+              "RecordType": {
+                  "HTTP": "all",
+                  "TCP": "all",
+                  "SWG": "all",
+                  "VPN": "all",
+                  "NGS": "all",
+                  "ICA": "all",
+                  "APPFW": "none",
+                  "BOT": "none",
+                  "VIDEOOPT": "none",
+                  "BURST_CQA": "none",
+                  "SLA": "none",
+                  "MONGO": "none"
+              },
+              "ProcessAlways": "no",
+              "ProcessYieldTimeOut": "500",
+              "MaxConnections": "512",
+              "ElkMaxSendBuffersPerSec": "64",
+              "JsonFileDump": "no"
+          }
+{{- else if .Values.splunk.enabled }}
+          "SPLUNK": {
+              "ServerUrl": {{ .Values.splunk.server | default "" | quote }},
+              "AuthToken": {{ .Values.splunk.authtoken | default "" | quote }},
+              "Index": {{ .Values.splunk.indexprefix | default "adc_nsoe" | quote }},
+              "RecordType": {
+                  "HTTP": "all",
+                  "TCP": "all",
+                  "SWG": "all",
+                  "VPN": "all",
+                  "NGS": "all",
+                  "ICA": "all",
+                  "APPFW": "none",
+                  "BOT": "none",
+                  "VIDEOOPT": "none",
+                  "BURST_CQA": "none",
+                  "SLA": "none",
+                  "MONGO": "none"
+              },
+              "TimeSeries": {
+                  "EVENTS": "no",
+                  "AUDITLOGS": "no"
+              },
+              "ProcessAlways": "no",
+              "ProcessYieldTimeOut": "500",
+              "MaxConnections": "512",
+              "JsonFileDump": "no"
+            }
+{{- end }}            
+        }
+    }

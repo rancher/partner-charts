@@ -1,0 +1,193 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netscaler-kubernetes-gateway-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+{{- if .Values.gatewayController.openshift }}
+      router: {{ include "netscaler-kubernetes-gateway-controller.fullname" . }}
+{{- else }}
+      app: {{ include "netscaler-kubernetes-gateway-controller.fullname" . }}
+{{- end }}
+  replicas: 1
+  template:
+    metadata:
+      name: nsgc
+      labels:
+{{- if .Values.gatewayController.openshift }}
+        router: {{ include "netscaler-kubernetes-gateway-controller.fullname" . }}
+{{- else }}
+        app: {{ include "netscaler-kubernetes-gateway-controller.fullname" . }}
+{{- end }}
+      annotations:
+{{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "netscaler-kubernetes-gateway-controller.serviceAccountName" . }}
+{{- if .Values.netscaler.nsValidateCert }}
+      hostAliases:
+      - ip: {{ .Values.netscaler.hostAlias.ip | quote }}
+        hostnames:
+          - {{ .Values.netscaler.hostAlias.hostName | quote }}
+{{- end }}
+      containers:
+      - name: nskgwc
+        image: "{{ tpl .Values.gatewayController.image . }}"
+        imagePullPolicy: {{ .Values.gatewayController.pullPolicy }}
+{{- if .Values.gatewayController.enableReadinessProbe }}
+        readinessProbe:
+        {{- toYaml .Values.gatewayController.readinessProbe | nindent 10 }}
+{{- end }}
+{{- if .Values.gatewayController.enableLivenessProbe }}
+        livenessProbe:
+        {{- toYaml .Values.gatewayController.livenessProbe | nindent 10 }}
+{{- end }}
+        args:
+          - --config-interface
+            gateway-controller
+          - --configmap
+            {{ .Release.Namespace }}/{{ include "nsgcconfigmap.fullname" . }}
+          - --feature-node-watch
+            {{ .Values.gatewayController.nodeWatch }}
+          - --enable-cnc-pbr
+            {{ .Values.gatewayController.nsncPbr }}
+{{- if .Values.gatewayController.ipam }}
+          - --ipam
+            citrix-ipam-controller
+{{- end }}
+{{- if .Values.gatewayController.disableAPIServerCertVerify }}
+          - --disable-apiserver-cert-verify
+            {{ .Values.gatewayController.disableAPIServerCertVerify }}
+{{- end }}
+        env:
+        - name: "NS_IP"
+          value: "{{ .Values.netscaler.nsIP }}"
+{{- if .Values.netscaler.certBundle }}
+        - name: "CERT_BUNDLE"
+          value: "true"
+{{- end }}
+{{- if .Values.netscaler.nsVIP }}
+        - name: "NS_VIP"
+          value: "{{ .Values.netscaler.nsVIP }}"
+{{- end }}
+{{- if .Values.netscaler.nitroReadTimeout }}
+        - name: "NS_NITRO_READ_TIMEOUT"
+          value: "{{ .Values.netscaler.nitroReadTimeout }}"
+{{- end }}
+{{- if .Values.gatewayController.enableLivenessProbe }}
+        - name: "LIVENESS_FILE_PATH"
+          value: '/tmp/liveness_path.log'
+{{- end }}
+{{- if .Values.netscaler.nsValidateCert }}
+        - name: "NS_VALIDATE_CERT"
+          value: "yes"
+        - name: "NS_CACERT_PATH"
+          value: "/etc/cacerts/nsCA.pem"
+{{- end }}
+        - name: "ENABLE_LIVENESS_PROBE"
+          value: {{ .Values.gatewayController.enableLivenessProbe | quote }}
+        - name: "NS_USER"
+        {{- if and .Values.netscaler.secretStore.enabled .Values.netscaler.secretStore.username}}
+        {{- toYaml .Values.netscaler.secretStore.username | nindent 10 }}
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.netscaler.adcCredentialSecret }}
+              key: username
+        {{- end }}
+        - name: "NS_PASSWORD"
+        {{- if and .Values.netscaler.secretStore.enabled .Values.netscaler.secretStore.password}}
+        {{- toYaml .Values.netscaler.secretStore.password | nindent 10 }}
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.netscaler.adcCredentialSecret }}
+              key: password
+        {{- end }}
+        - name: "EULA"
+          value: "{{ .Values.license.accept }}"
+{{- if and .Values.gatewayController.openshift .Values.gatewayController.namespaceLabels }}
+        - name: "NAMESPACE_LABELS"
+          value: {{ .Values.gatewayController.namespaceLabels | quote }}
+{{- end }}
+        - name: "NS_APPS_NAME_PREFIX"
+          value: {{ required "please provide unique entity prefix" .Values.gatewayController.entityPrefix | quote }}
+{{- if .Values.gatewayController.kubernetesURL }}
+        - name: "kubernetes_url"
+          value: "{{ .Values.gatewayController.kubernetesURL }}"
+{{- end }}
+{{- if .Values.gatewayController.clusterName }}
+        - name: "CLUSTER_NAME"
+          value: "{{ .Values.gatewayController.clusterName }}"
+{{- end }}
+{{- if .Values.gatewayController.optimizeEndpointBinding }}
+        - name: "OPTIMIZE_ENDPOINT_BINDING"
+          value: "{{ .Values.gatewayController.optimizeEndpointBinding }}"
+{{- end }}
+{{- if .Values.nodeLabels }}
+        - name: "NODE_LABELS"
+          value: "{{ .Values.nodeLabels }}"
+{{- end  }}
+{{- if .Values.gatewayController.openshift }}
+        - name: "PLATFORM"
+          value: "OPENSHIFT"
+{{- else }}
+        - name: "PLATFORM"
+          value: "KUBERNETES"
+{{- end  }}
+        - name: "GATEWAY_CONTROLLER_NAME"
+          value: {{ required "please provide unique controller name" .Values.gatewayController.gatewayControllerName | quote }}
+        resources:
+            {{- toYaml .Values.gatewayController.resources | nindent 12 }}
+        volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: volume-for-service-account
+          readOnly: true
+        {{- if .Values.netscaler.nsValidateCert }}
+        - name: certs
+          mountPath: /etc/cacerts
+          readOnly: true
+        {{- end }}
+        {{- if ne (len .Values.gatewayController.extraVolumeMounts) 0 }}
+{{- toYaml .Values.gatewayController.extraVolumeMounts | nindent 8 }}
+        {{- end }}
+      volumes:
+      - name: volume-for-service-account
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: {{ .Values.gatewayController.serviceAccount.tokenExpirationSeconds }}
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+      {{- if .Values.netscaler.nsValidateCert }}
+      - name: certs
+        secret:
+          secretName: {{ .Values.netscaler.nsCertSecret }}
+      {{- end }}
+{{- if ne (len .Values.gatewayController.extraVolumes) 0 }}
+{{ toYaml .Values.gatewayController.extraVolumes | indent 6 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- if .Values.tolerations }}
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
