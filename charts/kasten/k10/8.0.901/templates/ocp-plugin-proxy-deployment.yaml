@@ -1,0 +1,98 @@
+{{- if eq (include "k10.isOpenShift" .) "true" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "k10.openShiftConsolePluginProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+    component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "k10.common.matchLabels" . | indent 6 }}
+      component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+  template:
+    metadata:
+      annotations:
+        {{- include "k10.globalPodAnnotations" . | nindent 8 }}
+    {{- if .Values.scc.create }}
+        openshift.io/required-scc: {{ .Release.Name }}-scc
+    {{- end }}
+      labels:
+        component: {{ template "k10.openShiftConsolePluginProxyName" . }}
+{{- include "k10.deploymentPodLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - image: {{ include "k10.ocpConsolePluginImage" . }}
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          name: nginx
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+            - containerPort: 9443
+              name: https
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          env:
+          {{- if .Values.global.resourceLabels }}
+          - name: K10_CUSTOM_RESOURCE_LABELS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10CustomResourceLabels
+          {{- end }}
+          {{- if .Values.global.ephemeralResourceLabels }}
+          - name: K10_CUSTOM_EPHEMERAL_RESOURCE_LABELS
+            valueFrom:
+              configMapKeyRef:
+                name: k10-config
+                key: K10CustomEphemeralResourceLabels
+          {{- end }}
+          {{- if .Values.global.podLabels }}
+            - name: K10_CUSTOM_POD_LABELS
+              valueFrom:
+                configMapKeyRef:
+                  name: k10-config
+                  key: K10CustomPodLabels
+          {{- end }}
+          {{- if .Values.global.podAnnotations }}
+            - name: K10_CUSTOM_POD_ANNOTATIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: k10-config
+                  key: K10CustomPodAnnotations
+          {{- end }}
+          volumeMounts:
+            - mountPath: /etc/nginx
+              name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+            - mountPath: /etc/nginx/ssl
+              name: {{ template "k10.openShiftConsolePluginProxyTLSCertName" . }}
+      volumes:
+        - name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+          configMap:
+            defaultMode: 420
+            name: {{ template "k10.openShiftConsolePluginProxyConfigMapName" . }}
+        - name: {{ template "k10.openShiftConsolePluginProxyTLSCertName" . }}
+          secret:
+            defaultMode: 420
+            secretName: {{ template "k10.openShiftConsolePluginProxyTLSCertName" . }}
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      {{- $deploymentName := (include "k10.openShiftConsolePluginProxyName" .) }}
+      serviceAccountName: {{ include "get.serviceAccountForDeployment" (dict "deployment" $deploymentName "Values" .Values) }}
+{{- end -}}
