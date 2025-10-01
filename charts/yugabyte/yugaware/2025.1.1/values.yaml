@@ -1,0 +1,485 @@
+# Default values for yugaware.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+fullnameOverride: ""
+nameOverride: ""
+
+# Use YugabyteDB as the backend DB for YB Anywhere (Yugaware)
+# instead of PostgreSQL.
+useYugabyteDB: false
+
+image:
+  commonRegistry: ""
+  # Setting commonRegistry to say, quay.io overrides the registry settings for all images
+  # including the yugaware image
+
+  repository: quay.io/yugabyte/yugaware
+  tag: 2025.1.1.0-b197
+  pullPolicy: IfNotPresent
+  pullSecret: yugabyte-k8s-pull-secret
+  ## Docker config JSON File name
+  ## If set, this file content will be used to automatically create secret named as above
+  pullSecretFile: ""
+  ## Extra pull secrets that may be needed for custom sidecar
+  ## containers that user has.
+  ## These need to exist in the same ns as the yugaware pod
+  extraPullSecrets: []
+
+  postgres:
+    # For non default postgres image, set postgres.sampleConfig values accordingly.
+    registry: ""
+    tag: '14.17'
+    name: postgres
+    # Postgres postgresql.conf.sample location on container. This will be used to mount
+    # configmap with custom settings.
+    sampleConfLocation: /usr/share/postgresql/postgresql.conf.sample
+
+  postgres-upgrade:
+    registry: ""
+    tag: "11-to-14"
+    name: tianon/postgres-upgrade
+
+  prometheus:
+    registry: ""
+    tag: v3.2.1
+    name: prom/prometheus
+  
+  ybdb:
+    registry: ""
+    tag: 2.18.1.0-b84
+    name: yugabytedb/yugabyte
+
+
+yugaware:
+  replicas: 1
+  storage: 100Gi
+  storageClass: ""
+  storageAnnotations: {}
+  multiTenant: false
+  ## This is for testing purposes only.
+  persistentVolume:
+    enabled: true
+  ## Name of existing ServiceAccount. When provided, the chart won't create a ServiceAccount.
+  ## It will attach the required RBAC roles to it.
+  ## Helpful in Yugabyte Platform GKE App.
+  serviceAccount: ''
+  serviceMonitor:
+    enabled: false
+    annotations: {}
+  serviceAccountAnnotations: {}
+  service:
+    annotations: {}
+    clusterIP: ""
+    enabled: true
+    ip: ""
+    type: "LoadBalancer"
+    ## whitelist source CIDRs
+    #loadBalancerSourceRanges:
+    #- 0.0.0.0/0
+    #- 192.168.100.0/24
+  pod:
+    annotations: {}
+    labels: {}
+    terminationGracePeriodSeconds: 30
+    probes: # HTTP healthcheck probes configuration
+      enabled: false # add or not livenessProbe and startupProbe to the container
+      startupTimeSec:
+        min: 20 # minimum expected time for yugaware to start
+        max: 600 # maximum expected time for yugaware to start, k8s will restart pod on timeout
+      livenessProbe:
+        periodSeconds: 30 # query period
+        failureThreshold: 10 # number of failed checks to restart pod
+  health:
+    username: ""
+    password: ""
+    email: ""
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+  enableProxyMetricsAuth: true
+  ## List of additional alowed CORS origins in case of complex rev-proxy
+  additionAllowedCorsOrigins: []
+  proxyEndpointTimeoutMs: 3 minute
+  ## Enables features specific for cloud deployments
+  cloud:
+    enabled: false
+    requestIdHeader: "X-REQUEST-ID"
+
+  podDisruptionBudget:
+    # See https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+    # Note that the default of 0 doesn't really make sense since a StatefulSet isn't allowed to schedule extra replicas. However it is maintained as the default while we do additional testing. This value will likely change in the future.
+    maxUnavailable: 0
+
+  universe_boot_script: ""
+  # Control YBA k8s operator deployments
+  kubernetesOperatorEnabled: false
+  # Set namespace the operator watches for custom resources.
+  # If default ""  the YBA k8s operator watches all namespaces.
+  kubernetesOperatorNamespace: ""
+  # Crash YBA if operator thread is not initialised correctly
+  kubernetesOperatorCrashOnFailure: true
+
+  # Create an initial user for YugabyteDB Anywhere. A user is required for YBA workflows.
+  defaultUser:
+    enabled: false
+    username: yugabyte_k8s
+    # Please set the password. Templating will fail if it is not set.
+    password: ""
+    code: k8soperator
+    email: yugabyte_k8s@yugabyte.com
+
+  extraEnv: []
+
+  ## Extra volumes
+  ## extraVolumesMounts are mandatory for each extraVolumes.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volume-v1-core
+  ## Example:
+  # extraVolumes:
+  # - name: custom-nfs-vol
+  #   persistentVolumeClaim:
+  #     claimName: some-nfs-claim
+  extraVolumes: []
+
+  ## Extra volume mounts
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volumemount-v1-core
+  ## Example:
+  # extraVolumeMounts:
+  # - name: custom-nfs-vol
+  #   mountPath: /home/yugabyte/nfs-backup
+  extraVolumeMounts: []
+
+  # In case client wants to enable the additional headers to the YBA's http response
+  # Previously, it was possible via nginx, but given that we no longer have it, we can
+  # expose the same as application config/runtime config.
+  # Example: ["X-Content-Type-Options: nosniff", "Keep-Alive: timeout=5, max=1000"]
+  custom_headers: []
+
+## Configure PostgreSQL part of the application
+postgres:
+  # DO NOT CHANGE if using OCP Certified helm chart
+  user: postgres
+  dbname: yugaware
+
+  # DO NOT CHANGE for standard images
+  # The settings below are applied to postgresql.sample.conf. This is required because
+  # postgres initdb would not respect custom settings otherwise. Note: Only huge_pages = off
+  # is different from default value( try ).
+  sampleConfig:
+    max_connections: 100
+    shared_buffers: 128MB
+    dynamic_shared_memory_type: posix
+    max_wal_size: 1GB
+    min_wal_size: 80MB
+    wal_buffers: 4MB
+    logging_collector: on
+    log_filename: postgresql-%a.log
+    log_truncate_on_rotation: on
+    log_rotation_age: 1d
+    log_rotation_size: 0
+    log_timezone: UTC
+    datestyle: 'iso, mdy'
+    timezone: UTC
+    lc_messages: en_US.utf8
+    lc_monetary: en_US.utf8
+    lc_numeric: en_US.utf8
+    lc_time: en_US.utf8
+    default_text_search_config: pg_catalog.english
+    listen_addresses: '*'
+    huge_pages: off
+
+  service:
+    ## Expose internal Postgres as a Service
+    enabled: false
+    ## Additional Service annotations
+    annotations: {}
+    ## Service type
+    type: "ClusterIP"
+    ## IP address for the LoadBalancer, works only if supported by the cloud provider
+    ip: ""
+
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: 1Gi
+
+  # If external.host is set then we will connect to an external postgres database server instead of starting our own.
+  external:
+    host: ""
+    port: 5432
+    pass: ""
+    dbname: postgres
+    user: postgres
+
+    ## JDBC connection parameters including the leading `?`.
+    jdbcParams: ""
+
+
+  ## Extra volumes
+  ## extraVolumesMounts are mandatory for each extraVolumes.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volume-v1-core
+  ## Example:
+  # extraVolumes:
+  # - name: custom-nfs-vol
+  #   persistentVolumeClaim:
+  #     claimName: some-nfs-claim
+  extraVolumes: []
+
+  ## Extra volume mounts
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volumemount-v1-core
+  ## Example:
+  # extraVolumeMounts:
+  # - name: custom-nfs-vol
+  #   mountPath: /home/yugabyte/nfs-backup
+  extraVolumeMounts: []
+
+## Configure YBDB part of the application
+yugabytedb:
+  user: yugabyte
+  dbname: yugaware
+
+  config:
+    advertiseAddress : "127.0.0.1"
+    # Default tserver_webserver_port is 9000, but it's used by yugaware.
+    tserverWebserverPort: 9010
+    ysqlPort: ""
+    tserverFlags:
+      yb_enable_read_committed_isolation: true
+    masterFlags: {}
+    enableColocatedTables: true
+    startupRetryCount: 10
+
+
+  service:
+    ## Expose Yugabyted UI as a Service
+    enabled: false
+    ## Additional Service annotations
+    annotations: {}
+    ## Service type
+    type: "LoadBalancer"
+    ## IP address for the LoadBalancer, works only if supported by the cloud provider
+    loadBalancerIP: ""
+    yugabytedUiPort: 15433
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+
+tls:
+  enabled: false
+  hostname: "localhost"
+  ## Expects base64 encoded certificate, key, and CA certificate.
+  ## Populate these for non-self-signed certificates.
+  ## All three values should be base64 encoded.
+  ## These will be used to create server.pem and ca.pem files.
+  ## Note: The validity of the provided certificates is not verified.
+  certificate: ""
+  key: ""
+  ca_certificate: ""
+  sslProtocols: ""
+  ## cert-manager values
+  ## If cert-manager is enabled:
+  ## If genSelfsigned: true:
+  ##   Create a self-signed issuer/clusterIssuer
+  ##   Generate a rootCA using the above issuer.
+  ##   Generate a tls certificate with secret name as: {{ .Release.Name }}-yugaware-tls-cert
+  ## Else if genSelfsigned: false:
+  ##   Expect a clusterIssuer/issuer to be provided by user
+  ##   Generate a tls cert based on above issuer with secret name as: {{ .Release.Name }}-yugaware-tls-cert
+  certManager:
+    enabled: false
+    genSelfsigned: true
+    useClusterIssuer: false
+    clusterIssuer: cluster-ca
+    issuer: yugaware-ca
+    ## Configuration for the TLS certificate requested from Issuer/ClusterIssuer
+    configuration:
+      duration: 8760h # 90d
+      renewBefore: 240h # 15d
+      algorithm: RSA # ECDSA or RSA
+      # Can be 2048, 4096 or 8192 for RSA
+      # Or 256, 384 or 521 for ECDSA
+      keySize: 2048
+
+## yugaware pod Security Context
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+securityContext:
+  enabled: true
+  ## fsGroup related values are set at the pod level.
+  fsGroup: 10001
+  fsGroupChangePolicy: "OnRootMismatch"
+  ## Expected to have runAsUser values != 0 when
+  ## runAsNonRoot is set to true, otherwise container creation fails.
+  runAsUser: 10001
+  runAsGroup: 10001
+  runAsNonRoot: true
+
+helm:
+  timeout: 900
+  packagePath: "/opt/yugabyte/helm"
+
+domainName: "cluster.local"
+
+helm2Legacy: false
+
+ip_version_support: "v4_only" # v4_only, v6_only are the only supported values at the moment
+
+rbac:
+  ## Set this to false if you don't have enough permissions to create
+  ## ClusterRole and Binding, for example an OpenShift cluster. When
+  ## set to false, some of the graphs from Container section of the
+  ## Metrics UI don't work.
+  create: true
+
+## In order to deploy on OpenShift Container Platform, set this to
+## true.
+ocpCompatibility:
+  enabled: false
+
+sidecarVolumes:
+  ## Extra volumes
+  ## extraVolumesMounts are mandatory for each extraVolumes.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volume-v1-core
+  ## Example:
+  extraVolumes: []
+  ## Extra volume mounts
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#volumemount-v1-core
+  ## Example:
+  # extraVolumeMounts:
+  # - name: custom-nfs-vol
+  #   mountPath: /home/yugabyte/nfs-backup
+  extraVolumeMounts: []
+
+
+# Extra containers to add to the pod.
+sidecars: []
+
+## Following two controls for placement of pod - nodeSelector and AZ affinity.
+## Note: Remember to also provide a yugaware.StorageClass that has a olumeBindingMode of
+## WaitForFirstConsumer so that the PVC is created in the right topology visible to this pod.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+## eg.
+## nodeSelector:
+##   topology.kubernetes.io/region: us-west1
+nodeSelector: {}
+
+## Affinity to a particular zone for the pod.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+## eg.
+## nodeAffinity:
+##   requiredDuringSchedulingIgnoredDuringExecution:
+##     nodeSelectorTerms:
+##       - matchExpressions:
+##         - key: failure-domain.beta.kubernetes.io/zone
+##           operator: In
+##           values:
+##           - us-west1-a
+##           - us-west1-b
+zoneAffinity: {}
+
+## The tolerations that the pod should have.
+## See https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+tolerations: []
+
+
+## @param dnsPolicy DNS Policy for pod
+## ref: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/
+## E.g.
+## dnsPolicy: ClusterFirst
+dnsPolicy: ""
+## @param dnsConfig DNS Configuration pod
+## ref: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/
+## E.g.
+## dnsConfig:
+##   options:
+##   - name: ndots
+##     value: "4"
+dnsConfig: {}
+
+## Don't want prometheus to scrape nodes and evaluate alert rules in some cases (for example - cloud).
+prometheus:
+  ## Setting this to false will disable scraping of TServer and Master
+  ## nodes (could be pods or VMs)
+  scrapeNodes: true
+  evaluateAlertRules: true
+  retentionTime: 15d
+  queryConcurrency: 20
+  queryMaxSamples: 5000000
+  queryTimeout: 30s
+  scrapeTimeout: 10s
+  scrapeInterval: 10s
+  ## Set this to false to disable scraping of Kubernetes worker
+  ## nodes. Setting this to false will results in blank graphs of
+  ## resource utilization for Kubernetes universes. Useful for
+  ## scenarios where only VM based universes are being created.
+  scrapeKubernetesNodes: true
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+
+  ## Prometheus remote write config, as described here:
+  ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write
+  ## If tls configuration is needed, set prometheus.remoteWrite.tls.enabled = true and provide
+  ## necessary certificates/keys in base64 format as prometheus.remoteWrite.tls.[caCert|cert|key].
+  ## Remote write config should expect certs/keys in
+  ## /opt/remote_write/certs/[ca.crt|client.crt|client.key] respectively.
+  remoteWrite:
+    config: []
+    tls:
+      enabled: false
+      ## base64 encoded certificates and key expected
+      caCert: ""
+      clientCert: ""
+      clientKey: ""
+
+  ## Extra environment variables passed to the Prometheus container.
+  ## Ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#envvar-v1-core
+  ## Example:
+  # extraEnv:
+  # - name: GOMEM
+  #   value: "5Gi"
+  extraEnv: []
+
+  ## Enabling 'selfmonitor' allows Prometheus to collect and monitor its metrics.
+  selfMonitor: true
+
+# Arbitrary key=value config entries for application.docker.conf
+additionalAppConf:
+  stringConf: {}
+  nonStringConf: {}
+
+jdbcParams: ""
+
+## Override the APIVersion used by policy group for
+## PodDisruptionBudget resources. The chart selects the correct
+## APIVersion based on the target Kubernetes cluster. You don't need
+## to modify this unless you are using helm template command i.e. GKE
+## app's deployer image against a Kubernetes cluster >= 1.21.
+# pdbPolicyVersionOverride: "v1beta1"
+pdbPolicyVersionOverride: ""
+
+initContainers:
+  prometheusConfiguration:
+    resources:
+      ## https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-requests-and-limits-of-pod-and-container
+      ## Use the above link to learn more about Kubernetes resources configuration.
+      requests:
+        cpu: "0.25"
+        memory: 500Mi
+
+  postgresUpgrade:
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: 500Mi
+
+  dbInit:
+    resources:
+      requests:
+        cpu: "0.25"
+        memory: 500Mi
+

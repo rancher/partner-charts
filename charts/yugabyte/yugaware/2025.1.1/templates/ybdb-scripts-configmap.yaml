@@ -1,0 +1,60 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- if .Values.useYugabyteDB -}}
+---
+apiVersion: "v1"
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-yugaware-ybdb
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  ybdb-prerun.sh: |
+    #!/bin/bash
+    set -x -o errexit
+  
+  {{- if .Values.securityContext.enabled }}
+    mkdir -p $YBDB_DATA && chown -R $YBDB_UID:$YBDB_GID $YBDB_DATA;
+  {{- else }}
+    mkdir -p $YBDB_DATA;
+  {{- end }}
+
+  ybdb-create-yugaware-db.sh: |
+    #!/bin/bash
+    set -x
+
+    run_ysql_command() {
+      local command="$1"
+
+      /home/yugabyte/bin/ysqlsh \
+      -U {{ .Values.yugabytedb.user }} \
+      -h {{ .Values.yugabytedb.config.advertiseAddress | default "127.0.0.1" }} \
+      -p {{ .Values.yugabytedb.config.ysqlPort | default "5433" }} \
+      -c "$command"
+
+      return $?
+    }
+
+    retry_counter={{ .Values.yugabytedb.config.startupRetryCount }}
+    retry_sleep_time_sec=5
+
+    # Wait for ybdb to become healthy.
+    while [[ $retry_counter -gt 0 ]] && ! run_ysql_command "SELECT VERSION();"; do
+      sleep "$retry_sleep_time_sec"
+      retry_counter=$(( retry_counter - 1 ))
+    done
+
+    if [[ $retry_counter -eq 0 ]]; then 
+      exit 1
+    fi
+
+    create_db_cmd="CREATE DATABASE {{ .Values.yugabytedb.dbname }} WITH colocated = {{ .Values.yugabytedb.config.enableColocatedTables }};"
+    # Create yugaware db if it doesn't exist.
+    /home/yugabyte/bin/ysqlsh -U {{ .Values.yugabytedb.user }} -h {{ .Values.yugabytedb.config.advertiseAddress | default "127.0.0.1" }} \
+    -p {{ .Values.yugabytedb.config.ysqlPort | default "5433" }} -tc "SELECT 1 FROM pg_database WHERE datname = '{{ .Values.yugabytedb.dbname }}'" | grep -q "1" || run_ysql_command "$create_db_cmd" 
+
+    exit $?
+{{- end }}
