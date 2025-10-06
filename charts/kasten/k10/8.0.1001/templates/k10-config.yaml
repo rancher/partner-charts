@@ -1,0 +1,381 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-config
+data:
+  DataStoreLogLevel: {{ default "error" | quote }}
+  DataStoreFileLogLevel: {{ default "" | quote }}
+  loglevel: {{ .Values.logLevel | quote }}
+  {{- if .Values.clusterName }}
+  clustername: {{ quote .Values.clusterName }}
+  {{- end }}
+  version: {{ .Chart.AppVersion }}
+  {{- $capabilities := include "k10.capabilities" . | splitList " " }}
+  {{- $capabilities_mask := include "k10.capabilities_mask" . | splitList " " }}
+  {{- if and ( has "mc" $capabilities ) ( not ( has "mc" $capabilities_mask ) ) }}
+  multiClusterVersion: {{ include "k10.multiClusterVersion" . | quote }}
+  {{- end }}
+  modelstoredirname: "//mnt/k10state/kasten-io/"
+  apiDomain: {{ include "apiDomain" . }}
+  k10DataStoreDisableCompression: "false"
+  k10DataStoreParallelUpload: {{ .Values.datastore.parallelUploads | quote }}
+  k10DataStoreParallelDownload: {{ .Values.datastore.parallelDownloads | quote }}
+  k10DataStoreParallelBlockUpload: {{ .Values.datastore.parallelBlockUploads | quote }}
+  k10DataStoreParallelBlockDownload: {{ .Values.datastore.parallelBlockDownloads | quote }}
+  k10DataStoreEstimationType: {{ .Values.datastore.estimationType | quote }}
+  k10DataStoreAdaptiveEstimationThreshold: {{ .Values.datastore.adaptiveEstimationThreshold | quote }}
+  k10DataStoreGeneralContentCacheSizeMB: {{ include "k10.defaultK10DataStoreGeneralContentCacheSizeMB" . | quote }}
+  k10DataStoreGeneralMetadataCacheSizeMB: {{ include "k10.defaultK10DataStoreGeneralMetadataCacheSizeMB" . | quote }}
+  k10DataStoreTotalCacheSizeLimitMB: {{ if and (.Values.datastore.cacheSizeLimitMB) (ne (.Values.datastore.cacheSizeLimitMB | toString) "0") }}{{ .Values.datastore.cacheSizeLimitMB | quote }}{{ else if eq (.Values.datastore.cacheSizeLimitMB | toString) "0" }}{{ 0 | quote }}{{ else }}{{ include "k10.defaultK10DataStoreTotalCacheSizeLimitMB" . | quote }}{{ end }}
+  k10DataStoreRestoreContentCacheSizeMB: {{ include "k10.defaultK10DataStoreRestoreContentCacheSizeMB" . | quote }}
+  k10DataStoreRestoreMetadataCacheSizeMB: {{ include "k10.defaultK10DataStoreRestoreMetadataCacheSizeMB" . | quote }}
+  k10ImportLatestRestorePointOnly: "false"
+  K10BackupBufferFileHeadroomFactor: {{ include "k10.defaultK10BackupBufferFileHeadroomFactor" . | quote }}
+  AWSAssumeRoleDuration: {{ default (include "k10.defaultAssumeRoleDuration" .) .Values.awsConfig.assumeRoleDuration | quote }}
+  {{- if gt (int .Values.kanister.backupTimeout) 0 }}
+  K10TimeoutBlueprintBackup: {{ default (include "k10.defaultK10TimeoutBlueprintBackup" .) .Values.kanister.backupTimeout | quote }}
+  {{- else }}
+  K10TimeoutBlueprintBackup: {{ default (include "k10.defaultK10TimeoutBlueprintBackup" .) .Values.timeout.blueprintBackup | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.restoreTimeout) 0 }}
+  K10TimeoutBlueprintRestore: {{ default (include "k10.defaultK10TimeoutBlueprintRestore" .) .Values.kanister.restoreTimeout | quote }}
+  {{- else }}
+  K10TimeoutBlueprintRestore: {{ default (include "k10.defaultK10TimeoutBlueprintRestore" .) .Values.timeout.blueprintRestore | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.deleteTimeout) 0 }}
+  K10TimeoutBlueprintDelete: {{ default (include "k10.defaultK10TimeoutBlueprintDelete" .) .Values.kanister.deleteTimeout | quote }}
+  {{- else }}
+  K10TimeoutBlueprintDelete: {{ default (include "k10.defaultK10TimeoutBlueprintDelete" .) .Values.timeout.blueprintDelete | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.hookTimeout) 0 }}
+  K10TimeoutBlueprintHooks: {{ default (include "k10.defaultK10TimeoutBlueprintHooks" .) .Values.kanister.hookTimeout | quote }}
+  {{- else }}
+  K10TimeoutBlueprintHooks: {{ default (include "k10.defaultK10TimeoutBlueprintHooks" .) .Values.timeout.blueprintHooks | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.checkRepoTimeout) 0 }}
+  K10TimeoutCheckRepoPodReady: {{ default (include "k10.defaultK10TimeoutCheckRepoPodReady" .) .Values.kanister.checkRepoTimeout | quote }}
+  {{- else }}
+  K10TimeoutCheckRepoPodReady: {{ default (include "k10.defaultK10TimeoutCheckRepoPodReady" .) .Values.timeout.checkRepoPodReady | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.statsTimeout) 0 }}
+  K10TimeoutStatsPodReady: {{ default (include "k10.defaultK10TimeoutStatsPodReady" .) .Values.kanister.statsTimeout | quote }}
+  {{- else }}
+  K10TimeoutStatsPodReady: {{ default (include "k10.defaultK10TimeoutStatsPodReady" .) .Values.timeout.statsPodReady | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.efsPostRestoreTimeout) 0 }}
+  K10TimeoutEFSRestorePodReady: {{ default (include "k10.defaultK10TimeoutEFSRestorePodReady" .) .Values.kanister.efsPostRestoreTimeout | quote }}
+  {{- else }}
+  K10TimeoutEFSRestorePodReady: {{ default (include "k10.defaultK10TimeoutEFSRestorePodReady" .) .Values.timeout.efsRestorePodReady | quote }}
+  {{- end }}
+  {{- if gt (int .Values.kanister.podReadyWaitTimeout) 0 }}
+  K10TimeoutWorkerPodReady: {{ .Values.kanister.podReadyWaitTimeout | quote }}
+  {{- else }}
+  K10TimeoutWorkerPodReady: {{ .Values.timeout.workerPodReady | quote }}
+  {{- end }}
+
+  KanisterManagedDataServicesBlueprintsEnabled: {{ .Values.kanister.managedDataServicesBlueprintsEnabled | quote }}
+
+  WorkerPodMetricSidecarEnabled: {{ default .Values.kanisterPodMetricSidecar.enabled .Values.workerPodMetricSidecar.enabled | quote }}
+  WorkerPodMetricSidecarMetricLifetime: {{ default .Values.kanisterPodMetricSidecar.metricLifetime .Values.workerPodMetricSidecar.metricLifetime | quote }}
+  WorkerPodPushgatewayMetricsInterval: {{ default .Values.kanisterPodMetricSidecar.pushGatewayInterval .Values.workerPodMetricSidecar.pushGatewayInterval | quote }}
+{{- include "workerPodMetricSidecarResources" . | indent 2 }}
+  KanisterToolsImage: {{ include "get.kanisterToolsImage" . | quote }}
+
+  K10MutatingWebhookTLSCertDir: "/etc/ssl/certs/webhook"
+  {{- if .Values.injectGenericVolumeBackupSidecar.enabled }}
+  K10MutatingWebhookPort: {{ default 8080 .Values.injectGenericVolumeBackupSidecar.webhookServer.port | quote }}
+  {{- else }}
+  K10MutatingWebhookPort: {{ default 8080 .Values.injectKanisterSidecar.webhookServer.port | quote }}
+  {{- end }}
+
+  {{- if gt (int .Values.limiter.concurrentSnapConversions) 0 }}
+  K10LimiterSnapshotExportsPerAction: {{ default (include "k10.defaultK10LimiterSnapshotExportsPerAction" .) .Values.limiter.concurrentSnapConversions | quote }}
+  {{- else }}
+  K10LimiterSnapshotExportsPerAction: {{ default (include "k10.defaultK10LimiterSnapshotExportsPerAction" .) .Values.limiter.snapshotExportsPerAction | quote }}
+  {{- end }}
+  {{- if gt (int .Values.limiter.genericVolumeSnapshots) 0 }}
+  K10LimiterGenericVolumeBackupsPerCluster: {{ default (include "k10.defaultK10LimiterGenericVolumeBackupsPerCluster" .) .Values.limiter.genericVolumeSnapshots | quote }}
+  {{- else }}
+  K10LimiterGenericVolumeBackupsPerCluster: {{ default (include "k10.defaultK10LimiterGenericVolumeBackupsPerCluster" .) .Values.limiter.genericVolumeBackupsPerCluster | quote }}
+  {{- end }}
+  {{- if gt (int .Values.limiter.genericVolumeCopies) 0 }}
+  K10LimiterSnapshotExportsPerCluster: {{ default (include "k10.defaultK10LimiterSnapshotExportsPerCluster" .) .Values.limiter.genericVolumeCopies | quote }}
+  {{- else }}
+  K10LimiterSnapshotExportsPerCluster: {{ default (include "k10.defaultK10LimiterSnapshotExportsPerCluster" .) .Values.limiter.snapshotExportsPerCluster | quote }}
+  {{- end }}
+  {{- if gt (int .Values.limiter.genericVolumeRestores) 0 }}
+  K10LimiterVolumeRestoresPerCluster: {{ default (include "k10.defaultK10LimiterVolumeRestoresPerCluster" .) .Values.limiter.genericVolumeRestores | quote }}
+  {{- else }}
+  K10LimiterVolumeRestoresPerCluster: {{ default (include "k10.defaultK10LimiterVolumeRestoresPerCluster" .) .Values.limiter.volumeRestoresPerCluster | quote }}
+  {{- end }}
+  {{- if gt (int .Values.limiter.csiSnapshots) 0 }}
+  K10LimiterCsiSnapshotsPerCluster: {{ default (include "k10.defaultK10LimiterCsiSnapshotsPerCluster" .) .Values.limiter.csiSnapshots | quote }}
+  {{- else }}
+  K10LimiterCsiSnapshotsPerCluster: {{ default (include "k10.defaultK10LimiterCsiSnapshotsPerCluster" .) .Values.limiter.csiSnapshotsPerCluster | quote }}
+  {{- end }}
+  {{- if gt (int .Values.limiter.providerSnapshots) 0 }}
+  K10LimiterDirectSnapshotsPerCluster: {{ default (include "k10.defaultK10LimiterDirectSnapshotsPerCluster" .) .Values.limiter.providerSnapshots | quote }}
+  {{- else }}
+  K10LimiterDirectSnapshotsPerCluster: {{ default (include "k10.defaultK10LimiterDirectSnapshotsPerCluster" .) .Values.limiter.directSnapshotsPerCluster | quote }}
+  {{- end }}
+  {{- if gt (int .Values.limiter.imageCopies) 0 }}
+  K10LimiterImageCopiesPerCluster: {{ default (include "k10.defaultK10LimiterImageCopiesPerCluster" .) .Values.limiter.imageCopies | quote }}
+  {{- else }}
+  K10LimiterImageCopiesPerCluster: {{ default (include "k10.defaultK10LimiterImageCopiesPerCluster" .) .Values.limiter.imageCopiesPerCluster | quote }}
+  {{- end }}
+  K10LimiterWorkloadSnapshotsPerAction: {{ default (include "k10.defaultK10LimiterWorkloadSnapshotsPerAction" .) .Values.limiter.workloadSnapshotsPerAction | quote }}
+  {{- if gt (int .Values.services.executor.workerCount) 0 }}
+  K10LimiterExecutorThreads: {{ default (include "k10.defaultK10LimiterExecutorThreads" .) .Values.services.executor.workerCount | quote }}
+  {{- else }}
+  K10LimiterExecutorThreads: {{ default (include "k10.defaultK10LimiterExecutorThreads" .) .Values.limiter.executorThreads | quote }}
+  {{- end }}
+  {{- if gt (int .Values.services.executor.maxConcurrentRestoreCsiSnapshots) 0 }}
+  K10LimiterCsiSnapshotRestoresPerAction: {{ default (include "k10.defaultK10LimiterCsiSnapshotRestoresPerAction" .) .Values.services.executor.maxConcurrentRestoreCsiSnapshots | quote }}
+  {{- else }}
+  K10LimiterCsiSnapshotRestoresPerAction: {{ default (include "k10.defaultK10LimiterCsiSnapshotRestoresPerAction" .) .Values.limiter.csiSnapshotRestoresPerAction | quote }}
+  {{- end }}
+  {{- if gt (int .Values.services.executor.maxConcurrentRestoreGenericVolumeSnapshots) 0 }}
+  K10LimiterVolumeRestoresPerAction: {{ default (include "k10.defaultK10LimiterVolumeRestoresPerAction" .) .Values.services.executor.maxConcurrentRestoreGenericVolumeSnapshots | quote }}
+  {{- else }}
+  K10LimiterVolumeRestoresPerAction: {{ default (include "k10.defaultK10LimiterVolumeRestoresPerAction" .) .Values.limiter.volumeRestoresPerAction | quote }}
+  {{- end }}
+  {{- if gt (int .Values.services.executor.maxConcurrentRestoreWorkloads) 0 }}
+  K10LimiterWorkloadRestoresPerAction: {{ default (include "k10.defaultK10LimiterWorkloadRestoresPerAction" .) .Values.services.executor.maxConcurrentRestoreWorkloads | quote }}
+  {{- else }}
+  K10LimiterWorkloadRestoresPerAction: {{ default (include "k10.defaultK10LimiterWorkloadRestoresPerAction" .) .Values.limiter.workloadRestoresPerAction | quote }}
+  {{- end }}
+
+  K10GCDaemonPeriod: {{ default (include "k10.defaultK10GCDaemonPeriod" .) .Values.garbagecollector.daemonPeriod | quote }}
+  K10GCKeepMaxActions: {{ default (include "k10.defaultK10GCKeepMaxActions" .) .Values.garbagecollector.keepMaxActions | quote }}
+  K10GCActionsEnabled: {{ default (include "k10.defaultK10GCActionsEnabled" .) .Values.garbagecollector.actions.enabled | quote }}
+
+  K10EphemeralPVCOverhead: {{ .Values.ephemeralPVCOverhead | quote }}
+
+  K10PersistenceStorageClass: {{ .Values.global.persistence.storageClass | quote }}
+
+  K10DefaultPriorityClassName: {{ default (include "k10.defaultK10DefaultPriorityClassName" .) .Values.defaultPriorityClassName | quote }}
+  {{- if .Values.global.podLabels }}
+  K10CustomPodLabels: {{ include "k10.globalPodLabelsJson" . | quote }}
+  {{- end }}
+
+  {{- if .Values.global.resourceLabels }}
+  K10CustomResourceLabels: {{ include "k10.globalResourceLabelsJson" . | quote }}
+  {{- end }}
+
+  {{- if .Values.global.ephemeralResourceLabels }}
+  K10CustomEphemeralResourceLabels: {{ include "k10.globalEphemeralResourceLabelsJson" . | quote }}
+  {{- end }}
+
+  {{- if .Values.global.podAnnotations }}
+  K10CustomPodAnnotations: {{ include "k10.globalPodAnnotationsJson" . | quote }}
+  {{- end }}
+
+  kubeVirtVMsUnFreezeTimeout: {{ default (include "k10.defaultKubeVirtVMsUnfreezeTimeout" .) .Values.kubeVirtVMs.snapshot.unfreezeTimeout | quote }}
+
+  {{- if and .Values.maxJobWaitDuration (not (empty .Values.maxJobWaitDuration)) }}
+  K10TimeoutJobWait: {{ .Values.maxJobWaitDuration | quote }}
+  {{- else }}
+  K10TimeoutJobWait: {{ .Values.timeout.jobWait | quote }}
+  {{- end }}
+
+  quickDisasterRecoveryEnabled: {{ .Values.kastenDisasterRecovery.quickMode.enabled | quote }}
+  kastenDisasterRecoveryTimeout: {{ .Values.kastenDisasterRecovery.restoreTimeout | quote }}
+
+  {{- if .Values.forceRootInKanisterHooks }}
+  K10ForceRootInBlueprintActions: {{ .Values.forceRootInKanisterHooks| quote }}
+  {{- else }}
+  K10ForceRootInBlueprintActions: {{ .Values.forceRootInBlueprintActions | quote }}
+  {{- end }}
+
+  workerPodResourcesCRDEnabled: {{ .Values.workerPodCRDs.enabled | quote }}
+{{- include "workerPodResourcesCRD" . | indent 2 }}
+
+  {{- if .Values.awsConfig.efsBackupVaultName }}
+  efsBackupVaultName: {{ quote .Values.awsConfig.efsBackupVaultName }}
+  {{- end }}
+
+  {{- if .Values.excludedApps }}
+  excludedApps: '{{ join "," .Values.excludedApps }}'
+  {{- end }}
+
+  {{- if .Values.vmWare.taskTimeoutMin }}
+  vmWareTaskTimeoutMin: {{ quote .Values.vmWare.taskTimeoutMin }}
+  {{- end }}
+
+
+  {{- if .Values.kanisterFunctionVersion }}
+  kanisterFunctionVersion: {{ .Values.kanisterFunctionVersion | quote }}
+  {{- else }}
+  kanisterFunctionVersion: {{ quote "v1.0.0-alpha" }}
+  {{- end }}
+{{- include "kanisterToolsResources" . | indent 2 }}
+{{- include "get.gvsActivationToken" . | indent 2 }}
+
+  {{- if .Values.genericStorageBackup.overridepubkey }}
+  overridePublicKeyForGVS: {{ .Values.genericStorageBackup.overridepubkey | quote }}
+  {{- end }}
+
+  {{- with (include "k10.fluentbitEndpoint" .) }}
+  fluentbitEndpoint: {{ . | quote }}
+  {{- end }}
+  
+  {{- if .Values.features.fileRecoverySessionCR }}
+  frsMaxMountsPerSession: {{ quote .Values.frs.maxMountsPerSession }}
+  frsMaxMountsPerNamespace: {{ quote .Values.frs.maxMountsPerNamespace }}
+  frsMaxSystemMounts: {{ quote .Values.frs.maxSystemMounts }}
+  frsSessionExpiryTimeInMinutes: {{ quote .Values.frs.sessionExpiryTimeInMinutes }}
+  {{- end }}
+  
+{{ if .Values.features }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-features
+data:
+{{ include "k10.features" . | indent 2}}
+{{ end }}
+{{ if .Values.auth.openshift.enabled }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: k10-dex
+  namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+    issuer: {{ printf "%s/dex" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:8080
+    logger:
+      level: info
+      format: text
+    connectors:
+    - type: openshift
+      id: openshift
+      name: OpenShift
+      config:
+        issuer: {{ .Values.auth.openshift.openshiftURL }}
+        clientID: {{ printf "system:serviceaccount:%s:%s" .Release.Namespace (include "get.openshiftServiceAccountName" .) }}
+        clientSecret: {{ printf "{{ getenv \"%s\" }}" (include "k10.openShiftClientSecretEnvVar" . ) }}
+        redirectURI: {{ printf "%s/dex/callback" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
+        insecureCA: {{ .Values.auth.openshift.insecureCA }}
+{{- if and (eq (include "check.cacertconfigmap" .) "false") .Values.auth.openshift.useServiceAccountCA }}
+        rootCA: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+{{- end }}
+    oauth2:
+      skipApprovalScreen: true
+    staticClients:
+    - name: 'K10'
+      id: kasten
+      secret: kastensecret
+      redirectURIs:
+      - {{ printf "%s/auth-svc/v0/oidc/redirect" (trimSuffix "/" .Values.auth.openshift.dashboardURL) }}
+{{ end }}
+{{ if .Values.auth.ldap.enabled }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: k10-dex
+  namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+    issuer: {{ printf "%s/dex" (trimSuffix "/" .Values.auth.ldap.dashboardURL) }}
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:8080
+    frontend:
+      dir: {{ include "k10.dexFrontendDir" . }}
+      theme: custom
+      logoURL: theme/kasten-logo.svg
+    logger:
+      level: info
+      format: text
+    connectors:
+    - type: ldap
+      id: ldap
+      name: LDAP
+      config:
+        host: {{ .Values.auth.ldap.host }}
+        insecureNoSSL: {{ .Values.auth.ldap.insecureNoSSL }}
+        insecureSkipVerify: {{ .Values.auth.ldap.insecureSkipVerifySSL }}
+        startTLS: {{ .Values.auth.ldap.startTLS }}
+        bindDN: {{ .Values.auth.ldap.bindDN }}
+        bindPW: BIND_PASSWORD_PLACEHOLDER
+        userSearch:
+          baseDN: {{ .Values.auth.ldap.userSearch.baseDN }}
+          filter: {{ .Values.auth.ldap.userSearch.filter }}
+          username: {{ .Values.auth.ldap.userSearch.username }}
+          idAttr: {{ .Values.auth.ldap.userSearch.idAttr }}
+          emailAttr: {{ .Values.auth.ldap.userSearch.emailAttr }}
+          nameAttr: {{ .Values.auth.ldap.userSearch.nameAttr }}
+          preferredUsernameAttr: {{ .Values.auth.ldap.userSearch.preferredUsernameAttr }}
+        groupSearch:
+          baseDN: {{ .Values.auth.ldap.groupSearch.baseDN }}
+          filter: {{ .Values.auth.ldap.groupSearch.filter }}
+          nameAttr: {{ .Values.auth.ldap.groupSearch.nameAttr }}
+{{- with .Values.auth.ldap.groupSearch.userMatchers }}
+          userMatchers:
+{{ toYaml . | indent 10 }}
+{{- end }}
+    oauth2:
+      skipApprovalScreen: true
+    staticClients:
+    - name: 'K10'
+      id: kasten
+      secret: kastensecret
+      redirectURIs:
+      - {{ printf "%s/auth-svc/v0/oidc/redirect" (trimSuffix "/" .Values.auth.ldap.dashboardURL) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k10-logos-dex
+  namespace: {{ .Release.Namespace }}
+binaryData:
+  {{- $files := .Files }}
+  {{- range tuple "files/favicon.png" "files/kasten-logo.svg" "files/styles.css" }}
+  {{ trimPrefix "files/" . }}: |-
+    {{ $files.Get . | b64enc }}
+  {{- end }}
+{{ end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k10-gateway
+  namespace: {{ .Release.Namespace }}
+data:
+  {{ include "k10.gatewayPrefixVarName" . }}: {{ include "k10.prefixPath" . }}
+  {{ include "k10.gatewayGrafanaSvcVarName" . }}: {{ printf "%s-grafana" .Release.Name }}
+
+  {{- if .Values.gateway.requestHeaders }}
+  {{ include "k10.gatewayRequestHeadersVarName" .}}: {{ (.Values.gateway.requestHeaders | default list) | join " " }}
+  {{- end }}
+
+  {{- if .Values.gateway.authHeaders }}
+  {{ include "k10.gatewayAuthHeadersVarName" .}}: {{ (.Values.gateway.authHeaders | default list) | join " " }}
+  {{- end }}
+
+  {{- if .Values.gateway.service.internalPort }}
+  {{ include "k10.gatewayPortVarName" .}}: {{ .Values.gateway.service.internalPort | quote }}
+  {{- end }}
+
+  {{- if .Values.secrets.tlsSecret }}
+  {{ include "k10.gatewayTLSCertFile" . }}: /etc/tls/tls.crt
+  {{ include "k10.gatewayTLSKeyFile" . }}: /etc/tls/tls.key
+  {{- end }}
