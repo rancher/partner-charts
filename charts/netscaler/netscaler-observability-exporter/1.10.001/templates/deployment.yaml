@@ -1,0 +1,60 @@
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  name: {{ include "nsoe.fullname" . }}
+  labels: 
+    app: {{ include "nsoe.fullname" . }}
+spec:
+  replicas: {{ .Values.replicas }} 
+  selector:
+    matchLabels:
+      app: {{ include "nsoe.fullname" . }}
+  template:
+    metadata:
+      name: {{ include "nsoe.fullname" . }}
+      labels:
+        app: {{ include "nsoe.fullname" . }}
+{{- if .Values.timeseries.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5563"
+{{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- end}}
+    spec:
+      containers:
+        - name: nsoe
+          image: {{ tpl .Values.image . }} 
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - containerPort: 5557
+              name: lstream
+{{- if .Values.timeseries.enabled }}
+            - containerPort: 5563
+              name: rest
+{{- end}}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: lstreamd-config
+              mountPath: /var/logproxy/lstreamd/conf/lstreamd_default.conf
+              subPath: lstreamd_default.conf
+            - name: core-data
+              mountPath: /var/crash/
+          env:
+            - name: NSOE_LOG_LEVEL
+              value: {{ .Values.nsoeLogLevel }}
+      volumes:
+        - name: lstreamd-config
+          configMap:
+            name: {{ include "nsoe.fullname" . }}-config
+        - name: core-data
+          emptyDir: {}
+{{- if .Values.tolerations }}
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}

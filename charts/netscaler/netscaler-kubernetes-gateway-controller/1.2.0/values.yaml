@@ -1,0 +1,89 @@
+license:
+   accept: no
+imageRegistry: quay.io
+imageRepository: netscaler/netscaler-k8s-ingress-controller
+imageTag: 3.2.22
+pullPolicy: IfNotPresent
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+gatewayController:
+  gatewayControllerName:
+  disableAPIServerCertVerify: true
+  image: "{{ .Values.imageRegistry }}/{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
+  entityPrefix: ""
+  enableLivenessProbe: true
+  enableReadinessProbe: true
+  createClusterRoleAndBinding: true
+  serviceAccount:
+    create: true
+    tokenExpirationSeconds: 31536000
+    # The name of the ServiceAccount to use.
+    # If not set and `serviceAccount.create` is true, a name is generated using the fullname template
+    # If you want to use pre-created serviceAccount, set the name and serviceAccount.create to false.
+    name:
+  jsonLog: false
+  #kubernetesURL: url.com
+  livenessProbe:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - |
+        FILE_PATH="$LIVENESS_FILE_PATH"
+        [ -f "$FILE_PATH" ] && [ $(( $(date +%s) - $(stat -c %Y "$FILE_PATH") )) -lt 60 ] && exit 0 || exit 1
+    initialDelaySeconds: 30
+    periodSeconds: 60
+  logLevel: info
+  nodeWatch: false
+  nsncPbr: false
+  openshift: false
+  optimizeEndpointBinding: true
+  pullPolicy: Always
+  extraVolumeMounts: []
+  extraVolumes: []
+  readinessProbe:
+    exec:
+      command:
+      - cat
+      - /tmp/readiness
+    initialDelaySeconds: 10
+    periodSeconds: 60
+    failureThreshold: 3
+    successThreshold: 1
+  resources:
+    requests:
+      cpu: 32m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 200Mi
+netscaler:
+  adcCredentialSecret: nslogin
+  nitroReadTimeout: 40
+  nsIP: 
+  nsPort: 443
+  nsProtocol: HTTPS
+  nsSNIPs:
+  nsVIP: 
+  nsValidateCert: false
+  nsCertSecret:
+  certBundle: false
+  podIPsforServiceGroupMembers:
+  hostAlias:
+  secretStore:
+    enabled: false
+    username: {}
+      #valueFrom:
+      #  configMapKeyRef:
+      #    name: test1
+      #    key: username
+    password: {}
+      #valueFrom:
+      #  configMapKeyRef:
+      #    name: test1
+      #    key: password
+podAnnotations: {}
+nodeSelector: {}
+affinity: {}
+tolerations: []

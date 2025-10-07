@@ -1,0 +1,85 @@
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "netscaler-k8s-node-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netscaler-k8s-node-controller.labels" . | nindent 4}}
+spec:
+  selector:
+    matchLabels:
+      {{- include "netscaler-k8s-node-controller.selectorLabels" . | nindent 6}}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        {{- include "netscaler-k8s-node-controller.selectorLabels" . | nindent 8}}
+    spec:
+      serviceAccountName: {{ include "netscaler-k8s-node-controller.serviceAccountName" . }}
+      containers:
+      - name: {{ include "netscaler-k8s-node-controller.name" . }}
+        image: "{{ tpl .Values.image . }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        env:
+        - name: EULA
+          value: {{ required "Please set license.accept=yes for accepting NetScaler License" .Values.license.accept | quote }}
+        - name: NS_IP
+          value: {{ required "Provide NetScaler VPX/MPX IP" .Values.nsIP | quote }}
+        - name: NS_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "Please provide secret for NetScaler NetScaler credential" .Values.adcCredentialSecret }}
+              key: username
+        - name: NS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "Please provide secret for NetScaler NetScaler credential" .Values.adcCredentialSecret }}
+              key: password
+        - name: NETWORK
+          value: {{ required "Please provide network for VTEP overlay" .Values.network | quote }}
+        - name: REMOTE_VTEPIP
+          value: {{ required "Please provide NetScaler VPX/MPX SNIP" .Values.vtepIP | quote }}
+        - name: VNID
+          value: {{ required "Pleave provide VXLAN ID" .Values.vxlan.id | quote }}
+        - name: VXLAN_PORT
+          value: {{ required "Provide provide VXLAN port" .Values.vxlan.port | quote }}
+        - name: CNI_TYPE
+          value: {{ required "Provide CNI Type in cluster" .Values.cniType | quote }}
+{{- if .Values.dsrIPRange }}
+        - name: "DSR_IP_RANGE"
+          value: {{ .Values.dsrIPRange | quote }}
+{{- end }}
+{{- if .Values.clusterName }}
+        - name: "CLUSTER_NAME"
+          value: {{ .Values.clusterName | quote }}
+{{- end }}
+{{- if .Values.nsncRouterImage }}
+        - name: "CNC_ROUTER_IMAGE"
+          value: {{ .Values.nsncRouterImage | quote }}
+{{- end }}
+        - name: "CNC_ROUTER_NAME"
+          value: {{ include "netscaler-k8s-node-controller.nsncRouterName" . }} 
+        - name: "CNC_CONFIGMAP"
+          value: {{ include "netscaler-k8s-node-controller.nsncConfigMap" . }}
+        volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: volume-for-service-account
+          readOnly: true
+      volumes:
+      - name: volume-for-service-account
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: {{ .Values.serviceAccount.tokenExpirationSeconds }}
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
