@@ -2,14 +2,11 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ include "airlock-microgateway.fullname" . }}-test-install"
+  name: "{{ include "airlock-microgateway-cni.fullname" . }}-test-install"
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- include "airlock-microgateway-cni.labelsWithoutComponent" . | nindent 4 }}
     app.kubernetes.io/component: test-install
-    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
-    sidecar.istio.io/inject: "false"
-    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
-    {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 4 }}
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation
@@ -19,204 +16,88 @@ spec:
   - name: test
     image: "bitnami/kubectl:{{ (semver .Capabilities.KubeVersion.Version).Major }}.{{ (semver .Capabilities.KubeVersion.Version).Minor }}"
     securityContext:
-      {{- include "airlock-microgateway.restrictedSecurityContext" . | nindent 6 }}
+      allowPrivilegeEscalation: {{ .Values.privileged }}
+      capabilities:
+        drop:
+        - ALL
+      privileged: {{ .Values.privileged }}
+      readOnlyRootFilesystem: true
+      runAsGroup: 0
+      runAsNonRoot: false
+      runAsUser: 0
+      seccompProfile:
+        type: RuntimeDefault
+    volumeMounts:
+    - mountPath: /host/opt/cni/bin
+      name: cni-bin-dir
+      readOnly: true
+    - mountPath: /host/etc/cni/net.d
+      name: cni-net-dir
+      readOnly: true
     command:
-    - bash
+    - sh
     - -c
     - |
       set -eu
 
-      clean_up() {
-        echo ""
-        echo "### Clean up test resources"
-        kubectl delete --ignore-not-found=true -n {{ .Release.Namespace }} sidecargateways.microgateway.airlock.com {{ include "airlock-microgateway.fullname" . }}-test-sidecargateway || true
-        echo ""
-        echo "### Scale down '{{ include "airlock-microgateway.fullname" . }}-test-backend'"
-        kubectl scale -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --replicas=0 --timeout=60s
-        sleep 3s
-        echo ""
-      }
-
       fail() {
+        echo "Error: ${1}"
         echo ""
-        echo "### Error: ${1}"
-        echo ""
-
-        if kubectl get -n {{ .Release.Namespace }} sidecargateway.microgateway.airlock.com/{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway >/dev/null 2>&1; then
-          echo ""
-          echo 'Microgateway Sidecargateway status:'
-          kubectl get -n {{ .Release.Namespace }} sidecargateway.microgateway.airlock.com/{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway -o jsonpath-as-json='{.status}' || true
-          echo ""
-          echo ""
-        fi
-
-        if kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 >/dev/null 2>&1; then
-          echo "Pod '{{ include "airlock-microgateway.fullname" . }}-test-backend-0':"
-          kubectl describe -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 || true
-          echo ""
-          echo ""
-          echo 'Logs of Nginx container:'
-          kubectl logs -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -c nginx --tail 5 || true
-          echo ""
-          echo ""
-          # Wait for engine logs
-          sleep 10s
-          echo 'Logs of Microgateway Engine container:'
-          kubectl logs -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -c airlock-microgateway-engine --tail 5 || true
-        fi
-
+        echo 'CNI installer logs:'
+        kubectl logs -n {{ .Release.Namespace }} daemonsets/{{ include "airlock-microgateway-cni.fullname" .}} -c cni-installer
         exit 1
       }
 
-      create_sidecargateway() {
-        # create SidecarGateway resource for testing purposes
-        kubectl delete --ignore-not-found=true -n {{ .Release.Namespace }} sidecargateways.microgateway.airlock.com {{ include "airlock-microgateway.fullname" . }}-test-sidecargateway || true
-        kubectl apply -f - <<EOF
-        apiVersion: microgateway.airlock.com/v1alpha1
-        kind: SidecarGateway
-        metadata:
-          name: "{{ include "airlock-microgateway.fullname" . }}-test-sidecargateway"
-          namespace: {{ .Release.Namespace }}
-          labels:
-            app.kubernetes.io/component: test-install
-            {{- include "airlock-microgateway.sharedLabels" . | nindent 12 }}
-            {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 12 }}
-        spec:
-          podSelector:
-            matchLabels:
-              app: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
-              {{- include "airlock-microgateway.sharedLabels" . | nindent 14 }}
-              {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 14 }}
-          applications:
-            - containerPort: 8080
-      EOF
+      containsMGWCNIConf() {
+        cat "${1}" | grep -qe '"type":.*"{{ include "airlock-microgateway-cni.fullname" . }}"'
       }
 
-      exec_test_request() {
-        exec 3<>/dev/tcp/"${1}"/"${2}";echo -e "GET "${3}" HTTP/1.1\r\nhost: {{ include "airlock-microgateway.fullname" . }}-test-install\r\nConnection: close\r\n\r\n" >&3;cat <&3; ret=$?; exec 3>&-; return ${ret};
-      }
-
-      {{- if .Values.operator.watchNamespaceSelector }}
-      echo "### Verify that Namespace Selector matches Namespace '{{ .Release.Namespace }}'"
-      if ! kubectl get namespace -l '{{ include "airlock-microgateway.watchNamespaceSelector.labelQuery" .Values.operator.watchNamespaceSelector }}' | grep -q {{ .Release.Namespace }}; then
-        labels=$(kubectl get namespace {{ .Release.Namespace }} -o jsonpath={.metadata.labels} | jq | awk '{print "  " $0}')
-        fail {{printf `"Operator namespace '%s' is not part of the operator's watch scope. To execute 'helm test', the selector configured in the helm value 'operator.watchNamespaceSelector' must match the namespace's labels:\n* Current selector:\n%s\n\n* Current labels:\n$labels\n###"`
-        .Release.Namespace
-        (replace "\"" "\\\"" (replace "\n" "\\n" (.Values.operator.watchNamespaceSelector | toPrettyJson | indent 2)))
-        }}
+      if ! kubectl rollout status --timeout=60s -n {{ .Release.Namespace }} daemonsets/{{ include "airlock-microgateway-cni.fullname" .}}; then
+        fail 'CNI DaemonSet rollout did not complete within timeout'
       fi
-      echo ""
-      {{- end }}
 
-      trap clean_up EXIT
-      echo ""
-
-      echo "### Waiting for Microgateway Operator Deployments to be ready"
-      if ! kubectl rollout status -n {{ .Release.Namespace }} --timeout=90s \
-        deployments/{{ include "airlock-microgateway.operator.fullname" . }}; then
-        fail 'Timeout occurred'
+      echo "Checking whether CNI binary was installed"
+      if ! [ -f "/host/opt/cni/bin/{{ include "airlock-microgateway-cni.fullname" . }}" ]; then
+        fail 'CNI binary was not installed'
       fi
-      echo ""
 
-      echo "### Scale '{{ include "airlock-microgateway.fullname" . }}-test-backend' to '1' replica"
-      # scale to zero replicas to ensure no pods are present from previous runs
-      kubectl scale -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --replicas=0 --timeout=10s
-      kubectl scale -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --replicas=1 --timeout=10s
-      echo ""
-
-      echo "### Waiting for backend pod"
-      i=0
-      while true; do
-        if kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0; then
-          break
-        elif [ $i -gt 3 ]; then
-          fail 'Pod not ready'
-        fi
-        sleep 2s
-        i=$((i+1))
-      done
-
-      echo "### Checking Microgateway Engine sidecar container was injected"
-      if ! kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -o jsonpath='{.spec.containers[?(@.name=="airlock-microgateway-engine")]}' | grep -q "airlock-microgateway-engine"; then
-        fail 'Microgateway Engine sidecar container not injected'
+      echo "Checking whether CNI kubeconfig was installed"
+      if ! [ -f "/host/etc/cni/net.d/{{ include "airlock-microgateway-cni.fullname" . }}-kubeconfig" ]; then
+        fail 'CNI kubeconfig was not created'
       fi
-      echo "True"
-      echo ""
 
-      echo "### Checking for valid license"
-      i=0
-      while true; do
-        if [ "$(kubectl get -n {{ .Release.Namespace }} pods/{{ include "airlock-microgateway.fullname" . }}-test-backend-0 -o jsonpath='{.metadata.labels.sidecar\.microgateway\.airlock\.com/licensed}')" = 'true' ]; then
-          break
-        elif [ $i -gt 30 ]; then
-          fail 'Microgateway license is missing or invalid'
-        fi
-        sleep 2s
-        i=$((i+1))
-      done
-      echo "True"
-      echo ""
+      echo "Checking whether CNI configuration was written"
+      case {{ .Values.config.installMode }} in
+        "chained")
+          for file in "/host/etc/cni/net.d/"*.conflist; do
+            if containsMGWCNIConf "${file}"; then
+              echo "Success"
+              exit 0
+            fi
+          done
+          ;;
+        "standalone")
+          if containsMGWCNIConf "/host/etc/cni/net.d/{{ include "airlock-microgateway-cni.fullname" . }}.conflist"; then
+            echo "Success"
+            exit 0
+          fi
+          ;;
+        "manual")
+          echo "- Skipping because we are in 'manual' install mode"
+          echo "Success"
+          exit 0
+          ;;
+      esac
 
-      echo "### Create SidecarGateway resource for testing"
-      if ! create_sidecargateway ; then
-        fail 'Creation of SidecarGateway resource failed'
-      fi
-      echo ""
-
-      echo "### Waiting for '{{ include "airlock-microgateway.fullname" . }}-test-backend' to be ready"
-      if ! kubectl rollout status -n {{ .Release.Namespace }} statefulset/{{ include "airlock-microgateway.fullname" . }}-test-backend --timeout=90s; then
-        fail 'Timeout occurred'
-      fi
-      echo ""
-
-      echo "### Waiting  for 'engine-config-valid' condition"
-      if ! kubectl wait -n {{ .Release.Namespace }} pods --field-selector=metadata.name={{ include "airlock-microgateway.fullname" . }}-test-backend-0 --timeout=90s --for=condition=microgateway.airlock.com/engine-config-valid=True; then
-        fail 'Configuration was never accepted by the Microgateway Engine'
-      fi
-      sleep 5s
-      echo ""
-      echo ""
-
-      echo "### Checking whether a valid request is successful and returns HTTP status code '200'"
-      i=0
-      while ! out=$(exec_test_request "{{ include "airlock-microgateway.fullname" . }}-test-service" "8080" "/"); do
-        if [ $i -gt 3 ]; then
-          fail 'Failed to send test request'
-        fi
-        sleep 2s
-        i=$((i+1))
-        echo "Retry ${i}"
-      done
-      echo "Response:"
-      echo "${out}"
-
-      if ! echo "${out}" | grep -q "200 OK"; then
-        fail 'A valid request was not successful'
-      fi
-      sleep 5s
-      echo ""
-      echo ""
-
-      echo "### Checking whether a request with an injection attack is blocked and returns HTTP status code '400'"
-      i=0
-      while ! out=$(exec_test_request "{{ include "airlock-microgateway.fullname" . }}-test-service" "8080" "/?token='%20UnION%20all%20select%20A"); do
-        if [ $i -gt 3 ]; then
-          fail 'Failed to send test request'
-        fi
-        sleep 2s
-        i=$((i+1))
-        echo "Retry ${i}"
-      done
-      echo "Response:"
-      echo "${out}"
-
-      if ! echo "${out}" | grep -q "400 Bad Request"; then
-        fail 'A malicious request was not blocked'
-      fi
-      echo ""
-      echo ""
-
-      echo "### Installation of '{{ include "airlock-microgateway.fullname" . }}' succeeded"
-      exit 0
-  serviceAccountName: "{{ include "airlock-microgateway.fullname" . }}-tests"
+      fail 'Configuration for plugin "{{ include "airlock-microgateway-cni.fullname" . }}" was not found'
+  serviceAccountName: "{{ include "airlock-microgateway-cni.fullname" . }}-tests"
+  volumes:
+  - hostPath:
+      path: "{{ .Values.config.cniBinDir }}"
+      type: Directory
+    name: cni-bin-dir
+  - hostPath:
+      path: "{{ .Values.config.cniNetDir }}"
+      type: Directory
+    name: cni-net-dir
 {{- end -}}
