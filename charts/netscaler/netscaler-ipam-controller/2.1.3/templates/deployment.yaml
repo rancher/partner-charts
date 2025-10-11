@@ -1,0 +1,115 @@
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name:  {{ include "netscaler-ipam-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netscaler-ipam-controller.labels" . | nindent 4}}
+spec:
+  selector:
+    matchLabels:
+      {{- include "netscaler-ipam-controller.selectorLabels" . | nindent 6}}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        {{- include "netscaler-ipam-controller.selectorLabels" . | nindent 8}}
+{{- with .Values.podAnnotations }}
+      annotations:
+      {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "netscaler-ipam-controller.serviceAccountName" . }}
+      containers:
+      - name: ipam
+        image: "{{ tpl .Values.image . }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        env:
+        # This IPAM controller takes environment variable VIP_RANGE. IPs in this range are used to assign values for IP range
+        - name: "VIP_RANGE"
+          value: {{ required "Provide IPs or IP range for NetScaler IPAM Controller" .Values.vipRange | squote }}
+        # The IPAM controller can also be configured with name spaces for which it would work through the environment variable
+        # VIP_NAMESPACES, This expects a set of namespaces passed as space separated string
+{{- if .Values.reuseIngressVip | squote }}
+        - name: "REUSE_INGRESS_VIP"
+          value: {{ .Values.reuseIngressVip | squote }}
+{{- end }}
+{{- if .Values.infoblox.enabled}}
+        # Cluster name is used to identify the cluster in which the IPAM controller is deployed. This is required
+        - name: "CLUSTER_NAME"
+          value: {{ required "Provide a Cluster name where IPAM Controller is deployed" .Values.cluster | squote }}
+        - name: "IPAM_PROVIDER"
+          value: "infoblox"
+        - name: "INFOBLOX_GRID_HOST"
+          value: {{ required "Provide Infoblox Grid Host IP or FQDN" .Values.infoblox.gridHost | squote }}
+        - name: "INFOBLOX_USERNAME"
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "Provide Infoblox credential Secret" .Values.infoblox.credentialSecret }}
+              key: username
+        - name: "INFOBLOX_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "Provide Infoblox credential Secret" .Values.infoblox.credentialSecret }}
+              key: password
+{{- if .Values.infoblox.httpTimeout }}
+        - name: "HTTP_TIMEOUT"
+          value: {{ .Values.infoblox.httpTimeout | squote }}
+{{ else }}
+        - name: "HTTP_TIMEOUT"
+          value: "10"
+{{- end }}
+{{- if .Values.infoblox.maxRetries }}
+        - name: "MAX_RETRIES"
+          value: {{ .Values.infoblox.maxRetries | squote }}
+{{ else }}
+        - name: "MAX_RETRIES"
+          value: "3"
+{{- end }}
+{{- if .Values.infoblox.netView }}
+        # InfoBlox NetView is used to identify the network view. If this is not given, the default network view is used
+        - name: "INFOBLOX_NETVIEW"
+          value: {{ .Values.infoblox.netView | squote }}
+{{ else }}
+        - name: "INFOBLOX_NETVIEW"
+          value: "default"
+{{- end }} 
+        # InfoBlox Network Range is used to identify the network range from where IPs will be assigned. There should not be a conflict with the existing IPs
+        - name: "INFOBLOX_NETWORKS"
+          value: {{ required "Provide IPs or IP range for Infoblox in CIDR form" .Values.infoblox.vipRange | squote }}
+{{- end }}
+        resources:
+            {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: volume-for-service-account
+          readOnly: true
+      volumes:
+      - name: volume-for-service-account
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: {{ .Values.serviceAccount.tokenExpirationSeconds }}
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+{{- if and .Values.nodeSelector.key .Values.nodeSelector.value }}
+      nodeSelector:
+        {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}
+{{- end }}
+{{- if .Values.tolerations }}
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
