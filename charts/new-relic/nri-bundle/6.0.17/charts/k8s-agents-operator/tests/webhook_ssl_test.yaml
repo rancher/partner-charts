@@ -1,0 +1,176 @@
+suite: webhook ssl
+templates:
+  - templates/webhook-configuration.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: creates ssl certificate secret by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - hasDocuments:
+          count: 3
+      - containsDocument:
+          kind: Secret
+          apiVersion: v1
+          name: my-release-k8s-agents-operator-controller-manager-service-cert
+          namespace: my-namespace
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-controller-manager-service-cert
+      - exists:
+          path: data["tls.crt"]
+        template: templates/webhook-configuration.yaml
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-controller-manager-service-cert
+      - exists:
+          path: data["tls.key"]
+        template: templates/webhook-configuration.yaml
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-controller-manager-service-cert
+      - exists:
+          path: data["ca.crt"]
+        template: templates/webhook-configuration.yaml
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-controller-manager-service-cert
+  - it: does not inject cert-manager annotations into MutatingWebhook by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+  - it: does not inject cert-manager annotations into ValidatingWebhook by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-validation
+  - it: does inject caBundle into MutatingWebhook clientConfigs by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 2
+      - exists:
+          path: webhooks[0].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+      - exists:
+          path: webhooks[1].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+  - it: does inject caBundle into ValidatingWebhook clientConfigs by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 2
+      - exists:
+          path: webhooks[0].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+      - exists:
+          path: webhooks[1].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-validation
+  - it: does not creates ssl certificate secret if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+  - it: injects cert-manager annotations into MutatingWebhook if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: my-namespace/my-release-k8s-agents-operator-serving-cert
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+  - it: injects cert-manager annotations into ValidatingWebhook if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: my-namespace/my-release-k8s-agents-operator-serving-cert
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-validation
+  - it: does not inject caBundle into MutatingWebhook clientConfigs if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 2
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+      - notExists:
+          path: webhooks[1].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+  - it: does not inject caBundle into ValidatingWebhook clientConfigs if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 2
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-mutation
+      - notExists:
+          path: webhooks[1].clientConfig.caBundle
+        documentSelector:
+          path: metadata.name
+          value: my-release-k8s-agents-operator-validation
