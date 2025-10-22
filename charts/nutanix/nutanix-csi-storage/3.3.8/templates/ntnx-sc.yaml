@@ -1,0 +1,26 @@
+{{- if eq .Values.createVolumeSnapshotClass true}}
+{{- if .Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1" }}
+apiVersion: snapshot.storage.k8s.io/v1
+{{- else }}
+apiVersion: snapshot.storage.k8s.io/v1beta1
+{{- end }}
+kind: VolumeSnapshotClass
+metadata:
+  name: {{ .Values.volumeSnapshotClassName }}
+  annotations:
+  {{- with .Values.volumeSnapshotClassAnnotations }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+  {{- with .Values.volumeSnapshotClassLabels }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+driver: {{ include "nutanix-csi-storage.drivername" . }}
+parameters:
+  storageType: NutanixVolumes
+  {{- if eq .Values.ntnxInitConfigMap.usePC false }}
+  csi.storage.k8s.io/snapshotter-secret-name: {{ .Values.peSecretName }}
+  csi.storage.k8s.io/snapshotter-secret-namespace: {{ .Release.Namespace }}
+  {{- end }}
+deletionPolicy: {{ .Values.volumeSnapshotClassRetention}}
+{{ end }}
