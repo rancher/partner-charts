@@ -1,0 +1,421 @@
+#
+#
+# Copyright © 2020-2025 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#      http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#
+
+## K8S/DRIVER ATTRIBUTES
+########################
+
+# driverName: defines the name of driver
+# Allowed values: string
+# Default value: None
+driverName: "csi-powerstore.dellemc.com"
+# "version" is used to verify the values file matches driver version
+# Not recommend to change
+version: v2.15.1
+
+# "images" defines every container images used for the driver and its sidecars.
+#  To use your own images, or a private registry, change the values here.
+images:
+  # "driver" defines the container image, used for the driver container.
+  driver:
+    image: quay.io/dell/container-storage-modules/csi-powerstore:v2.15.1
+  # CSI sidecars
+  attacher:
+    image: registry.k8s.io/sig-storage/csi-attacher:v4.9.0
+  provisioner:
+    image: registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
+  snapshotter:
+    image: registry.k8s.io/sig-storage/csi-snapshotter:v8.3.0
+  resizer:
+    image: registry.k8s.io/sig-storage/csi-resizer:v1.14.0
+  registrar:
+    image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.14.0
+  healthmonitor:
+    image: registry.k8s.io/sig-storage/csi-external-health-monitor-controller:v0.15.0
+
+  # CSM sidecars
+  replication:
+    image: quay.io/dell/container-storage-modules/dell-csi-replicator:v1.13.0
+  vgsnapshotter:
+    image: quay.io/dell/container-storage-modules/csi-volumegroup-snapshotter:v1.8.1
+  podmon:
+    image: quay.io/dell/container-storage-modules/podmon:v1.14.0
+  metadataretriever:
+    image: quay.io/dell/container-storage-modules/csi-metadata-retriever:v1.12.0
+  authorization:
+    image: quay.io/dell/container-storage-modules/csm-authorization-sidecar:v2.3.0
+
+# Represents number of certificate secrets, which user is going to create for ssl authentication. (powerstore-cert-0..powerstore-cert-n)
+# If user does not use certificate, set to 0
+certSecretCount: 0
+
+# Specify kubelet config dir path.
+# Ensure that the config.yaml file is present at this path.
+# Default value: /var/lib/kubelet
+kubeletConfigDir: /var/lib/kubelet
+
+# nodeFCPortsFilterFile: It is the name of the environment variable which store path to the file which
+# provide list of WWPN which should be used by the driver for FC connection on this node
+# If file not exist or empty or in invalid format, then the driver will use all available FC ports
+# Allowed Values: string
+# Default Value: None
+# Example:
+# content of the file:
+#   21:00:00:29:ff:48:9f:6e,21:00:00:29:ff:48:9f:6e
+nodeFCPortsFilterFile: /etc/fc-ports-filter
+
+# externalAccess: allows to specify additional entries for hostAccess of NFS volumes. Both single IP address and subnet are valid entries.
+# Allowed Values: x.x.x.x/xx or x.x.x.x
+# Default Value: None
+externalAccess:
+
+# imagePullPolicy: Policy to determine if the image should be pulled prior to starting the container.
+# Allowed values:
+#  Always: Always pull the image.
+#  IfNotPresent: Only pull the image if it does not already exist on the node.
+#  Never: Never pull the image.
+# Default value: None
+imagePullPolicy: IfNotPresent
+
+# maxPowerstoreVolumesPerNode: Specify default value for maximum number of volumes that controller can publish to the node.
+# If value is zero CO SHALL decide how many volumes of this type can be published by the controller to the node.
+# This limit is applicable to all the nodes in the cluster for which node label 'max-powerstore-volumes-per-node' is not set.
+# Allowed values: n, where n >= 0
+# Default value: 0
+maxPowerstoreVolumesPerNode: 0
+
+# nfsAcls: enables setting permissions on NFS mount directory
+# This value acts as default value for NFS ACL (nfsAcls), if not specified for an array config in secret
+# Permissions can be specified in two formats:
+#   1) Unix mode (NFSv3)
+#   2) NFSv4 ACLs (NFSv4)
+#      NFSv4 ACLs are supported on NFSv4 share only.
+# Allowed values:
+#   1) Unix mode: valid octal mode number
+#      Examples: "0777", "777", "0755"
+#   2) NFSv4 acls: valid NFSv4 acls, seperated by comma
+#      Examples: "A::OWNER@:RWX,A::GROUP@:RWX", "A::OWNER@:rxtncy"
+# Optional: true
+# Default value: "0777"
+nfsAcls: "0777"
+
+# podmonAPIPort: Defines the port to be used within the kubernetes cluster
+# Allowed values:
+#   Any valid and free port.
+# Default value: 8083
+podmonAPIPort: 8083
+
+# apiTimeout: Defines the timeout for PowerStore API calls in seconds
+# Allowed values: Number followed by unit (s,m,h)
+# Examples: 60s, 5m, 1h
+# Default value: 120s
+apiTimeout: "120s"
+
+# controller: configure controller specific parameters
+controller:
+  # controllerCount: defines the number of csi-powerstore controller pods to deploy to
+  # the Kubernetes release.
+  # Allowed values: n, where n > 0
+  # Default value: None
+  controllerCount: 2
+
+  # volumeNamePrefix: defines a string prepended to each volume created by the CSI driver.
+  # Allowed values: string
+  # Default value: csivol
+  # Examples: "k8s", "app1"
+  volumeNamePrefix: csivol
+
+  # vgsnapshot: allows to configure volume-group-snapshot
+  # volume-group-snapshot CRDs must be installed before installing driver
+  vgsnapshot:
+    # enabled: Enable/Disable volume-group-snapshot feature
+    # Allowed values:
+    #   true: enable volume-group-snapshot feature(install vg-snapshotter sidecar)
+    #   false: disable volume-group-snapshot feature(do not install vg-snapshotter sidecar)
+    # Default value: false
+    enabled: false
+
+  # snapshot: allows to enable/disable snapshot feature
+  # snapshot CRDs needs to be installed before enabling this feature
+  snapshot:
+    # enabled: Enable/Disable volume snapshot feature
+    # Allowed values:
+    #   true: enable volume snapshot feature(install snapshotter sidecar)
+    #   false: disable volume snapshot feature(do not install snapshotter sidecar)
+    # Default value: None
+    enabled: true
+
+    # snapNamePrefix: Prefix to apply to the names of a created snapshots
+    # Allowed values: string
+    # Default value: csi-snap
+    # Examples: "snap", "snapshot"
+    snapNamePrefix: csi-snap
+  # provisioner: allows to provision volumes of CSI drivers
+  # csi-provisioner is installed as a sidecar for CSI drivers
+  provisioner:
+    ## timeout: Defines the timeout for csi-provisoner sidecar in seconds
+    # Allowed values: Number followed by unit (s)
+    # Examples: 60s
+    # Default value: 10s
+    timeout: 10s
+  # resizer: allows to enable/disable resizer feature
+  resizer:
+    # enabled: Enable/Disable volume expansion feature
+    # Allowed values:
+    #   true: enable volume expansion feature(install resizer sidecar)
+    #   false: disable volume expansion feature(do not install resizer sidecar)
+    # Default value: true
+    enabled: true
+
+  healthMonitor:
+    # enabled: Enable/Disable health monitor of CSI volumes
+    # Allowed values:
+    #   true: enable checking of health condition of CSI volumes
+    #   false: disable checking of health condition of CSI volumes
+    # Default value: false
+    enabled: false
+
+    # interval: Interval of monitoring volume health condition
+    # Allowed values: Number followed by unit (s,m,h)
+    # Examples: 60s, 5m, 1h
+    # Default value: 60s
+    interval: 60s
+
+  # replication: allows to configure replication
+  # Replication CRDs must be installed before installing driver
+  replication:
+    # enabled: Enable/Disable replication feature
+    # Allowed values:
+    #   true: enable replication feature(install dell-csi-replicator sidecar)
+    #   false: disable replication feature(do not install dell-csi-replicator sidecar)
+    # Default value: false
+    enabled: false
+
+    # replicationContextPrefix: prefix to use for naming of resources created by replication feature
+    # Allowed values: string
+    # Default value: powerstore
+    replicationContextPrefix: "powerstore"
+
+    # replicationPrefix: prefix to prepend to storage classes parameters
+    # Allowed values: string
+    # Default value: replication.storage.dell.com
+    replicationPrefix: "replication.storage.dell.com"
+
+  # nodeSelector: Define node selection constraints for controller pods.
+  # For the pod to be eligible to run on a node, the node must have each
+  # of the indicated key-value pairs as labels.
+  # Leave as blank to consider all nodes
+  # Allowed values: map of key-value pairs
+  # Default value: None
+  nodeSelector:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  node-role.kubernetes.io/master
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  node-role.kubernetes.io/control-plane
+
+  # tolerations: Define tolerations for the controllers, if required.
+  # Leave as blank to install controller on worker nodes
+  # Default value: None
+  tolerations:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  # - key: "node-role.kubernetes.io/master"
+  #   operator: "Exists"
+  #   effect: "NoSchedule"
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  # tolerations:
+  # - key: "node-role.kubernetes.io/control-plane"
+  #   operator: "Exists"
+  #   effect: "NoSchedule"
+
+# node: configure node pod specific parameters
+node:
+  # nodeNamePrefix: defines a string prepended to each node registered by the CSI driver.
+  # Allowed values: string
+  # Default value: None
+  nodeNamePrefix: csi-node
+
+  # nodeIDPath: defines the path to file with node identifier (e.g. /etc/machine-id, /etc/hostname).
+  # Allowed values: string
+  # Default value: None
+  nodeIDPath: /etc/machine-id
+
+  healthMonitor:
+    # enabled: Enable/Disable health monitor of CSI volumes- volume usage, volume condition
+    # Allowed values:
+    #   true: enable checking of health condition of CSI volumes
+    #   false: disable checking of health condition of CSI volumes
+    # Default value: None
+    enabled: false
+
+  # nodeSelector: Define node selection constraints for node pods.
+  # For the pod to be eligible to run on a node, the node must have each
+  # of the indicated key-value pairs as labels.
+  # Leave as blank to consider all nodes
+  # Allowed values: map of key-value pairs
+  # Default value: None
+  nodeSelector:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  node-role.kubernetes.io/master
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  node-role.kubernetes.io/control-plane
+
+  # tolerations: Define tolerations for the node pods, if required.
+  # Leave as blank to consider all worker nodes
+  # Default value: None
+  tolerations:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  # - key: "node-role.kubernetes.io/master"
+  #   operator: "Exists"
+  #   effect: "NoSchedule"
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  # tolerations:
+  # - key: "node-role.kubernetes.io/control-plane"
+  #   operator: "Exists"
+  #   effect: "NoSchedule"
+
+  # Uncomment if CSM for Resiliency and CSI Driver pods monitor are enabled
+  # tolerations:
+  #  - key: "offline.vxflexos.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "vxflexos.podmon.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "offline.unity.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "unity.podmon.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "offline.isilon.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "isilon.podmon.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "offline.powerstore.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+  #  - key: "powerstore.podmon.storage.dell.com"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+
+## PLATFORM ATTRIBUTES
+######################
+
+# connection: allows to configure connection to storage array
+connection:
+  # connection.enableCHAP: allows to enable CHAP for iSCSI connections
+  # CHAP password will be autogenerated by driver
+  # Allowed values:
+  #   true : enable CHAP
+  #   false: disable CHAP
+  # Default value: false
+  enableCHAP: false
+
+# CSI driver log level
+# Allowed values: "error", "warn"/"warning", "info", "debug", "error"
+# Default value: "info"
+logLevel: "info"
+
+# CSI driver log format
+# Allowed values: "TEXT" or "JSON"
+# Default value: "JSON"
+logFormat: "JSON"
+
+# Following modes are supported: None, File and ReadWriteOnceWithFSType
+fsGroupPolicy: ReadWriteOnceWithFSType
+
+# Allows the controller to round off filesystem to 3Gi which is the minimum supported value
+allowAutoRoundOffFilesystemSize: true
+
+# Storage Capacity Tracking
+# Note: Capacity tracking is supported in kubernetes v1.24 and above, this feature will be automatically disabled in older versions.
+storageCapacity:
+  # enabled : Enable/Disable storage capacity tracking
+  # Allowed values:
+  #   true: enable storage capacity tracking
+  #   false: disable storage capacity tracking
+  # Default value: true
+  enabled: true
+  # pollInterval : Configure how often external-provisioner polls the driver to detect changed capacity
+  # Allowed values: 1m,2m,3m,...,10m,...,60m etc
+  # Default value: 5m
+  pollInterval: 5m
+
+# Enable this feature only after contact support for additional information
+podmon:
+  enabled: false
+  controller:
+    args:
+      - "--csisock=unix:/var/run/csi/csi.sock"
+      - "--labelvalue=csi-powerstore"
+      - "--arrayConnectivityPollRate=60"
+      - "--driverPath=csi-powerstore.dellemc.com"
+      - "--mode=controller"
+      - "--skipArrayConnectionValidation=false"
+      - "--driver-config-params=/powerstore-config-params/driver-config-params.yaml"
+      - "--driverPodLabelValue=dell-storage"
+      - "--ignoreVolumelessPods=false"
+
+  node:
+    args:
+      - "--csisock=unix:/var/lib/kubelet/plugins/csi-powerstore.dellemc.com/csi_sock"
+      - "--labelvalue=csi-powerstore"
+      - "--arrayConnectivityPollRate=60"
+      - "--driverPath=csi-powerstore.dellemc.com"
+      - "--mode=node"
+      - "--leaderelection=false"
+      - "--driver-config-params=/powerstore-config-params/driver-config-params.yaml"
+      - "--driverPodLabelValue=dell-storage"
+      - "--ignoreVolumelessPods=false"
+
+  # arrayConnectivityTimeout: Defines the timeout (in seconds) for podmon array connectivity timeout check
+  # Allowed values: Number followed by unit (s,m,h)
+  # Examples: 10s, 1m, 1h
+  # Default value: 10s
+  arrayConnectivityTimeout: "10s"
+
+# Define multi NAS parameters
+multiNas:
+  # threshold: Number of consecutive FS creation failures after which a NAS is put into cooldown.
+  # If a NAS is in cooldown, it will not be considered for new FS creation attempts for cooldownPeriod amount of time.
+  # Allowed values: n, where n >= 0
+  # Default value: 5
+  threshold: 5
+  # cooldownPeriod: Duration for which a NAS remains in cooldown once the threshold is reached.
+  # During this period, the NAS will not be considered for new FS creation attempts.
+  # Allowed values: Number followed by unit (s,m,h) e.g. 60s,1m,2m,3m,...,1h etc
+  # Default value: 5m
+  cooldownPeriod: 5m
+
+# CSM module attributes
+# authorization: enable csm-authorization for RBAC
+# Deploy and configure authorization before installing driver
+# Allowed values:
+#   "true" - authorization is enabled
+#   "false" - authorization is disabled
+# Default value: "false"
+authorization:
+  enabled: false
+  # proxyHost: hostname of the csm-authorization server
+  # Default value: None
+  proxyHost:
+  # skipCertificateValidation: certificate validation of the csm-authorization server
+  # Allowed Values:
+  #   "true" - TLS certificate verification will be skipped
+  #   "false" - TLS certificate will be verified
+  # Default value: "true"
+  skipCertificateValidation: true
