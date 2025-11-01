@@ -1,0 +1,38 @@
+volumeProvisioner:
+  env:
+    IS_ROOTLESS: true
+  # -- Only if local volumes are used as backend storage (ignored for ebs/ebs-csi disks)
+  dind-lv-monitor:
+    image:
+      tag: 1.30.0-rootless
+      digest: sha256:712e549e6e843b04684647f17e0973f8047e0d60e6e8b38a693ea64dc75b0479
+    containerSecurityContext:
+      runAsUser: 1000
+    podSecurityContext:
+      fsGroup: 1000
+      # Ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods
+      fsGroupChangePolicy: "OnRootMismatch"
+    # -- Enable initContainer to run chmod for /var/lib/codefresh/dind-volumes on host nodes
+    volumePermissions:
+      enabled: false
+
+runtime:
+  dind:
+    image:
+      tag: 28.5.1-3.0.5-rootless
+      digest: sha256:49d77f61e754db1329c7969cc20d2e6b6d034faa33b7303835eff318223e85ed
+    userVolumeMounts:
+      dind:
+        name: dind
+        mountPath: /home/rootless/.local/share/docker
+    containerSecurityContext:
+      privileged: true
+      runAsUser: 1000
+    podSecurityContext:
+      fsGroup: 1000
+      # Ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods
+      fsGroupChangePolicy: "OnRootMismatch"
+    # -- Enable initContainer to run chmod for /home/rootless in DinD pod
+    # !!! Will slow down dind pod startup
+    volumePermissions:
+      enabled: true
