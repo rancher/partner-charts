@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-prometheus-init
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+data:
+  init-prometheus.sh: |
+    #!/bin/bash
+
+    set -xe -o pipefail
+
+    current_prom_directory="/prometheus"
+    new_prom_directory="/prometheus_data"
+
+    # Prometheus specific files:
+    # Files: queries.active, lock
+    # Directories: ./wal, ./chunks_head, ./snapshots, ./queries, ULID based TSDB block directories
+
+    # We'll first move the files and wal, chunks_head, snapshots and queries directory,
+    # then move the TSDB block directories( these are regex based ).
+
+    include_list="./wal \
+    ./chunks_head \
+    ./queries \
+    ./snapshots"
+
+    if [[ -d "${new_prom_directory}" ]]; then
+      cd "${current_prom_directory}" || { echo "Failed to cd to ${current_prom_directory}"; exit 1; }
+
+      find_command="find . -maxdepth 1 \( -name \"lock\" -o -name \"queries.active\"" 
+      for include in ${include_list}; do
+        find_command="${find_command} -o -path \"${include}\""
+      done
+      find_command="${find_command} \) -print"
+      
+      eval "${find_command}" | while read -r path; do
+        if [[ -d "${path}" ]]; then
+          target="${new_prom_directory}/$(echo "$path" | sed 's|^\./||')"
+          if [[ ! -e "$target" ]]; then
+            mv "$path" "$target" || { echo "Failed to move: $path -> $target"; exit 1; }
+          fi
+        else
+          target="${new_prom_directory}"
+          file="$(echo "$path" | sed 's|^\./||')"
+          if [[ ! -e "$target/$file" ]]; then
+            mv "$path" "$target/" || { echo "Failed to move: $path -> $target"; exit 1; }
+          fi
+        fi
+      done
+
+      # Move ULID naming based TSDB block directories
+
+      find . -maxdepth 1 -type d -regextype posix-extended -regex '^\./[0-9A-HJKMNP-TV-Z]{26}$' | while read -r block_dir; do
+        target="${new_prom_directory}/$(echo "$block_dir" | sed 's|^\./||')"
+        if [[ ! -e "$target" ]]; then
+          mv "$block_dir" "$target" || { echo "Failed to move: $block_dir -> $target"; exit 1; }
+        fi
+      done
+    fi

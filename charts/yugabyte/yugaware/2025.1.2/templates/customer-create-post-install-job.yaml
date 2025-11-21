@@ -1,0 +1,80 @@
+{{- if .Values.yugaware.defaultUser.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata: 
+  name: {{ include "yugaware.fullname" . }}-customer-create-job
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app: "customer-create"
+    release: {{ .Release.Name | quote }}
+    chart: "{{ .Chart.Name }}"
+    component: "{{ .Values.Component }}"
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ include "yugaware.fullname" . }}-customer-create-job
+      labels:
+        app: "customer-create"
+        release: {{ .Release.Name | quote }}
+        chart: "{{ .Chart.Name }}"
+        component: "{{ .Values.Component }}"
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.yugaware.pod.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ .Values.yugaware.serviceAccount | default .Release.Name }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+        {{- if .Values.image.extraPullSecrets }}
+        {{- range .Values.image.extraPullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+        {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8}}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- end }}
+      {{- if .Values.zoneAffinity }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: failure-domain.beta.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+      {{- end }}
+      restartPolicy: Never
+      containers: 
+      - name: post-install-job
+        image: {{ include "full_yugaware_image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - "curl"
+        - "-X"
+        - "POST"
+        - "--url"
+        - "{{ .Release.Name }}-yugaware-ui/api/register"
+        - "--header"
+        - "Content-Type: application/json"
+        - "--data"
+        - '{"email": "{{ .Values.yugaware.defaultUser.email}}", 
+{{- if eq .Values.yugaware.defaultUser.password ""}}
+{{- fail ".Values.yugaware.defaultUser.password cannot be empty string"}}
+{{- end }}
+"password": "{{ .Values.yugaware.defaultUser.password }}",
+"code": "operator",
+"name": "{{ .Values.yugaware.defaultUser.username }}"}'
+{{- end -}}
