@@ -1,0 +1,135 @@
+{{- if and (.Values.sumologic.metrics.useRoutingConnectors) (eq .Values.sumologic.metrics.sourceType "http") }}
+connectors:
+{{ tpl (.Files.Get "conf/metrics/otelcol/connectors.yaml") . | indent 2 }}
+{{- end}}
+
+exporters:
+{{ tpl (.Files.Get "conf/metrics/otelcol/exporters.yaml") . | indent 2 }}
+
+extensions:
+{{ if .Values.metadata.persistence.enabled }}
+  ## Configuration for File Storage extension
+  file_storage:
+    compaction:
+      directory: /tmp
+      on_rebound: true
+    directory: /var/lib/storage/otc
+    timeout: 10s
+{{ end }}
+  health_check:
+    endpoint: {{ template "sumologic.healthEndpoint" . }}
+  pprof: {}
+
+processors:
+{{ tpl (.Files.Get "conf/metrics/otelcol/processors.yaml") . | indent 2 }}
+{{ if .Values.sumologic.metrics.enableDefaultFilters -}}
+{{ tpl (.Files.Get "conf/metrics/otelcol/default-filters.yaml") . | indent 2 }}
+{{ end -}}
+
+receivers:
+  ## Configuration for Telegraf Receiver
+  telegraf:
+    agent_config: |
+      [agent]
+        interval = "30s"
+        flush_interval = "30s"
+        omit_hostname = true
+      [[inputs.http_listener_v2]]
+        # wait longer than prometheus
+        read_timeout = "30s"
+        write_timeout = "30s"
+        service_address = ":9888"
+        data_format = "prometheusremotewrite"
+        paths = [
+{{ include "metric.endpoints" . | indent 10 }}
+        ]
+  otlp:
+    protocols:
+      http:
+        endpoint: {{ template "sumologic.otlp_http_endpoint" . }}
+
+service:
+  extensions:
+    - health_check
+{{ if .Values.metadata.persistence.enabled }}
+    - file_storage
+{{ end }}
+    - pprof
+  pipelines:
+    metrics:
+{{ tpl (.Files.Get "conf/metrics/otelcol/pipeline.yaml") . | indent 6 }}
+{{- if and (.Values.sumologic.metrics.useRoutingConnectors) (eq .Values.sumologic.metrics.sourceType "http") }}
+    metrics/sumologic/default:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/default
+{{- if eq .Values.debug.metrics.metadata.print true }}
+    metrics/debug:
+      receivers:
+        - routing/default
+      exporters:
+        - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+    metrics/sumologic/sumologic-mock-default:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/sumologic-mock-default
+    metrics/sumologic/sumologic-mock-http:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/sumologic-mock-http
+{{- end }}
+    metrics/apiserver:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/apiserver
+    metrics/control_plane:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/control_plane
+    metrics/controller:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/controller
+    metrics/kubelet:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/kubelet
+    metrics/node:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/node
+    metrics/scheduler:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/scheduler
+    metrics/state:
+      receivers:
+        - routing/default
+      exporters:
+        - sumologic/state
+{{- end }}
+  telemetry:
+    logs:
+      level: {{ .Values.metadata.metrics.logLevel }}
+    metrics:
+      level: {{ .Values.metadata.metrics.metricsLevel }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888
+                without_type_suffix: true
+                without_units: true
+                without_scope_info: true
