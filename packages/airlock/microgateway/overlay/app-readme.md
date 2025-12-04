@@ -3,7 +3,7 @@
 *Airlock Microgateway is a Kubernetes native WAAP (Web Application and API Protection) solution to protect microservices.*
 
 ## Features
-* Kubernetes native integration with sidecar injection and Gateway API support
+* Kubernetes native integration with Gateway API support
 * Reverse proxy functionality with request routing rules, TLS termination and remote IP extraction
 * Using native Envoy HTTP filters like Lua scripting, RBAC, ext_authz, JWT authentication
 * Content security filters for protecting against known attacks (OWASP Top 10)
@@ -13,9 +13,9 @@
 For a list of all features, view the **[comparison of the community and premium edition](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000056)**.
 
 ## Requirements
-* (Recommended) [Airlock Microgateway CNI Helm Chart](https://artifacthub.io/packages/helm/airlock-microgateway-cni/microgateway-cni) (Required for [data plane mode sidecar](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000137). Also available as Rancher Chart)
-* [Airlock Microgateway License](https://github.com/airlock/microgateway?tab=readme-ov-file#obtain-airlock-microgateway-license) (After obtaining the license install it according to the [documentation](https://github.com/airlock/microgateway?tab=readme-ov-file#deploy-airlock-microgateway-operator))
+* [Airlock Microgateway License](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000056)
 * [cert-manager](https://cert-manager.io/docs/installation/)
+* [Kubernetes Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api)
 
 ## Documentation and links
 
