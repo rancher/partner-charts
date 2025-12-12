@@ -1,4 +1,4 @@
-# -- Allows overriding the name to use instead of "microgateway".
+# -- Allows overriding the name to use instead of "microgateway-cni".
 nameOverride: ""
 # -- Allows overriding the name to use as full name of resources.
 fullnameOverride: ""
@@ -14,258 +14,84 @@ imagePullSecrets: []
 #   - myRegistryKeySecretName1
 #   - myRegistryKeySecretName2
 
-crds:
-  # -- Whether to skip the sanity check which prevents installing/upgrading the helm chart in a cluster with outdated Airlock Microgateway CRDs.
-  # The check aims to prevent unexpected behavior and issues due to Helm v3 not automatically upgrading CRDs which are already present in the cluster
-  # when performing a "helm install/upgrade".
-  skipVersionCheck: false
-operator:
-  # -- Number of replicas for the operator Deployment.
-  replicaCount: 2
-  # -- Additional environment variables to set for the operator container.
-  extraEnv: []
-  # -- PodDisruptionBudget to create for the operator Deployment. If empty, no PDB is created.
-  # Note: The selector is automatically configured to match the labels of the operator Deployment and does not need to be set manually.
-  # See https://kubernetes.io/docs/tasks/run-application/configure-pdb/ for details.
-  podDisruptionBudget: {}
-  # minAvailable: 1
-
-  # -- Specifies the operator update strategy.
-  updateStrategy:
-    type: RollingUpdate
-  # Specifies the Airlock Microgateway Operator image.
-  image:
-    # -- Image repository from which to pull the Airlock Microgateway Operator image.
-    repository: "quay.io/airlock/microgateway-operator"
-    # -- Image tag to pull.
-    tag: "4.8.0"
-    # -- SHA256 image digest to pull (in the format "sha256:c79ee3f85862fb386e9dd62b901b607161d27807f512d7fbdece05e9ee3d7c63").
-    # Overrides tag when specified.
-    digest: "sha256:a0606ee97e74e8392d524c9977bfec1f4b96a875a4312d18ddeac476bab82af5"
-    # -- Pull policy for this image.
-    pullPolicy: IfNotPresent
-  # -- Annotations to add to all Pods.
-  podAnnotations: {}
-  # -- Labels to add to all Pods.
-  podLabels: {}
-  # -- Annotations to add to the Service.
-  serviceAnnotations: {}
-  # prometheus.io/scrape: "true"
-  # prometheus.io/port: "8080"
-
-  # -- Labels to add to the Service.
-  serviceLabels: {}
-  # -- Resource restrictions to apply to the operator container.
-  resources:
-    limits:
-      cpu: 2500m
-      memory: 512Mi
-    requests:
-      cpu: 250m
-      memory: 512Mi
-  # -- Custom nodeSelector to apply to the operator Deployment in order to constrain its Pods to certain nodes.
-  nodeSelector: {}
-  # -- Custom tolerations to apply to the operator Deployment in order to allow its Pods to run on tainted nodes.
-  tolerations: []
-  # -- Custom affinity to apply to the operator Deployment. Used to influence the scheduling.
-  affinity: {}
-  # -- Custom topologySpreadConstraints to apply to the operator Deployment. Used to influence how replicas are spread across the cluster.
-  topologySpreadConstraints: []
-  # Parameters for the operator configuration.
-  config:
-    # -- Operator application log level.
-    logLevel: "info"
-  webhook:
-    # -- Configure which provider is responsible for webhook certificates
-    certificateProvider: cert-manager
-  # Configures the generation of the ServiceAccount.
-  serviceAccount:
-    # -- Whether a ServiceAccount should be created.
-    create: true
-    # -- Annotations to add to the ServiceAccount.
-    annotations: {}
-    # -- Name of the ServiceAccount to use.
-    # If not set and create is true, a name is generated using the fullname template.
-    name: ""
-  # -- Allows to restrict the operator to specific namespaces, depending on your needs.
-  # For a `OwnNamespace` or `SingleNamespace` installation the list may only contain one namespace (e.g., `watchNamespaces: ["airlock-microgateway-system"]`).
-  # In case of the `OwnNamespace` installation mode the specified namespace should be equal to the installation namespace.
-  # For a static `MultiNamespace` installation, the complete list of namespaces must be provided in the `watchNamespaces`.
-  # An `AllNamespaces` installation or the usage of the `watchNamespaceSelector` requires the `watchNamespaces` to be empty.
-  # Regardless of the installation modes supported by `watchNamespaces`, RBAC is created only namespace-scoped (using Roles and RoleBindings) in the respective namespaces.
-  # Please note that this feature requires a Premium license.
-  watchNamespaces: []
-  # -- Allows to dynamically select watch namespaces of the operator and the scope of the webhooks based on a Namespace label selector.
-  # It is able to detect and reconcile resources in all namespaces that match the label selector automatically, even for new namespaces, without restarting the operator.
-  # This facilitates a dynamic `MultiNamespace` installation mode, but still requires cluster-scoped permissions (i.e., ClusterRoles and ClusterRoleBindings).
-  # An `AllNamespaces` installation or the usage of the `watchNamespaces` requires the `watchNamespaceSelector` to be empty.
-  # Please note that this feature requires a Premium license.
-  watchNamespaceSelector: {}
-  # For further examples, see: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#resources-that-support-set-based-requirements.
-  #  matchLabels:
-  #    microgateway.airlock.com/enable: "true"
-  #  matchExpressions:
-  #    - { key: environment, operator: NotIn, values: [dev] }
-
-  # Configures the generation of Role and RoleBinding as well as ClusterRoles and ClusterRoleBinding pairs for the ServiceAccount specified above.
-  rbac:
-    # -- Whether to create RBAC resources which are required for the Airlock Microgateway Operator to function.
-    create: true
-  # Configures the generation of a Prometheus Operator ServiceMonitor.
-  serviceMonitor:
-    # -- Whether to create a ServiceMonitor resource for monitoring.
-    # Requires that the monitoring.coreos.com/v1 resources are installed on the cluster.
-    create: false
-    # -- Labels to add to the ServiceMonitor.
-    labels: {}
-    # release: "<prometheus-operator-release>"
-  sidecarGateway:
-    # -- Whether to enable the Sidecar Gateway related controllers and webhooks.
-    enabled: true
-  # Configures the Kubernetes Gateway API integration.
-  gatewayAPI:
-    # -- Whether to enable the Kubernetes Gateway API related controllers.
-    # Requires that the gateway.networking.k8s.io/v1 resources are installed on the cluster.
-    enabled: false
-    # -- Controller name referred in the GatewayClasses managed by this operator. The value must be a path prefixed by the domain `microgateway.airlock.com`.
-    controllerName: microgateway.airlock.com/gatewayclass-controller
-    # Configures the default GatewayClass.
-    gatewayClass:
-      # -- Whether to create a default GatewayClass during installation.
-      create: true
-      # -- Name of the default GatewayClass. The name must adhere to the DNS Subdomain Name format as defined in RFC1123.
-      # See https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names for details.
-      name: airlock-microgateway
-    # Configures PodMonitor resources for Gateway Pods.
-    podMonitor:
-      # -- Whether the controller should create a PodMonitor per Gateway.
-      # Requires that the monitoring.coreos.com/v1 resources are installed on the cluster.
-      create: false
-      # -- Allows to define additional labels that should be set on the PodMonitors.
-      labels: {}
-      # release: "<prometheus-operator-release>"
-engine:
-  # Specifies the Airlock Microgateway Engine image.
-  image:
-    # -- Image repository from which to pull the Airlock Microgateway Engine image.
-    repository: "quay.io/airlock/microgateway-engine"
-    # -- Image tag to pull.
-    tag: "4.8.0"
-    # -- SHA256 image digest to pull (in the format "sha256:a3051f42d3013813b05f7513bb86ed6a3209cb3003f1bb2f7b72df249aa544d3").
-    # Overrides tag when specified.
-    digest: "sha256:c5ce5bec037bd45698f551d6857e90ed0a08776a5ea984a7c74a85d710aecba6"
-    # -- Pull policy for this image.
-    pullPolicy: IfNotPresent
-  # -- Default resource restrictions to apply to the Airlock Microgateway Engine container when deployed as a sidecar.
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-  # Additional configuration when deployed as a sidecar.
-  sidecar:
-    # Configures the generation of a Prometheus Operator PodMonitor.
-    podMonitor:
-      # -- Whether the controller should create a PodMonitor per SidecarGateway.
-      # Requires that the monitoring.coreos.com/v1 resources are installed on the cluster.
-      create: false
-      # -- Labels to add to the PodMonitor.
-      labels: {}
-      # release: "<prometheus-operator-release>"
-networkValidator:
-  # -- Deprecated
-  image: null
-  # -- Resource restrictions to apply to the Airlock Microgateway Network Validator init-container.
-  resources:
-    limits:
-      cpu: 25m
-      memory: 12Mi
-    requests:
-      cpu: 5m
-      memory: 1Mi
-sessionAgent:
-  # Specifies the Airlock Microgateway Session Agent image.
-  image:
-    # -- Image repository from which to pull the Airlock Microgateway Session Agent image.
-    repository: "quay.io/airlock/microgateway-session-agent"
-    # -- Image tag to pull.
-    tag: "4.8.0"
-    # -- SHA256 image digest to pull (in the format "sha256:a3051f42d3013813b05f7513bb86ed6a3209cb3003f1bb2f7b72df249aa544d3").
-    # Overrides tag when specified.
-    digest: "sha256:af007231bbfb9db4e5b689647bf0936fb00446915d7064f9374f78d53a14a8ad"
-    # -- Pull policy for this image.
-    pullPolicy: IfNotPresent
-  # -- Resource restrictions to apply to the Airlock Microgateway Session Agent container when the Airlock Microgateway Engine is deployed as a sidecar.
-  resources: {}
-  # We recommend at least the following resource specification if session handling is used.
-  #  limits:
-  #    memory: 128Mi
-  #  requests:
-  #    cpu: 25m
-  #    memory: 64Mi
-license:
-  # -- Name of the secret containing the "microgateway-license.txt" key.
-  secretName: "airlock-microgateway-license"
-# Creates dashboards in the form of ConfigMaps that can be imported
-# by Grafana using its sidecar setup.
-dashboards:
-  # -- Whether to create any ConfigMaps containing Grafana dashboards to import.
+# Specifies the Airlock Microgateway CNI image.
+image:
+  # -- Image repository from which to pull the Airlock Microgateway CNI image.
+  repository: "quay.io/airlock/microgateway-cni"
+  # -- Image tag to pull.
+  tag: "4.8.0"
+  # -- SHA256 image digest to pull (in the format "sha256:7144f7bab3d4c2648d7e59409f15ec52a18006a128c733fcff20d3a4a54ba44a").
+  # Overrides tag when specified.
+  digest: "sha256:7fdd86364da608ee108cf2eece7776a416402ab09c31359057328aa0244c750e"
+  # -- Pull policy for this image.
+  pullPolicy: IfNotPresent
+# -- Annotations to add to all Pods.
+podAnnotations: {}
+# -- Labels to add to all Pods.
+podLabels: {}
+# -- Resource restrictions to apply to the CNI installer container.
+resources:
+  requests:
+    cpu: 10m
+    memory: 100Mi
+# -- NodeSelector to apply to the CNI DaemonSet in order to only deploy the CNI plugin on specific nodes.
+nodeSelector:
+  kubernetes.io/os: linux
+# -- Custom affinity for the DaemonSet to only deploy the CNI plugin on specific nodes.
+affinity: {}
+# Configures the generation of RBAC Roles and RoleBindings.
+rbac:
+  # -- Whether to create RBAC resources which are required for the CNI plugin to function.
+  create: true
+  # -- (OpenShift) Whether to create RBAC resources which allow the CNI installer to use the "privileged" security context constraint.
+  createSCCRole: false
+# -- Whether the DaemonSet should run in privileged mode. Must be enabled for environments which require it for writing files to the host (e.g. OpenShift).
+privileged: false
+# Configures the generation of the ServiceAccount.
+serviceAccount:
+  # -- Whether a ServiceAccount should be created.
+  create: true
+  # -- Annotations to add to the ServiceAccount.
+  annotations: {}
+  # -- Name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template.
+  name: ""
+# Configures the generation of a NetworkAttachmentDefinition for use with Multus CNI (OpenShift)
+multusNetworkAttachmentDefinition:
+  # -- Whether a NetworkAttachmentDefinition CR should be created, which can be used for applying the CNI plugin to Pods.
   create: false
-  config:
-    # Configures the necessary label and annotations along with their values
-    # to enable Grafana to correctly identify the ConfigMaps containing
-    # dashboards and file them within a dedicated folder in the dashboard overview.
-    # These settings need to match the Grafana sidecar configuration.
-    grafana:
-      folderAnnotation:
-        # -- Name of the annotation containing the folder name to file dashboards into.
-        name: "grafana_folder"
-        # -- Name of the folder dashboards are filed into within the Grafana UI.
-        value: "Airlock Microgateway"
-      dashboardLabel:
-        # -- Name of the label that lets Grafana identify ConfigMaps that represent dashboards.
-        name: "grafana_dashboard"
-        # -- Value of the label that lets Grafana identify ConfigMaps that represent dashboards.
-        value: "1"
-  instances:
-    # Available dashboard instances that can be individually created/deployed.
-    overview:
-      # -- Whether to create the overview dashboard.
-      create: true
-    license:
-      # -- Whether to create the license dashboard.
-      create: true
-    blockMetrics:
-      # -- Whether to create the block metrics dashboard.
-      create: true
-    blockLogs:
-      # -- Whether to create the block logs dashboard.
-      create: true
-    headerLogs:
-      # -- Whether to create the header rewrite logs dashboard.
-      create: true
-    logOnlyMetrics:
-      # -- Whether to create the log only metrics dashboard
-      create: true
-    logOnlyLogs:
-      # -- Whether to create the log only logs dashboard.
-      create: true
-    requestLogs:
-      # -- Whether to create the request logs dashboard.
-      create: true
-    accessCtrlLogs:
-      # -- Whether to create the access control logs dashboard.
-      create: true
-    systemMetrics:
-      # -- Whether to create the system metrics dashboard.
-      create: true
-    upstreamMetrics:
-      # -- Whether to create the upstream metrics dashboard.
-      create: true
-    downstreamMetrics:
-      # -- Whether to create the downstream metrics dashboard.
-      create: true
-# Check whether the installation of the Airlock Microgateway Helm Chart was successful.
-# Requires a secret with a valid Airlock Microgateway license key already to be present.
+  # -- Namespace in which the NetworkAttachmentDefinition is deployed.
+  # Note: If namespace is set to a custom value, referencing the created NetworkAttachmentDefinition from other namespaces
+  # may not work if Multus namespace isolation is enabled. https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.0.2/docs/configuration.md#namespace-isolation
+  namespace: default
+# Parameters for the CNI installer configuration.
+config:
+  # -- Whether to install the CNI plugin as a `chained` plugin (default, required with most interface CNI providers),
+  # as a `standalone` plugin (required for use with Multus CNI, e.g. on OpenShift)
+  # or in `manual` mode, where no CNI network configuration is written.
+  installMode: "chained"
+  # -- Specifies the repair mode
+  # There is a race condition regarding the installation of the CNI Plugin and creation of Pods when starting a Node.
+  # This would cause Pods to be unprotected, because the CNI did not reconfigure the Pod's network.
+  # The Airlock Microgateway Network Validator prevents this and causes the Pod to fail on purpose.
+  # Pods can be repaired by choosing the appropriate repair mode.
+  # Available options are:
+  # `deletePods` will delete failing Pods, such that the CNI Plugin can correctly configure them
+  # `none` will not perform any action for failing Pods
+  repairMode: "none"
+  # -- Log level for the CNI installer and plugin.
+  logLevel: info
+  # -- Directory where the CNI config files reside on the host.
+  # This path can either be found in the documentation of your Kubernetes distribution or CNI provider.
+  # It can also be queried by running the command `crictl info -o go-template --template '{{.config.cni.confDir}}'` on your Kubernetes node.
+  cniNetDir: "/etc/cni/net.d"
+  # -- Directory where the CNI plugin binaries reside on the host.
+  # This path can either be found in the documentation of your Kubernetes distribution or CNI provider.
+  # It can also be queried by running the command `crictl info -o go-template --template '{{.config.cni.binDir}}'` on your Kubernetes node.
+  cniBinDir: "/opt/cni/bin"
+  # -- Namespaces for which this CNI plugin should not apply any modifications.
+  excludeNamespaces:
+    - kube-system
 tests:
   # -- Whether additional resources required for running `helm test` should be created (e.g. Roles and ServiceAccounts).
   # If set to false, `helm test` will not run any tests.
