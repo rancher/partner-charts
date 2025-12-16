@@ -1,0 +1,96 @@
+{{- if .Values.installTVK.enabled }}
+{{- if not (lookup "triliovault.trilio.io/v1" "TrilioVaultManager" "" "").items }}
+    {{template "k8s-triliovault-operator.tlsSecretValidation" .}}
+apiVersion: triliovault.trilio.io/v1
+kind: TrilioVaultManager
+metadata:
+  name: "triliovault-manager"
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install
+spec:
+  applicationScope: {{ .Values.installTVK.applicationScope }}
+  {{- if .Values.installTVK.tvkInstanceName }}
+  tvkInstanceName: {{ .Values.installTVK.tvkInstanceName }}
+  {{- end }}
+  {{- if or .Values.installTVK.helmValues .Values.imagePullSecret .Values.svcAccountName .Values.observability.enabled .Values.global.urlPath }}
+  helmValues:
+  {{- range $key, $value := .Values.installTVK.helmValues }}
+    {{- if not (has $key (list "observability" "global" "urlPath" "imagePullSecret" "svcAccountName")) }}
+    {{- if kindIs "map" $value }}
+    {{ $key }}: {{ toYaml $value | nindent 6 }}
+    {{- end }}
+    {{- if not (kindIs "map" $value)  }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+    urlPath: {{ .Values.global.urlPath | quote }}
+    {{- if .Values.observability.enabled }}
+    observability:
+      name: {{ .Values.observability.name }}
+      namespace: {{ default .Release.Namespace }}
+    {{- end }}
+    {{- if include "k8s-triliovault-operator.imagePullSecret" . }}
+    imagePullSecret: {{ template "k8s-triliovault-operator.imagePullSecret" . }}
+    {{- end }}
+    {{- if .Values.svcAccountName }}
+    svcAccountName: {{ .Values.svcAccountName }}
+    {{- end }}
+  {{- end }}
+  {{- if and .Values.nodeSelector (kindIs "map" .Values.nodeSelector) (not (empty .Values.nodeSelector)) }}
+  nodeSelector: {{- toYaml .Values.nodeSelector | nindent 4 }}
+  {{- end }}
+  {{- if and .Values.affinity (kindIs "map" .Values.affinity) (not (empty .Values.affinity)) }}
+  affinity:
+  {{- toYaml .Values.affinity | nindent 4 }}
+  {{- end }}
+  {{- if and .Values.tolerations (kindIs "slice" .Values.tolerations) (not (empty .Values.tolerations)) }}
+  tolerations:
+  {{- toYaml .Values.tolerations | nindent 4 }}
+  {{- end }}
+  {{- if eq (include "workerJobsSchedulingConfigExists" .) "true" }}
+  workerJobsSchedulingConfig:
+    {{- if and .Values.workerJobsSchedulingConfig.affinity (kindIs "map" .Values.workerJobsSchedulingConfig.affinity) (not (empty .Values.workerJobsSchedulingConfig.affinity)) }}
+    affinity:
+      {{- toYaml (index .Values "workerJobsSchedulingConfig" "affinity") | nindent 6 }}
+    {{- end }}
+    {{- if and .Values.workerJobsSchedulingConfig.nodeSelector (kindIs "map" .Values.workerJobsSchedulingConfig.nodeSelector) (not (empty .Values.workerJobsSchedulingConfig.nodeSelector)) }}
+    nodeSelector:
+      {{- toYaml (index .Values "workerJobsSchedulingConfig" "nodeSelector") | nindent 6 }}
+    {{- end }}
+    {{- if and .Values.workerJobsSchedulingConfig.tolerations (kindIs "slice" .Values.workerJobsSchedulingConfig.tolerations) (not (empty .Values.workerJobsSchedulingConfig.tolerations)) }}
+    tolerations:
+      {{- toYaml (index .Values "workerJobsSchedulingConfig" "tolerations") | nindent 6 }}
+    {{- end }}
+    {{- if and .Values.workerJobsSchedulingConfig.topologySpreadConstraints (kindIs "slice" .Values.workerJobsSchedulingConfig.topologySpreadConstraints) (not (empty .Values.workerJobsSchedulingConfig.topologySpreadConstraints)) }}
+    topologySpreadConstraints:
+      {{- toYaml (index .Values "workerJobsSchedulingConfig" "topologySpreadConstraints") | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  # User can configure the ingress hosts, annotations and TLS secret through the ingressConfig section
+  ingressConfig:
+    {{- if and (gt (len .Values.installTVK.ingressConfig.annotations) 0) (not .Values.installTVK.ComponentConfiguration.ingressController.enabled) }}
+    annotations:
+    {{- range $key, $value := .Values.installTVK.ingressConfig.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end -}}
+    {{- end }}
+    host: {{ .Values.installTVK.ingressConfig.host | quote }}
+    {{- if not .Values.installTVK.ComponentConfiguration.ingressController.enabled }}
+    ingressClass: {{ .Values.installTVK.ingressConfig.ingressClass | quote }}
+    {{- end }}
+    {{- if .Values.installTVK.ingressConfig.tlsSecretName }}
+    tlsSecretName: {{ .Values.installTVK.ingressConfig.tlsSecretName | quote }}
+    {{- end }}
+  # TVK components configuration, currently supports control-plane, web, exporter, web-backend, ingress-controller, admission-webhook.
+  # User can configure resources for all componentes and can configure service type and host for the ingress-controller
+  componentConfiguration:
+    ingress-controller:
+      enabled: {{ .Values.installTVK.ComponentConfiguration.ingressController.enabled }}
+      service:
+        type: {{ .Values.installTVK.ComponentConfiguration.ingressController.service.type }}
+        ipFamilyPolicy: {{ .Values.installTVK.ComponentConfiguration.ingressController.service.ipFamilyPolicy | quote }}
+        ipFamilies: {{ toYaml .Values.installTVK.ComponentConfiguration.ingressController.service.ipFamilies | nindent 8 }}
+{{- end -}}
+{{- end -}}
