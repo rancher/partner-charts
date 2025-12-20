@@ -1,0 +1,218 @@
+{{- if (include "k10.ocpcacertsautoextraction" .) -}}
+{{- if or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: {{ .Release.Name }}-extract-ocp-ca-cert-dockerconfig
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ or .Values.secrets.dockerConfig ( .Values.secrets.dockerConfigPath | b64enc ) }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: {{ .Release.Name }}-ocp-ca-cert-extractor
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: openshift-cluster-config-reader
+rules:
+  - apiGroups: ["config.openshift.io"]
+    resources: ["proxies", "apiservers"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: openshift-config-reader
+  namespace: openshift-config
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: openshift-ingress-operator-reader
+  namespace: openshift-ingress-operator
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: openshift-kube-apiserver-reader
+  namespace: openshift-kube-apiserver
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: {{ .Release.Namespace }}-configmaps-editor
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: read-openshift-cluster-config
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-ocp-ca-cert-extractor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: openshift-cluster-config-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: read-openshift-config
+  namespace: openshift-config
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-ocp-ca-cert-extractor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: openshift-config-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: read-openshift-ingress-operator
+  namespace: openshift-ingress-operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-ocp-ca-cert-extractor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: openshift-ingress-operator-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: read-openshift-kube-apiserver
+  namespace: openshift-kube-apiserver
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-ocp-ca-cert-extractor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: openshift-kube-apiserver-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  name: edit-{{ .Release.Namespace }}-configmaps
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-ocp-ca-cert-extractor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Namespace }}-configmaps-editor
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-extract-ocp-ca-cert-job
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook-weight": "3"
+spec:
+  template:
+    metadata:
+      name: {{ .Release.Name }}-extract-ocp-ca-cert-job
+      labels:
+{{ include "helm.labels" . | indent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-ocp-ca-cert-extractor
+      containers:
+      - name: {{ .Release.Name }}-extract-ocp-ca-cert-job
+        image: {{ include "k10.k10ToolsImage" . }}
+        command: ["./k10tools", "openshift", "extract-certificates"]
+        args: ["-n", "{{ .Release.Namespace }}", "--release-name", "{{ .Release.Name }}", "--ca-cert-configmap-name", "{{ .Values.cacertconfigmap.name }}"]
+      {{- if or .Values.secrets.dockerConfig .Values.secrets.dockerConfigPath }}
+      imagePullSecrets:
+      - name: {{ .Release.Name }}-extract-ocp-ca-cert-dockerconfig
+      {{- else if .Values.global.imagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecret }}
+      {{- end }}
+  backoffLimit: 0
+{{ end }}
