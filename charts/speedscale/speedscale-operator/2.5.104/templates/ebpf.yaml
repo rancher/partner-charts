@@ -1,0 +1,291 @@
+{{- if .Values.ebpf.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: speedscale-nettap
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: speedscale-nettap
+---
+{{- if .Values.namespaceSelector }}
+{{- $namespaceList := append $.Values.namespaceSelector .Release.Namespace }}
+{{- range $namespaceList }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-nettap
+  namespace: {{ . }}
+  labels:
+    app: speedscale-nettap
+rules:
+- apiGroups:
+  - ""
+  resources: 
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources: 
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-nettap
+  namespace: {{ . }}
+  labels:
+    app: speedscale-nettap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-nettap
+subjects:
+- kind: ServiceAccount
+  name: speedscale-nettap
+  namespace: {{ . }}
+{{- end }}
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: speedscale-nettap
+  labels:
+    app: speedscale-nettap
+rules:
+- apiGroups:
+  - ""
+  resources: 
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources: 
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: speedscale-nettap
+  labels:
+    app: speedscale-nettap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: speedscale-nettap
+subjects:
+- kind: ServiceAccount
+  name: speedscale-nettap
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: speedscale-nettap
+  namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+{{ .Values.ebpf.configuration | toYaml | indent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: speedscale-nettap
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    controlplane.speedscale.com/annotations: "true"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  labels:
+    app: speedscale-nettap
+    {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: speedscale-nettap
+  template:
+    metadata:
+      labels:
+        app: speedscale-nettap
+        {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 8}}
+        {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/compute-type
+                operator: NotIn
+                values:
+                - fargate
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
+              - key: kubernetes.io/os
+                operator: NotIn
+                values:
+                - windows
+      serviceAccountName: speedscale-nettap
+      restartPolicy: Always
+      tolerations:
+      - operator: Exists
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      # Capture container - nettap eBPF agent
+      - name: speedscale-nettap-capture
+        image: {{ .Values.image.registry }}/nettap:{{ .Values.imageTags.nettap | default "v0.0.13" }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: api
+          containerPort: 8080
+        env:
+        - name: NETTAP_SYSTEM_NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          privileged: true
+          runAsUser: 0
+          runAsGroup: 0
+        volumeMounts:
+        - name: host-procfs
+          mountPath: /host/proc
+          readOnly: true
+        - name: host-cgroup
+          mountPath: /host/sys/fs/cgroup
+          readOnly: true
+        - name: host-sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: host-sys
+          mountPath: /sys/kernel/tracing
+          subPath: kernel/tracing
+          readOnly: true
+        - name: host-netns
+          mountPath: /var/run/netns
+          readOnly: true
+        - name: nettap-shared
+          mountPath: /tmp
+        - name: nettap-config
+          mountPath: /etc/nettap
+      - name: speedscale-nettap-ingest
+        image: {{ .Values.image.registry }}/goproxy:{{ .Values.imageTags.goproxy | default .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: NETTAP_SOCKET_PATH
+          value: /tmp/nettap.sock
+        - name: LOG_LEVEL
+          value: {{ .Values.ebpf.configuration.logging.level | default "info" }}
+        - name: SPEC_NODENAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: SPEC_SERVICEACCOUNTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: FORWARDER_ADDR
+          value: speedscale-forwarder.{{ .Release.Namespace }}.svc:80
+        envFrom:
+        - secretRef:
+            name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
+            optional: false
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            port: 4144
+            path: /healthz
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            port: 4144
+            path: /readyz
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: nettap-shared
+          mountPath: /tmp
+      volumes:
+      - name: host-procfs
+        hostPath:
+          path: /proc
+      - name: host-cgroup
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: host-sys
+        hostPath:
+          path: /sys
+      - name: host-netns
+        hostPath:
+          path: /var/run/netns
+      - name: nettap-config
+        configMap:
+          name: speedscale-nettap
+      - name: nettap-shared
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: speedscale-nettap
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: speedscale-nettap
+spec:
+  type: ClusterIP
+  selector:
+    app: speedscale-nettap
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: api
+---
+{{- end }}
