@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "newrelic.common.naming.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    control-plane: controller-manager
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.controllerManager.replicas }}
+  selector:
+    matchLabels:
+      {{- include "newrelic.common.labels.selectorLabels" . | nindent 6 }}
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        {{- include "newrelic.common.labels.podLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- $hostNetwork := false }}
+      {{- if not (kindIs "invalid" .Values.hostNetwork) }}
+        {{- $hostNetwork = .Values.hostNetwork }}
+      {{- else if .Values.global }}
+        {{- if .Values.global.hostNetwork }}
+          {{- $hostNetwork = .Values.global.hostNetwork }}
+        {{- end }}
+      {{- end }}
+      {{- if $hostNetwork }}
+      hostNetwork: {{ $hostNetwork }}
+      {{- end }}
+      {{- with include "newrelic.common.images.renderPullSecrets" ( dict "pullSecrets" (list .Values.imagePullSecrets) "context" .) }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "newrelic.common.serviceAccount.name" . }}
+      {{- with include "newrelic.common.securityContext.pod" . }}
+      securityContext:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.priorityClassName" . }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with include "newrelic.common.dnsConfig" . }}
+      dnsConfig:
+        {{- . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: manager
+        {{- with include "k8s-agents-operator.manager.securityContext.container" . }}
+        securityContext:
+          {{- . | nindent 10 }}
+        {{- end }}
+        args:
+        - --metrics-bind-address=:{{ (index .Values.metricsService.ports 0).targetPort }}
+        {{- if .Values.controllerManager.manager.leaderElection.enabled }}
+        - --leader-elect
+        {{- end }}
+        {{- $localVerboseLog := .Values.controllerManager.manager.verboseLog }}
+        {{- $globalVerboseLog := include "newrelic.common.verboseLog" . -}}
+        {{- $logLevel := .Values.controllerManager.manager.logLevel | default "info" -}}
+        {{- $verboseLog := "" }}
+        {{- if and (kindIs "invalid" $localVerboseLog | not) $localVerboseLog }}
+          {{- $verboseLog = "true" }}
+        {{- else if and (kindIs "invalid" $localVerboseLog | not) (not $localVerboseLog) }}
+          {{- $verboseLog = "false" }}
+        {{- else if ne $logLevel "info" }}
+          {{- $verboseLog = "false" }}
+        {{- else if eq $globalVerboseLog "true" }}
+          {{- $verboseLog = "true" }}
+        {{- else }}
+          {{- $verboseLog = "false" }}
+        {{- end }}
+        {{- if eq $verboseLog "true" }}
+        - --zap-log-level=debug
+        {{- else }}
+        - --zap-log-level={{ $logLevel }}
+        {{- end }}
+        - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
+        - --webhook-service-bind-address=:{{ (index .Values.webhookService.ports 0).targetPort }}
+        command:
+        - /bin/operator
+        env:
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        - name: ENABLE_WEBHOOKS
+          value: "true"
+        {{- $globalProxy := "" }}
+        {{- if .Values.global }}
+          {{- $globalProxy = .Values.global.proxy | default "" }}
+        {{- end }}
+        {{- $proxy := .Values.proxy | default $globalProxy | default "" }}
+        {{- if $proxy }}
+        - name: HTTP_PROXY
+          value: {{ $proxy | quote }}
+        - name: HTTPS_PROXY
+          value: {{ $proxy | quote }}
+        {{- end }}
+        image: {{ include "k8s-agents-operator.manager.image" . }}
+        imagePullPolicy: {{ .Values.controllerManager.manager.image.pullPolicy | default "Always" }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ .Values.healthProbe.port }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        ports:
+        - containerPort: {{ (index .Values.webhookService.ports 0).targetPort }}
+          name: webhook-server
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ .Values.healthProbe.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.controllerManager.manager.resources | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      {{- if or .Values.admissionWebhooks.create (include "k8s-agents-operator.certificateSecret.name" . ) }}
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ include "k8s-agents-operator.certificateSecret.name" . }}
+      {{- end }}
+      {{- with include "newrelic.common.nodeSelector" . }}
+      nodeSelector:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.affinity" . }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with include "newrelic.common.tolerations" . }}
+      tolerations:
+        {{- . | nindent 8 }}
+      {{- end }}

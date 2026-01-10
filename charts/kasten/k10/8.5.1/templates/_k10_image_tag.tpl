@@ -1,0 +1,1 @@
+{{- define "k10.imageTag" -}}8.5.0{{- end -}}
