@@ -1,0 +1,223 @@
+# Copyright 2021 Nutanix Inc
+#
+# example usage: kubectl create -f <this_file>
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: nutanix-csi-node
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ if eq .Values.kubernetesClusterDeploymentType "ntnx-msp-default" }}csi-node-ntnx-plugin{{ else }}nutanix-csi-node{{ end }}
+  updateStrategy:
+    type: "RollingUpdate"
+    rollingUpdate:
+      maxUnavailable: "10%"
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: nutanix-csi-node
+        {{- with .Values.node.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        app: {{ if eq .Values.kubernetesClusterDeploymentType "ntnx-msp-default" }}csi-node-ntnx-plugin{{ else }}nutanix-csi-node{{ end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccount: nutanix-csi-node
+      hostNetwork: true
+      containers:
+        - name: driver-registrar
+          image: {{ .Values.sidecars.registrar.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --v=2
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: {{ .Values.kubeletDir }}/plugins/{{ include "nutanix-csi-storage.drivername" . }}/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          {{- with .Values.sidecars.registrar.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi/
+            - name: registration-dir
+              mountPath: /registration
+        - name: nutanix-csi-node
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+          image: {{ .Values.node.imageRepo }}/{{ .Values.node.imageName }}:{{ .Values.node.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args :
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(NODE_ID)"
+            - "--drivername={{ include "nutanix-csi-storage.drivername" . }}"
+            - "--max-volumes-per-node={{ .Values.maxVolumesPerNode }}"
+            - --force-detach-existing-client-in-pe-mode=true
+            # - --volume-capacity-threshold=50.0
+          env:
+            - name: CSI_JWT_TOKEN_FILE
+              value: {{ include "nutanix-csi-storage.csiTokenFile" . }}
+            - name: CSI_JWT_TOKEN_DIR
+              value: {{ include "nutanix-csi-storage.csiTokenDir" . }}
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: CSI_SECRET_DIR
+              value: {{ .Values.csiSecretDir }}
+            - name: CSI_PE_SECRET_DIR
+              value: {{ include "nutanix-csi-storage.peSecretDir" . }}
+            - name: CSI_INIT_CONFIGMAP_NAME
+              value: {{  .Values.ntnxInitConfigMap.name }}
+            - name: CSI_INIT_CONFIGMAP_NAMESPACE
+              {{- if .Values.ntnxInitConfigMap.namespace }}
+              value: {{  .Values.ntnxInitConfigMap.namespace }}
+              {{- else }}
+              value: {{ .Release.Namespace }}
+              {{- end }}
+            - name: CSI_PLUGIN_TYPE
+              value: NODE_PLUGIN
+          {{- with .Values.node.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          {{- if eq .Values.ntnxInitConfigMap.usePC true}}
+            - mountPath: {{ .Values.csiSecretDir }}
+              name: pc-secret
+              readOnly: true
+          {{- end }}
+          {{- if and (eq .Values.ntnxInitConfigMap.usePC false) (eq (include "isPETopologyEnabled" .) "true") }}
+          {{- range $index, $peSecret := .Values.peSecrets }}
+            - name: pe-secret-{{ $index }}
+              mountPath: {{ include "nutanix-csi-storage.peSecretDir" . }}/{{ printf "pe-secret-%d" $index }}
+              readOnly: true
+          {{- end }}
+          {{- end }}
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: {{ .Values.kubeletDir }}
+              # needed so that any mounts setup inside this container are
+              # propagated back to the host machine.
+              mountPropagation: "Bidirectional"
+            - mountPath: /dev
+              name: device-dir
+            - mountPath: /etc/iscsi
+              name: iscsi-dir
+            - mountPath: /host
+              name: root-dir
+              # This is needed because mount is run from host using chroot.
+              mountPropagation: "Bidirectional"
+          {{- if eq (default false .Values.ntnxInitConfigMap.usePEFallback) true }}
+            - mountPath: {{ include "nutanix-csi-storage.csiTokenDir" . }}
+              name: jwt-secret
+              readOnly: true
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.node.port }}
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-endpoint
+            initialDelaySeconds: {{ .Values.liveness.node.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.liveness.node.timeoutSeconds }}
+            periodSeconds: {{ .Values.liveness.node.periodSeconds }}
+            failureThreshold: {{ .Values.liveness.node.failureThreshold }}
+        - name: liveness-probe
+          {{- with .Values.sidecars.livenessprobe.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /csi
+              name: plugin-dir
+          image: {{ .Values.sidecars.livenessprobe.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+            - --http-endpoint=:{{ .Values.node.port }}
+      priorityClassName: system-cluster-critical
+    {{- with (.Values.node.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with (.Values.node.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletDir }}/plugins_registry/
+            type: Directory
+        - name: plugin-dir
+          hostPath:
+            path: {{ .Values.kubeletDir }}/plugins/{{ include "nutanix-csi-storage.drivername" . }}/
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: {{ .Values.kubeletDir }}
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+        - name: iscsi-dir
+          hostPath:
+            path: /etc/iscsi
+            {{- if eq .Values.kindtest true }}
+            type: DirectoryOrCreate
+            {{- else }}
+            type: Directory
+            {{- end }}
+        - name: root-dir
+          hostPath:
+            path: /
+            type: Directory
+        {{- if eq .Values.ntnxInitConfigMap.usePC true}}
+        - name: pc-secret
+          secret:
+            secretName: {{ .Values.pcSecretName }}
+        {{- end }}
+        {{- if eq (default false .Values.ntnxInitConfigMap.usePEFallback) true }}
+        - name: jwt-secret
+          secret:
+            secretName: {{ include "nutanix-csi-storage.csiTokenFile" . }}
+        {{- end }}        
+        {{- if and (eq .Values.ntnxInitConfigMap.usePC false) (eq (include "isPETopologyEnabled" .) "true") }}
+        {{- range $index, $peSecret := .Values.peSecrets }}
+        - name: pe-secret-{{ $index }}
+          secret:
+            {{- if $.Values.createPESecrets }}
+            secretName: {{ default (printf "pe-secret-%d" $index) $peSecret.secretName }}
+            {{- else }}
+            secretName: {{ $peSecret.secretName }}
+            {{- end }}
+        {{- end }}
+        {{- end }}

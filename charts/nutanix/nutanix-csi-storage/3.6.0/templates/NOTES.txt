@@ -1,0 +1,17 @@
+Driver name: {{ include "nutanix-csi-storage.drivername" . }}
+{{- $existingCSIDriver := lookup "storage.k8s.io/v1" "CSIDriver" "" (include "nutanix-csi-storage.drivername" .) }}
+{{- $fsGroupPolicy := "" }}
+{{- if $existingCSIDriver }}
+  {{- $fsGroupPolicy = $existingCSIDriver.spec.fsGroupPolicy }}
+{{- else }}
+  {{- $fsGroupPolicy = .Values.fsGroupPolicy | default "File" }}
+{{- end }}
+fsGroupPolicy: {{ $fsGroupPolicy }}
+{{- if $existingCSIDriver }}
+NOTE: fsGroupPolicy is immutable. For upgrades, the existing value ({{ $fsGroupPolicy }}) is retained. To change it, delete the CSIDriver, modify the helm chart by adding desired fsGroupPolicy value and reinstall the csi driver.
+{{- else }}
+NOTE: fsGroupPolicy is set to '{{ $fsGroupPolicy }}'. This value is immutable after installation. To change it, delete the CSIDriver, modify the helm chart by adding desired fsGroupPolicy value and reinstall the csi driver.
+{{- end }}
+
+Nutanix CSI provider was deployed in namespace {{ .Release.Namespace }}. Check it's status by running:
+kubectl -n {{ .Release.Namespace }} get pods | grep 'nutanix-csi'

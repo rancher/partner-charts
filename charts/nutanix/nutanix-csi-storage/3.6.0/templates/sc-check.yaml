@@ -1,0 +1,194 @@
+# defining error message for blocking upgrade from 3.0.0-beta.1912<=(CSI version)<=3.1.0 to 3.2 PE mode
+{{- $pcToPeVersionError := printf "%s%s%s%s" 
+" to version " .Chart.AppVersion 
+" is blocked when using PE as the management plane. "
+"Please update the deployment mode by setting Values.ntnxInitConfigMap.usePC."
+ }}
+
+# defining error message for blocking upgrade from CSI version>= 3.2.0 PC to PE mode 
+{{- $pcModeToPeModeError :=  printf "%s%s"
+"Upgrade is blocked from PC as management plane to PE, "
+"Please update the deployment mode by setting Values.ntnxInitConfigMap.usePC." }}
+
+{{- $usePC := .Values.ntnxInitConfigMap.usePC }}
+{{- $csiDriverName := include "nutanix-csi-storage.drivername" . }}
+{{- $releaseName := .Release.Name }}
+{{- $ntnxVolumes := "NutanixVolumes" }}
+{{- $usePETopology := include "isPETopologyEnabled" . }}
+
+# This checks if the maxVolumesPerNode value exceeds the allowed maximum of 128.
+{{- if gt (int .Values.maxVolumesPerNode) 128 }}
+  {{- fail (printf "The value of maxVolumesPerNode %v exceeds the allowed maximum of 128" .Values.maxVolumesPerNode) }}
+{{- end }}
+
+# This checks for the csidriver and checks whether the already existing driver is any of versions (>=3.0.0-beta.1904, <=3.1.0, 3.2.0 PC mode) from the labels and blocks the upgrade to 3.2.0 PE mode
+{{- if (eq $usePC false) }}
+  {{- $csiDriver := lookup "storage.k8s.io/v1" "CSIDriver" "" $csiDriverName -}}
+  {{- if $csiDriver }}
+    {{- range $key, $value := $csiDriver.metadata.labels }}
+      {{- if eq $key "app.kubernetes.io/version" }}
+        {{- if and (ge $value "3.0.0-beta.1912") (lt $value "3.2.0") }}
+          {{- fail (printf "%s%s%s" "Upgrade from " $value $pcToPeVersionError) }}
+        {{- end }}
+      {{- else if and (eq $key "app.kubernetes.io/management-plane") (eq $value "PrismCentral")}}
+        {{- fail $pcModeToPeModeError }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# This blocks the upgrade from CSI with PE topology enabled to CSI with PE topology disabled
+{{- if and (eq $usePC false) (eq $usePETopology "false") }}
+  {{- $csiDriver := lookup "storage.k8s.io/v1" "CSIDriver" "" $csiDriverName -}}
+  {{- if $csiDriver }}
+    {{- $topologyEnabledValue := index $csiDriver.metadata.labels "app.kubernetes.io/topology-enabled" }}
+    {{- $managementPlaneValue := index $csiDriver.metadata.labels "app.kubernetes.io/management-plane" }}
+    {{- if and (eq $topologyEnabledValue "true") (eq $managementPlaneValue "PrismElement") }}
+      {{- fail "Upgrade is blocked from CSI driver with PE topology enabled to CSI driver with PE topology disabled." }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# This checks for existing PVs with the volume attribute isLVMVolume="true", 
+# and blocks the installation or upgrade if any are found.
+# Additionally, if the installation is in PE mode, it verifies the presence of 
+# nodePublishSecretRef in the spec.csi. If not found, the installation or upgrade will also fail.
+{{- $pvs := lookup "v1" "PersistentVolume" "" "" -}}
+{{- range $pv := $pvs.items }}
+  {{- if and $pv.spec $pv.spec.csi }}
+    {{- $secretRef := $pv.spec.csi.nodePublishSecretRef }}
+    {{- $attributes := $pv.spec.csi.volumeAttributes }}
+    {{- $driver := $pv.spec.csi.driver }}
+    {{- $volumeHandle := $pv.spec.csi.volumeHandle }}
+    {{- if and (eq $driver $csiDriverName) (contains $ntnxVolumes $volumeHandle) }}
+
+      {{/* Check for a missing nodePublishSecretRef when not in PC mode */}}
+      {{- if and (not $usePC) (not $secretRef) (eq $usePETopology "false") }}
+        {{- fail (printf "%s%s" "The upgrade or installation is failed due to the missing nodePublishSecretRef in the PV:" $pv.metadata.name )}}
+      {{- end }}
+
+      {{/* Check for LVM volume presence */}}
+      {{- if and $attributes (eq (index $attributes "isLVMVolume") true) }}
+        {{- fail (printf "%s%s" "The upgrade or installation is failed due to the presence of LVM volume, PV:" $pv.metadata.name) -}}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "checkSecretRefFuncInternal" -}}
+{{- $secretName := .secretName }}
+{{- $secretNamespace := .secretNamespace }}
+{{- $sc := .sc }}
+
+{{- $secretRefError := printf "%s%s%s" " Parameters:"
+" csi.storage.k8s.io/provisioner-secret-name, csi.storage.k8s.io/controller-publish-secret-name, csi.storage.k8s.io/node-publish-secret-name and namespaces "
+"are required, Please update or delete the storageclasses" }}
+
+{{- $hasSecretName := hasKey $sc.parameters $secretName }}
+{{- $hasSecretNamespace := hasKey $sc.parameters $secretNamespace }}
+
+{{- if or (not $hasSecretName) (not $hasSecretNamespace) }}
+  {{- fail (printf "%s%s%s%s%s%s%s" "The upgrade or installation is failed due to missing parameters:"
+  $secretName "," $secretNamespace " in storageclass:"
+  $sc.metadata.name $secretRefError) }}
+{{- end }}
+
+{{- end }}
+
+
+# This function checks for the secretRef in storage class parameters and fails installation if any secretRef is missing
+{{- define "checkSecretRefFunc" -}}
+{{- $sc := .sc }}
+
+
+# check for provisionerSecretRef
+{{- $checkSecretRefFuncInternal := include "checkSecretRefFuncInternal" (dict 
+    "secretName" "csi.storage.k8s.io/provisioner-secret-name" 
+    "secretNamespace" "csi.storage.k8s.io/provisioner-secret-namespace" 
+    "sc" $sc 
+) }}
+{{ $checkSecretRefFuncInternal }}
+
+# check for ControllerPublishSecretRef
+{{- $checkSecretRefFuncInternal := include "checkSecretRefFuncInternal" (dict 
+    "secretName" "csi.storage.k8s.io/controller-publish-secret-name" 
+    "secretNamespace" "csi.storage.k8s.io/controller-publish-secret-namespace" 
+    "sc" $sc 
+) }}
+{{ $checkSecretRefFuncInternal }}
+
+# check for NodePublishSecretRef
+{{- $checkSecretRefFuncInternal := include "checkSecretRefFuncInternal" (dict 
+    "secretName" "csi.storage.k8s.io/node-publish-secret-name" 
+    "secretNamespace" "csi.storage.k8s.io/node-publish-secret-namespace" 
+    "sc" $sc 
+) }}
+{{ $checkSecretRefFuncInternal }}
+
+{{- end -}}
+
+
+# This checks for the existing storage classes which has provisioner set as csiDriver 
+# and throws an error if any of the secretRef is missing, it skips
+# the check if annotaion meta.helm.sh/release-name set to the release name,
+# and instead updates the storageclass with the ControllerPublishVolume secretRef
+# as storageclass is deployed by previous isntallation.
+{{- $storageClasses := lookup "storage.k8s.io/v1" "StorageClass" "" "" -}}
+{{- $matchingSCs := list -}}
+{{- if $storageClasses.items }}
+  {{- range $index, $sc := $storageClasses.items }} 
+    {{- $provisioner := $sc.provisioner}}
+    {{- if eq $provisioner $csiDriverName }}
+      #This check is only for sc's with storageType as nutanixVolumes
+      {{- $isNutanixVolume := false }}
+      {{- range $key, $value := $sc.parameters }}
+        {{- if and (eq (lower $key) "storagetype") (eq $value $ntnxVolumes)}}
+          {{- $isNutanixVolume = true }}
+        {{- end }}
+      {{- end }}
+
+      {{- if and ($isNutanixVolume) (not $usePC) (eq $usePETopology "false") }}
+        {{- $checkSecretRef := include "checkSecretRefFunc" (dict "sc" $sc) }}
+        {{ $checkSecretRef }}
+      {{- end }}
+      
+      {{- $hasMetadata := $sc.metadata }}
+      {{- $hasAnnotations := $sc.metadata.annotations }}
+
+      # for retaining storage classes deployed by previous installations
+      {{- if and $hasMetadata $hasAnnotations  }}
+        {{- $hasReleaseAnnotation := hasKey $sc.metadata.annotations "meta.helm.sh/release-name" }}
+        # Check for Helm release name annotation
+        {{- if and $hasReleaseAnnotation (eq (index $sc.metadata.annotations "meta.helm.sh/release-name") $releaseName) }}
+          # Append the matching StorageClass to the list
+          {{- $matchingSCs = append $matchingSCs $sc }}
+        {{- end }}        
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# Retaining storage classes deployed by previous installations
+{{- range $index, $sc := $matchingSCs }}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ $sc.metadata.name }}
+  annotations:
+    {{- range $key, $value := $sc.metadata.annotations }}
+    {{ $key }}: {{ printf "%v" $value | quote }}
+    {{- end }}
+  labels:
+    {{- range $key, $value := $sc.metadata.labels }}
+    {{ $key }}: {{ printf "%v" $value | quote }}
+    {{- end }}
+provisioner: {{ $sc.provisioner }}
+parameters:
+  {{- range $key, $value := $sc.parameters }}
+  {{ $key }}: {{ printf "%v" $value | quote }}
+  {{- end }}
+reclaimPolicy: {{ $sc.reclaimPolicy }}
+volumeBindingMode: {{ $sc.volumeBindingMode }}
+allowVolumeExpansion: {{ $sc.allowVolumeExpansion }}
+{{- end }}
