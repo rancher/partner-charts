@@ -1,0 +1,74 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: csi-snapshot-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ if .Values.singleNodeCluster  | default false }}1{{ else }}{{ required "controller.replicas must be set" .Values.controller.replicas }}{{ end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: csi-snapshot-controller
+      app: csi-snapshot-controller
+  minReadySeconds: 35
+  strategy:
+    {{ if .Values.singleNodeCluster  | default false}}
+    type: Recreate
+    {{ else }}
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+    {{ end }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: csi-snapshot-controller
+        app: csi-snapshot-controller
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccount: csi-snapshot-controller
+      containers:
+        - name: snapshot-controller
+          image: {{ .Values.controller.image }}:{{ .Values.controller.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--v=2"
+            - "--leader-election=true"
+            - "--prevent-volume-mode-conversion=true"
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            requests:
+              cpu: 10m
+              memory: 20Mi
+      priorityClassName: system-cluster-critical
+      securityContext:
+        runAsNonRoot: true
+    {{- with (.Values.controller.nodeSelector | default .Values.nodeSelector ) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with (.Values.controller.tolerations | default .Values.tolerations)}}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- if not (.Values.singleNodeCluster | default false) }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - csi-snapshot-controller
+              topologyKey: kubernetes.io/hostname
+    {{- end }}
