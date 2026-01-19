@@ -1,0 +1,278 @@
+# Default values for csi-wekafsplugin.
+
+# -- Directory in root of file system where dynamic volumes are provisioned
+dynamicProvisionPath: "csi-volumes"
+# -- Name of the driver (and provisioner)
+csiDriverName: "csi.weka.io"
+# -- CSI driver version
+csiDriverVersion: &csiDriverVersion 2.8.1
+images:
+  # -- CSI liveness probe sidecar image URL
+  livenessprobesidecar: registry.k8s.io/sig-storage/livenessprobe:v2.16.0
+  # -- CSI attacher sidecar image URL
+  attachersidecar: registry.k8s.io/sig-storage/csi-attacher:v4.9.0
+  # -- CSI provisioner sidecar image URL
+  provisionersidecar: registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
+  # -- CSI registrar sidercar
+  registrarsidecar: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.14.0
+  # -- CSI resizer sidecar image URL
+  resizersidecar: registry.k8s.io/sig-storage/csi-resizer:v1.14.0
+  # -- CSI snapshotter sidecar image URL
+  snapshottersidecar: registry.k8s.io/sig-storage/csi-snapshotter:v8.3.0
+  # -- CSI driver main image URL
+  csidriver: quay.io/weka.io/csi-wekafs
+  # -- CSI driver tag
+  csidriverTag: *csiDriverVersion
+# -- image pull secret required for image download. Must have permissions to access all images above.
+#    Should be used in case of private registry that requires authentication
+imagePullSecret: ""
+# -- Tolerations for all CSI driver components
+globalPluginTolerations: &globalPluginTolerations
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+# -- Tolerations for CSI controller component only (by default same as global)
+controllerPluginTolerations: *globalPluginTolerations
+# -- Tolerations for CSI node component only (by default same as global)
+nodePluginTolerations: *globalPluginTolerations
+# -- Optional nodeSelector for CSI plugin deployment on certain Kubernetes nodes only
+#    This nodeselector will be applied to all CSI plugin components
+nodeSelector: {}
+# -- Optional affinity for CSI plugin deployment
+#    This affinity will be applied to all CSI plugin components
+affinity: {}
+# -- Optional setting for OCP platform only, which machineconfig pools to apply the Weka SELinux policy on
+#    NOTE: by default, the policy will be installed both on workers and control plane nodes
+machineConfigLabels:
+  - "worker"
+  - "master"
+# Controller-specific parameters, please do not change unless explicitly guided
+controller:
+  # -- Controller number of replicas
+  replicas: 2
+  # -- Health probe port for controller pods
+  healthPort: 8081
+  # -- Maximum concurrent requests from sidecars (global)
+  maxConcurrentRequests: 5
+  # -- maximum concurrent operations per operation type
+  concurrency:
+    createVolume: 5
+    deleteVolume: 5
+    expandVolume: 5
+    createSnapshot: 5
+    deleteSnapshot: 5
+  # -- Return GRPC Unavailable if request waits in queue for that long time (seconds)
+  grpcRequestTimeoutSeconds: 30
+  # -- Configure provisioner sidecar for leader election
+  configureProvisionerLeaderElection: true
+  # -- Configure resizer sidecar for leader election
+  configureResizerLeaderElection: true
+  # -- Configure snapshotter sidecar for leader election
+  configureSnapshotterLeaderElection: true
+  # -- Configure attacher sidecar for leader election
+  configureAttacherLeaderElection: true
+  # -- optional nodeSelector for controller components only
+  nodeSelector: {}
+  # -- optional affinity for controller components only
+  affinity: {}
+  # -- optional labels to add to controller deployment
+  labels: {}
+  # -- optional labels to add to controller pods
+  podLabels: {}
+  # -- termination grace period for controller pods
+  terminationGracePeriodSeconds: 10
+  # -- resource requests and limits for controller containers
+  resources:
+    wekafs:
+      limits:
+        cpu: 1
+        memory: 3Gi
+      requests:
+        cpu: 128m
+        memory: 128Mi
+    csiAttacher:
+      limits:
+        cpu: 1
+        memory: 1Gi
+      requests:
+        cpu: 4m
+        memory: 48Mi
+    csiProvisioner:
+      limits:
+        cpu: 1
+        memory: 3Gi
+      requests:
+        cpu: 128m
+        memory: 128Mi
+    csiResizer:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      requests:
+        cpu: 4m
+        memory: 48Mi
+    csiSnapshotter:
+      limits:
+        cpu: 1
+        memory: 1Gi
+      requests:
+        cpu: 4m
+        memory: 48Mi
+    livenessProbe:
+      limits:
+        cpu: 1
+        memory: 1Gi
+      requests:
+        cpu: 12m
+        memory: 48Mi
+# Node-specific parameters, please do not change unless explicitly guided
+node:
+  # -- Maximum concurrent requests from sidecars (global)
+  maxConcurrentRequests: 5
+  # -- maximum concurrent operations per operation type (to avoid API starvation)
+  concurrency:
+    nodePublishVolume: 5
+    nodeUnpublishVolume: 5
+  # -- Return GRPC Unavailable if request waits in queue for that long time (seconds)
+  grpcRequestTimeoutSeconds: 30
+  # -- optional nodeSelector for node components only
+  nodeSelector: {}
+  # -- optional affinity for node components only
+  affinity: {}
+  # -- optional labels to add to node daemonset
+  labels: {}
+  # -- optional labels to add to node pods
+  podLabels: {}
+  # -- termination grace period for node pods
+  terminationGracePeriodSeconds: 10
+  # -- resource requests and limits for node containers
+  resources:
+    wekafs:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      requests:
+        cpu: 128m
+        memory: 128Mi
+    livenessProbe:
+      limits:
+        cpu: 1
+        memory: 1Gi
+      requests:
+        cpu: 12m
+        memory: 44Mi
+    csiRegistrar:
+      limits:
+        cpu: 1
+        memory: 1Gi
+      requests:
+        cpu: 8m
+        memory: 52Mi
+# -- Log level of CSI plugin
+logLevel: 5
+# -- Use JSON structured logging instead of human-readable logging format (for exporting logs to structured log parser)
+useJsonLogging: false
+# -- for migration of pre-CSI 0.7.0 volumes only, default API secret. Must reside in same namespace as the plugin
+legacyVolumeSecretName: ""
+# -- Optional CSI Plugin priorityClassName
+priorityClassName: ""
+# -- Support SELinux labeling for Persistent Volumes, may be either `off`, `mixed`, `enforced` (default off)
+#    In `enforced` mode, CSI node components will only start on nodes having a label `selinuxNodeLabel` below
+#    In `mixed` mode, separate CSI node components will be installed on SELinux-enabled and regular hosts
+#    In `off` mode, only non-SELinux-enabled node components will be run on hosts without label.
+#    WARNING: if SELinux is not enabled, volume provisioning and publishing might fail!
+#    NOTE: SELinux support is enabled automatically on clusters recognized as RedHat OpenShift Container Platform
+selinuxSupport: "off"
+# -- This label must be set to `"true"` on SELinux-enabled Kubernetes nodes,
+#    e.g., to run the node server in secure mode on SELinux-enabled node, the node must have label
+#    `csi.weka.io/selinux_enabled="true"`
+selinuxNodeLabel: "csi.weka.io/selinux_enabled"
+# -- If true, the SELinux policy machine configuration will not be removed when uninstalling the plugin.
+#    This is useful for OpenShift Container Platform clusters, to not cause machine config pool update on plugin reinstall
+selinuxOcpRetainMachineConfig: false
+# -- kubelet path, in cases Kubernetes is installed not in default folder
+kubeletPath: "/var/lib/kubelet"
+metrics:
+  # -- Enable Prometheus Metrics
+  enabled: true
+  # -- Metrics port for Controller Server
+  controllerPort: 9090
+  # -- Provisioner metrics port
+  provisionerPort: 9091
+  # -- Resizer metrics port
+  resizerPort: 9092
+  # -- Snapshotter metrics port
+  snapshotterPort: 9093
+  # -- Metrics port for Node Serer
+  nodePort: 9094
+  # -- Attacher metrics port
+  attacherPort: 9095
+# -- Tracing URL (For Jaeger tracing engine / OpenTelemetry), optional
+# @ignore
+tracingUrl: ""
+# @ignore
+tracingDeploymentIdentifier: ""
+# -- Set to true to use host networking. Will be always set to true when using NFS mount protocol
+hostNetwork: false
+pluginConfig:
+  # -- CSI Driver support for fsGroupPolicy, may be either "File" or "None". Default is "File"
+  # -- WARNING: Changing this value might require uninstall and re-install of the plugin
+  fsGroupPolicy: "File"
+  # -- Allow insecure HTTPS (skip TLS certificate verification)
+  allowInsecureHttps: false
+  objectNaming:
+    # -- Prefix that will be added to names of Weka cluster filesystems / snapshots assocciated with CSI volume,
+    #    must not exceed 7 symbols.
+    volumePrefix: "csivol-"
+    # -- Prefix that will be added to names of Weka cluster snapshots assocciated with CSI snapshot,
+    #    must not exceed 7 symbols.
+    snapshotPrefix: "csisnp-"
+    # -- Prefix that will be added to automatically created "seed" snapshot of empty filesytem,
+    #    must not exceed 12 symbols.
+    seedSnapshotPrefix: "csisnp-seed-"
+  allowedOperations:
+    # -- Allow automatic provisioning of CSI volumes based on distinct Weka filesystem
+    autoCreateFilesystems: true
+    # -- Allow automatic expansion of filesystem on which Weka snapshot-backed CSI volumes,
+    #    e.g. in case a required volume capacity exceeds the size of filesystem.
+    #    Note: the filesystem is not expanded automatically when a new directory-backed volume is provisioned
+    autoExpandFilesystems: true
+    # -- Create snapshots of legacy (dir/v1) volumes. By default disabled.
+    #    Note: when enabled, for every legacy volume snapshot, a full filesystem snapshot will be created (wasteful)
+    snapshotDirectoryVolumes: false
+    # -- Allow creation of snapshot-backed volumes even on unsupported Weka cluster versions, off by default
+    #    Note: On versions of Weka < v4.2 snapshot-backed volume capacity cannot be enforced
+    snapshotVolumesWithoutQuotaEnforcement: false
+    # -- Enforce total filesystem capacity for directory-backed volumes (prevents over-provisioning)
+    enforceDirVolTotalCapacity: false
+  mutuallyExclusiveMountOptions:
+    - "readcache,writecache,coherent,forcedirect"
+    - "sync,async"
+    - "ro,rw"
+  encryption:
+    # -- Allow encryption of Weka filesystems associated with CSI volumes without using external KMS server.
+    #    Should never be run in production, only for testing purposes
+    allowEncryptionWithoutKms: false
+  mountProtocol:
+    # -- Use NFS transport for mounting Weka filesystems, off by default
+    useNfs: false
+    # -- Allow Failback to NFS transport if Weka client fails to mount filesystem using native protocol
+    allowNfsFailback: false
+    # -- Specify name of NFS interface group to use for mounting Weka filesystems. If not set, first NFS interface group will be used
+    interfaceGroupName: ""
+    # -- Specify existing client group name for NFS configuration. If not set, "WekaCSIPluginClients" group will be created
+    clientGroupName: ""
+    # -- Specify NFS protocol version to use for mounting Weka filesystems. Default is "4.1", consult Weka documentation for supported versions
+    nfsProtocolVersion: "4.1"
+    # -- Specify name of Weka container to use for mounting filesystems. If not set, container name will be auto-detected.
+    # -- NOTE: for multiple clusters setup, set specific container name rather than attempt to identify it automatically
+    wekafsContainerName: ""
+  # -- Skip garbage collection of deleted directory-backed volume contents and only move them to trash. Default false
+  skipGarbageCollection: false
+  # -- Wait for WEKA filesystem / snapshot deletion before acknowledging the corresponding CSI volume deletion. Default false
+  waitForObjectDeletion: false
+  # -- Allow CSI plugin to manage node topology labels. For Operator-managed clusters, this should be set to false.
+  manageNodeTopologyLabels: true
+  # -- Automatically set ownership (exclusive permissions to mount a filesystem) on dynamically created filesystem-backed volumes
+  # --   NOTE: This functionality requires WEKA software of version 5.1.0 and above
+  setOwnershipOnDynamicFilesystems: false
