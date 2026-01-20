@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netscaler-gslb-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+{{- if .Values.openshift }}
+      router: {{ include "netscaler-gslb-controller.fullname" . }}
+{{- else }}
+      app: {{ include "netscaler-gslb-controller.fullname" . }}
+{{- end }}
+  replicas: 1
+  template:
+    metadata:
+      name: {{ include "netscaler-gslb-controller.name" . }}
+      labels:
+{{- if .Values.openshift }}
+        router: {{ include "netscaler-gslb-controller.fullname" . }}
+{{- else }}
+        app: {{ include "netscaler-gslb-controller.fullname" . }}
+{{- end }}
+{{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "netscaler-gslb-controller.serviceAccountName" . }}
+      containers:
+      - name: nsgslbc
+        image: "{{ tpl .Values.image . }}"
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        env:
+{{- if .Values.nsIP }}
+        - name: "NS_IP"
+          value: "{{ .Values.nsIP }}"
+        - name: "NS_USER"
+{{- if and .Values.secretStore.enabled .Values.secretStore.username}}
+        {{- toYaml .Values.secretStore.username | nindent 10 }}
+{{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "Please provide ADC user name" .Values.adcCredentialSecret }}
+              key: username
+{{- end }}
+        - name: "NS_PASSWORD"
+{{- if and .Values.secretStore.enabled .Values.secretStore.password}}
+        {{- toYaml .Values.secretStore.password | nindent 10 }}
+{{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "Please provide ADC password" .Values.adcCredentialSecret }}
+              key: password
+{{- end }}
+{{- end }}
+{{- if .Values.openshift }}
+        - name: "PLATFORM"
+          value: "OPENSHIFT"
+{{- else }}
+        - name: "PLATFORM"
+          value: "KUBERNETES"
+{{- end  }}
+        - name: "CLEANUP_GSLB_SITE_CONFIG"
+          value: {{ .Values.cleanup_gslb_site_config | default "false" | quote }}
+        - name: "LOGLEVEL"
+          value: {{ .Values.logLevel | default "INFO" | quote }}
+        - name: "NS_PROTOCOL"
+          value: "{{ .Values.nsProtocol }}"
+        - name: "NS_PORT"
+          value: "{{ .Values.nsPort }}"
+{{- if .Values.nitroReadTimeout }}
+        - name: "NS_NITRO_READ_TIMEOUT"
+          value: "{{ .Values.nitroReadTimeout }}"
+{{- end }} 
+        - name: "LOCAL_REGION"
+          value: {{ required "Please provide localRegion name" .Values.localRegion }}
+        - name: "LOCAL_CLUSTER"
+          value: {{ required "Please provide localCluster name" .Values.localCluster }}
+        - name: "SITENAMES"
+          value: {{ include "netscaler-gslb-controller.sites" .}}
+{{- $namespace := .Release.Namespace -}}
+{{- range .Values.sitedata }}
+        - name: {{ include "netscaler-gslb-controller.siteip" .}}
+          value: {{ .siteIp }}
+        - name: {{ include "netscaler-gslb-controller.siteusername" .}}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .secretName }}
+              key: username
+        - name: {{ include "netscaler-gslb-controller.sitepassword" .}}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .secretName }}
+              key: password
+{{- $secret := (lookup "v1" "Secret" $namespace .secretName) -}}
+{{- if hasKey $secret.data "sitesyncpassword" }}
+        - name: {{ include "netscaler-gslb-controller.sitesyncpassword" .}}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .secretName }}
+              key: sitesyncpassword
+{{- end }}
+        - name: {{ include "netscaler-gslb-controller.siteregion" .}}
+          value: {{ .siteRegion }}
+{{- if .sitePublicip }}
+        - name: {{ include "netscaler-gslb-controller.sitePublicip" .}}
+          value: {{ .sitePublicip }}
+{{- end }}
+{{- if .siteMask }}
+        - name: {{ include "netscaler-gslb-controller.siteMask" .}}
+          value: {{ .siteMask }}
+{{- end }}
+{{- end }}
+        - name: "EULA"
+          value: "{{ .Values.license.accept }}"
+        - name: "NS_APPS_NAME_PREFIX"
+          value: {{ .Values.entityPrefix | default "k8s"| quote }}
+        args:
+        - --config-interface
+          gslb-endpoints
+{{- if .Values.nsIP }}
+        - --configmap
+          {{ .Release.Namespace }}/{{ include "gslbconfigmap.fullname" . }}
+{{- end }}
+{{- if .Values.disableAPIServerCertVerify }}
+        - --disable-apiserver-cert-verify
+          {{ .Values.disableAPIServerCertVerify }}
+{{- end }}
+{{- if .Values.kubernetesURL }}
+        - name: "kubernetes_url"
+          value: "{{ .Values.kubernetesURL }}"
+{{- end}}
+        resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: volume-for-service-account
+          readOnly: true
+{{- if ne (len .Values.extraVolumeMounts) 0 }}
+{{- toYaml .Values.extraVolumeMounts | nindent 8 }}
+{{- end }}
+      volumes:
+      - name: volume-for-service-account
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: {{ .Values.serviceAccount.tokenExpirationSeconds }}
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+{{- if ne (len .Values.extraVolumes) 0 }}
+{{ toYaml .Values.extraVolumes | indent 6 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- if .Values.tolerations }}
+      tolerations: {{ .Values.tolerations | toYaml | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}

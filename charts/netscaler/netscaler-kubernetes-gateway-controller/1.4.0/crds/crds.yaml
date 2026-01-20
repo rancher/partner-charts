@@ -1,0 +1,1274 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: rewritepolicies.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: rewritepolicy 
+    plural: rewritepolicies
+    singular: rewritepolicy 
+  scope: Namespaced
+  versions: 
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              rewrite-policies:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servicenames:
+                      description: 'Name of the services that needs to be binded to rewrite policy.'
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 127
+                    goto-priority-expression:
+                      description: 'Expression or other value specifying the next policy to be
+                                    evaluated if the current policy evaluates to TRUE.
+                                    Specify one of the following values:
+                                    * NEXT - Evaluate the policy with the next higher priority number.
+                                    * END - End policy evaluation.
+                                    Default value of goto-priority-expression: END'
+                      type: string
+                      maxLength: 1499
+                    logpackets:
+                      type: object
+                      description: 'Adds an audit message action.
+                                    The action specifies whether to log the message, and to which log.'
+                      properties:
+                        logexpression:
+                          description: 'Default-syntax expression that defines the format and content of the log message.'
+                          type: string
+                          maxLength: 7991
+                        loglevel:
+                          description: 'Audit log level, which specifies the severity level of the log message being generated.'
+                          type: string
+                          enum: ["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG"]
+                      required: [logexpression, loglevel]
+                    rewrite-policy:
+                      type: object
+                      properties:
+                        rewrite-criteria:
+                          description: 'Expression against which traffic is evaluated.'
+                          type: string
+                          maxLength: 1299
+                        default-action:
+                          description: 'Action to perform if the result of policy evaluation is undefined (UNDEF). 
+                                        An UNDEF event indicates an internal error condition.'
+                          type: string
+                          maxLength: 77
+                          enum: ['NOREWRITE', 'RESET', 'DROP']
+                        operation:
+                          description: 'Type of user-defined rewrite action.'
+                          type: string
+                          enum: ["noop", "delete", "insert_http_header", "delete_http_header",
+                                  "corrupt_http_header", "insert_before", "insert_after", "replace",
+                                  "replace_http_res", "delete_all", "replace_all", "insert_before_all",
+                                  "insert_after_all", "clientless_vpn_encode", "clientless_vpn_encode_all",
+                                  "clientless_vpn_decode", "clientless_vpn_decode_all", "insert_sip_header",
+                                  "delete_sip_header", "corrupt_sip_header", "replace_sip_res", "replace_diameter_header_field",
+                                  "replace_dns_header_field", "replace_dns_answer_section"]
+                        target:
+                          description: 'Default syntax expression that specifies which part of the request or response to rewrite.'
+                          type: string
+                          maxLength: 1229
+                        modify-expression:
+                          description: 'Default syntax expression that specifies the content to insert into the request 
+                                        or response at the specified location, or that replaces the specified string.'
+                          type: string
+                          maxLength: 7991
+                        multiple-occurence-modify:
+                          description: 'Search facility that is used to match multiple strings in the request or response.'
+                          type: string
+                          maxLength: 171
+                        additional-multiple-occurence-modify:
+                          description: 'Specify additional criteria to refine the results of the search.
+                                        Always starts with the "extend(m,n)" operation, where "m" specifies number of bytes to the left of selected data
+                                        and "n" specifies number of bytes to the right of selected data.
+                                        You can use refineSearch only on body expressions, and only when rewrite-criteria is any one of this:
+                                        INSERT_BEFORE_ALL, INSERT_AFTER_ALL, REPLACE_ALL, and DELETE_ALL.'
+                          type: string
+                          maxLength: 1299
+                        direction:
+                          description: 'Bind point to which to bind the policy.'
+                          type: string
+                          enum: ["REQUEST","RESPONSE"]
+                        comment:
+                          description: 'Any comments to preserve information about this rewrite policy.' 
+                          type: string
+                          maxLength: 255
+                      required: [rewrite-criteria, operation, target, direction]
+                  required: [rewrite-policy]
+
+              responder-policies:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servicenames:
+                      description: 'Name of the services that needs to be binded to responder policy.' 
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 127
+                    goto-priority-expression:
+                      description: 'Expression or other value specifying the next policy to be
+                                    evaluated if the current policy evaluates to TRUE.
+                                    Specify one of the following values:
+                                    * NEXT - Evaluate the policy with the next higher priority number.
+                                    * END - End policy evaluation.
+                                    Default value of goto-priority-expression: END'
+                      type: string
+                      maxLength: 1499
+                    logpackets:
+                      type: object
+                      description: 'Adds an audit message action.
+                                    The action specifies whether to log the message, and to which log.'
+                      properties:
+                        logexpression:
+                          description: 'Default-syntax expression that defines the format and content of the log message.'
+                          type: string
+                          maxLength: 7991
+                        loglevel:
+                          description: 'Audit log level, which specifies the severity level of the log message being generated.'
+                          type: string
+                          enum: ["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING",
+                                  "NOTICE", "INFORMATIONAL", "DEBUG"]
+                      required: [logexpression, loglevel]
+                    responder-policy:
+                      type: object
+                      properties:
+                        redirect:
+                          type: object
+                          description: 'Use this option when you want to Redirect the request when request matches to policy.'
+                          properties:
+                            url:
+                              description: 'URL on which you want to redirect the request.'
+                              type: string
+                              maxLength: 7991
+                            redirect-status-code:
+                              description: 'HTTP response status code, for example 200, 302, 404, etc.'
+                              type: integer
+                              minimum: 100
+                              maximum: 599
+                            redirect-reason:
+                              description: 'Expression specifying the reason for redirecting the request.'
+                              type: string
+                              maxLength: 7991
+                          required: [url]
+                        respondwith:
+                          type: object
+                          description: 'Use this parameter when you want to respond to the request when request matches to policy.'
+                          properties:
+                            http-payload-string:
+                              description: 'Expression that you want to sent as response to the request.'
+                              type: string
+                              maxLength: 7991
+                          required: [http-payload-string]
+                        noop:
+                          type: string
+                          description: 'Use this option when you want to send the request to the protected server instead of 
+                                        responding to it when request matches to policy.'
+                          properties:
+                            target:
+                              description: 'Default syntax expression that specifies to perform noop operation on'
+                              type: string
+                              maxLength: 1229
+                        reset:
+                          type: string
+                          description: 'Use this option when you want to Reset the client connection by closing it when request matches to policy.'
+                          properties:
+                        drop:
+                          type: string
+                          description: 'Use this option when you want to drop the request without sending a response to the user when request matches to policy.'
+                          properties:
+                        respond-criteria:
+                          description: 'Default syntax expression that the policy uses to determine whether to respond to the specified request.'
+                          type: string
+                          maxLength: 1299
+                        default-action:
+                          description: 'Action to perform if the result of policy evaluation is undefined (UNDEF).
+                                        An UNDEF event indicates an internal error condition.'
+                          type: string
+                          maxLength: 77
+                          enum: ['NOOP', 'RESET', 'DROP']
+                        comment:
+                          description: 'Any comments to preserve information about this responder policy.'
+                          type: string
+                          maxLength: 255
+                      required: [respond-criteria]
+                      oneOf: [required: [redirect], required: [respondwith], required: [noop], required: [reset], required: [drop]]
+                  required: [responder-policy]
+
+              dataset:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'Name of the dataset.'
+                      type: string
+                      maxLength: 32
+                    type:
+                      description: 'Type of value to bind to the dataset.'
+                      type: string
+                      enum: ["ipv4", "number", "ipv6", "ulong", "double", "mac"]
+                    comment:
+                      description: 'Any comments to preserve information about this dataset.'
+                      type: string
+                      maxLength: 255
+                    values:
+                      description: 'Value of the specified type that is associated with this dataset.'
+                      type: array
+                      items:
+                        type: string
+                  required: [name, type, values]
+
+              patset:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'Name of the Patset.'
+                      type: string
+                      maxLength: 32
+                    comment:
+                      description: 'Any comments to preserve information about this patset.'
+                      type: string
+                      maxLength: 255
+                    values:
+                      description: 'String of characters that constitutes a pattern and is associated with this patset.'
+                      type: array
+                      items:
+                        type: string
+                  required: [name, values]
+
+              stringmap:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'Name of the Stringmap.'
+                      type: string
+                      maxLength: 32
+                    comment:
+                      description: 'Any comments to preserve information about this stringmap.'
+                      type: string
+                      maxLength: 255
+                    values:
+                      description: 'List of (key,value) pairs to be bound to this string map.'
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          key:
+                            description: 'Character string constituting the key to be bound to this string map.'
+                            type: string
+                            maxLength: 2047
+                          value:
+                            description: 'Character string constituting the value associated with the key.'
+                            type: string
+                            maxLength: 2047
+                  required: [name, values]
+
+              httpcallout_policy:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'httpcallout name'
+                      type: string
+                      maxLength: 32
+                    server_ip:
+                      description: 'IP Address of the server(callout agent) to which the callout is sent.'
+                      type: string
+                    server_port:
+                      description: 'Port of the server(callout agent) to which the callout is sent.'
+                      type: integer
+                      minimum: 1
+                      maximum: 65535
+                    http_method:
+                      description: |+
+                                   'Method used in the HTTP request that this callout sends.
+                                    Default http method is GET'
+                      type: string
+                      enum: ['GET', 'POST']
+                    host_expr:
+                      description: |+
+                                   'String expression to configure the Host header. Can contain a literal value
+                                    (for example, 10.101.10.11) or a derived value (for example, http.req.header("Host")).
+                                    The literal value can be an IP address or a fully qualified domain name. Mutually
+                                    exclusive with the full HTTP request expression.'
+                      type: string
+                      maxLength: 255
+                    url_stem_expr: 
+                      description: |+
+                                   'String expression for generating the URL stem. Can contain a literal string
+                                    (for example, "/mysite/index.html") or an expression that derives the value
+                                    (for example, http.req.url).'
+                      type: string
+                      maxLength: 8191
+                    headers:
+                      type: array
+                      description: |+
+                                   'One or more headers to insert into the HTTP request. Each header is represented by
+                                    name and expr, where expr is an expression that is evaluated at runtime to provide
+                                    the value for the named header. You can configure a maximum of eight headers for
+                                    an HTTP callout.'
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            description: 'header name'
+                            type: string                   
+                          expr:
+                            description: 'header expression'
+                            type: string    
+                    parameters:
+                      type: array
+                      description: |+
+                                   'One or more query parameters to insert into the HTTP request URL (for a GET request)
+                                    or into the request body (for a POST request). Each parameter is represented by
+                                    name and expr, where expr is an expression that is evaluated at run time to provide
+                                    the value for the named parameter (name=value). The parameter values are URL encoded.'
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            description: 'parameter name'
+                            type: string                   
+                          expr:
+                            description: 'parameter expression'
+                            type: string  
+                    body_expr:
+                      description: |+
+                                   'An advanced string expression for generating the body of the request.
+                                    The expression can contain a literal string or an expression that derives
+                                    the value (for example, client.ip.src).'
+                      type: string
+                    full_req_expr:
+                      description: |+
+                                   'Exact HTTP request, in the form of an expression, which the NetScaler sends
+                                    to the callout agent. The request expression is constrained by the feature
+                                    for which the callout is used. For example, an HTTP.RES expression cannot be
+                                    used in a request-time policy bank or in a TCP content switching policy bank.'
+                      type: string
+                    scheme:
+                      description: |+
+                                   'Type of scheme for the callout server.
+                                    Default scheme is HTTP'
+                      type: string
+                      enum: ['HTTP', 'HTTPS']
+                    cache_for_secs:
+                      description: |+
+                                   'Duration, in seconds, for which the callout response is cached.
+                                    The cached responses are stored in an integrated caching content
+                                    group named "calloutContentGroup". If no duration is configured, 
+                                    the callout responses will not be cached unless normal caching
+                                    configuration is used to cache them. This parameter takes precedence over any
+                                    normal caching configuration that would otherwise apply to these responses.'
+                      type: integer
+                      minimum: 1
+                      maximum: 31536000
+                    return_type:
+                      description: |+
+                                   'Type of data that the target callout agent returns in response to the callout
+                                    Available settings function as follows:
+                                    * TEXT - Treat the returned value as a text string.
+                                    * NUM - Treat the returned value as a number.
+                                    * BOOL - Treat the returned value as a Boolean value.'
+                      type: string
+                      enum: ['TEXT', 'NUM', 'BOOL']
+                    result_expr:
+                      description: |+
+                                   'Expression that extracts the callout results from the response sent by the HTTP callout
+                                    agent. Must be a response based expression, that is, it must begin with HTTP.RES. The
+                                    operations in this expression must match the return type. For example, if you configure
+                                    a return type of TEXT, the result expression must be a text based expression. If the
+                                    return type is NUM, the result  expression (resultExpr) must return a numeric value,
+                                    as in the following example: http.res.body(10000).length.'       
+                      type: string
+                      maxLength: 8191
+                    comment:
+                      description: 'Any comments to preserve information about this HTTP callout.'
+                      type: string
+                      maxLength: 255
+                  allOf:
+                  - properties:
+                    required: [name, server_ip, server_port]
+                  - properties:
+                    oneOf:
+                    - properties:
+                      required: [full_req_expr]
+                    - properties:
+                      anyOf:
+                      - properties:
+                        required: [http_method]
+                      - properties:
+                        required: [host_expr]
+                      - properties:
+                        required: [url_stem_expr]
+                      - properties:
+                        required: [headers]
+                      - properties:
+                        required: [parameters]
+                      - properties:
+                        required: [body_expr]
+            anyOf: [required: [rewrite-policies], required: [responder-policies]]
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ratelimits.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: ratelimit
+    plural: ratelimits
+    singular: ratelimit
+  scope: Namespaced
+  versions: 
+  - name: v1beta1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              servicenames:
+                description: 'Name of the services to which the ratelimit policies are applied.'
+                type: array
+                items:
+                  type: string
+                  maxLength: 127
+              selector_keys:
+                type: object
+                description: 'Traffic match criteria to which apply above rate-limit/throttling. All keys are applied as AND condition. If no keys are specified, rate-limit applies at service level'
+                properties:
+                  basic:
+                    type: object
+                    description: "Basic traffic stream selection criteria to which to apply the ratelimit"
+                    properties:
+                      path:
+                        type: array
+                        description: "api resource path prefix match. e.g. /api/v1/products"
+                        items:
+                          type: string
+                      method:
+                        type: array
+                        items:
+                          type: string
+                          enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT','PATCH', 'UNKNOWN_METHOD']
+                      header_name:
+                        description: "HTTP header that identifies the unique API client for e.g. X-apikey"
+                        type: string
+                      per_client_ip:
+                        description: "Setting this applies the throttling limit to each unique Client IP address accessing the API resource"
+                        type: boolean
+              req_threshold:
+                description: 'Max requests per timeslice units to be allowed'
+                type: integer
+              timeslice:
+                description: 'Timeslice in miliseconds in multiple of 10. Defaults to 1000 miliseconds'
+                type: integer
+              limittype:
+                description: "Burst mode or smooth. Defaults to smooth limittype if not specified"
+                type: string
+                enum: ['BURSTY','SMOOTH']
+              throttle_action:
+                type: string
+                enum: ['DROP', 'RESET','REDIRECT', 'RESPOND']
+                description: "Drop will drop the requests exceeding limits, RESET will reset the client connection, Redirect will redirect to specified URL, respond will respond with 429 'Exceeded allowed rate of requests'"
+              redirect_url:
+                type: string
+                description: "Redirect-URL"
+              logpackets:
+                type: object
+                description: 'Adds an audit message action. The action specifies whether to log the message, and to which log.'
+                properties:
+                  logexpression:
+                    description: 'Default-syntax expression that defines the format and content of the log message.'
+                    type: string
+                    maxLength: 7991
+                  loglevel:
+                    description: 'Audit log level, which specifies the severity level of the log message being generated.'
+                    type: string
+                    enum: ["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG"]
+                required: [logexpression, loglevel]
+            required: [req_threshold]
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: wafs.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: waf
+    plural: wafs
+    singular: waf
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        required: [spec]
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              servicenames:
+                description: 'Name of the services to which the waf policies are applied.'
+                type: array
+                items:
+                  type: string
+                  maxLength: 127
+              application_type:
+                description: 'Type of applications to protect'
+                type: array
+                items:
+                  type: string
+                  enum: ['HTML', 'JSON', 'XML']
+              signatures:
+                description: 'Location of external signature file'
+                type: string
+              redirect_url:
+                description: 'When a URL is blocked/down, redirect_url represents the alternate URL where the client requests should be sent.'
+                type: string
+              html_error_object:
+                description: 'Location of customized error page to respond when html or common violation are hit'
+                type: string
+              xml_error_object:
+                description: 'Location of customized error page to respond when xml violations are hit'
+                type: string
+              json_error_object:
+                description: 'Location of customized error page to respond when json violations are hit'
+                type: string
+              ip_reputation:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+                description: 'Enabling IP reputation feature'
+              target:
+                description: 'To control what traffic to be inspected by Web Application Firewall. If you do not provide the target, everything will be inspected by default'
+                type: object
+                properties:
+                  path:
+                    type: array
+                    description: "List of http urls to inspect"
+                    items:
+                      type: string
+                      description: "URL path"
+                  method:
+                    type: array
+                    description: "List of http methods to inspect"
+                    items:
+                      type: string
+                      enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT','PATCH', 'UNKNOWN_METHOD']
+                  header:
+                    type: array
+                    description: "List of http headers to inspect"
+                    items:
+                      type: string
+                      description: "header name"
+              exclude:
+                description: 'To control what traffic to be excluded by Web Application Firewall. If you do not provide the exclude list, nothing will be skipped by default explicitly'
+                type: object
+                properties:
+                  path:
+                    type: array
+                    description: "List of http urls to exclude"
+                    items:
+                      type: string
+                      description: "URL path"
+                  method:
+                    type: array
+                    description: "List of http methods to exclude"
+                    items:
+                      type: string
+                      enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT', 'UNKNOWN_METHOD']
+                  header:
+                    type: array
+                    description: "List of http headers to exclude"
+                    items:
+                      type: string
+                      description: "header name"
+              security_checks:
+                description: 'To enable/disable application firewall security checks'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              settings:
+                description: 'To fine tune application firewall security checks default settings'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              relaxations:
+                description: 'Section which contains relaxation rules for known traffic and false positives'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              enforcements:
+                description: 'Section which contains enforcement or restriction rules'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: bots.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: bot
+    plural: bots
+    singular: bot
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        required: [spec]
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              servicenames:
+                description: 'Name of the services to which the bot policies are applied.'
+                type: array
+                items:
+                  type: string
+                  maxLength: 127
+              signatures:
+                description: 'Location of external bot signature file'
+                type: string
+              redirect_url:
+                description: 'url to redirect when bot violation is hit'
+                type: string
+              target:
+                description: 'To control what traffic to be inspected by BOT. If you do not provide the target, everything will be inspected by default'
+                type: object
+                properties:
+                  path:
+                    type: array
+                    description: "List of http urls to inspect"
+                    items:
+                      type: string
+                      description: "URL path"
+                  method:
+                    type: array
+                    description: "List of http methods to inspect"
+                    items:
+                      type: string
+                      enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT','PATCH', 'UNKNOWN_METHOD']
+                  header:
+                    type: array
+                    description: "List of http headers to inspect"
+                    items:
+                      type: string
+                      description: "header name"
+              security_checks:
+                description: 'To enable/disable bot ecurity checks'
+                type: object
+                properties:
+                  allow_list:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  block_list:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  device_fingerprint:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  device_fingerprint_action:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  headless_browser:
+                    type: string
+                    enum: ['ON','OFF']
+                  reputation:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  ratelimit:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  tps:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  trap:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              bindings:
+                description: 'Section which contains binding rules for bot security checks'
+                type: object
+                properties:
+                  allow_list:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ip:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6_subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        expression:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+
+                  block_list:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ip:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6_subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        expression:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                  ratelimit:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        url:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ip:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        cookie:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        geolocation:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                  reputation:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  captcha:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                  logexp:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                  kbmexpr:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                  tps:
+                    type: object
+                    properties:
+                      geolocation:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      host:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      ip:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      url:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                  trapinsertion:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: appqoepolicies.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: appqoepolicy
+    plural: appqoepolicies
+    singular: appqoepolicy
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              appqoe-policies:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servicenames:
+                      description: 'Name of the services that needs to be binded to appqoe policy.'
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 127
+                    appqoe-policy:
+                      type: object
+                      properties:
+                        operation-retry:
+                          type: object
+                          properties:
+                            on-reset:
+                              description: "To set Retry on Connection Reset or Not"
+                              type: string
+                              enum: ['YES','NO']
+                            on-timeout:
+                              description: "Time in milliseconds for retry"
+                              type: integer
+                              minimum: 30
+                              maximum: 2000
+                        number-of-retries:
+                          description: "To set number of retries"
+                          type: integer
+                          minimum: 1
+                          maximum: 7
+                          required: [operation-retry]
+                        appqoe-criteria:
+                          description: 'Expression against which traffic is evaluated.'
+                          type: string
+                          maxLength: 1299
+                        direction:
+                          description: 'Bind point to which to bind the policy.'
+                          type: string
+                          enum: ["REQUEST","RESPONSE"]
+                      required: [appqoe-criteria, operation-retry]
+                  required: [appqoe-policy]
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: httpprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  status_message:
+                    type: string
+            spec:
+              type: object
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this HTTP profile should be applied to."
+                targetRef:
+                  type: array
+                  description: "A list of target resources where this profile will be applied."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the target resource."
+                      namespace:
+                        type: string
+                        description: "Namespace of the target resource."
+                      group:
+                        type: string
+                        description: "Group of the target resource."
+                      kind:
+                        type: string
+                        description: "Kind of the target resource."
+                      sectionName:
+                        type: string
+                        description: "Specific section within the target resource."
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in HTTP profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom profile. Customers can specify any valid Nitro HTTP profile parameters."
+                  additionalProperties: true
+                  maxProperties: 127
+  scope: Namespaced
+  names:
+    plural: httpprofiles
+    singular: httpprofile
+    kind: httpprofile
+    shortNames:
+    - httpp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tcpprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  status_message:
+                    type: string
+            spec:
+              type: object
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this TCP profile should be applied to."
+                targetRef:
+                  type: array
+                  description: "A list of target resources where this profile will be applied."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the target resource."
+                      namespace:
+                        type: string
+                        description: "Namespace of the target resource."
+                      group:
+                        type: string
+                        description: "Group of the target resource."
+                      kind:
+                        type: string
+                        description: "Kind of the target resource."
+                      sectionName:
+                        type: string
+                        description: "Specific section within the target resource."
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in TCP profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom profile. Customers can specify any valid Nitro TCP profile parameters."
+                  additionalProperties: true
+                  maxProperties: 127
+  scope: Namespaced
+  names:
+    plural: tcpprofiles
+    singular: tcpprofile
+    kind: tcpprofile
+    shortNames:
+    - tcpp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: sslprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  status_message:
+                    type: string
+            spec:
+              type: object
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this SSL profile should be applied to."
+                targetRef:
+                  type: array
+                  description: "A list of target resources where this profile will be applied."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the target resource."
+                      namespace:
+                        type: string
+                        description: "Namespace of the target resource."
+                      group:
+                        type: string
+                        description: "Group of the target resource."
+                      kind:
+                        type: string
+                        description: "Kind of the target resource."
+                      sectionName:
+                        type: string
+                        description: "Specific section within the target resource."
+                sslciphers:
+                  type: array
+                  description: "List of ciphers to be bound to the ssl profile for the listener. Priority is as per the order in the list. A cipher suite, predefined cipher group or User created cipher group can be mentioned"
+                  minItems: 1
+                  items:
+                    type: string
+                    description: "Cipher suite, cipher group name"
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in SSL profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom profile. Customers can specify any valid Nitro SSL profile parameters."
+                  additionalProperties: true
+  scope: Namespaced
+  names:
+    plural: sslprofiles
+    singular: sslprofile
+    kind: sslprofile
+    shortNames:
+    - sslp
+---

@@ -1,0 +1,192 @@
+license:
+  accept: no
+replicaCount: 1
+
+# Generic/Common parameters
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Gateway Controller configuration
+gatewayController:
+  # OpenShift specific
+  openshift: false
+  required: true
+  gatewayControllerName: ""
+  disableAPIServerCertVerify: false
+  certBundle: false
+  entityPrefix: ""
+  imageRegistry: quay.io
+  imageRepository: netscaler/netscaler-k8s-ingress-controller
+  imageTag: 3.4.4
+  image: "{{ .Values.gatewayController.imageRegistry }}/{{ .Values.gatewayController.imageRepository }}:{{ .Values.gatewayController.imageTag }}"
+  pullPolicy: IfNotPresent
+  ipam: false
+  jsonLog: false
+  kubernetesURL: ""
+  enableLivenessProbe: true
+  livenessProbe:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - |
+        FILE_PATH="$LIVENESS_FILE_PATH"
+        [ -f "$FILE_PATH" ] && [ $(( $(date +%s) - $(stat -c %Y "$FILE_PATH") )) -lt 60 ] && exit 0 || exit 1
+    initialDelaySeconds: 30
+    periodSeconds: 60
+  logLevel: INFO
+  logProxy: ""
+  namespaceLabels: ""
+  optimizeEndpointBinding: false
+  rbacRole: false
+  enableReadinessProbe: true
+  readinessProbe:
+    exec:
+      command:
+      - cat
+      - /tmp/readiness
+    initialDelaySeconds: 30
+    periodSeconds: 60
+    failureThreshold: 5
+    successThreshold: 1
+  resources:
+    requests:
+      cpu: 32m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 200Mi  
+
+# NetScaler CPX configuration
+netscalerCpx:
+  imageRegistry: quay.io
+  imageRepository: netscaler/netscaler-cpx
+  imageTag: 14.1-60.52
+  image: "{{ .Values.netscalerCpx.imageRegistry }}/{{ .Values.netscalerCpx.imageRepository }}:{{ .Values.netscalerCpx.imageTag }}"
+  pullPolicy: IfNotPresent
+  nsProtocol: "http"
+  nsHTTP2ServerSide: "OFF"
+  nsCookieVersion: 0
+  nsDnsNameserver: ""
+  nsLbHashAlgo:
+    required: false
+    hashFingers: ""
+    hashAlgorithm: ""
+  hostName: ""
+  mgmtHttpPort: 9080
+  mgmtHttpsPort: 9443
+  cpxLicenseAggregator: ""
+  resources:
+    requests:
+      cpu: 128m
+      memory: 500Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  nitroReadTimeout: 20
+  ADMSettings:
+    licenseServerIP: ""
+    licenseServerPort: 27000
+    ADMIP: ""
+    loginSecret: ""
+    bandWidthLicense: false
+    bandWidth: ""
+    vCPULicense: false
+    cpxCores: 1
+    licenseEdition: "PLATINUM"
+    platform: false
+    licensingMode: "" # "pool" or "las"
+    # For licensingmode "las", set the ADMIP, loginSecret, licenseEdition and bandwidth
+
+  enableStartupProbe: true
+  startupProbe:
+    exec:
+      command:
+      - ls
+      - /tmp/cpx_started
+    periodSeconds:  5
+    failureThreshold: 20
+    initialDelaySeconds: 30
+    successThreshold: 1
+  
+  enableLivenessProbe: true
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    failureThreshold: 5
+    successThreshold: 1
+    exec:
+      command:
+      - /bin/ping
+      - -c 1
+      - 192.0.0.1
+  
+  # commands: to provide global config to be applied in CPX. The commands will be executed in order. For e.g.
+  # add rewrite action rw_act_x_forwarded_proto insert_http_header X-Forwarded-Proto "\"https\""
+  # add rewrite policy rw_pol_x_forwarded_proto CLIENT.SSL.IS_SSL rw_act_x_forwarded_proto
+  # bind rewrite global rw_pol_x_forwarded_proto 10 -type REQ_OVERRIDE
+  commands: |
+
+  # shellCommands: to provide commands that need to be executed in shell of CPX. For e.g.
+  # touch /etc/a.txt
+  # echo "this is a" > /etc/a.txt
+  # echo "this is the file" >> /etc/a.txt
+  # ls >> /etc/a.txt
+  shellCommands: |
+
+createClusterRoleAndBinding: true
+# Service Account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  tokenExpirationSeconds: 3600
+
+# Service configuration
+service:
+  annotations: {}
+  spec:
+    type: ClusterIP
+    ports:
+      - port: 80
+        targetPort: 80
+        protocol: TCP
+        name: http
+      - port: 443
+        targetPort: 443
+        protocol: TCP
+        name: https
+
+# Node configuration
+nodeSelector:
+  key: ""
+  value: ""
+tolerations: []
+affinity: {}
+podAnnotations: {}
+
+# Exporter config details
+exporter:
+  required: false
+  imageRegistry: quay.io
+  imageRepository: netscaler/netscaler-adc-metrics-exporter
+  imageTag: 1.5.0
+  image: "{{ .Values.exporter.imageRegistry }}/{{ .Values.exporter.imageRepository }}:{{ .Values.exporter.imageTag }}"
+  pullPolicy: IfNotPresent
+  ports:
+    containerPort: 8888
+  resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+  serviceMonitorExtraLabels: {}
+
