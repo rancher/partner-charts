@@ -1,0 +1,214 @@
+{{ $otelcolInstrumentationEnabled := .Values.otelcolInstrumentation.enabled }}
+{{ $tracesEnabled := .Values.sumologic.traces.enabled }}
+{{- if and $tracesEnabled $otelcolInstrumentationEnabled }}
+exporters:
+{{- if eq .Values.debug.instrumentation.otelcolInstrumentation.print true }}
+  debug:
+    verbosity: detailed
+{{- end }}
+
+  sumologic/metrics:
+    client: '{{ include "sumologic.sumo_client" . }}'
+    endpoint: ${SUMO_ENDPOINT_DEFAULT_METRICS_SOURCE}
+    ## Compression encoding format, either empty string (""), gzip or deflate (default gzip).
+    ## Empty string means no compression
+    compression: gzip
+    ## Max HTTP request body size in bytes before compression (if applied). By default 1_048_576 (1MB) is used.
+    max_request_body_size: 1_048_576 # 1MB
+    ## Format to use when sending logs to Sumo. (default json) (possible values: json, text)
+    log_format: text
+    ## Format of the metrics to be sent (default is prometheus) (possible values: carbon2, prometheus)
+    ## carbon2 and graphite are going to be supported soon.
+    metric_format: prometheus
+    ## Timeout for every attempt to send data to Sumo Logic backend. Maximum connection timeout is 55s.
+    timeout: 5s
+    retry_on_failure:
+      enabled: true
+      ## Time to wait after the first failure before retrying
+      initial_interval: 5s
+      ## Upper bound on backoff
+      max_interval: 30s
+      ## Maximum amount of time spent trying to send a batch
+      max_elapsed_time: 120s
+    sending_queue:
+      enabled: false
+      ## Number of consumers that dequeue batches
+      num_consumers: 10
+      ## Maximum number of batches kept in memory before data
+      ## User should calculate this as num_seconds * requests_per_second where:
+      ## num_seconds is the number of seconds to buffer in case of a backend outage
+      ## requests_per_second is the average number of requests per seconds.
+      queue_size: 5000
+{{- if eq .Values.tracesGateway.enabled true }}
+  otlphttp/traces:
+    endpoint: 'http://{{ include "otelcolinstrumentation.exporter.endpoint" . }}:4318'
+{{- else }}
+  loadbalancing:
+    protocol:
+      otlp:
+        timeout: 10s
+        tls:
+          insecure: true
+        sending_queue:
+          enabled: true
+          num_consumers: 10
+          queue_size: 10_000
+    resolver:
+      dns:
+        hostname: '{{ include "tracesgateway.exporter.loadbalancing.endpoint" . }}'
+        port: '4317'
+{{- end }}
+receivers:
+  jaeger:
+    protocols:
+      thrift_compact:
+        endpoint: {{ template "sumologic.thrift_compact_endpoint" . }}
+      thrift_binary:
+        endpoint: {{ template "sumologic.thrift_binary_endpoint" . }}
+      grpc:
+        endpoint: {{ template "sumologic.jaeger_grpc_endpoint" . }}
+      thrift_http:
+        endpoint: {{ template "sumologic.jaeger_http_thrift_endpoint" . }}
+  otlp:
+    protocols:
+      grpc:
+        endpoint: {{ template "sumologic.otlp_grpc_endpoint" . }}
+      http:
+        endpoint: {{ template "sumologic.otlp_http_endpoint" . }}
+  otlp/deprecated:
+    protocols:
+      http:
+        endpoint: {{ template "sumologic.otlphttp_deprecated_endpoint" . }}
+  zipkin:
+    endpoint: {{ template "sumologic.zipkin_endpoint" . }}
+
+processors:
+  ## Source processor adds Sumo Logic related metadata
+  source:
+    annotation_prefix: "k8s.pod.annotation."
+    collector: {{ .Values.sumologic.collectorName | default .Values.sumologic.clusterName | quote }}
+    exclude:
+      k8s.container.name: {{ .Values.otelcolInstrumentation.sourceMetadata.excludeContainerRegex  | quote }}
+      k8s.host.name: {{ .Values.otelcolInstrumentation.sourceMetadata.excludeHostRegex | quote }}
+      k8s.namespace.name: {{ .Values.otelcolInstrumentation.sourceMetadata.excludeNamespaceRegex | quote }}
+      k8s.pod.name: {{  .Values.otelcolInstrumentation.sourceMetadata.excludePodRegex | quote }}
+    pod_key: "k8s.pod.name"
+    pod_name_key: "k8s.pod.pod_name"
+    pod_template_hash_key: "k8s.pod.label.pod-template-hash"
+    source_category: {{ .Values.otelcolInstrumentation.sourceMetadata.sourceCategory | quote }}
+    source_category_prefix: {{ .Values.otelcolInstrumentation.sourceMetadata.sourceCategoryPrefix | quote }}
+    source_category_replace_dash: {{ .Values.otelcolInstrumentation.sourceMetadata.sourceCategoryReplaceDash | quote }}
+    source_host: "%{k8s.pod.hostname}"
+    source_name: {{ .Values.otelcolInstrumentation.sourceMetadata.sourceName | quote }}
+
+  ## Resource processor sets the associted cluster attribute
+  resource:
+    attributes:
+      - key: k8s.cluster.name
+        value: '{{ include "sumologic.clusterNameReplaceSpaceWithDash" . }}'
+        action: upsert
+
+  resourcedetection:
+    detectors:
+      - system
+    override: false
+    timeout: 10s
+
+  ## Tags spans with K8S metadata, basing on the context IP
+  k8s_tagger:
+    ## When true, only IP is assigned and passed (so it could be tagged on another collector)
+    passthrough: false
+    ## When true, additional fields, such as serviceName are being also extracted
+    owner_lookup_enabled: true
+    ## Extracted fields and assigned names
+    extract:
+      metadata:
+        ## extract the following well-known metadata fields
+        - containerId
+        - containerName
+        - daemonSetName
+        - deploymentName
+        - hostName
+        - namespace
+        - nodeName
+        - podId
+        - podName
+        - replicaSetName
+        - serviceName
+        - statefulSetName
+      annotations:
+        - tag_name: "k8s.pod.annotation.%s"
+          key: "*"
+      namespace_labels:
+        - tag_name: "k8s.namespace.label.%s"
+          key: "*"
+      labels:
+        - tag_name: "k8s.pod.label.%s"
+          key: "*"
+
+  ## The memory_limiter processor is used to prevent out of memory situations on the collector.
+  memory_limiter:
+    ## check_interval is the time between measurements of memory usage for the
+    ## purposes of avoiding going over the limits. Defaults to zero, so no
+    ## checks will be performed. Values below 1 second are not recommended since
+    ## it can result in unnecessary CPU consumption.
+    check_interval: 5s
+
+    ## Maximum amount of memory, in %, targeted to be allocated by the process heap.
+    ## Note that typically the total memory usage of process will be about 50MiB higher
+    ## than this value.
+    limit_percentage: 90
+
+    ## Maximum spike expected between the measurements of memory usage, in %.
+    spike_limit_percentage: 20
+
+  ## The batch processor accepts spans and places them into batches grouped by node and resource
+  batch:
+    ## Number of spans after which a batch will be sent regardless of time
+    send_batch_size: 256
+    ## Never more than this many spans are being sent in a batch
+    send_batch_max_size: 512
+    ## Time duration after which a batch will be sent regardless of size
+    timeout: 5s
+extensions:
+  health_check:
+    endpoint: {{ template "sumologic.healthEndpoint" . }}
+  pprof: {}
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [jaeger, otlp, otlp/deprecated, zipkin]
+      processors: [memory_limiter, k8s_tagger, source, resource, batch]
+      exporters:
+{{- if eq .Values.tracesGateway.enabled true }}
+        - otlphttp/traces
+{{- else }}
+        - loadbalancing
+{{- end}}
+{{- if eq .Values.debug.instrumentation.otelcolInstrumentation.print true }}
+        - debug
+{{- end }}
+    metrics:
+      receivers: [otlp, otlp/deprecated]
+      processors: [memory_limiter, k8s_tagger, source, resource, batch]
+      exporters:
+        - sumologic/metrics
+{{- if eq .Values.debug.instrumentation.otelcolInstrumentation.print true }}
+        - debug
+{{- end }}
+  telemetry:
+    logs:
+      level: {{ .Values.otelcolInstrumentation.logLevel }}
+    metrics:
+      level: {{ .Values.otelcolInstrumentation.metricsLevel }}
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: ${env:MY_POD_IP}
+                port: 8888
+                without_type_suffix: true
+                without_units: true
+                without_scope_info: true
+{{- end }}

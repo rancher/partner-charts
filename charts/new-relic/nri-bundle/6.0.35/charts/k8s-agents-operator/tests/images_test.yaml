@@ -1,0 +1,76 @@
+suite: images
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has a default image version
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ".*nil.*"
+        template: templates/deployment.yaml
+
+  - it: loads image and version
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          image:
+            repository: nr/test-1
+            version: "1.1.1"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/nr/test-1:1.1.1
+        template: templates/deployment.yaml
+
+  - it: loads image and version using SHA digest
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          image:
+            repository: nr/test-1
+            version: "sha256:e2399e70e99ac370ca6a3c7e5affa9655da3b246d0ada77c40ed155b3726ee2e"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/nr/test-1@sha256:e2399e70e99ac370ca6a3c7e5affa9655da3b246d0ada77c40ed155b3726ee2e
+        template: templates/deployment.yaml
+  - it: uses global.images.registry for manager image
+    set:
+      licenseKey: us-whatever
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+      controllerManager:
+        manager:
+          image:
+            repository: k8s-agents-operator
+            version: "0.32.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: harbor.corp.net/newrelic/k8s-agents-operator:0.32.3
+        template: templates/deployment.yaml
+  - it: local registry overrides global.images.registry
+    set:
+      licenseKey: us-whatever
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+      controllerManager:
+        manager:
+          image:
+            registry: local-registry.example.com
+            repository: k8s-agents-operator
+            version: "0.32.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: local-registry.example.com/k8s-agents-operator:0.32.3
+        template: templates/deployment.yaml

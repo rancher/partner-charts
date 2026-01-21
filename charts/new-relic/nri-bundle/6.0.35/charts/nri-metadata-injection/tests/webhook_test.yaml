@@ -1,0 +1,68 @@
+suite: test mutatingwebhookconfiguraton values
+templates:
+  - templates/admission-webhooks/mutatingWebhookConfiguration.yaml
+release:
+  name: release
+  namespace: ns
+tests:
+  - it: default ignored namespaces are set
+    set:
+      cluster: my-cluster
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector.matchExpressions[0].values
+          value: ['kube-public', 'kube-node-lease', 'kube-system']
+  - it: custom ignored namespaces are set
+    set:
+      cluster: my-cluster
+      ignoreNamespaces: ['custom-namespace1', 'custom-namespace2']
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector.matchExpressions[0].values
+          value: [ 'custom-namespace1', 'custom-namespace2' ]
+  - it: empty ignoreNamespaces results in no namespaceSelector
+    set:
+      cluster: my-cluster
+      ignoreNamespaces: []
+    asserts:
+      - notExists:
+          path: webhooks[0].namespaceSelector
+  - it: injectOnlyLabeledNamespaces=true results in namespaceSelector with matchLabels
+    set:
+      cluster: my-cluster
+      injectOnlyLabeledNamespaces: true
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector.matchLabels
+          value:
+            newrelic-metadata-injection: enabled
+      - equal:
+          path: webhooks[0].namespaceSelector.matchExpressions[0].values
+          value: [ 'kube-public', 'kube-node-lease', 'kube-system' ]
+
+  - it: namespaceSelector does not match Autopilot Managed Resources when Provide is set to GKE_AUTOPILOT
+    set:
+      cluster: my-cluster
+      injectOnlyLabeledNamespaces: true
+      provider: GKE_AUTOPILOT
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector.matchLabels
+          value:
+            newrelic-metadata-injection: enabled
+      - equal:
+          path: webhooks[0].namespaceSelector.matchExpressions[1].key
+          value: kubernetes.io/metadata.name
+      - equal:
+          path: webhooks[0].namespaceSelector.matchExpressions[1].operator
+          value: NotIn
+      - equal:
+          path: webhooks[0].namespaceSelector.matchExpressions[1].values
+          value:
+            - kube-system
+            - gke-gmp-system
+            - gke-managed-cim
+            - gke-managed-volumepopulator
+            - gke-managed-checkpointing
+            - gke-managed-parallelstorecsi
+            - gke-managed-lustrecsi
