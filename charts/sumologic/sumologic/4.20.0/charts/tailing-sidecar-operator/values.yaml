@@ -1,0 +1,98 @@
+fullnameOverride: ""
+nameOverride: ""
+
+operator:
+  image:
+    pullPolicy: IfNotPresent
+    repository: public.ecr.aws/sumologic/tailing-sidecar-operator
+    # Overrides the image tag whose default is the Helm Chart appVersion.
+    tag: ""
+  resources:
+    limits:
+      cpu: 100m
+      memory: 30Mi
+    requests:
+      cpu: 100m
+      memory: 20Mi
+
+  ## Enable leader election mechanism for protecting against split brain if multiple operator pods/replicas are started.
+  ## See more at https://docs.openshift.com/container-platform/4.10/operators/operator_sdk/osdk-leader-election.html
+  leaderElection:
+    enabled: true
+    leaseDuration: "137s"
+    renewDeadline: "107s"
+    retryPeriod: "26s"
+
+  # Number of sidecar operator Pods to run (requires enable leader election if replicaCount > 1)
+  replicaCount: 1
+
+  livenessProbe: {}
+    # initialDelaySeconds: 1
+    # periodSeconds: 20
+  startupProbe: {}
+    # periodSeconds: 3
+
+  affinity: {}
+
+  tolerations: []
+
+sidecar:
+  image:
+    repository: public.ecr.aws/sumologic/tailing-sidecar
+    # Overrides the image tag whose default is the Helm Chart appVersion.
+    tag: ""
+  # Configuration for sidecar compute resource requirements.
+  # Those are the default resources settings and can be overrides by TailingSidecarConfig
+  resources:
+    limits:
+      cpu: 500m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 200Mi
+
+  # Overrides the sidecar configuration
+  config:
+    mountPath: /etc/otel/
+    # map of files which are going to be created in mountPath
+    # for example to create three empty files:
+    #
+    # content:
+    #  fluent-bit.conf: |
+    #  parsers.conf: |
+    #  plugins.conf
+    content: {}
+
+kubeRbacProxy:
+  image:
+    pullPolicy: IfNotPresent
+    repository: quay.io/brancz/kube-rbac-proxy
+    tag: v0.19.1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi
+
+# Configuration for MutatingWebhook which is used by tailing sidecar operator
+# for details please see Kubernetes API Reference Docs
+# e.g. https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#mutatingwebhookconfiguration-v1-admissionregistration-k8s-io
+webhook:
+  failurePolicy: Ignore
+  reinvocationPolicy: Never
+
+  objectSelector: {}
+    # matchLabels:
+    #   tailing-sidecar: "true"
+
+  namespaceSelector: {}
+    # matchLabels:
+    #   tailing-sidecar: "true"
+
+certManager:
+  enabled: false
+
+scc:
+  create: true

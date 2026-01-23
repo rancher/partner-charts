@@ -1,0 +1,55 @@
+exporters:
+{{- if (eq .Values.sumologic.metrics.sourceType "http") }}
+  - routing/default
+{{- else }}
+  - sumologic/default
+{{- if eq .Values.debug.metrics.metadata.print true }}
+  - debug
+{{- end }}
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+  - sumologic/sumologic-mock-default
+{{- end }}
+{{- if eq .Values.sumologic.metrics.sourceType "http" }}
+  - sumologic/apiserver
+  - sumologic/control_plane
+  - sumologic/controller
+  - sumologic/kubelet
+  - sumologic/node
+  - sumologic/scheduler
+  - sumologic/state
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+  - sumologic/sumologic-mock-http
+{{- end }}
+{{- end }}
+{{- end }}
+
+processors:
+  - memory_limiter
+  - metricstransform
+  - groupbyattrs
+  - resource
+{{ if .Values.metadata.metrics.useSumoK8sProcessor }}
+  - k8s_tagger
+{{ else }}
+  - k8sattributes
+{{ end }}
+  - source
+  - sumologic
+{{- if .Values.sumologic.metrics.otelcol.extraProcessors }}
+{{- range $processor := .Values.sumologic.metrics.otelcol.extraProcessors }}
+{{ printf "- %s" ( $processor | keys | first ) | indent 2 }}
+{{- end }}
+{{- end }}
+  - resource/remove_k8s_pod_pod_name
+  - resource/delete_source_metadata
+  - transform/set_name
+  - groupbyattrs/group_by_name
+  - transform/remove_name
+  - filter/drop_unnecessary_metrics
+{{- if .Values.sumologic.metrics.enableDefaultFilters }}
+  - filter/app_metrics
+{{- end }}
+  - batch
+receivers:
+  - telegraf
+  - otlp
