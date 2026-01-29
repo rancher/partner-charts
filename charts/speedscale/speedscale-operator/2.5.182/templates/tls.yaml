@@ -1,0 +1,193 @@
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- $s := (lookup "v1" "Secret" .Release.Namespace "speedscale-certs") -}}
+{{- if $s -}}
+{{- $crt = index $s.data "tls.crt" | b64dec -}}
+{{- $key = index $s.data "tls.key" | b64dec -}}
+{{ else }}
+{{- $cert := genCA "Speedscale" 3650 -}}
+{{- $crt = $cert.Cert -}}
+{{- $key = $cert.Key -}}
+{{- end -}}
+---
+{{- if .Values.createJKS }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "5"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-operator-create-jks
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 30
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
+      creationTimestamp: null
+      labels:
+        {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 8}}
+        {{- end }}
+    spec:
+      containers:
+      - args:
+        - |-
+            keytool -keystore /usr/lib/jvm/jre/lib/security/cacerts  -importcert -noprompt -trustcacerts  -storepass changeit  -alias speedscale -file /etc/ssl/speedscale/tls.crt
+            kubectl -n ${POD_NAMESPACE} delete secret speedscale-jks || true
+            kubectl -n ${POD_NAMESPACE} create secret generic speedscale-jks --from-file=cacerts.jks=/usr/lib/jvm/jre/lib/security/cacerts
+
+            # in case we're in istio
+            curl -X POST http://127.0.0.1:15000/quitquitquit || true
+        command:
+        - sh
+        - -c
+        volumeMounts:
+        - mountPath: /etc/ssl/speedscale
+          name: speedscale-tls-out
+          readOnly: true
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        envFrom:
+        - secretRef:
+            name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
+            optional: false
+        image: '{{ .Values.image.registry }}/amazoncorretto:23'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: create-jks
+        securityContext: {{ toYaml .Values.globalPodSecurityContext | nindent 10 }}
+        resources:
+          limits:
+            memory: "256M"
+            cpu: "1"
+          requests:
+            memory: "128M"
+            cpu: "200m"
+      restartPolicy: Never
+      serviceAccountName: speedscale-operator-provisioning
+      securityContext: {{ toYaml .Values.globalSecurityContext | nindent 6 }}
+      volumes:
+      - name: speedscale-tls-out
+        secret:
+          secretName: speedscale-certs
+      {{- if .Values.affinity }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "1"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  labels:
+    app: speedscale-operator
+    controlplane.speedscale.com/component: operator
+  name: speedscale-operator-provisioning
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "2"
+  creationTimestamp: null
+  name: speedscale-operator-provisioning
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "3"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-operator-provisioning
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: speedscale-operator-provisioning
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator-provisioning
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-certs
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $crt | b64enc }}
+  tls.key: {{ $key | b64enc }}
