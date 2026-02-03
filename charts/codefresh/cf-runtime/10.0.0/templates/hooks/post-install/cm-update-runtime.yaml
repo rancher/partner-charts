@@ -1,0 +1,19 @@
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{ $values := .Values.runtime.patch }}
+{{- if $values.enabled }}
+{{- $runtimeFile := printf "%s.yaml" (include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .))) }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}-runtime-config
+  labels:
+    {{- include "runtime.labels" . | nindent 4 }}
+  annotations:
+    {{- with $values.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  {{ $runtimeFile }}: |
+    {{ include "runtime.runtime-environment-spec.template" . | nindent 4 | trim }}
+{{- end }}
