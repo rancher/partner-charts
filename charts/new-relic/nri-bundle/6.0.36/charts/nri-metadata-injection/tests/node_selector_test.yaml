@@ -1,0 +1,57 @@
+suite: test node selector configuration
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has a linux node selector by default
+    set:
+      cluster: my-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+
+  - it: has a linux node selector and additional selectors
+    set:
+      cluster: my-cluster
+      nodeSelector:
+        aCoolTestLabel: aCoolTestValue
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            aCoolTestLabel: aCoolTestValue
+
+  - it: should inherit global.nodeSelector when local nodeSelector not set
+    set:
+      cluster: test-cluster
+      global.nodeSelector:
+        globalNodeKey: globalNodeValue
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["globalNodeKey"]
+          value: globalNodeValue
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+
+  - it: should use local nodeSelector over global.nodeSelector
+    set:
+      cluster: test-cluster
+      nodeSelector:
+        localNodeKey: localNodeValue
+      global.nodeSelector:
+        globalNodeKey: globalNodeValue
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.localNodeKey
+          value: localNodeValue
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+      - notExists:
+          path: spec.template.spec.nodeSelector.globalNodeKey
