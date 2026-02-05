@@ -1,16 +1,14 @@
 {{/*
 Expand the name of the chart.
-We truncate at 49 chars because some Kubernetes name fields are limited to 63 chars (by the DNS naming spec)
-and the longest explicit suffix is 14 characters.
 */}}
-{{- define "airlock-microgateway.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 49 | trimSuffix "-" }}
+{{- define "airlock-microgateway-cni.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Convert an image configuration object into an image ref string.
 */}}
-{{- define "airlock-microgateway.image" -}}
+{{- define "airlock-microgateway-cni.image" -}}
     {{- if .digest -}}
         {{- printf "%s@%s" .repository .digest -}}
     {{- else if .tag -}}
@@ -22,19 +20,19 @@ Convert an image configuration object into an image ref string.
 
 {{/*
 Create a default fully qualified app name.
-We truncate at 36 chars because some Kubernetes name fields are limited to 63 chars (by the DNS naming spec)
-and the longest implicit suffix is 27 characters.
+We truncate at 50 chars because some Kubernetes name fields are limited to 63 chars (by the DNS naming spec)
+and the longest suffix is 13 characters.
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "airlock-microgateway.fullname" -}}
+{{- define "airlock-microgateway-cni.fullname" -}}
 {{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 36 | trimSuffix "-" }}
+{{- .Values.fullnameOverride | trunc 50 | trimSuffix "-" }}
 {{- else }}
 {{- $name := default .Chart.Name .Values.nameOverride }}
 {{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 36 | trimSuffix "-" }}
+{{- .Release.Name | trunc 50 | trimSuffix "-" }}
 {{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 36 | trimSuffix "-" }}
+{{- printf "%s-%s" .Release.Name $name | trunc 50 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
 {{- end }}
@@ -42,112 +40,62 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "airlock-microgateway.chart" -}}
+{{- define "airlock-microgateway-cni.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "airlock-microgateway.sharedLabels" -}}
-helm.sh/chart: {{ include "airlock-microgateway.chart" . }}
+{{- define "airlock-microgateway-cni.labels" -}}
+helm.sh/chart: {{ include "airlock-microgateway-cni.chart" . }}
+{{ include "airlock-microgateway-cni.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: {{ .Chart.Name }}
 {{- with .Values.commonLabels }}
 {{ toYaml .}}
 {{- end }}
 {{- end }}
 
 {{/*
-Common Selector labels
+Common labels without component
 */}}
-{{- define "airlock-microgateway.sharedSelectorLabels" -}}
-app.kubernetes.io/instance: {{ .Release.Name }}
+{{- define "airlock-microgateway-cni.labelsWithoutComponent" -}}
+{{- $labels := fromYaml (include "airlock-microgateway-cni.labels" .) -}}
+{{ unset $labels "app.kubernetes.io/component" | toYaml }}
 {{- end }}
 
 {{/*
-Restricted Container Security Context
+Selector labels
 */}}
-{{- define "airlock-microgateway.restrictedSecurityContext" -}}
-allowPrivilegeEscalation: false
-privileged: false
-runAsNonRoot: true
-capabilities:
-  drop: ["ALL"]
-readOnlyRootFilesystem: true
-seccompProfile:
-  type: RuntimeDefault
+{{- define "airlock-microgateway-cni.selectorLabels" -}}
+app.kubernetes.io/component: cni-plugin-installer
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/name: {{ include "airlock-microgateway-cni.name" . }}
 {{- end }}
 
-{{/* Precondition: May only be used if AppVersion is isSemver */}}
-{{- define "airlock-microgateway.supportedCRDVersionPattern" -}}
-{{- $version := (semver .Chart.AppVersion) -}}
-{{- if $version.Prerelease -}}
->= {{ $version.Major }}.{{ $version.Minor }}.{{ $version.Patch }}-{{ $version.Prerelease }}
-{{- else -}}
->= {{ $version.Major }}.{{ $version.Minor }}.0 || >= {{ $version.Major }}.{{ $version.Minor }}.{{ add1 $version.Patch }}-0
-{{- end -}}
-{{- end -}}
+{{/*
+Create the name of the service account to use for the CNI Plugin
+*/}}
+{{- define "airlock-microgateway-cni.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "airlock-microgateway-cni.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
 
-{{- define "airlock-microgateway.outdatedCRDs" -}}
-{{- if (eq "true" (include "airlock-microgateway.isSemver" .Chart.AppVersion)) -}}
-    {{- $supportedVersion := (include "airlock-microgateway.supportedCRDVersionPattern" .) -}}
-    {{- range $path, $_  := .Files.Glob "crds/*.yaml" -}}
-        {{- $api := ($.Files.Get $path | fromYaml).metadata.name -}}
-        {{- $crd := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" $api) -}}
-        {{- $isOutdated := false -}}
-        {{- if $crd -}}
-            {{/* If CRD is already present in the cluster, it must have the minimum supported version */}}
-            {{- $isOutdated = true -}}
-            {{- if hasKey $crd.metadata "labels" -}}
-                {{- $crdVersion := get $crd.metadata.labels "app.kubernetes.io/version" -}}
-                {{- if (eq "true" (include "airlock-microgateway.isSemver" $crdVersion)) -}}
-                    {{- if (semverCompare $supportedVersion $crdVersion) }}
-                        {{- $isOutdated = false -}}
-                    {{- end }}
-                {{- end -}}
-            {{- end -}}
-        {{- end -}}
-        {{- if $isOutdated }}
-{{ base $path }}
-        {{- end }}
-    {{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "airlock-microgateway.isSemver" -}}
+{{- define "airlock-microgateway-cni.isSemver" -}}
 {{- regexMatch `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$` . -}}
 {{- end -}}
 
-{{- define "airlock-microgateway.docsVersion" -}}
-{{- if and (eq "true" (include "airlock-microgateway.isSemver" .Chart.AppVersion)) (not (contains "-" .Chart.AppVersion)) -}}
+{{- define "airlock-microgateway-cni.docsVersion" -}}
+{{- if and (eq "true" (include "airlock-microgateway-cni.isSemver" .Chart.AppVersion)) (not (contains "-" .Chart.AppVersion)) -}}
     {{- $version := (semver .Chart.AppVersion) -}}
     {{- $version.Major }}.{{ $version.Minor -}}
 {{- else -}}
     {{- print "latest" -}}
 {{- end -}}
-{{- end -}}
-
-{{- define "airlock-microgateway.watchNamespaceSelector.labelQuery" -}}
-{{- $list := list -}}
-{{- with .matchLabels -}}
-    {{- range $key, $value := . -}}
-        {{- $list = append $list (printf "%s=%s" $key $value) -}}
-    {{- end -}}
-{{- end -}}
-{{- with .matchExpressions -}}
-    {{- range . -}}
-        {{- if has .operator (list "In" "NotIn") -}}
-            {{- $list = append $list (printf "%s %s (%s)" .key (lower .operator) (join "," .values)) -}}
-        {{- else if eq .operator "Exists" -}}
-            {{- $list = append $list .key -}}
-        {{- else if eq .operator "DoesNotExist" -}}
-            {{- $list = append $list (printf "!%s" .key) -}}
-        {{- end -}}
-    {{- end -}}
-{{- end -}}
-{{- join "," $list -}}
 {{- end -}}
