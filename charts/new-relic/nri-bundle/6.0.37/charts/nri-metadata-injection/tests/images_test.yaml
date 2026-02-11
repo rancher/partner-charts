@@ -1,0 +1,53 @@
+suite: test global images configuration
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: should inherit global.images.registry when local image.registry not set
+    set:
+      cluster: test-cluster
+      global.images.registry: global-registry.io
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^global-registry\.io/
+
+  - it: should use local image.registry over global.images.registry
+    set:
+      cluster: test-cluster
+      image.registry: local-registry.io
+      global.images.registry: global-registry.io
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^local-registry\.io/
+
+  - it: should inherit global.images.pullSecrets when local image.pullSecrets not set
+    set:
+      cluster: test-cluster
+      global.images.pullSecrets:
+        - name: global-pull-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: global-pull-secret
+
+  - it: should merge local image.pullSecrets with global.images.pullSecrets
+    set:
+      cluster: test-cluster
+      image.pullSecrets:
+        - name: local-pull-secret
+      global.images.pullSecrets:
+        - name: global-pull-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: local-pull-secret
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: global-pull-secret
