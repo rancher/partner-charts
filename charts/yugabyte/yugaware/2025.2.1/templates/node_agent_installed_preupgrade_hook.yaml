@@ -1,0 +1,258 @@
+{{- if .Release.IsUpgrade }}
+{{- $newTag := .Values.image.tag }}
+{{- /* stsName is also the same format used for the app selector label to map sts to pods */}}
+{{- $stsName := printf "%s-%s" .Release.Name "yugaware" }}
+{{- $stable := "2025.2.0.0" }}
+{{- $preview := "2.27.0.0" }}
+{{- $newTagMain := regexReplaceAll "(.*)-b.*" $newTag "${1}" }}
+{{- $newCompare := include "yb_version_compare" (list $newTagMain $stable $preview) | int }}
+{{- $shouldRun := ge $newCompare 0 }}
+{{- if and $shouldRun .Values.preupgradeChecks.enabled }}
+{{- /* need to get the ip address of the YBA pod, so we can connect to its pg */}}
+{{- $postgresIp := "localhost" }}
+{{- range $i, $p := (lookup "v1" "Pod" .Release.Namespace "" ).items }}
+  {{- if and (and (hasKey $p.metadata "labels") (hasKey $p.metadata.labels "app")) (eq $p.metadata.labels.app $stsName) }}
+    {{- $postgresIp = $p.status.podIP }}
+  {{- end }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- /* Truncate name length to be less than 63 chars, including extra identifiers that *}}
+  {{- /* are added when a job pod are created */}}
+  name: {{ trunc 35 (include "yugaware.fullname" . )}}-nodeagent-precheck
+  namespace: "{{ .Release.Namespace }}"
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: "nodeagent-precheck"
+    release: {{ .Release.Name | quote }}
+    chart: "{{ .Chart.Name }}"
+    component: "{{ .Values.Component }}"
+spec:
+  template:
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.yugaware.pod.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ .Values.yugaware.serviceAccount | default .Release.Name }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+        {{- if .Values.image.extraPullSecrets }}
+        {{- range .Values.image.extraPullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+        {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8}}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- end }}
+      {{- if .Values.zoneAffinity }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: failure-domain.beta.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+      {{- end }}
+      containers:
+        - name: nodeagent-precheck
+          image: {{ include "full_yugaware_image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args: ["-c", "/opt/yugabyte/yugaware/bin/yugaware -Dconfig.file=/data/application.docker.conf -Dyba_upgrade_precheck=true && python3 -c'import json\nwith open(\"/tmp/yba_upgrade_precheck/precheck_output.json\") as f:\n    po = json.load(f)\nif not po.get(\"passed\", False):\n  print(\"Yugaware pre-upgrade check failed. Please resolve the issues before proceeding with the upgrade.\")\n  print(json.dumps(po, indent=2))\n  exit(1)'" ]
+          env:
+            - name: YBA_UPGRADE_PRECHECK
+              value: "true"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: postgres_db
+            - name: POSTGRES_HOST
+              value: {{ $postgresIp }}
+            - name: POSTGRES_PORT
+              {{- if .Values.postgres.external.host }}
+              value: {{ .Values.postgres.external.port | quote }}
+              {{- else }}
+              value: {{ .Values.useYugabyteDB | ternary (.Values.yugabytedb.config.ysqlPort | default 5433) 5432 | quote }}
+              {{- end }}
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-yugaware-global-config
+                  key: app_secret
+          volumeMounts:
+          - name: yugaware-config
+            mountPath: /data
+      volumes:
+        - name: yugaware-config
+          projected:
+            sources:
+              - configMap:
+                  name: {{ trunc 36 .Release.Name }}-preupgrade-config
+                  items:
+                    - key: application.docker.conf
+                      path: application.docker.conf
+      restartPolicy: Never
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ trunc 36 .Release.Name }}-preupgrade-config
+  labels:
+    app: {{ template "yugaware.name" . }}
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  application.docker.conf: |
+  application.docker.conf: |
+    include classpath("application.common.conf")
+    play.crypto.secret=${APP_SECRET}
+    play.i18n.langs = [ "en" ]
+    pidfile.path = "/dev/null"
+    play.logger.includeConfigProperties=true
+    log.override.path = "/opt/yugabyte/yugaware/data/logs"
+
+    db {
+      default.dbname=${POSTGRES_DB}
+  {{ if and (not .Values.useYugabyteDB) .Values.postgres.external.host }}
+      default.host="{{ .Values.postgres.external.host }}"
+      default.port={{ .Values.postgres.external.port }}
+  {{ else }}
+      default.host={{ $postgresIp }}
+  {{ end }}
+  {{- if .Values.useYugabyteDB }}
+      default.port={{ .Values.yugabytedb.config.ysqlPort | default "5433" }}
+  {{- end }}
+      default.url="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${db.default.dbname}${db.default.params}
+      default.params="{{ .Values.jdbcParams }}"
+      default.username=${POSTGRES_USER}
+      default.password=${POSTGRES_PASSWORD}
+  {{ if .Values.yugaware.cloud.enabled }}
+      perf_advisor.driver="org.hsqldb.jdbc.JDBCDriver"
+      perf_advisor.url="jdbc:hsqldb:mem:perf-advisor"
+      perf_advisor.createDatabaseIfMissing=false
+      perf_advisor.username="sa"
+      perf_advisor.password="sa"
+      perf_advisor.migration.auto=false
+      perf_advisor.migration.disabled=true
+  {{ else }}
+      perf_advisor.url="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${db.perf_advisor.dbname}${db.default.params}
+      perf_advisor.createDatabaseUrl="jdbc:postgresql://"${db.default.host}":"${db.default.port}"/"${db.default.dbname}${db.default.params}
+  {{ end }}
+    }
+    yb {
+      skip_version_check = true
+      cloud.enabled = {{ .Values.yugaware.cloud.enabled }}
+      cloud.requestIdHeader = "{{ .Values.yugaware.cloud.requestIdHeader }}"
+      devops.home = /opt/yugabyte/devops
+      metrics.host = "{{ eq .Values.ip_version_support "v6_only" | ternary "[::1]" "127.0.0.1" }}"
+      metrics.url = "http://"${yb.metrics.host}":9090/api/v1"
+      metrics.management.url = "http://"${yb.metrics.host}":9090/-"
+      storage.path = /opt/yugabyte/yugaware/data
+      docker.network = bridge
+      seedData = false
+      swamper.targetPath = /opt/yugabyte/prometheus/targets
+      swamper.rulesPath = /opt/yugabyte/prometheus/rules
+      security.enable_auth_for_proxy_metrics = {{ .Values.yugaware.enableProxyMetricsAuth }}
+      proxy_endpoint_timeout = {{ .Values.yugaware.proxyEndpointTimeoutMs }}
+      multiTenant = {{ .Values.yugaware.multiTenant }}
+      releases.path = "/opt/yugabyte/releases"
+      docker.release = "/opt/yugabyte/release"
+      # TODO(bogdan): need this extra level for installing from local...
+      thirdparty.packagePath = /opt/third-party
+      helm.packagePath = "{{ .Values.helm.packagePath }}"
+      helm.timeout_secs = {{ .Values.helm.timeout }}
+      health.check_interval_ms = 300000
+      health.status_interval_ms = 43200000
+      health.default_email = "{{ .Values.yugaware.health.email }}"
+      health.ses_email_username = "{{ .Values.yugaware.health.username }}"
+      health.ses_email_password = "{{ .Values.yugaware.health.password }}"
+      kubernetes.storageClass = "{{ .Values.yugaware.storageClass }}"
+      kubernetes.yugawareImageRepository = "{{ .Values.image.repository }}"
+      kubernetes.yugawareImageTag = "{{ .Values.image.tag }}"
+      kubernetes.pullSecretName = "{{ .Values.image.pullSecret }}"
+      kubernetes.operator.enabled = "{{ .Values.yugaware.kubernetesOperatorEnabled }}"
+      kubernetes.operator.namespace = "{{ .Values.yugaware.kubernetesOperatorNamespace }}"
+      kubernetes.operator.crash_yba_on_operator_failure = "{{ .Values.yugaware.kubernetesOperatorCrashOnFailure }}"
+      url = "https://{{ .Values.tls.hostname }}"
+      # GKE MCS takes 7 to 10 minutes to setup DNS
+      wait_for_server_timeout = 15 minutes
+    {{- if .Values.tls.enabled }}
+      security.headers.hsts_enabled = true
+    {{- end }}
+      security.headers.custom_headers = {{ include "customHeaders" . }}
+    {{- if eq .Values.ip_version_support "v6_only" }}
+      env_proxy_selector.enabled = false
+    {{- end }}
+    }
+
+    play.filters {
+      # CSRF config
+      csrf {
+        cookie {
+          # If non null, the CSRF token will be placed in a cookie with this name
+          name = "csrfCookie"
+          # Whether the cookie should be set to secure
+          secure = false
+          # Whether the cookie should have the HTTP only flag set
+          httpOnly = false
+        }
+        # Whether to bypass CSRF check if CORS check is satisfied
+        bypassCorsTrustedOrigins = false
+        header {
+          # The name of the header to accept CSRF tokens from.
+          name = "Csrf-Token"
+        }
+      }
+      # CORS config
+      cors {
+        pathPrefixes = ["/"]
+        allowedOrigins = {{ include "allowedCorsOrigins" . }}
+        # Server allows cookies/credentials to be sent with cross-origin requests
+        supportsCredentials=true
+        allowedHttpMethods = ["GET", "POST", "PUT", "OPTIONS", "DELETE"]
+        allowedHttpHeaders = ["Accept", "Origin", "Content-Type", "X-Auth-Token", "X-AUTH-YW-API-TOKEN", "{{ .Values.yugaware.cloud.requestIdHeader }}", ${play.filters.csrf.header.name}]
+      }
+    }
+
+    # string config entries from helm values additionalAppConf
+    {{- range $key, $value := .Values.additionalAppConf.stringConf }}
+    {{ $key }} = "{{ $value }}"
+    {{- end }}
+
+    # boolean/int config entries from helm values additionalAppConf
+    {{- range $key, $value := .Values.additionalAppConf.nonStringConf }}
+    {{ $key }} = {{ $value }}
+    {{- end }}
+
+{{- end }}
+{{- end }}
