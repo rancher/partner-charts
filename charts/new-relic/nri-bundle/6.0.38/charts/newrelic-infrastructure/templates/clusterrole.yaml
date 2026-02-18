@@ -1,0 +1,50 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+  name: {{ include "newrelic.common.naming.fullname" . }}
+rules:
+{{- if .Values.rbac.kubeletFineGrainedAuth }}
+  # Fine-grained kubelet authorization (KEP-2862)
+  # Grants access to specific read-only kubelet endpoints, blocking write endpoints like /exec, /run, /attach
+  - apiGroups: [""]
+    resources:
+      - "nodes/metrics"  # Allows /metrics and /metrics/cadvisor
+      - "nodes/stats"    # Allows /stats/summary
+      - "nodes/pods"     # Allows /pods
+      - "nodes/healthz"  # Allows /healthz (used for connection testing)
+    verbs: ["get", "list"]
+{{- else }}
+  # Legacy kubelet authorization (nodes/proxy)
+  # Works on all Kubernetes versions but nodes/proxy could be exploited to reach kubelet write endpoints
+  # Consider using rbac.kubeletFineGrainedAuth: true when KEP-2862 is available
+  - apiGroups: [""]
+    resources:
+      - "nodes/metrics"  # Required for kubelet metrics endpoints
+      - "nodes/stats"    # Required for kubelet stats endpoint
+      - "nodes/proxy"    # Grants access to all kubelet endpoints
+    verbs: ["get", "list"]
+{{- end }}
+  - apiGroups: [ "" ]
+    resources:
+      - "endpoints"
+      - "services"
+      - "nodes"
+      - "namespaces"
+      - "pods"
+    verbs: [ "get", "list", "watch" ]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+  {{- if .Values.rbac.pspEnabled }}
+  - apiGroups:
+      - extensions
+    resources:
+      - podsecuritypolicies
+    resourceNames:
+      - privileged-{{ include "newrelic.common.naming.fullname" . }}
+    verbs:
+      - use
+  {{- end -}}
+{{- end -}}
