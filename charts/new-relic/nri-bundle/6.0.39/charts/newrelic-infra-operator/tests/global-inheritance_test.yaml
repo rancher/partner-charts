@@ -1,0 +1,518 @@
+suite: global value inheritance
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+  - templates/secret.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  # ========== CLUSTER & LICENSE TESTS ==========
+  - it: cluster from global when local not set
+    set:
+      licenseKey: us-whatever
+      global:
+        cluster: global-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: global-cluster
+        template: templates/deployment.yaml
+
+  - it: cluster from local overrides global
+    set:
+      cluster: local-cluster
+      licenseKey: us-whatever
+      global:
+        cluster: global-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: local-cluster
+        template: templates/deployment.yaml
+
+  - it: fails when neither global nor local cluster set
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - failedTemplate:
+          errorMessage: "There is not cluster name definition set neither in `.global.cluster' nor `.cluster' in your values.yaml. Cluster name is required."
+        template: templates/deployment.yaml
+
+  # ========== IMAGE INHERITANCE TESTS ==========
+  - it: uses default image when no registry override
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "newrelic/newrelic-infra-operator"
+        template: templates/deployment.yaml
+
+  - it: uses global.images.registry for operator image
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "harbor.corp.net/newrelic/newrelic/newrelic-infra-operator"
+        template: templates/deployment.yaml
+
+  - it: uses custom repository with global registry
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+      image:
+        repository: custom-operator
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "harbor.corp.net/newrelic/custom-operator"
+        template: templates/deployment.yaml
+
+  - it: local image registry overrides global registry
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+      image:
+        registry: private.registry.io
+        repository: custom-operator
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "private.registry.io/custom-operator"
+        template: templates/deployment.yaml
+
+  # ========== IMAGE PULL SECRETS INHERITANCE TESTS ==========
+  - it: sets imagePullSecrets from global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        images:
+          pullSecrets:
+            - name: harbor-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: harbor-secret
+        template: templates/deployment.yaml
+
+  - it: merges global and local imagePullSecrets (global then local)
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        images:
+          pullSecrets:
+            - name: global-secret
+      image:
+        pullSecrets:
+          - name: local-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: global-secret
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.imagePullSecrets[1].name
+          value: local-secret
+        template: templates/deployment.yaml
+
+  - it: has no imagePullSecrets by default when neither global nor local set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        template: templates/deployment.yaml
+
+  # ========== NODE SELECTOR INHERITANCE TESTS ==========
+  - it: includes linux os selector by default
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+        template: templates/deployment.yaml
+
+  - it: adds global nodeSelector to linux selector
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        nodeSelector:
+          monitoring: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.nodeSelector.monitoring
+          value: "true"
+        template: templates/deployment.yaml
+
+  - it: local nodeSelector overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        nodeSelector:
+          environment: global-value
+      nodeSelector:
+        environment: local-value
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.nodeSelector.environment
+          value: local-value
+        template: templates/deployment.yaml
+
+  # ========== TOLERATIONS INHERITANCE TESTS ==========
+  - it: sets tolerations from global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        tolerations:
+          - key: monitoring
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: monitoring
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.tolerations[0].value
+          value: "true"
+        template: templates/deployment.yaml
+
+  - it: local tolerations override global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        tolerations:
+          - key: monitoring
+            operator: Equal
+            value: global-taint
+            effect: NoSchedule
+      tolerations:
+        - key: monitoring
+          operator: Equal
+          value: local-taint
+          effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: monitoring
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.tolerations[0].value
+          value: local-taint
+        template: templates/deployment.yaml
+
+  - it: has no tolerations by default when neither global nor local set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.tolerations
+        template: templates/deployment.yaml
+
+  # ========== AFFINITY INHERITANCE TESTS ==========
+  - it: sets affinity from global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/arch
+                      operator: In
+                      values:
+                        - amd64
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: kubernetes.io/arch
+        template: templates/deployment.yaml
+
+  - it: local affinity overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/arch
+                      operator: In
+                      values:
+                        - arm64
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: kubernetes.io/arch
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values[0]
+          value: amd64
+        template: templates/deployment.yaml
+
+  - it: has no affinity by default when neither global nor local set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+        template: templates/deployment.yaml
+
+  # ========== PRIORITY CLASS INHERITANCE TESTS ==========
+  - it: sets priorityClassName from global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        priorityClassName: high-priority
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+        template: templates/deployment.yaml
+
+  - it: local priorityClassName overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        priorityClassName: global-priority
+      priorityClassName: local-priority
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: local-priority
+        template: templates/deployment.yaml
+
+  - it: has no priorityClassName by default when neither global nor local set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.priorityClassName
+        template: templates/deployment.yaml
+
+  # ========== DNS CONFIG INHERITANCE TESTS ==========
+  - it: sets dnsConfig from global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        dnsConfig:
+          options:
+            - name: ndots
+              value: "2"
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: ndots
+        template: templates/deployment.yaml
+
+  - it: local dnsConfig overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        dnsConfig:
+          options:
+            - name: global-option
+              value: global
+      dnsConfig:
+        options:
+          - name: local-option
+            value: local
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: local-option
+        template: templates/deployment.yaml
+
+  - it: has no dnsConfig by default when neither global nor local set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.dnsConfig
+        template: templates/deployment.yaml
+
+  # ========== HOST NETWORK INHERITANCE TESTS ==========
+  - it: default hostNetwork is false
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+        template: templates/deployment.yaml
+
+  - it: sets hostNetwork from local when true
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirstWithHostNet
+        template: templates/deployment.yaml
+
+  - it: sets hostNetwork from global when local not set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirstWithHostNet
+        template: templates/deployment.yaml
+
+  - it: local hostNetwork overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        hostNetwork: true
+      hostNetwork: false
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+        template: templates/deployment.yaml
+
+  # ========== SERVICE ACCOUNT INHERITANCE TESTS ==========
+  - it: uses service account name from global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        serviceAccount:
+          name: custom-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-sa
+        template: templates/deployment.yaml
+
+  - it: local service account name overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        serviceAccount:
+          name: global-sa
+      serviceAccount:
+        name: local-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: local-sa
+        template: templates/deployment.yaml
+
+  - it: has default service account name when neither global nor local set
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.serviceAccountName
+          pattern: "my-release-newrelic-infra-operator"
+        template: templates/deployment.yaml
+
+  # ========== POD SECURITY CONTEXT INHERITANCE TESTS ==========
+  - it: uses default pod security context from values.yaml
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+        template: templates/deployment.yaml
+
+  - it: global pod security context used when local set to null
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      podSecurityContext: null
+      global:
+        podSecurityContext:
+          fsGroup: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+        template: templates/deployment.yaml
+
+  - it: local pod security context overrides global
+    set:
+      licenseKey: us-whatever
+      cluster: test-cluster
+      global:
+        podSecurityContext:
+          fsGroup: 2000
+      podSecurityContext:
+        fsGroup: 3000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 3000
+        template: templates/deployment.yaml
