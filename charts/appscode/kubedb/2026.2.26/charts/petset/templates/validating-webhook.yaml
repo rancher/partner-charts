@@ -1,0 +1,82 @@
+{{ template "petset.prepare-certs" $ }}
+
+{{- if .Values.apiserver.enableValidatingWebhook }}
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validators.petset.appscode.com
+  {{- $caInject := include "petset.webhook-ca-inject-annotations" . }}
+  {{- if $caInject }}
+  annotations:
+    {{- $caInject | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "petset.labels" . | nindent 4 }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        namespace: {{ .Release.Namespace }}
+        name: {{ include "petset.fullname" . }}
+        path: /validate-apps-k8s-appscode-com-v1-petset
+{{- include "petset.webhook-ca-bundle" $ | nindent 6 }}
+    failurePolicy: Fail
+    name: petsets.apps.k8s.appscode.com
+    rules:
+      - apiGroups:
+          - apps.k8s.appscode.com
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - petsets
+    sideEffects: None
+
+{{- end }}
+
+{{- if .Values.apiserver.enableValidatingWebhook }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validators.placementpolicy.appscode.com
+  {{- $caInject := include "petset.webhook-ca-inject-annotations" . }}
+  {{- if $caInject }}
+  annotations:
+    {{- $caInject | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "petset.labels" . | nindent 4 }}
+webhooks:
+  - name: vplacementpolicy.kb.io
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        namespace: {{ .Release.Namespace }}
+        name: {{ include "petset.fullname" . }}
+        path: /validate-apps-k8s-appscode-com-v1-placementpolicy
+{{- include "petset.webhook-ca-bundle" $ | nindent 6 }}
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+          - "apps.k8s.appscode.com"
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - "placementpolicies"
+    sideEffects: None
+    objectSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values:
+        - default
+{{- end }}

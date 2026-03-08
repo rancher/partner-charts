@@ -1,0 +1,59 @@
+{{ template "supervisor.prepare-certs" $ }}
+
+{{- if .Values.apiserver.enableValidatingWebhook }}
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validators.supervisor.appscode.com
+  {{- $caInject := include "supervisor.webhook-ca-inject-annotations" . }}
+  {{- if $caInject }}
+  annotations:
+    {{- $caInject | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "supervisor.labels" . | nindent 4 }}
+webhooks:
+  - name: recommendations.validators.supervisor.appscode.com
+    clientConfig:
+      service:
+        namespace: {{ .Release.Namespace }}
+        name: {{ include "supervisor.fullname" . }}
+        path: /validate-supervisor-appscode-com-v1alpha1-recommendation
+{{- include "supervisor.webhook-ca-bundle" $ | nindent 6 }}
+    rules:
+    - apiGroups: ["supervisor.appscode.com"]
+      apiVersions: ["v1alpha1"]
+      resources: ["recommendations"]
+      operations: ["CREATE", "UPDATE"]
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: None
+  - name: maintenancewindows.validators.supervisor.appscode.com
+    clientConfig:
+      service:
+        namespace: {{ .Release.Namespace }}
+        name: {{ include "supervisor.fullname" . }}
+        path: /validate-supervisor-appscode-com-v1alpha1-maintenancewindow
+{{- include "supervisor.webhook-ca-bundle" $ | nindent 6 }}
+    rules:
+      - apiGroups: ["supervisor.appscode.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["maintenancewindows"]
+        operations: ["CREATE", "UPDATE"]
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: None
+  - name: clustermaintenancewindows.validators.supervisor.appscode.com
+    clientConfig:
+      service:
+        namespace: {{ .Release.Namespace }}
+        name: {{ include "supervisor.fullname" . }}
+        path: /validate-supervisor-appscode-com-v1alpha1-clustermaintenancewindow
+{{- include "supervisor.webhook-ca-bundle" $ | nindent 6 }}
+    rules:
+      - apiGroups: ["supervisor.appscode.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["clustermaintenancewindows"]
+        operations: ["CREATE", "UPDATE"]
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: None
+{{- end }}

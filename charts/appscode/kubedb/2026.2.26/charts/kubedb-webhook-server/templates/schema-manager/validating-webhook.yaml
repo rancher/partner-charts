@@ -1,0 +1,97 @@
+{{ template "kubedb-webhook-server.prepare-certs" $ }}
+
+{{ $featureGates := .Values.featureGates }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+{{- end }}
+
+{{- if .Values.apiserver.enableValidatingWebhook }}
+{{- if list "kubedb-webhook-server" "kubedb-schema-manager" | has .Values.server.repository }}
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validators.schema.kubedb.com
+  labels:
+    app.kubernetes.io/component: kubedb-schema-manager
+    {{- include "kubedb-webhook-server.labels" . | nindent 4 }}
+  {{- $caInject := include "kubedb-webhook-server.webhook-ca-inject-annotations" . }}
+  {{- if $caInject }}
+  annotations:
+    {{- $caInject | nindent 4 }}
+  {{- end }}
+webhooks:
+{{- if $featureGates.MariaDB }}
+- name: mariadbdatabasewebhook.validators.schema.kubedb.com
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: {{ include "kubedb-webhook-server.fullname" . }}
+      path: /validate-schema-kubedb-com-v1alpha1-mariadbdatabase
+      port: 443
+{{- include "kubedb-webhook-server.webhook-ca-bundle" $ | nindent 4 }}
+  rules:
+    - apiGroups: ["schema.kubedb.com"]
+      apiVersions: ["*"]
+      resources: ["mariadbdatabases"]
+      operations: ["CREATE", "UPDATE", "DELETE"]
+  admissionReviewVersions: ["v1beta1"]
+  failurePolicy: {{ .Values.apiserver.webhook.failurePolicy }}
+  sideEffects: None
+{{- end }}
+{{- if $featureGates.MongoDB }}
+- name: mongodbdatabasewebhook.validators.schema.kubedb.com
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: {{ include "kubedb-webhook-server.fullname" . }}
+      path: /validate-schema-kubedb-com-v1alpha1-mongodbdatabase
+      port: 443
+{{- include "kubedb-webhook-server.webhook-ca-bundle" $ | nindent 4 }}
+  rules:
+  - apiGroups: ["schema.kubedb.com"]
+    apiVersions: ["*"]
+    resources: ["mongodbdatabases"]
+    operations: ["CREATE", "UPDATE", "DELETE"]
+  admissionReviewVersions: ["v1beta1"]
+  failurePolicy: {{ .Values.apiserver.webhook.failurePolicy }}
+  sideEffects: None
+{{- end }}
+{{- if $featureGates.MySQL }}
+- name: mysqldatabasewebhook.validators.schema.kubedb.com
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: {{ include "kubedb-webhook-server.fullname" . }}
+      path: /validate-schema-kubedb-com-v1alpha1-mysqldatabase
+      port: 443
+{{- include "kubedb-webhook-server.webhook-ca-bundle" $ | nindent 4 }}
+  rules:
+    - apiGroups: ["schema.kubedb.com"]
+      apiVersions: ["*"]
+      resources: ["mysqldatabases"]
+      operations: ["CREATE", "UPDATE", "DELETE"]
+  admissionReviewVersions: ["v1beta1"]
+  failurePolicy: {{ .Values.apiserver.webhook.failurePolicy }}
+  sideEffects: None
+{{- end }}
+{{- if $featureGates.Postgres }}
+- name: postgresdatabasewebhook.validators.schema.kubedb.com
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: {{ include "kubedb-webhook-server.fullname" . }}
+      path: /validate-schema-kubedb-com-v1alpha1-postgresdatabase
+      port: 443
+{{- include "kubedb-webhook-server.webhook-ca-bundle" $ | nindent 4 }}
+  rules:
+  - apiGroups: ["schema.kubedb.com"]
+    apiVersions: ["*"]
+    resources: ["postgresdatabases"]
+    operations: ["CREATE", "UPDATE", "DELETE"]
+  admissionReviewVersions: ["v1beta1"]
+  failurePolicy: {{ .Values.apiserver.webhook.failurePolicy }}
+  sideEffects: None
+{{- end }}
+{{- end }}
+{{- end }}
