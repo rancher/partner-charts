@@ -1,0 +1,897 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  labels:
+    app.kubernetes.io/name: airlock-microgateway-operator
+    app.kubernetes.io/version: 4.8.3
+  name: sidecargateways.microgateway.airlock.com
+spec:
+  group: microgateway.airlock.com
+  names:
+    categories:
+      - airlock-microgateway
+    kind: SidecarGateway
+    listKind: SidecarGatewayList
+    plural: sidecargateways
+    singular: sidecargateway
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .status.status
+          name: Status
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: SidecarGateway defines an Airlock Microgateway Engine sidecar container configuration.
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: spec defines the desired sidecar gateway configuration.
+              properties:
+                applications:
+                  description: applications defines applications which run on different ports.
+                  items:
+                    properties:
+                      containerPort:
+                        default: 8080
+                        description: |-
+                          containerPort refers to the container port.
+                          This must be a valid port number, 0 < x < 65536.
+                        format: int64
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      downstream:
+                        description: downstream defines the downstream configuration for this application
+                        properties:
+                          protocol:
+                            description: |-
+                              protocol defines the exposed HTTP protocol version. At most one of http1, http2 and auto can be set.
+                              Default: auto: {}
+                            properties:
+                              auto:
+                                description: auto specifies that the protocol should be inferred.
+                                properties:
+                                  http2:
+                                    description: http2 specifies the settings for when HTTP/2 is inferred.
+                                    properties:
+                                      allowConnect:
+                                        default: false
+                                        description: allowConnect specifies whether to allow proxying Websocket and other upgrades over H2 CONNECT.
+                                        type: boolean
+                                    type: object
+                                type: object
+                              http1:
+                                description: http1 specifies that the client is assumed to speak HTTP/1.1.
+                                type: object
+                              http2:
+                                description: http2 specifies that the client is assumed to speak HTTP/2.
+                                properties:
+                                  allowConnect:
+                                    default: false
+                                    description: allowConnect specifies whether to allow proxying Websocket and other upgrades over H2 CONNECT.
+                                    type: boolean
+                                type: object
+                            type: object
+                          remoteIP:
+                            description: |-
+                              remoteIP defines how the remote IP of a client is propagated.
+                              Default: xff: {...}
+                            properties:
+                              connectionIP:
+                                description: connectionIP configures to use the source IP address of the direct downstream connection.
+                                type: object
+                              customHeader:
+                                description: customHeader specifies to use a custom header for remote IP extraction.
+                                properties:
+                                  headerName:
+                                    description: headerName specifies the name of the custom header containing the remote IP.
+                                    maxLength: 256
+                                    minLength: 1
+                                    type: string
+                                  required:
+                                    default: true
+                                    description: required specifies if the custom header is required. If true and not available the request will be rejected with 403.
+                                    type: boolean
+                                required:
+                                  - headerName
+                                type: object
+                              xff:
+                                description: xff configures to use the standard 'X-Forwarded-For' header for IP extraction.
+                                properties:
+                                  numTrustedHops:
+                                    description: |-
+                                      numTrustedHops specifies to extract the client's originating IP from the nth rightmost entry in the X-Forwarded-For header. With the default value of 1, the IP is extracted from the rightmost entry.
+                                      Only one of numTrustedHops and trustedCIDRRanges can be set.
+                                      Default: 1
+                                    format: int32
+                                    minimum: 1
+                                    type: integer
+                                  trustedCIDRRanges:
+                                    description: |-
+                                      trustedCIDRRanges specifies the IPv4 or IPv6 CIDR ranges, e.g. ``196.148.3.128/26`` or ``2001:db8::/28`` to trust when evaluating the remote IP address to determine the original client’s IP address. When the remote IP address matches a trusted CIDR and the X-Forwarded-For header was sent, each entry in the X-Forwarded-For header is evaluated from right to left and the first non-trusted address is used as the original client address. If all addresses in X-Forwarded-For are within the trusted list, the first (leftmost) entry is used.
+                                      Only one of numTrustedHops and trustedCIDRRanges can be set.
+                                    items:
+                                      description: CIDRRange defines an IPv4 or IPv6 CIDR range, e.g. “196.148.3.128/26“ or “2001:db8::/28“.
+                                      format: cidr
+                                      maxLength: 49
+                                      minLength: 1
+                                      type: string
+                                    maxItems: 64
+                                    minItems: 1
+                                    type: array
+                                type: object
+                            type: object
+                          requestNormalizations:
+                            description: requestNormalizations defines a set of normalization actions which are applied to the request before route matching.
+                            properties:
+                              mergeSlashes:
+                                default: true
+                                description: mergeSlashes ensures that adjacent slashes in the path are merged into one.
+                                type: boolean
+                              normalizePath:
+                                default: true
+                                description: normalizePath ensures normalization according to RFC 3986 without case normalization.
+                                type: boolean
+                            type: object
+                          restrictions:
+                            description: restrictions defines restrictions for downstream.
+                            properties:
+                              http:
+                                description: http defines limits for the HTTP protocol.
+                                properties:
+                                  headersLength:
+                                    anyOf:
+                                      - type: integer
+                                      - type: string
+                                    default: 60Ki
+                                    description: headersLength defines maximum size of all request headers combined. Requests that exceed this limit will receive a 431 response.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                type: object
+                            type: object
+                          timeouts:
+                            description: timeouts defines timeouts for downstream
+                            properties:
+                              http:
+                                description: http defines the settings for HTTP timeouts.
+                                properties:
+                                  idle:
+                                    default: 5m
+                                    description: |-
+                                      idle specifies the downstream HTTP idle timeout.
+                                      A value of 0 will completely disable the timeout.
+                                      Default: 5m
+                                    type: string
+                                  maxDuration:
+                                    default: 5m
+                                    description: |-
+                                      maxDuration defines the total duration for a HTTP request/response stream.
+                                      A value of 0 will completely disable the timeout.
+                                      Default: 5m
+                                    type: string
+                                  requestHeaders:
+                                    default: 10s
+                                    description: |-
+                                      requestHeaders defines the duration before all request headers must be received.
+                                      A value of 0 will completely disable the timeout.
+                                      Default: 10s
+                                    type: string
+                                type: object
+                            type: object
+                          tls:
+                            description: tls defines the TLS settings.
+                            properties:
+                              ciphers:
+                                description: ciphers defines a list of the supported TLS cipher suites. For details on cipher list refer to the envoy documentation on cipher_suites in common tls configuration.
+                                items:
+                                  maxLength: 256
+                                  type: string
+                                maxItems: 32
+                                minItems: 1
+                                type: array
+                                x-kubernetes-list-type: set
+                              clientCertificate:
+                                description: |-
+                                  clientCertificate defines the TLS settings for verification of client certificates.
+                                  At most one of ignored, optional and required can be set.
+                                  Default: ignored: {}
+                                properties:
+                                  ignored:
+                                    description: ignored disables verification of the client certificate.
+                                    type: object
+                                  optional:
+                                    description: |-
+                                      optional enables verification of the client certificate if one is presented.
+                                      In this mode only trustedCA and crl settings can be configured since certificatePinning and allowedSANs require a client certificate.
+                                    properties:
+                                      crl:
+                                        description: crl defines the Certificate Revocation List (CRL) settings.
+                                        properties:
+                                          lists:
+                                            description: lists defines the list of secretRefs containing Certificate Revocation Lists.
+                                            items:
+                                              properties:
+                                                secretRef:
+                                                  description: secretRef defines the reference to a secret containing one or more CRL's (in PEM format) under the key 'ca.crl'.
+                                                  properties:
+                                                    name:
+                                                      description: name of the resource
+                                                      maxLength: 253
+                                                      minLength: 1
+                                                      type: string
+                                                  required:
+                                                    - name
+                                                  type: object
+                                              required:
+                                                - secretRef
+                                              type: object
+                                            maxItems: 32
+                                            minItems: 1
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                          validationMode:
+                                            default: VerifyChain
+                                            description: validationMode defines whether only the leaf certificate or also the CA certs should be checked.
+                                            enum:
+                                              - VerifyLeafCertOnly
+                                              - VerifyChain
+                                            type: string
+                                        type: object
+                                      trustedCA:
+                                        description: trustedCA defines which CA certificates are trusted.
+                                        properties:
+                                          certificates:
+                                            description: certificates defines the list of secretRefs containing trusted CA certificates.
+                                            items:
+                                              properties:
+                                                secretRef:
+                                                  description: secretRef defines the reference to a secret containing one or more CA certificates under the key 'ca.crt'.
+                                                  properties:
+                                                    name:
+                                                      description: name of the resource
+                                                      maxLength: 253
+                                                      minLength: 1
+                                                      type: string
+                                                  required:
+                                                    - name
+                                                  type: object
+                                              required:
+                                                - secretRef
+                                              type: object
+                                            maxItems: 16
+                                            minItems: 1
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                          verificationDepth:
+                                            default: 1
+                                            description: |-
+                                              verificationDepth specifies the hops in the certificate chain at which validation is performed.
+                                              1 means that either the leaf or the signing CA must be in the set of trusted certificates.
+                                            format: int32
+                                            minimum: 0
+                                            type: integer
+                                        required:
+                                          - certificates
+                                        type: object
+                                    required:
+                                      - trustedCA
+                                    type: object
+                                  required:
+                                    description: |-
+                                      required contains settings for client certificate verification. A client must present a valid certificate.
+                                      At least one of trustedCA and certificatePinning must be set.
+                                    properties:
+                                      allowedSANs:
+                                        description: |-
+                                          allowedSANs is a list of matchers to verify the Subject Alternative name. If specified, it will verify that the
+                                          Subject Alternative Name of the presented certificate matches one of the specified matchers. The matching uses “any” semantics,
+                                          that is to say, the SAN is verified if at least one matcher is matched.
+                                          AllowedSANs requires trustedCA to be set.
+                                        items:
+                                          description: |-
+                                            TLSValidationContextSANMatcher is a list of matchers to verify the Subject Alternative name. If specified, it will verify that the
+                                            Subject Alternative Name of the presented certificate matches one of the specified matchers.
+                                          properties:
+                                            matcher:
+                                              description: matcher defines the string matcher for the SAN value.
+                                              properties:
+                                                contains:
+                                                  description: |-
+                                                    contains defines a substring match on the substring specified here. Empty contains match is not allowed, please use regex instead.
+                                                    Only one of exact, prefix, suffix, regex or contains can be set.
+                                                  maxLength: 1024
+                                                  minLength: 1
+                                                  type: string
+                                                exact:
+                                                  description: |-
+                                                    exact defines an explicit match on the string specified here.
+                                                    Only one of exact, prefix, suffix, regex or contains can be set.
+                                                  maxLength: 1024
+                                                  minLength: 1
+                                                  type: string
+                                                ignoreCase:
+                                                  default: false
+                                                  description: ignoreCase indicates whether the matching should be case-insensitive. In case of a regex match, the regex gets wrapped with a group `(?i:...)`.
+                                                  type: boolean
+                                                prefix:
+                                                  description: |-
+                                                    prefix defines a prefix match on the prefix specified here. Empty prefix is not allowed, please use regex instead.
+                                                    Only one of exact, prefix, suffix, regex or contains can be set.
+                                                  maxLength: 1024
+                                                  minLength: 1
+                                                  type: string
+                                                regex:
+                                                  description: |-
+                                                    regex defines a regex match on the regular expression specified here. Google's [RE2 regex engine](https://github.com/google/re2/wiki/Syntax) is used.
+                                                    The regex matches only single-line by default, even with ".*". To match a multi-line string prepend (?s) to your regex.
+                                                    Only one of exact, prefix, suffix, regex or contains can be set.
+                                                  maxLength: 1024
+                                                  minLength: 1
+                                                  type: string
+                                                suffix:
+                                                  description: |-
+                                                    suffix defines a suffix match on the suffix specified here. Empty suffix is not allowed, please use regex instead.
+                                                    Only one of exact, prefix, suffix, regex or contains can be set.
+                                                  maxLength: 1024
+                                                  minLength: 1
+                                                  type: string
+                                              type: object
+                                            sanType:
+                                              description: sanType defines the type of SAN matcher.
+                                              enum:
+                                                - DNS
+                                                - Email
+                                                - URI
+                                                - IPAddress
+                                              type: string
+                                          required:
+                                            - matcher
+                                            - sanType
+                                          type: object
+                                        maxItems: 32
+                                        minItems: 1
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                      certificatePinning:
+                                        description: |-
+                                          certificatePinning defines the constraints a client certificate must fulfill.
+                                          If more than one constraint is configured only one must be satisfied.
+                                          At least one of allowedSPKIs and allowedHashes must be set.
+                                        properties:
+                                          allowedHashes:
+                                            description: |-
+                                              allowedHashes is a list of hex-encoded SHA-256 hashes.
+                                              If specified, it will verify that the SHA-256 of the DER-encoded presented certificate matches one of the specified values.
+                                            items:
+                                              maxLength: 95
+                                              minLength: 64
+                                              pattern: ^[0-9a-fA-F]{64}$|^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){31}$
+                                              type: string
+                                            maxItems: 64
+                                            minItems: 1
+                                            type: array
+                                            x-kubernetes-list-type: set
+                                          allowedSPKIs:
+                                            description: |-
+                                              allowedSPKIs is a list of base64-encoded SHA-256 hashes.
+                                              If specified, it will verify that the SHA-256 of the DER-encoded Subject Public Key Information (SPKI) of the presented certificate matches one of the specified values.
+                                            items:
+                                              format: byte
+                                              maxLength: 44
+                                              minLength: 44
+                                              pattern: '[^=]=$'
+                                              type: string
+                                            maxItems: 64
+                                            minItems: 1
+                                            type: array
+                                            x-kubernetes-list-type: set
+                                        type: object
+                                      crl:
+                                        description: crl defines the Certificate Revocation List (CRL) settings.
+                                        properties:
+                                          lists:
+                                            description: lists defines the list of secretRefs containing Certificate Revocation Lists.
+                                            items:
+                                              properties:
+                                                secretRef:
+                                                  description: secretRef defines the reference to a secret containing one or more CRL's (in PEM format) under the key 'ca.crl'.
+                                                  properties:
+                                                    name:
+                                                      description: name of the resource
+                                                      maxLength: 253
+                                                      minLength: 1
+                                                      type: string
+                                                  required:
+                                                    - name
+                                                  type: object
+                                              required:
+                                                - secretRef
+                                              type: object
+                                            maxItems: 32
+                                            minItems: 1
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                          validationMode:
+                                            default: VerifyChain
+                                            description: validationMode defines whether only the leaf certificate or also the CA certs should be checked.
+                                            enum:
+                                              - VerifyLeafCertOnly
+                                              - VerifyChain
+                                            type: string
+                                        type: object
+                                      trustedCA:
+                                        description: trustedCA defines which CA certificates are trusted.
+                                        properties:
+                                          certificates:
+                                            description: certificates defines the list of secretRefs containing trusted CA certificates.
+                                            items:
+                                              properties:
+                                                secretRef:
+                                                  description: secretRef defines the reference to a secret containing one or more CA certificates under the key 'ca.crt'.
+                                                  properties:
+                                                    name:
+                                                      description: name of the resource
+                                                      maxLength: 253
+                                                      minLength: 1
+                                                      type: string
+                                                  required:
+                                                    - name
+                                                  type: object
+                                              required:
+                                                - secretRef
+                                              type: object
+                                            maxItems: 16
+                                            minItems: 1
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                          verificationDepth:
+                                            default: 1
+                                            description: |-
+                                              verificationDepth specifies the hops in the certificate chain at which validation is performed.
+                                              1 means that either the leaf or the signing CA must be in the set of trusted certificates.
+                                            format: int32
+                                            minimum: 0
+                                            type: integer
+                                        required:
+                                          - certificates
+                                        type: object
+                                    type: object
+                                type: object
+                              enable:
+                                default: false
+                                description: enable defines if the downstream connection is encrypted.
+                                type: boolean
+                              protocol:
+                                description: protocol defines the supported TLS protocol versions.
+                                properties:
+                                  maximum:
+                                    description: maximum supported TLS version.
+                                    enum:
+                                      - TLSv1_0
+                                      - TLSv1_1
+                                      - TLSv1_2
+                                      - TLSv1_3
+                                    type: string
+                                  minimum:
+                                    description: minimum supported TLS version.
+                                    enum:
+                                      - TLSv1_0
+                                      - TLSv1_1
+                                      - TLSv1_2
+                                      - TLSv1_3
+                                    type: string
+                                type: object
+                              secretRef:
+                                description: secretRef defines the reference to the TLS server certificate (secret of type kubernetes.io/tls).
+                                properties:
+                                  name:
+                                    description: name of the resource
+                                    maxLength: 253
+                                    minLength: 1
+                                    type: string
+                                required:
+                                  - name
+                                type: object
+                              xfcc:
+                                description: |-
+                                  xfcc defines the handling of X-Forwarded-Client-Cert header. Meaning of the possible values:
+                                  _Sanitize_: Do not send the XFCC header to the next hop. This is the default value.
+                                  _ForwardOnly_: When the client connection is mTLS (Mutual TLS), forward the XFCC header in the request.
+                                  _AppendAndForward_: When the client connection is mTLS, append the client certificate information to the request’s XFCC header and forward it.
+                                  _SanitizeAndSet_: When the client connection is mTLS, reset the XFCC header with the client certificate information and send it to the next hop.
+                                  _AlwaysForwardOnly_: Always forward the XFCC header in the request, regardless of whether the client connection is mTLS.
+                                  Note: When forwarding the XFCC header in the request you might have to adjust the header length restrictions (See sidecargateway.spec.applications.downstream.restrictions.http)
+                                enum:
+                                  - Sanitize
+                                  - ForwardOnly
+                                  - AppendAndForward
+                                  - SanitizeAndSet
+                                  - AlwaysForwardOnly
+                                type: string
+                            type: object
+                        type: object
+                      envoyHTTPFilterRefs:
+                        description: envoyHTTPFilterRefs selects the relevant EnvoyHTTPFilters.
+                        properties:
+                          append:
+                            description: append specifies EnvoyHTTPFilters to insert after the Airlock filters (i.e., after auth, deny rule filtering, header rewrites, etc.).
+                            items:
+                              properties:
+                                name:
+                                  description: name of the resource
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                              required:
+                                - name
+                              type: object
+                            maxItems: 32
+                            type: array
+                            x-kubernetes-list-map-keys:
+                              - name
+                            x-kubernetes-list-type: map
+                          prepend:
+                            description: prepend specifies EnvoyHTTPFilters to insert before the Airlock filters (i.e, before auth, deny rule filtering, header rewrites, etc.).
+                            items:
+                              properties:
+                                name:
+                                  description: name of the resource
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                              required:
+                                - name
+                              type: object
+                            maxItems: 32
+                            type: array
+                            x-kubernetes-list-map-keys:
+                              - name
+                            x-kubernetes-list-type: map
+                        type: object
+                      routes:
+                        description: routes defines the security configurations for different paths. The first matching route (from top to bottom) applies.
+                        items:
+                          description: |-
+                            SidecarGatewayApplicationRoute defines the security configurations for different paths.
+                            At most one of secured and unsecured can be set.
+                            Default: secured: {...}
+                          properties:
+                            pathPrefix:
+                              default: /
+                              description: pathPrefix defines the path prefix used during route selection.
+                              maxLength: 2048
+                              minLength: 1
+                              type: string
+                            secured:
+                              description: secured enables WAF processing for this route.
+                              properties:
+                                accessControlRef:
+                                  description: |-
+                                    accessControlRef selects the relevant AccessControl configuration resource.
+                                    If undefined, Airlock Microgateway does not perform any access control.
+                                  properties:
+                                    name:
+                                      description: name of the resource
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                    - name
+                                  type: object
+                                contentSecurityRef:
+                                  description: |-
+                                    contentSecurityRef selects the relevant ContentSecurity configuration resource.
+                                    If undefined, default settings are applied, designed to work with most upstream web application services.
+                                  properties:
+                                    name:
+                                      description: name of the resource
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                    - name
+                                  type: object
+                              type: object
+                            unsecured:
+                              description: |-
+                                unsecured disables all WAF functionality and therefore protection for this route.
+                                WARNING: Using this setting when the application is exposed to untrusted downstream traffic is highly discouraged.
+                              type: object
+                          type: object
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-map-keys:
+                          - pathPrefix
+                        x-kubernetes-list-type: map
+                      telemetryRef:
+                        description: |-
+                          telemetryRef selects the relevant Telemetry configuration resource.
+                          If undefined, default settings are applied, designed to work with most upstream web application services.
+                        properties:
+                          name:
+                            description: name of the resource
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      upstream:
+                        description: upstream defines the upstream configuration for this application
+                        properties:
+                          protocol:
+                            description: |-
+                              protocol defines HTTP protocol version used to communicate with the upstream. At most one of http1, http2 and auto can be set.
+                              Default: auto: {}
+                            properties:
+                              auto:
+                                description: auto specifies to negotiate the protocol with TLS ALPN (if TLS is enabled) or, as a fallback, use the same protocol that is used by the downstream connection.
+                                properties:
+                                  http2:
+                                    description: http2 specifies the settings for when HTTP/2 is inferred.
+                                    properties:
+                                      allowConnect:
+                                        default: false
+                                        description: allowConnect specifies whether to allow proxying Websocket and other upgrades over H2 CONNECT.
+                                        type: boolean
+                                    type: object
+                                type: object
+                              http1:
+                                description: http1 specifies to use HTTP/1.1.
+                                type: object
+                              http2:
+                                description: http2 specifies to use HTTP/2.
+                                properties:
+                                  allowConnect:
+                                    default: false
+                                    description: allowConnect specifies whether to allow proxying Websocket and other upgrades over H2 CONNECT.
+                                    type: boolean
+                                type: object
+                            type: object
+                          timeouts:
+                            description: timeouts defines the timeout settings.
+                            properties:
+                              http:
+                                description: http defines the settings for HTTP timeouts.
+                                properties:
+                                  idle:
+                                    description: |-
+                                      idle configures the upstream HTTP idle timeout. If this setting is not specified, the value of applications[].downstream.timeouts.http.idle is inherited.
+                                      A value of 0 will completely disable the timeout.
+                                    type: string
+                                  maxDuration:
+                                    default: 15s
+                                    description: |-
+                                      maxDuration limits the total duration for an HTTP request/response stream.
+                                      Default: 15s
+                                    type: string
+                                type: object
+                            type: object
+                          tls:
+                            description: tls defines the TLS settings.
+                            properties:
+                              ciphers:
+                                description: ciphers defines a list of the supported TLS cipher suites. For details on cipher list refer to the envoy documentation on cipher_suites in common tls configuration.
+                                items:
+                                  maxLength: 256
+                                  type: string
+                                maxItems: 32
+                                minItems: 1
+                                type: array
+                                x-kubernetes-list-type: set
+                              enable:
+                                default: false
+                                description: enable defines if the upstream connection is encrypted.
+                                type: boolean
+                              protocol:
+                                description: protocol defines the supported TLS protocol versions.
+                                properties:
+                                  maximum:
+                                    description: maximum supported TLS version.
+                                    enum:
+                                      - TLSv1_0
+                                      - TLSv1_1
+                                      - TLSv1_2
+                                      - TLSv1_3
+                                    type: string
+                                  minimum:
+                                    description: minimum supported TLS version.
+                                    enum:
+                                      - TLSv1_0
+                                      - TLSv1_1
+                                      - TLSv1_2
+                                      - TLSv1_3
+                                    type: string
+                                type: object
+                            type: object
+                        type: object
+                    type: object
+                  maxItems: 16
+                  minItems: 1
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - containerPort
+                  x-kubernetes-list-type: map
+                envoyClusterRefs:
+                  description: envoyClusterRefs selects the relevant EnvoyClusters.
+                  items:
+                    properties:
+                      name:
+                        description: name of the resource
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  maxItems: 128
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+                podSelector:
+                  description: podSelector defines to which Pods the configuration will be applied to.
+                  properties:
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels.
+                      type: object
+                  type: object
+                sessionHandlingRef:
+                  description: sessionHandlingRef selects the SessionHandling configuration to apply.
+                  properties:
+                    name:
+                      description: name of the resource
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                  required:
+                    - name
+                  type: object
+              required:
+                - applications
+              type: object
+            status:
+              description: status describes the current status of the SidecarGateway.
+              properties:
+                conditions:
+                  description: conditions describe the status of the SidecarGateway.
+                  items:
+                    description: Condition contains details for one aspect of the current state of this API Resource.
+                    properties:
+                      lastTransitionTime:
+                        description: |-
+                          lastTransitionTime is the last time the condition transitioned from one status to another.
+                          This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                        format: date-time
+                        type: string
+                      message:
+                        description: |-
+                          message is a human readable message indicating details about the transition.
+                          This may be an empty string.
+                        maxLength: 32768
+                        type: string
+                      observedGeneration:
+                        description: |-
+                          observedGeneration represents the .metadata.generation that the condition was set based upon.
+                          For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                          with respect to the current state of the instance.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      reason:
+                        description: |-
+                          reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                          Producers of specific condition types may define expected values and meanings for this field,
+                          and whether the values are considered a guaranteed API.
+                          The value should be a CamelCase string.
+                          This field may not be empty.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                        type: string
+                      status:
+                        description: status of the condition, one of True, False, Unknown.
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                        type: string
+                    required:
+                      - lastTransitionTime
+                      - status
+                      - type
+                    type: object
+                  maxItems: 8
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - type
+                  x-kubernetes-list-type: map
+                pods:
+                  description: pods selected by the SidecarGateway.
+                  items:
+                    properties:
+                      envoyConfig:
+                        description: envoyConfig indicates the name of the EnvoyConfig CR for the Pod.
+                        maxLength: 253
+                        type: string
+                      name:
+                        description: name indicates the name of a Pod selected by the SidecarGateway.
+                        maxLength: 63
+                        type: string
+                      sessionAgentSecret:
+                        maxLength: 253
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  maxItems: 256
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+                status:
+                  description: status indicates the overall status of the SidecarGateway.
+                  enum:
+                    - Active
+                    - Warning
+                    - Error
+                  type: string
+                unmanagedPods:
+                  description: unmanagedPods lists Pods which are selected by the SidecarGateway, but not managed by the reconciling Airlock Microgateway Operator instance.
+                  items:
+                    properties:
+                      managedBy:
+                        description: managedBy indicates the Airlock Microgateway Operator instance which manages this Pod.
+                        maxLength: 63
+                        type: string
+                      name:
+                        description: name indicates the name of a Pod selected by the SidecarGateway.
+                        maxLength: 63
+                        type: string
+                      sessionAgentSecret:
+                        maxLength: 253
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  maxItems: 256
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
