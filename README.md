@@ -21,7 +21,7 @@ To certify your software as SUSE "Ready", you need to attest that the software:
 
 * has been tested on RKE2 or K3s and publishes documentation showing supported
   versions, including
-  * version of Rancher (e.g. 2.8) 
+  * version of Rancher (e.g. 2.8)
   * Rancher-supported distribution of Kubernetes (RKE2, K3s, EKS, etc.)
   * version of Kubernetes (e.g. 1.27)
 * is supported by your organization on the declared Rancher versions and configurations
@@ -79,6 +79,7 @@ following files. If any of these are missing, the pull request will not be accep
 
 * `assets/<vendor>/<chart>-<version>.tgz` — the packaged chart archive
 * `assets/icons/<chart>.<ext>` — the chart icon, downloaded from upstream
+* `charts/<vendor>/<chart>/<version>/*` — the chart helm files
 * `index.yaml` — updated with the new chart entry
 
 **Package files** (authored by you):
