@@ -70,6 +70,63 @@ is useful for this; for more information please see the
 [`partner-charts-ci` documentation](https://github.com/rancher/partner-charts-ci?tab=readme-ov-file#4-run-partner-charts-ci-update).
 
 
+### How do I verify my pull request is correct?
+
+After running `bin/partner-charts-ci update`, your pull request should contain the
+following files. If any of these are missing, the pull request will not be accepted.
+
+**Generated files** (produced by `partner-charts-ci update` — do not edit manually):
+
+* `assets/<vendor>/<chart>-<version>.tgz` — the packaged chart archive
+* `assets/icons/<chart>.<ext>` — the chart icon, downloaded from upstream
+* `index.yaml` — updated with the new chart entry
+
+**Package files** (authored by you):
+
+* `packages/<vendor>/<chart>/upstream.yaml` — upstream source configuration
+* `packages/<vendor>/<chart>/overlay/app-readme.md` — brief description shown in the Rancher UI (1-2 paragraphs)
+
+**`Chart.yaml` annotations**
+
+`partner-charts-ci update` automatically adds the following Rancher-specific annotations
+to your chart's `Chart.yaml`. Verify they are present in the generated file:
+
+```yaml
+annotations:
+  catalog.cattle.io/certified: partner
+  catalog.cattle.io/display-name: <your chart display name>
+  catalog.cattle.io/kube-version: '>=X.Y-0'
+  catalog.cattle.io/release-name: <your chart name>
+```
+
+> [!IMPORTANT]
+> `kubeVersion` must include the `-0` suffix (e.g. `>=1.21-0`). Without it, the chart
+> will not display in the Rancher UI on GKE clusters. Set it via `ChartMetadata.kubeVersion`
+> in your `upstream.yaml` if your upstream chart does not already define it correctly.
+
+**`index.yaml` entry**
+
+Each chart version in `index.yaml` must have the same `catalog.cattle.io/*` annotations
+and an icon path pointing to the local file:
+
+```yaml
+entries:
+  <chart>:
+  - annotations:
+      catalog.cattle.io/certified: partner
+      catalog.cattle.io/display-name: <your chart display name>
+      catalog.cattle.io/kube-version: '>=X.Y-0'
+      catalog.cattle.io/release-name: <your chart name>
+    icon: file://assets/icons/<chart>.<ext>
+    urls:
+    - assets/<vendor>/<chart>-<version>.tgz
+```
+
+> [!NOTE]
+> The `generated:` timestamp at the top of `index.yaml` is managed exclusively by the
+> CI system. Do not modify it in your pull request.
+
+
 ### How do I change the icon associated with my helm chart?
 
 Icons are located in the `assets/icons/` directory. You can see which of these
