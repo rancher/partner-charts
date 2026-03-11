@@ -102,8 +102,14 @@ annotations:
 
 > [!IMPORTANT]
 > `kubeVersion` must include the `-0` suffix (e.g. `>=1.21-0`). Without it, the chart
-> will not display in the Rancher UI on GKE clusters. Set it via `ChartMetadata.kubeVersion`
-> in your `upstream.yaml` if your upstream chart does not already define it correctly.
+> will not display in Rancher on any Kubernetes distribution that appends pre-release
+> identifiers to its version string. Distributions such as GKE (`v1.25.6-gke.200`),
+> EKS (`v1.26.8-eks-12345`), k3s (`v1.26.8-k3s1`), and RKE2 (`v1.26.8+rke2r1`) produce
+> version strings that Helm's semver engine treats as pre-release versions and skips unless
+> the constraint explicitly opts in via `-0` (see [Masterminds/semver — Working with
+> Pre-Release Versions](https://github.com/Masterminds/semver/blob/master/README.md#working-with-prerelease-versions)).
+> Set `kubeVersion` via `ChartMetadata.kubeVersion` in your `upstream.yaml` if your
+> upstream chart does not already define it correctly.
 
 **`index.yaml` entry**
 
