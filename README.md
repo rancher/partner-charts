@@ -129,9 +129,13 @@ entries:
     - assets/<vendor>/<chart>-<version>.tgz
 ```
 
-> [!NOTE]
-> The `generated:` timestamp at the top of `index.yaml` is managed exclusively by the
-> CI system. Do not modify it in your pull request.
+> [!IMPORTANT]
+> This repository is updated nightly by an automated CI process that pulls the latest
+> upstream chart versions and updates `index.yaml`. **Always rebase your branch from
+> `main-source` and re-run `bin/partner-charts-ci update` immediately before submitting
+> your pull request** to ensure your branch is in sync. The `generated:` timestamp at
+> the top of `index.yaml` is managed exclusively by the CI system — if it differs from
+> `main-source`, your branch is out of date and must be rebased before it can be merged.
 
 
 ### How do I change the icon associated with my helm chart?

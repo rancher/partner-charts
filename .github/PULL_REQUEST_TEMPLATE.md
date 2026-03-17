@@ -2,6 +2,10 @@
 > - [Example Workflow for Adding a Package](https://github.com/rancher/partner-charts-ci?tab=readme-ov-file#example-workflow-for-adding-a-package)
 > - [How do I verify my pull request is correct?](https://github.com/rancher/partner-charts#how-do-i-verify-my-pull-request-is-correct)
 
+> [!IMPORTANT]
+> This repository is updated nightly by an automated CI process. Always rebase your
+> branch from `main-source` and re-run `bin/partner-charts-ci update` immediately
+> before submitting this pull request.
 
 ## Checklist
 
