@@ -1,0 +1,63 @@
+suite: test global DNS and network configuration
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: should inherit global.hostNetwork when local hostNetwork not set
+    set:
+      cluster: test-cluster
+      global.hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirstWithHostNet
+
+  - it: should use local hostNetwork over global.hostNetwork
+    set:
+      cluster: test-cluster
+      hostNetwork: false
+      global.hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+      - notExists:
+          path: spec.template.spec.dnsPolicy
+
+  - it: should inherit global.dnsConfig when local dnsConfig not set
+    set:
+      cluster: test-cluster
+      global.dnsConfig:
+        nameservers:
+          - 1.2.3.4
+        searches:
+          - ns1.svc.cluster-domain.example
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.nameservers[0]
+          value: 1.2.3.4
+      - equal:
+          path: spec.template.spec.dnsConfig.searches[0]
+          value: ns1.svc.cluster-domain.example
+
+  - it: should use local dnsConfig over global.dnsConfig
+    set:
+      cluster: test-cluster
+      dnsConfig:
+        nameservers:
+          - 5.6.7.8
+      global.dnsConfig:
+        nameservers:
+          - 1.2.3.4
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.nameservers[0]
+          value: 5.6.7.8
+      - notContains:
+          path: spec.template.spec.dnsConfig.nameservers
+          content: 1.2.3.4
