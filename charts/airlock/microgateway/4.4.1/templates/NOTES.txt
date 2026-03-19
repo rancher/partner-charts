@@ -1,15 +1,61 @@
-Thank you for installing Airlock Microgateway CNI.
+Thank you for installing Airlock Microgateway.
+{{- if .Values.operator.gatewayAPI.enabled }}
 
-Please ensure that the helm values'.config.cniNetDir' and '.config.cniBinDir' are configured for your Kubernetes distribution.
-For further information, consider our manual https://docs.airlock.com/microgateway/{{ include "airlock-microgateway-cni.docsVersion" . }}.
-The chapter 'Setup > Installation' describes how to set those settings correctly.
+K8s Gateway API support enabled.
+Note that the K8s Gateway API support is an incubating Airlock Microgateway feature. We encourage you to try the installation and configuration for testing and evaluation. Your feedback is welcome.
+
+    {{- if or .Values.operator.watchNamespaces .Values.operator.watchNamespaceSelector -}}
+        {{- fail `
+
+K8s Gateway API is only supported using the 'AllNamespaces' installation mode type, ensure that 'operator.watchNamespaces' and 'operator.watchNamespaceSelector' are not configured.
+`
+    -}}
+    {{- end -}}
+{{- end }}
+
+Please ensure the following prerequisites are fulfilled:
+* cert-manager is installed.
+  https://cert-manager.io/docs/installation/helm/
+* A valid Airlock Microgateway license is deployed in the Kubernetes secret '{{ .Release.Namespace }}/{{ .Values.license.secretName }}'
+  * Get a free Community license: https://airlock.com/en/microgateway-community
+  * Order a Premium license: https://airlock.com/en/microgateway-premium
+* Airlock Microgateway CNI is installed on the cluster, when running data plane mode sidecar
+  https://artifacthub.io/packages/helm/airlock-microgateway-cni/microgateway-cni.
+  For more information about data plane modes, see https://docs.airlock.com/microgateway/{{ include "airlock-microgateway.docsVersion" . }}/#data/1660804709650.html
 
 Further information:
-* Documentation: https://docs.airlock.com/microgateway/{{ include "airlock-microgateway-cni.docsVersion" . }}
+* Documentation: https://docs.airlock.com/microgateway/{{ include "airlock-microgateway.docsVersion" . }}
+* CRD API reference documentation: https://docs.airlock.com/microgateway/{{ include "airlock-microgateway.docsVersion" . }}/api/crds
 * Airlock Microgateway Labs: https://play.instruqt.com/airlock/invite/hyi9fy4b4jzc?icp_referrer=helm
+{{- if .Values.crds.skipVersionCheck }}
 
-Next steps:
-* Install Airlock Microgateway (if not done already)
-  https://artifacthub.io/packages/helm/airlock-microgateway/microgateway
+Warning: CRD version check skipped
+{{- else -}}
+{{- $outdatedCRDs := (include "airlock-microgateway.outdatedCRDs" .) -}}
+{{- if $outdatedCRDs -}}
+    {{- fail (printf `
+
+Helm does not automatically upgrade CRDs from the chart's 'crds/' directory during 'helm install/upgrade'.
+Therefore, the CRDs must be manually upgraded with the following command before deploying this chart:
+
+kubectl apply -k https://github.com/airlock/microgateway/deploy/charts/airlock-microgateway/crds/?ref=%s --server-side --force-conflicts
+
+If you are not using the helm install/upgrade command and instead rely on some other mechanism which is able to upgrade CRDs for deploying this chart, you can suppress this error by setting the helm value 'crds.skipVersionCheck=true'.`
+    .Chart.AppVersion)
+    -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.tests.enabled -}}
+    {{- if .Values.operator.watchNamespaces -}}
+        {{- if not (has .Release.Namespace .Values.operator.watchNamespaces) -}}
+            {{- fail (printf `
+
+To execute 'helm test', it is necessary that the release namespace '%s' is part of the operator's watch scope. Either disable the tests or ensure that the release namespace is added to watch namspace list ('operator.watchNamespaces') in the helm values.
+`
+            .Release.Namespace)
+            -}}
+        {{- end -}}
+    {{- end -}}
+{{- end }}
 
 Your release version is {{ .Chart.Version }}.

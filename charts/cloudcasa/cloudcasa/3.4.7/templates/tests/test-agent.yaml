@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "cloudcasa-test-agent"
+  namespace: cloudcasa-io
+  annotations:
+    "helm.sh/hook": test
+spec:
+  {{ if .Values.imagePullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.imagePullSecret | quote }}
+  {{ end }}
+  containers:
+    - name: kubeagentmanager-test
+      image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+      command: ["bin/bash", "-c"]
+      args:
+        - kubectl get deployment cloudcasa-kubeagent-manager
+        - -o=jsonpath='{.status.conditions[?(@.type=="Available")].status}' |
+        - grep -q "True"
+  serviceAccountName: cloudcasa-io
+  restartPolicy: Never
