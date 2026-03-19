@@ -1,0 +1,101 @@
+{{- if .Values.ingress.enabled -}}
+{{- $serviceName := include "artifactory.fullname" . -}}
+{{- $servicePort := .Values.artifactory.externalPort -}}
+{{- $serviceRTFSName := include "rtfs.fullname" . -}}
+{{- $artifactoryServicePort := .Values.artifactory.externalArtifactoryPort -}}
+{{- $ingressName := default ( include "artifactory.fullname" . ) .Values.ingress.name -}}
+{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1" }}
+apiVersion: networking.k8s.io/v1
+{{- else if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1
+{{- else }}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ $ingressName }}
+  labels:
+    app: {{ template "artifactory.name" . }}
+    chart: {{ template "artifactory.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if .Values.ingress.labels }}
+{{ .Values.ingress.labels | toYaml | trimSuffix "\n"| indent 4 -}}
+{{- end}}
+{{- if .Values.ingress.annotations }}
+  annotations:
+{{ .Values.ingress.annotations | toYaml | trimSuffix "\n" | indent 4 -}}
+{{- end }}
+spec:
+  {{- if and .Values.ingress.className (semverCompare ">=1.18.0-0" .Capabilities.KubeVersion.GitVersion) }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.defaultBackend.enabled }}
+    {{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1" }}
+  defaultBackend:
+    service:
+      name: {{ $serviceName }}
+      port:
+        number: {{ $servicePort }}
+    {{- else }}
+  backend:
+    serviceName: {{ $serviceName }}
+    servicePort: {{ $servicePort }}
+    {{- end }}
+  {{- end }}
+  rules:
+{{- if .Values.ingress.hosts }}
+  {{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1" }}
+    {{- range $host := .Values.ingress.hosts }}
+  - host: {{ $host | quote }}
+    http:
+      paths:
+        - path: {{ $.Values.ingress.routerPath }}
+          pathType: {{ $.Values.ingress.pathType | default "ImplementationSpecific" }}
+          backend:
+            service:
+              name: {{ $serviceName }}
+              port:
+                number: {{ $servicePort }}
+        {{- if not $.Values.ingress.disableRouterBypass }}
+        - path: {{ $.Values.ingress.artifactoryPath }}
+          pathType: {{ $.Values.ingress.pathType | default "ImplementationSpecific" }}
+          backend:
+            service:
+              name: {{ $serviceName }}
+              port:
+                number: {{ $artifactoryServicePort }}
+        {{- end }}
+    {{- end }}
+  {{- else }}
+    {{- range $host := .Values.ingress.hosts }}
+  - host: {{ $host | quote }}
+    http:
+      paths:
+        - path: {{ $.Values.ingress.routerPath }}
+          backend:
+            serviceName: {{ $serviceName }}
+            servicePort: {{ $servicePort }}
+        {{- if not $.Values.ingress.disableRouterBypass }}
+        - path: {{ $.Values.ingress.artifactoryPath }}
+          backend:
+            serviceName: {{ $serviceName }}
+            servicePort: {{ $artifactoryServicePort }}
+        {{- end }}
+      {{- end }}
+  {{- end }}
+{{- end -}}
+  {{- with .Values.ingress.additionalRules }}
+{{ tpl . $ | indent 2 }}
+  {{- end }}
+
+  {{- if .Values.ingress.tls }}
+  tls:
+{{ toYaml .Values.ingress.tls | indent 4 }}
+  {{- end -}}
+
+{{- if .Values.customIngress }}
+---
+{{ .Values.customIngress | toYaml | trimSuffix "\n" }}
+{{- end -}}
+{{- end -}}
