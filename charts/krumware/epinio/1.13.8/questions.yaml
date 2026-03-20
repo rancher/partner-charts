@@ -1,0 +1,322 @@
+questions:
+
+# ─────────────────────────────────────────────
+# Required / Global
+# ─────────────────────────────────────────────
+- variable: global.domain
+  required: true
+  type: string
+  label: Wildcard Domain
+  description: >-
+    Base domain used for both the Epinio API server and all deployed
+    applications. A wildcard DNS record (*.your-domain.com) pointing to
+    your ingress controller's external IP must exist before installing.
+  group: "Global"
+
+- variable: global.tlsIssuer
+  required: true
+  default: "selfsigned-issuer"
+  type: enum
+  label: TLS Certificate Issuer
+  description: >-
+    ClusterIssuer used to issue TLS certificates for Epinio services.
+    Use 'selfsigned-issuer' for testing, 'letsencrypt-production' for
+    publicly trusted certificates (requires a valid domain and email).
+  group: "Global"
+  options:
+    - selfsigned-issuer
+    - epinio-ca
+    - letsencrypt-staging
+    - letsencrypt-production
+
+- variable: global.tlsIssuerEmail
+  type: string
+  label: Let's Encrypt Email
+  description: >-
+    Email address for Let's Encrypt certificate notifications. Required
+    when using letsencrypt-staging or letsencrypt-production.
+  group: "Global"
+  show_if: "global.tlsIssuer=letsencrypt-production||global.tlsIssuer=letsencrypt-staging"
+
+- variable: global.customTlsIssuer
+  type: string
+  label: Custom TLS ClusterIssuer Name
+  description: >-
+    Name of a pre-existing ClusterIssuer to use instead of the built-in
+    options. Overrides the TLS Certificate Issuer selection above when set.
+  group: "Global"
+
+- variable: certManagerNamespace
+  type: string
+  default: "cert-manager"
+  label: cert-manager Namespace
+  description: Namespace where cert-manager is installed.
+  group: "Global"
+
+# ─────────────────────────────────────────────
+# Ingress
+# ─────────────────────────────────────────────
+- variable: ingress.ingressClassName
+  type: string
+  label: Ingress Class Name
+  description: >-
+    Ingress class to use for the Epinio API server. Leave blank to use
+    the cluster default ingress class.
+  group: "Ingress"
+
+- variable: ingress.proxyBodySize
+  type: string
+  default: "500m"
+  label: Proxy Body Size
+  description: >-
+    Maximum size of the client request body (e.g. "500m", "1g"). Larger
+    values allow deploying applications with bigger source tarballs.
+  group: "Ingress"
+
+- variable: ingress.proxyReadTimeout
+  type: string
+  default: "600s"
+  label: Proxy Read Timeout
+  description: >-
+    Maximum time to wait for a response from the proxied server
+    (e.g. "600s", "10m"). Increase for slow builds or large deployments.
+  group: "Ingress"
+
+- variable: ingress.nginxSSLRedirect
+  type: enum
+  default: "true"
+  label: NGINX SSL Redirect
+  description: Whether NGINX should redirect HTTP requests to HTTPS.
+  group: "Ingress"
+  options:
+    - "true"
+    - "false"
+
+# ─────────────────────────────────────────────
+# Admin Credentials
+# ─────────────────────────────────────────────
+- variable: api.adminPassword
+  type: password
+  label: Admin Password
+  description: >-
+    Plain-text password for the built-in 'admin' user. Leave blank to
+    use the default value defined in values.yaml.
+  group: "Admin Credentials"
+
+- variable: api.epinioPassword
+  type: password
+  label: Epinio User Password
+  description: >-
+    Plain-text password for the built-in 'epinio' user. Leave blank to
+    use the default value defined in values.yaml.
+  group: "Admin Credentials"
+
+# ─────────────────────────────────────────────
+# Storage — MinIO
+# ─────────────────────────────────────────────
+- variable: minio.enabled
+  type: boolean
+  default: true
+  label: Enable Built-in MinIO
+  description: >-
+    Deploy the bundled MinIO instance for S3-compatible object storage.
+    Disable and configure the S3 settings below to use an external bucket.
+  group: "Storage"
+  show_subquestion_if: true
+  subquestions:
+  - variable: minio.persistence.size
+    type: string
+    default: "2Gi"
+    label: MinIO Persistence Size
+    description: Size of the PersistentVolumeClaim created for MinIO.
+  - variable: minio.persistence.storageClass
+    type: storageclass
+    label: MinIO Storage Class
+    description: StorageClass to use for the MinIO PVC. Leave blank to use the cluster default.
+  - variable: minio.replicas
+    type: int
+    default: 1
+    label: MinIO Replicas
+
+# ─────────────────────────────────────────────
+# Storage — External S3
+# ─────────────────────────────────────────────
+- variable: s3.endpoint
+  type: string
+  default: "s3.amazonaws.com"
+  label: S3 Endpoint
+  description: Endpoint hostname (or host:port) for the S3-compatible object store.
+  group: "External S3"
+  show_if: "minio.enabled=false"
+
+- variable: s3.bucket
+  type: string
+  default: "epinio"
+  label: S3 Bucket Name
+  group: "External S3"
+  show_if: "minio.enabled=false"
+
+- variable: s3.region
+  type: string
+  label: S3 Region
+  group: "External S3"
+  show_if: "minio.enabled=false"
+
+- variable: s3.accessKeyID
+  type: string
+  label: S3 Access Key ID
+  group: "External S3"
+  show_if: "minio.enabled=false"
+
+- variable: s3.secretAccessKey
+  type: password
+  label: S3 Secret Access Key
+  group: "External S3"
+  show_if: "minio.enabled=false"
+
+- variable: s3.useSSL
+  type: boolean
+  default: true
+  label: S3 Use SSL
+  group: "External S3"
+  show_if: "minio.enabled=false"
+
+# ─────────────────────────────────────────────
+# Container Registry
+# ─────────────────────────────────────────────
+- variable: containerregistry.enabled
+  type: boolean
+  default: true
+  label: Enable Built-in Container Registry
+  description: >-
+    Deploy the bundled container registry. Disable and supply external
+    registry credentials below to use your own registry.
+  group: "Container Registry"
+  show_subquestion_if: true
+  subquestions:
+  - variable: containerregistry.ingressClassName
+    type: string
+    label: Registry Ingress Class Name
+    description: Ingress class for the built-in container registry. Leave blank to inherit the global ingress class.
+  - variable: containerregistry.storage.emptyDir
+    type: boolean
+    default: true
+    label: Use EmptyDir for Registry Storage
+    description: Use ephemeral EmptyDir storage for the registry. Disable to configure a PVC.
+
+- variable: global.registryURL
+  type: string
+  label: External Registry URL
+  description: URL of an external container registry (e.g. "registry.example.com").
+  group: "Container Registry"
+  show_if: "containerregistry.enabled=false"
+
+- variable: global.registryUsername
+  type: string
+  default: "admin"
+  label: External Registry Username
+  group: "Container Registry"
+  show_if: "containerregistry.enabled=false"
+
+- variable: global.registryPassword
+  type: password
+  label: External Registry Password
+  group: "Container Registry"
+  show_if: "containerregistry.enabled=false"
+
+- variable: global.registryNamespace
+  type: string
+  default: "apps"
+  label: Registry Namespace / Prefix
+  description: Path prefix used when pushing application images (e.g. "apps" → registry.example.com/apps/APPNAME).
+  group: "Container Registry"
+
+# ─────────────────────────────────────────────
+# Epinio UI
+# ─────────────────────────────────────────────
+- variable: epinioUI.enabled
+  type: boolean
+  default: true
+  label: Enable Epinio UI
+  description: Deploy the Epinio web UI alongside the API server.
+  group: "Epinio UI"
+  show_subquestion_if: true
+  subquestions:
+  - variable: epinioUI.theme
+    type: enum
+    default: "light"
+    label: UI Theme
+    options:
+      - light
+      - dark
+  - variable: epinioUI.ingress.enabled
+    type: boolean
+    default: false
+    label: Enable Separate UI Ingress
+    description: Expose the UI on its own ingress/domain rather than sharing the API ingress.
+  - variable: epinioUI.ingress.ingressClassName
+    type: string
+    label: UI Ingress Class Name
+    show_if: "epinioUI.ingress.enabled=true"
+
+# ─────────────────────────────────────────────
+# Dex (OIDC Authentication)
+# ─────────────────────────────────────────────
+- variable: global.dex.enabled
+  type: boolean
+  default: true
+  label: Enable Dex OIDC Provider
+  description: >-
+    Deploy Dex as an embedded OIDC identity provider. Required for
+    SSO and Rancher UI extension authentication.
+  group: "Dex (OIDC Auth)"
+
+# ─────────────────────────────────────────────
+# Rancher Integration
+# ─────────────────────────────────────────────
+- variable: rancher.url
+  type: string
+  label: Rancher URL
+  description: >-
+    Hostname of your Rancher instance (e.g. "https://rancher.example.com").
+    Required for the Epinio UI extension to reach Epinio and Dex services
+    when the global.cattle.url value is not automatically available.
+  group: "Rancher Integration"
+
+# ─────────────────────────────────────────────
+# Advanced
+# ─────────────────────────────────────────────
+- variable: server.timeoutMultiplier
+  type: int
+  default: 1
+  label: Timeout Multiplier
+  description: >-
+    Scale factor applied to all server timeouts. Increase on slow clusters
+    or when staging larger applications.
+  group: "Advanced"
+
+- variable: server.traceLevel
+  type: int
+  default: 0
+  label: Trace / Debug Level
+  description: >-
+    Verbosity of API server debug output. 0 = off, higher values produce
+    progressively more output.
+  group: "Advanced"
+
+- variable: server.disableTracking
+  type: boolean
+  default: false
+  label: Disable Version Tracking
+  description: Disable telemetry that tracks the Epinio and Kubernetes cluster version.
+  group: "Advanced"
+
+- variable: certManager.enabled
+  type: boolean
+  default: true
+  label: Enable cert-manager Integration
+  description: >-
+    Allow Epinio to use cert-manager to automatically issue and renew
+    TLS certificates. Disable only if you supply pre-existing certificate
+    secrets manually.
+  group: "Advanced"
