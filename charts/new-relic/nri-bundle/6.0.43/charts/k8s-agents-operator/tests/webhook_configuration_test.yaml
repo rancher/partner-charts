@@ -1,0 +1,411 @@
+suite: webhook configuration
+templates:
+  - templates/instrumentation-crd.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: uses default failurePolicy Fail for Instrumentation webhooks
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].failurePolicy
+          value: Fail
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].failurePolicy
+          value: Fail
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].failurePolicy
+          value: Fail
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].failurePolicy
+          value: Fail
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: uses default podFailurePolicy Ignore for Pod mutation webhook
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: webhooks[?(@.name == "mpod.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: does not set timeoutSeconds by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - notExists:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].timeoutSeconds
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - notExists:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].timeoutSeconds
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - notExists:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].timeoutSeconds
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - notExists:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].timeoutSeconds
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - notExists:
+          path: webhooks[?(@.name == "mpod.kb.io")].timeoutSeconds
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: applies custom failurePolicy to Instrumentation webhooks
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        failurePolicy: Ignore
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: applies custom podFailurePolicy to Pod mutation webhook
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        podFailurePolicy: Fail
+    asserts:
+      - equal:
+          path: webhooks[?(@.name == "mpod.kb.io")].failurePolicy
+          value: Fail
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: applies timeoutSeconds to all webhooks when set
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        timeoutSeconds: 15
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].timeoutSeconds
+          value: 15
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].timeoutSeconds
+          value: 15
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].timeoutSeconds
+          value: 15
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].timeoutSeconds
+          value: 15
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "mpod.kb.io")].timeoutSeconds
+          value: 15
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: supports combined configuration of all webhook settings
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        failurePolicy: Ignore
+        podFailurePolicy: Fail
+        timeoutSeconds: 20
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      # Instrumentation webhooks use failurePolicy
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].failurePolicy
+          value: Ignore
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      # Pod webhook uses podFailurePolicy
+      - equal:
+          path: webhooks[?(@.name == "mpod.kb.io")].failurePolicy
+          value: Fail
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      # All webhooks use timeoutSeconds
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].timeoutSeconds
+          value: 20
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].timeoutSeconds
+          value: 20
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].timeoutSeconds
+          value: 20
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].timeoutSeconds
+          value: 20
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "mpod.kb.io")].timeoutSeconds
+          value: 20
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: validates webhook count and names are correct
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      # Validate all expected webhooks exist by name
+      - isNotEmpty:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")]
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - isNotEmpty:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")]
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - isNotEmpty:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")]
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - isNotEmpty:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")]
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - isNotEmpty:
+          path: webhooks[?(@.name == "mpod.kb.io")]
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: validates webhook paths are correct
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - add new asserts if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].clientConfig.service.path
+          value: /mutate-newrelic-com-v1beta3-instrumentation
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta2.kb.io")].clientConfig.service.path
+          value: /mutate-newrelic-com-v1beta2-instrumentation
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta1.kb.io")].clientConfig.service.path
+          value: /mutate-newrelic-com-v1beta1-instrumentation
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1alpha2.kb.io")].clientConfig.service.path
+          value: /mutate-newrelic-com-v1alpha2-instrumentation
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "mpod.kb.io")].clientConfig.service.path
+          value: /mutate-v1-pod
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: rejects timeoutSeconds less than 1
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        timeoutSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: "admissionWebhooks.timeoutSeconds must be between 1 and 30 seconds"
+
+  - it: rejects timeoutSeconds greater than 30
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        timeoutSeconds: 31
+    asserts:
+      - failedTemplate:
+          errorMessage: "admissionWebhooks.timeoutSeconds must be between 1 and 30 seconds"
+
+  - it: accepts timeoutSeconds of 1
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        timeoutSeconds: 1
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - update assertion below if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].timeoutSeconds
+          value: 1
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: accepts timeoutSeconds of 30
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        timeoutSeconds: 30
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 5 # Ensure we're testing all webhooks - update assertion below if new webhook versions are added
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+      - equal:
+          path: webhooks[?(@.name == "minstrumentation-v1beta3.kb.io")].timeoutSeconds
+          value: 30
+        documentSelector:
+          path: kind
+          value: MutatingWebhookConfiguration
+
+  - it: rejects invalid failurePolicy value
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        failurePolicy: Invalid
+    asserts:
+      - failedTemplate:
+          errorMessage: "admissionWebhooks.failurePolicy must be either 'Fail' or 'Ignore'"
+
+  - it: rejects invalid podFailurePolicy value
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        podFailurePolicy: Invalid
+    asserts:
+      - failedTemplate:
+          errorMessage: "admissionWebhooks.podFailurePolicy must be either 'Fail' or 'Ignore'"
