@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    operator: dxoperator-v2
+    operator-deployment: kubernetes-operator
+    operator-element: operator-instance
+    {{- include  "dxoperator.labels" . | nindent 4 }}
+  name: dxoperator-v2-operator
+  namespace: dxoperator-v2-system
+spec:
+  replicas: 1
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      operator: dxoperator-v2
+      operator-deployment: kubernetes-operator
+      operator-element: operator-instance
+      {{- include "dxoperator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        operator: dxoperator-v2
+        operator-deployment: kubernetes-operator
+        operator-element: operator-instance
+        {{- include "dxoperator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets}}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- if .Values.clusterDomain }}
+        - name: CLUSTER_DOMAIN
+          value: "{{ .Values.clusterDomain | toString }}"
+        {{- end }}
+        envFrom:
+        - configMapRef:
+            name: dxoperator-v2-webhook-config-bf6thg56g8
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+        name: operator
+        ports:
+        - containerPort: 5001
+          name: https
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - mountPath: /certs
+          name: certificates
+          readOnly: true
+        - mountPath: /ca
+          name: ca-certificates
+          readOnly: true
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: certificates
+        secret:
+          secretName: dxoperator-v2-webhook-cert-t84khh44kt
+      - name: ca-certificates
+        secret:
+          secretName: dxoperator-v2-webhook-ca-64hmmfgtc7
