@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "airlock-microgateway.fullname" . }}-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  {{- with .Values.updateStrategy }}
+  strategy:
+    {{- toYaml . | trim | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "airlock-microgateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        kubectl.kubernetes.io/default-container: manager
+        {{- with mustMerge .Values.podAnnotations .Values.commonAnnotations}}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "airlock-microgateway.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+      - env:
+        - name: ENGINE_IMAGE
+          value: {{ include "airlock-microgateway.image" .Values.config.engineImage }}
+        - name: SESSION_AGENT_IMAGE
+          value: {{ include "airlock-microgateway.image" .Values.config.sessionAgentImage }}
+        - name: OPERATOR_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LOG_LEVEL
+          value: {{ .Values.config.logLevel }}
+        {{- with .Values.controllerName }}
+        - name: CONTROLLER_NAME
+          value: {{ . }}
+        {{- end }}
+        {{- with .Values.config.gatewayPodMonitor }}
+        - name: GATEWAY_POD_MONITOR_CREATE
+          value: "{{ .create }}"
+        {{- with .labels }}
+        - name: GATEWAY_POD_MONITOR_ADDITIONAL_LABELS
+          value: {{ include "airlock-microgateway.toCommaSeparatedList" . | quote }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraEnv }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        image: {{ include "airlock-microgateway.image" .Values.image }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+        name: manager
+        ports:
+        - containerPort: 13377
+          name: xds-server
+          protocol: TCP
+        - containerPort: 8080
+          protocol: TCP
+        - containerPort: 8081
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext:
+          {{- include "airlock-microgateway.restrictedSecurityContext" . | nindent 10 }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /app/config/license/
+          name: airlock-microgateway-license
+          readOnly: true
+        - mountPath: /app/config/engine_bootstrap_config_template.yaml
+          name: operator-config
+          subPath: engine_bootstrap_config_template.yaml
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ include "airlock-microgateway.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "airlock-microgateway.imagePullSecrets" . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: airlock-microgateway-license
+        secret:
+          defaultMode: 292
+          optional: true
+          secretName: {{ .Values.license.secretName }}
+      - configMap:
+          name: {{ include "airlock-microgateway.fullname" . }}-config
+        name: operator-config

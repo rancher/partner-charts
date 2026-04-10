@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "airlock-microgateway.operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.operator.replicaCount }}
+  {{- with .Values.operator.updateStrategy }}
+  strategy:
+    {{- toYaml . | trim | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "airlock-microgateway.operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/operator/configmap.yaml") . | sha256sum }}
+        kubectl.kubernetes.io/default-container: manager
+        {{- with mustMerge .Values.operator.podAnnotations .Values.commonAnnotations}}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "airlock-microgateway.operator.labels" . | nindent 8 }}
+        {{- with .Values.operator.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+      - args:
+        - --config=operator_config.yaml
+        env:
+        - name: ENGINE_IMAGE
+          value: {{ include "airlock-microgateway.image" .Values.engine.image }}
+        - name: NETWORK_VALIDATOR_IMAGE
+          value: {{ include "airlock-microgateway.image" .Values.networkValidator.image }}
+        - name: OPERATOR_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: {{ include "airlock-microgateway.image" .Values.operator.image }}
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 13377
+          name: xds-server
+          protocol: TCP
+        - containerPort: 8080
+          protocol: TCP
+        - containerPort: 8081
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        {{- with .Values.operator.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext:
+          {{- include "airlock-microgateway.restrictedSecurityContext" . | nindent 10 }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+        - mountPath: /opt/airlock/license/
+          name: airlock-microgateway-license
+          readOnly: true
+        - mountPath: /operator_config.yaml
+          name: operator-config
+          subPath: operator_config.yaml
+        - mountPath: /sidecar/engine_container_template.yaml
+          name: operator-config
+          subPath: engine_container_template.yaml
+        - mountPath: /sidecar/network_validator_container_template.yaml
+          name: operator-config
+          subPath: network_validator_container_template.yaml
+        - mountPath: /engine_bootstrap_config_template.yaml
+          name: operator-config
+          subPath: engine_bootstrap_config_template.yaml
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ include "airlock-microgateway.operator.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ include "airlock-microgateway.operator.fullname" . }}-webhook-server-cert
+      - name: airlock-microgateway-license
+        secret:
+          defaultMode: 292
+          optional: true
+          secretName: {{ .Values.license.secretName }}
+      - configMap:
+          name: {{ include "airlock-microgateway.operator.fullname" . }}-config
+        name: operator-config

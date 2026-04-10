@@ -1,0 +1,107 @@
+suite: test port configuration
+templates:
+  - templates/deployment.yaml
+  - templates/service.yaml
+release:
+  name: release
+  namespace: ns
+tests:
+  - it: should use default ports when not specified
+    set:
+      cluster: test-cluster
+    asserts:
+      # Check deployment container port
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8443
+      # Check readiness probe port
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8080
+      # Check environment variables for ports
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEW_RELIC_K8S_METADATA_INJECTION_PORT
+            value: "8443"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEW_RELIC_K8S_METADATA_INJECTION_HEALTH_PORT
+            value: "8080"
+    template: templates/deployment.yaml
+
+  - it: should use custom ports when specified
+    set:
+      cluster: test-cluster
+      ports:
+        webhook: 9443
+        health: 9080
+    asserts:
+      # Check deployment container port
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 9443
+      # Check readiness probe port
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 9080
+      # Check environment variables for ports
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEW_RELIC_K8S_METADATA_INJECTION_PORT
+            value: "9443"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEW_RELIC_K8S_METADATA_INJECTION_HEALTH_PORT
+            value: "9080"
+    template: templates/deployment.yaml
+
+  - it: should use default service ports when not specified
+    set:
+      cluster: test-cluster
+    asserts:
+      # Check service port
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+      # Check service target port (should default to webhook port)
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 8443
+    template: templates/service.yaml
+
+  - it: should use custom service ports when specified
+    set:
+      cluster: test-cluster
+      service:
+        port: 8443
+        targetPort: 9443
+      ports:
+        webhook: 9443
+    asserts:
+      # Check service port
+      - equal:
+          path: spec.ports[0].port
+          value: 8443
+      # Check service target port
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 9443
+    template: templates/service.yaml
+
+  - it: should default service targetPort to webhook port when targetPort is empty
+    set:
+      cluster: test-cluster
+      service:
+        targetPort: ""
+      ports:
+        webhook: 9443
+    asserts:
+      # Check service target port defaults to webhook port
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 9443
+    template: templates/service.yaml

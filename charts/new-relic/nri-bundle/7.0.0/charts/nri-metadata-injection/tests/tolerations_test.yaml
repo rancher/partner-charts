@@ -1,0 +1,133 @@
+suite: test tolerations configuration
+templates:
+  - templates/deployment.yaml
+  - templates/admission-webhooks/job-patch/job-createSecret.yaml
+  - templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: should not have tolerations when none are provided
+    set:
+      cluster: test-cluster
+    asserts:
+      - notExists:
+          path: spec.template.spec.tolerations
+        template: templates/deployment.yaml
+
+  - it: should inherit global.tolerations when local tolerations not set
+    set:
+      cluster: test-cluster
+      global:
+        tolerations:
+          - key: "globalKey"
+            operator: "Exists"
+            effect: "NoSchedule"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "globalKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "globalKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "globalKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+
+  - it: should set tolerations from local values
+    set:
+      cluster: test-cluster
+      tolerations:
+        - key: "localKey"
+          operator: "Exists"
+          effect: "NoSchedule"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "localKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "localKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "localKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+
+  - it: should use local tolerations over global.tolerations
+    set:
+      cluster: test-cluster
+      tolerations:
+        - key: "localKey"
+          operator: "Exists"
+          effect: "NoSchedule"
+      global:
+        tolerations:
+          - key: "globalKey"
+            operator: "Exists"
+            effect: "NoSchedule"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "localKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "localKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: "localKey"
+              operator: "Exists"
+              effect: "NoSchedule"
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+
+  - it: should handle multiple tolerations
+    set:
+      cluster: test-cluster
+      tolerations:
+        - key: "key1"
+          operator: "Equal"
+          value: "value1"
+          effect: "NoSchedule"
+        - key: "key2"
+          operator: "Exists"
+          effect: "NoExecute"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: "key1"
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.tolerations[1].key
+          value: "key2"
+        template: templates/deployment.yaml

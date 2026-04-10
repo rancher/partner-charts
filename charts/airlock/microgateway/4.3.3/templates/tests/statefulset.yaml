@@ -1,0 +1,56 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: test-install
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    app: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+    {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 4 }}
+spec:
+  serviceName: nginx
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: test-install
+      app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+      app: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+      {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: default/airlock-microgateway-cni
+      labels:
+        sidecar.microgateway.airlock.com/inject: "true"
+        sidecar.istio.io/inject: "false"
+        app.kubernetes.io/component: test-install
+        app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+        app: "{{ include "airlock-microgateway.fullname" . }}-test-backend"
+        {{- include "airlock-microgateway.sharedLabels" . | nindent 8 }}
+        {{- include "airlock-microgateway.sharedSelectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - image: cgr.dev/chainguard/nginx
+          name: nginx
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /var/lib/nginx/tmp/
+              name: nginx-tmp
+            - mountPath: /var/run
+              name: nginx-run
+          securityContext:
+            {{- include "airlock-microgateway.restrictedSecurityContext" . | nindent 12 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - emptyDir: {}
+          name: nginx-tmp
+        - emptyDir: {}
+          name: nginx-run
+{{- end -}}

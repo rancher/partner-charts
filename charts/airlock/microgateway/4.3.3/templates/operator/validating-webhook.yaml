@@ -1,0 +1,28 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "airlock-microgateway.operator.fullname" . }}-webhook-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.operator.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "airlock-microgateway.operator.fullname" . }}-serving-cert
+  {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+webhooks:
+{{- range $webhook := (include "airlock-microgateway-operator.validatingWebhooks" .) | fromYamlArray }}
+- {{ toYaml $webhook | indent 2 | trim }}
+  {{- with $.Values.operator.watchNamespaceSelector }}
+  namespaceSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $.Values.operator.watchNamespaces }}
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+          {{- toYaml . | nindent 10 }}
+  {{- end }}
+{{- end }}
