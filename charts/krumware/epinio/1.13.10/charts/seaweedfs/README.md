@@ -1,0 +1,337 @@
+# SEAWEEDFS - helm chart (2.x+)
+
+
+### Add the helm repo
+
+```bash
+helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
+```
+
+### Install the helm chart
+
+```bash
+helm install seaweedfs seaweedfs/seaweedfs
+```
+
+### (Recommended) Provide `values.yaml`
+
+```bash
+helm install --values=values.yaml seaweedfs seaweedfs/seaweedfs
+```
+
+## Info:
+* master/filer/volume are stateful sets with anti-affinity on the hostname,
+so your deployment will be spread/HA.
+* chart is using memsql(mysql) as the filer backend to enable HA (multiple filer instances) and backup/HA memsql can provide.
+* mysql user/password are created in a k8s secret (default: `<release>-seaweedfs-db-secret`) and injected to the filer with ENV.
+* cert config exists and can be enabled, but not been tested, requires cert-manager to be installed.
+
+## Prerequisites
+### Database
+
+leveldb is the default database, this supports multiple filer replicas that will [sync automatically](https://github.com/seaweedfs/seaweedfs/wiki/Filer-Store-Replication), with some [limitations](https://github.com/seaweedfs/seaweedfs/wiki/Filer-Store-Replication#limitation).
+
+When the [limitations](https://github.com/seaweedfs/seaweedfs/wiki/Filer-Store-Replication#limitation) apply, or for a large number of filer replicas, an external datastore is recommended.
+
+Such as MySQL-compatible database, as specified in the `values.yaml` at `filer.extraEnvironmentVars`.
+This database should be pre-configured and initialized. If using the default `db-init-config`, the configmap name is now dynamic (e.g., `<release>-seaweedfs-db-init-config`). You can override this name via `filer.dbInitConfigName`.
+
+To initialize manually:
+```sql
+CREATE TABLE IF NOT EXISTS `filemeta` (
+  `dirhash`   BIGINT NOT NULL       COMMENT 'first 64 bits of MD5 hash value of directory field',
+  `name`      VARCHAR(766) NOT NULL COMMENT 'directory or file name',
+  `directory` TEXT NOT NULL         COMMENT 'full path to parent directory',
+  `meta`      LONGBLOB,
+  PRIMARY KEY (`dirhash`, `name`)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+```
+
+Alternative database can also be configured (e.g. leveldb, postgres) following the instructions at `filer.extraEnvironmentVars`.
+
+### Node Labels
+Kubernetes nodes can have labels which help to define which node(Host) will run which pod:
+
+Here is an example:
+* s3/filer/master needs the label **sw-backend=true**
+* volume need the label **sw-volume=true**
+
+to label a node to be able to run all pod types in k8s:
+```
+kubectl label node YOUR_NODE_NAME sw-volume=true sw-backend=true
+```
+
+on production k8s deployment you will want each pod to have a different host,
+especially the volume server and the masters, all pods (master/volume/filer)
+should have anti-affinity rules to disallow running multiple component pods  on the same host.
+
+If you still want to run multiple pods of the same component (master/volume/filer) on the same host please set/update the corresponding affinity rule in values.yaml to an empty one:
+
+```affinity: ""```
+
+## PVC - storage class ###
+
+On the volume stateful set added support for k8s PVC, currently example
+with the simple local-path-provisioner from Rancher (comes included with k3d / k3s)
+https://github.com/rancher/local-path-provisioner
+
+you can use ANY storage class you like, just update the correct storage-class
+for your deployment.
+
+## current instances config (AIO):
+
+1 instance for each type (master/filer+s3/volume)
+
+You can update the replicas count for each node type in values.yaml,
+need to add more nodes with the corresponding labels if applicable.
+
+Most of the configuration are available through values.yaml any pull requests to expand functionality or usability are greatly appreciated. Any pull request must pass [chart-testing](https://github.com/helm/chart-testing).
+
+## S3 configuration
+
+To enable an s3 endpoint for your filer with a default install add the following to your values.yaml:
+
+```yaml
+filer:
+  s3:
+    enabled: true
+```
+
+### Enabling Authentication to S3
+
+To enable authentication for S3, you have two options:
+
+- let the helm chart create an admin user as well as a read only user
+- provide your own s3 config.json file via an existing Kubernetes Secret
+
+#### Use the default credentials for S3
+
+Example parameters for your values.yaml:
+
+```yaml
+filer:
+  s3:
+    enabled: true
+    enableAuth: true
+```
+
+#### Provide your own credentials for S3
+
+Example parameters for your values.yaml:
+
+```yaml
+filer:
+  s3:
+    enabled: true
+    enableAuth: true
+    existingConfigSecret: my-s3-secret
+```
+
+Example existing secret with your s3 config to create an admin user and readonly user, both with credentials:
+
+```yaml
+---
+# Source: seaweedfs/templates/seaweedfs-s3-secret.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: my-s3-secret
+  namespace: seaweedfs
+  labels:
+    app.kubernetes.io/name: seaweedfs
+    app.kubernetes.io/component: s3
+stringData:
+  # this key must be an inline json config file
+  seaweedfs_s3_config: '{"identities":[{"name":"anvAdmin","credentials":[{"accessKey":"snu8yoP6QAlY0ne4","secretKey":"PNzBcmeLNEdR0oviwm04NQAicOrDH1Km"}],"actions":["Admin","Read","Write"]},{"name":"anvReadOnly","credentials":[{"accessKey":"SCigFee6c5lbi04A","secretKey":"kgFhbT38R8WUYVtiFQ1OiSVOrYr3NKku"}],"actions":["Read"]}]}'
+```
+
+## Admin Component
+
+The admin component provides a modern web-based administration interface for managing SeaweedFS clusters. It includes:
+
+- **Dashboard**: Real-time cluster status and metrics
+- **Volume Management**: Monitor volume servers, capacity, and health
+- **File Browser**: Browse and manage files in the filer
+- **Maintenance Operations**: Trigger maintenance tasks via workers
+- **Object Store Management**: Create and manage buckets with web interface
+
+### Enabling Admin
+
+To enable the admin interface, add the following to your values.yaml:
+
+```yaml
+admin:
+  enabled: true
+  port: 23646
+  grpcPort: 33646  # For worker connections
+  adminUser: "admin"
+  adminPassword: "your-secure-password"  # Leave empty to disable auth
+  
+  # Optional: persist admin data
+  data:
+    type: "persistentVolumeClaim"
+    size: "10Gi"
+    storageClass: "your-storage-class"
+  
+  # Optional: enable ingress
+  ingress:
+    enabled: true
+    host: "admin.seaweedfs.local"
+    className: "nginx"
+```
+
+The admin interface will be available at `http://<admin-service>:23646` (or via ingress). Workers connect to the admin server via gRPC on port `33646`.
+
+### Admin Authentication
+
+If `adminPassword` is set, the admin interface requires authentication:
+- Username: Value of `adminUser` (default: `admin`)
+- Password: Value of `adminPassword`
+
+If `adminPassword` is empty or not set, the admin interface runs without authentication (not recommended for production).
+
+### Admin Data Persistence
+
+The admin component can store configuration and maintenance data. You can configure storage in several ways:
+
+- **emptyDir** (default): Data is lost when pod restarts
+- **persistentVolumeClaim**: Data persists across pod restarts
+- **hostPath**: Data stored on the host filesystem
+- **existingClaim**: Use an existing PVC
+
+## Worker Component
+
+Workers are maintenance agents that execute cluster maintenance tasks such as vacuum, volume balancing, and erasure coding. Workers connect to the admin server via gRPC and receive task assignments.
+
+### Enabling Workers
+
+To enable workers, add the following to your values.yaml:
+
+```yaml
+worker:
+  enabled: true
+  replicas: 2  # Scale based on workload
+  capabilities: "vacuum,balance,erasure_coding"  # Tasks this worker can handle
+  maxConcurrent: 3  # Maximum concurrent tasks per worker
+  
+  # Working directory for task execution
+  # Default: "/tmp/seaweedfs-worker"
+  # Note: /tmp is ephemeral - use persistent storage (hostPath/existingClaim) for long-running tasks
+  workingDir: "/tmp/seaweedfs-worker"
+  
+  # Optional: configure admin server address
+  # If not specified, auto-discovers from admin service in the same namespace by looking for
+  # a service named "<release-name>-admin" (e.g., "seaweedfs-admin").
+  # Auto-discovery only works if the admin is in the same namespace and same Helm release.
+  # For cross-namespace or separate release scenarios, explicitly set this value.
+  # Example: If main SeaweedFS is deployed in "production" namespace:
+  #   adminServer: "seaweedfs-admin.production.svc:33646"
+  adminServer: ""
+  
+  # Workers need storage for task execution
+  # Note: Workers use a Deployment, which does not support `volumeClaimTemplates` 
+  # for dynamic PVC creation per pod. To use persistent storage, you must 
+  # pre-provision a PersistentVolumeClaim and use `type: "existingClaim"`.
+  data:
+    type: "emptyDir"  # Options: "emptyDir", "hostPath", or "existingClaim"
+    hostPathPrefix: /storage  # For hostPath
+    # claimName: "worker-pvc"  # For existingClaim with pre-provisioned PVC
+  
+  # Resource limits for worker pods
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+```
+
+### Worker Capabilities
+
+Workers can be configured with different capabilities:
+- **vacuum**: Reclaim deleted file space
+- **balance**: Balance volumes across volume servers
+- **erasure_coding**: Handle erasure coding operations
+
+You can configure workers with all capabilities or create specialized worker pools with specific capabilities.
+
+### Worker Deployment Strategy
+
+For production deployments, consider:
+
+1. **Multiple Workers**: Deploy 2+ worker replicas for high availability
+2. **Resource Allocation**: Workers need sufficient CPU/memory for maintenance tasks
+3. **Storage**: Workers need temporary storage for vacuum and balance operations (size depends on volume size)
+4. **Specialized Workers**: Create separate worker deployments for different capabilities if needed
+
+Example specialized worker configuration:
+
+For specialized worker pools, deploy separate Helm releases with different capabilities:
+
+**values-worker-vacuum.yaml** (for vacuum operations):
+```yaml
+# Disable all other components, enable only workers
+master:
+  enabled: false
+volume:
+  enabled: false
+filer:
+  enabled: false
+s3:
+  enabled: false
+admin:
+  enabled: false
+
+worker:
+  enabled: true
+  replicas: 2
+  capabilities: "vacuum"
+  maxConcurrent: 2
+  # REQUIRED: Point to the admin service of your main SeaweedFS release
+  # Replace <namespace> with the namespace where your main seaweedfs is deployed
+  # Example: If deploying in namespace "production":
+  #   adminServer: "seaweedfs-admin.production.svc:33646"
+  adminServer: "seaweedfs-admin.<namespace>.svc:33646"
+```
+
+**values-worker-balance.yaml** (for balance operations):
+```yaml
+# Disable all other components, enable only workers
+master:
+  enabled: false
+volume:
+  enabled: false
+filer:
+  enabled: false
+s3:
+  enabled: false
+admin:
+  enabled: false
+
+worker:
+  enabled: true
+  replicas: 1
+  capabilities: "balance"
+  maxConcurrent: 1
+  # REQUIRED: Point to the admin service of your main SeaweedFS release
+  # Replace <namespace> with the namespace where your main seaweedfs is deployed
+  # Example: If deploying in namespace "production":
+  #   adminServer: "seaweedfs-admin.production.svc:33646"
+  adminServer: "seaweedfs-admin.<namespace>.svc:33646"
+```
+
+Deploy the specialized workers as separate releases:
+```bash
+# Deploy vacuum workers
+helm install seaweedfs-worker-vacuum seaweedfs/seaweedfs -f values-worker-vacuum.yaml
+
+# Deploy balance workers
+helm install seaweedfs-worker-balance seaweedfs/seaweedfs -f values-worker-balance.yaml
+```
+
+## Enterprise
+
+For enterprise users, please visit [seaweedfs.com](https://seaweedfs.com) for the SeaweedFS Enterprise Edition, 
+which has a self-healing storage format with better data protection.

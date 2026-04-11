@@ -1,0 +1,32 @@
+{{- if and .Values.config.azure.podIdentityClientID .Values.config.azure.podIdentityName -}}
+---
+apiVersion: "aadpodidentity.k8s.io/v1"
+kind: AzureIdentity
+metadata:
+  labels:
+    {{- include "falcosidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+    {{- with .Values.customLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- with .Values.customAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  name: {{ include "falcosidekick.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: 0
+  resourceID: /subscriptions/{{ .Values.config.azure.subscriptionID }}/resourcegroups/{{ .Values.config.azure.resourceGroupName }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{{ .Values.config.azure.podIdentityName }}
+  clientID: {{ .Values.config.azure.podIdentityClientID }}
+---
+apiVersion: "aadpodidentity.k8s.io/v1"
+kind: AzureIdentityBinding
+metadata:
+  labels:
+    {{- include "falcosidekick.labels" . | nindent 4 }}
+  name: {{ include "falcosidekick.fullname" . }}
+spec:
+  azureIdentity: {{ include "falcosidekick.fullname" . }}
+  selector: {{ include "falcosidekick.fullname" . }}
+{{- end }}

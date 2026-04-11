@@ -1,0 +1,442 @@
+## Default values for Epinio Helm Chart.
+## This is a YAML-formatted file.
+## Declare variables to be passed into your templates.
+# Fall back email address to receive notifications from the `letsencrypt-production` issuer.
+#
+# __SUPERCEDED__ by `global.tlsIssuerMail`.
+#
+# Kept for backward compatibility, here and in the templates.
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "epinio-server"
+email: "epinio@krum.io"
+image:
+  epinio:
+    registry: ghcr.io/
+    repository: epinio/epinio-server
+    tag: v1.13.10
+  epinio-ui:
+    registry: ghcr.io/
+    repository: epinio/epinio-ui
+    tag: v1.13.10
+  bash:
+    registry: ghcr.io/
+    repository: epinio/epinio-unpacker
+    tag: v1.13.10
+  awscli:
+    repository: amazon/aws-cli
+    tag: 2.13.26
+  skopeo:
+    registry: quay.io/
+    repository: skopeo/stable
+    tag: v1.13.2
+  kubectl:
+    repository: rancher/kubectl
+    tag: v1.22.6
+  builder:
+    repository: paketobuildpacks/builder-jammy-full
+    tag: 0.3.495
+    # The user/group combination to use when running
+    # the builder image (and in supporting scripts).
+    userid: 1001
+    groupid: 1000
+appChart:
+  default: https://github.com/epinio/helm-charts/releases/download/epinio-application-0.1.26/epinio-application-0.1.26.tgz
+server:
+  # increase this value to increase all timeouts by the same factor
+  timeoutMultiplier: 1
+  # Increase this value to instruct the API server to produce more debug output
+  traceLevel: 0
+  # The ingressClassName is used to select the ingress controller for apps.
+  # If empty ingress.ingressClassName (see below) is used
+  ingressClassName: ""
+  # Disable tracking of the Epinio and Kubernetes cluster version
+  disableTracking: false
+
+  # Configure staging jobs performing builds and deployment
+  stagingWorkloads:
+    # Name of the Service Account used by the staging job
+    serviceAccountName: "epinio-server"
+    # Time to live for the deployed staging job
+    ttlSecondsAfterFinished: 300
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "1Gi"
+      # limits:
+      #   cpu: ""
+      #   memory: ""
+    storage:
+      # Configure PVC or EmptyDir values for build cache
+      cache:
+        # If set to false, the values below will be used or defaulted
+        emptyDir: false
+        size: 1Gi
+        storageClassName: ""
+        volumeMode: Filesystem
+        accessModes:
+        - ReadWriteOnce
+      # Configure PVC or EmptyDir values for source blob storage
+      sourceBlobs:
+        # If set to false, the values below will be used or defaulted
+        emptyDir: true
+        # size: 1Gi
+        # storageClassName: ""
+        # volumeMode: Filesystem
+        # accessModes:
+        # - ReadWriteOnce
+    nodeSelector: {}
+    # kubernetes.io/os: linux
+    affinity: {}
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchExpressions:
+    #       - key: kubernetes.io/os
+    #         operator: In
+    #         values:
+    #         - linux
+    tolerations: []
+    # - key: "kubernetes.io/os"
+    #   operator: "Equal"
+    #   value: "linux"
+    #   effect: "NoSchedule"
+
+  resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  replicaCount: 1
+  # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+ingress:
+  # The ingressClassName is used to select the ingress controller for the server. If empty no class will be added to the ingresses.
+  ingressClassName: ""
+  # Maximum size of the client request body. This setting is important for deploying applications
+  # with larger source code or assets. The default value is set to 500m (500 megabytes) to handle
+  # larger deployments. You can override this value if needed for your specific use case.
+  # Format: number followed by unit (k, m, g) e.g., "100m", "1g"
+  proxyBodySize: "500m"
+  # Maximum time to read a response from the proxied server. This setting is important for
+  # deployments that take longer to complete, especially on instances with lower compute power.
+  # The default value is set to 600s (10 minutes) to handle longer-running deployments.
+  # Format: number followed by unit (s, m, h) e.g., "180s", "5m", "1h"
+  proxyReadTimeout: "600s"
+  # Annotations to add to the API ingress
+  # e.g.: --set 'ingress.annotations.nginx\.ingress\.kubernetes\.io/ssl-redirect=false'
+  # or:
+  # --set ingress.annotations.nginx\.org/proxy-connect-timeout="180s" \
+  # --set ingress.annotations.nginx\.org/proxy-read-timeout="180s" \
+  # --set ingress.annotations.nginx\.ingress\.kubernetes\.io/proxy-connect-timeout="180s" \
+  # --set ingress.annotations.nginx\.ingress\.kubernetes\.io/proxy-read-timeout="180s"
+  annotations:
+  # nginx.org/proxy-connect-timeout: "180s"
+  # nginx.org/proxy-read-timeout: "180s"
+  # nginx.ingress.kubernetes.io/proxy-connect-timeout: "180s"
+  # nginx.ingress.kubernetes.io/proxy-read-timeout: "180s"
+  # nginxSSLRedirect to controll https->http redirects
+  nginxSSLRedirect: "true"
+service:
+  # -- Annotations to be added to the Epinio service.
+  annotations: {}
+  port: 8030
+# The strategy used to deploy the Epinio server.
+# If you are using a RWO storage the following will avoid a Multi-Attach error during an `helm upgrade`.
+# See https://github.com/epinio/epinio/issues/2253.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+certManagerNamespace: cert-manager
+# Set enabled to false to disable cert manager.
+# With the auto-creation of secrets from Cert request gone the secrets have to specified manually.
+# See below. Leaving out the `dex` falls back to `epinio`. No other connections between them.
+# Further note:
+#  - s3 applies to either seaweedfs, or s3gw, whichever is active.
+#    In case of using an external s3 store it does not apply at all.
+#  - dex applies only when enabled
+certManager:
+  enabled: true
+  registry:
+    cert: ""
+    key: ""
+    ca: ""
+  epinio:
+    cert: ""
+    key: ""
+    ca: ""
+  dex:
+    cert: ""
+    key: ""
+    ca: ""
+  s3:
+    cert: ""
+    key: ""
+    ca: ""
+# Connection details for the S3 storage
+s3:
+  endpoint: s3.amazonaws.com
+  bucket: "epinio"
+  region: ""
+  accessKeyID: ""
+  secretAccessKey: ""
+  useSSL: true
+  # Set it to an existing secret if S3 is using a self signed cert
+  certificateSecret: ""
+api:
+  # Install RBAC role ConfigMaps (application_manager, application_developer, view_only, system_manager).
+  # When true, end users can create Secrets with epinio.io/roles: "application_manager" etc.
+  # When false, only the default "user" and "blank" roles are available.
+  rbac:
+    enabled: true
+  # Default users
+  # plain password used for the 'admin' user
+  adminPassword: ""
+  # plain password used for the 'epinio' user
+  epinioPassword: ""
+  users:
+    - username: admin
+      password: password
+      # or you can provide an already bcrypt hashed password
+      # passwordBcrypt: "$2a$10$6bCi5NMstMK781In7JGiL.B44pgoplUb330FQvm6mVXMppbXBPiXS"
+      roles:
+        - admin
+    - username: epinio
+      # the Bcrypt hash for the `password` password
+      passwordBcrypt: "$2a$10$6bCi5NMstMK781In7JGiL.B44pgoplUb330FQvm6mVXMppbXBPiXS"
+      roles:
+        - user
+        - admin:workspace
+      workspaces:
+        - workspace
+# Dex subchart values -- None for now, and sub chart disabled
+dex:
+  # Target fork that supports pkce for oidc providers
+  image:
+    repository: ghcr.io/epinio/dex
+    tag: v2.37.0-epinio-pkce
+    pullPolicy: IfNotPresent
+  # hardcode this, to avoid problems with release name
+  fullnameOverride: "dex"
+  configSecret:
+    create: false
+    name: "dex-config"
+  ui:
+    # secret should be supplied by dex automatically, this is just a fall back
+    secret: ""
+    # Defaults to https://epinio.{{ .Values.global.domain }}/auth/verify/
+    redirectURI: ""
+  service:
+    # -- Annotations to be added to the Epinio service.
+    annotations: {}
+  # The issuer URL for the Dex OIDC provider
+  # This configuration value is currently not in use
+  issuer:
+    url: "https://auth.{{ .Values.global.domain }}"
+    port: null
+    # The issuer CA certificate
+    ca: ""
+  # Security context configuration to prevent privilege escalation and run as root
+  # See: https://github.com/epinio/epinio/issues/2730
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+# Extra environment variables passed to the epinio-server pod.
+# extraEnv:
+# - name: MY_ENV_VAR
+#   value: "1.0"
+# SeaweedFS subchart values (S3-compatible storage)
+seaweedfs:
+  enabled: true
+  fullnameOverride: seaweedfs
+  existingSecret: seaweedfs-creds
+  global:
+    # Set to true to enable SeaweedFS internal TLS. When enabled, also set `seaweedfs.tls.enabled=true`.
+    enableSecurity: false
+  s3:
+    enabled: true
+    port: 8333
+    enableAuth: true
+    existingConfigSecret: seaweedfs-creds
+  tls:
+    enabled: false
+    certSecret: seaweedfs-tls
+epinioUI:
+  enabled: true
+  # UI theme, either 'light' or 'dark'
+  theme: light
+  imagePullPolicy: IfNotPresent
+  # API URL of epinio instance, for proxied connections, defaults to http://epinio-server.%s.svc.cluster.local"
+  apiURL: ""
+  wssURL: ""
+  dexURL: ""
+  uiURL: ""
+  # Skip checking for valid SSL cert when making requests to `EPINIO_API_URL`
+  apiSkipSSL: "true"
+  logLevel: info
+  # Domain that will serve the UI and be the origin of browser requests, used by CORS process
+  allowedOrigins: ""
+  ingress:
+    enabled: false
+    # The ingressClassName is used to select the ingress controller. If empty no class will be added to the ingresses.
+    ingressClassName: ""
+  service:
+    # -- Annotations to be added to the service.
+    annotations: {}
+reflector:
+  enabled: true
+  fullnameOverride: reflector
+  image:
+    repository: emberstack/kubernetes-reflector
+    tag: ""
+    pullPolicy: IfNotPresent
+  rbac:
+    enabled: true
+  serviceAccount:
+    create: true
+    name: ""
+
+# s3gw subchart values
+s3gw:
+  enabled: false
+  ingress:
+    enabled: false
+  ui:
+    enabled: false
+  serviceName: s3gw
+  useExistingSecret: true
+  defaultUserCredentialsSecret: s3gw-creds
+  storageSize: 2Gi
+  storageClass:
+    create: false
+    name: ""
+containerregistry:
+  enabled: true
+  image:
+    registry:
+      repository: registry
+      tag: "3"
+    nginx:
+      repository: nginx
+      tag: 1.27-alpine
+  imagePullPolicy: IfNotPresent
+  # The ingressClassName is used to select the ingress controller. If
+  # empty no class will be added to the ingresses.
+  ingressClassName: ""
+  # The certificateSecret is used to load the certificate of the registry in the staging job.
+  # The certificate has to be in PEM format within in a 'tls.crt' key (it can be an Opaque secret).
+  # It also has to be trusted by the kubelet, and it needs to be added in the cluster as well.
+  certificateSecret: ""
+  # Configure PVC or EmptyDir values for container registry storage
+  storage:
+    # If set to false, the values below will be used or defaulted
+    emptyDir: true
+    # size: 1Gi
+    # storageClassName: ""
+    # volumeMode: Filesystem
+    # accessModes:
+    # - ReadWriteOnce
+  resources: {}
+  # requests:
+  #   cpu: "200m"
+  #   memory: "1Gi"
+  # limits:
+  #   cpu: ""
+  #   memory: ""
+  nodeSelector: {}
+  # kubernetes.io/os: linux
+  affinity: {}
+  # nodeAffinity:
+  #   requiredDuringSchedulingIgnoredDuringExecution:
+  #     nodeSelectorTerms:
+  #     - matchExpressions:
+  #       - key: kubernetes.io/os
+  #         operator: In
+  #         values:
+  #         - linux
+  tolerations: []
+  # - key: "kubernetes.io/os"
+  #   operator: "Equal"
+  #   value: "linux"
+  #   effect: "NoSchedule"
+serviceCatalog:
+  # Enable service catalog service for development
+  enableDevServices: true
+# Scheduling configurations for the Helm Controller
+helmController:
+  resources: {}
+  # requests:
+  #   cpu: "200m"
+  #   memory: "500Mi"
+  # limits:
+  #   cpu: ""
+  #   memory: ""
+  nodeSelector: {}
+  # kubernetes.io/os: linux
+  affinity: {}
+  # nodeAffinity:
+  #   requiredDuringSchedulingIgnoredDuringExecution:
+  #     nodeSelectorTerms:
+  #     - matchExpressions:
+  #       - key: kubernetes.io/os
+  #         operator: In
+  #         values:
+  #         - linux
+  tolerations: []
+  # - key: "kubernetes.io/os"
+  #   operator: "Equal"
+  #   value: "linux"
+  #   effect: "NoSchedule"
+
+global:
+  dex:
+    enabled: true
+  # The domain that will be used to access the epinio API server and the registry
+  domain: ""
+  # Connection details for the container registry.
+  # Skip if containerregistry.enabled is true
+  registryURL: ""
+  registryUsername: "admin"
+  registryPassword: "changeme"
+  # Used in registry path when pushing -> "external.tld/apps/APPNAME"
+  registryNamespace: "apps"
+  # The name of the cluster issuer to use.
+  # Epinio provides four options: 'epinio-ca', 'selfsigned-issuer', 'letsencrypt-staging' and 'letsencrypt-production'.
+  tlsIssuer: "epinio-ca"
+  # The name of your ClusterIssuer (it will override the tlsIssuer)
+  customTlsIssuer: ""
+  # Email address to receive the certificate notification emails send by the `letsencrypt-production` issuer.
+  tlsIssuerEmail: ""
+  # The URL of the container registry from where to pull container images for the various
+  # created Pods. Don't confuse this registry with the "Epinio registry" which is the one
+  # where Epinio stores the application images.
+  cattle:
+    systemDefaultRegistry: ""
+rancher:
+  # Epinio's UI extension needs to reach both epinio and dex services.
+  # Configuration for those services to enable this requires the uri of the Rancher instance.
+  # The uri comes from global.cattle.url (provided by rancher), or if that's missing this value (rancher.url)
+  # This supersedes server.accessControlAllowOrigin
+  url: ""
