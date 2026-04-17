@@ -1,0 +1,208 @@
+{{- if not .Values.forceUnsupportedInterval }}
+{{- $max := 40 }}
+{{- $min := 10 }}
+{{- if not (.Values.common.config.interval | hasSuffix "s") }}
+{{ fail (printf "Interval must be between %ds and %ds" $min $max ) }}
+{{- end }}
+{{- if gt ( .Values.common.config.interval | trimSuffix "s" | int64 ) $max }}
+{{ fail (printf "Intervals larger than %ds are not supported" $max) }}
+{{- end }}
+{{- if lt ( .Values.common.config.interval | trimSuffix "s" | int64 ) $min }}
+{{ fail (printf "Intervals smaller than %ds are not supported" $min) }}
+{{- end }}
+{{- end }}
+
+{{- if or (not .Values.ksm.enabled) (not .Values.kubelet.enabled) }}
+Warning:
+========
+
+You have specified ksm or kubelet integration components as not enabled.
+Those components are needed to have the full experience on NROne kubernetes explorer.
+{{- end }}
+
+{{- if and (include "nriKubernetes.controlPlane.enabled" .) (not (include "nriKubernetes.controlPlane.hostNetwork" .)) }}
+Warning:
+========
+
+Most Control Plane components listen in the loopback address only, which is not reachable without `hostNetwork: true`.
+Control plane autodiscovery might not work as expected.
+You can enable hostNetwork for all pods by setting `global.hotNetwork`, `hostNetwork` or only for the control
+plane pods by setting `controlPlane.hostNetwork: true`. Alternatively, you can disable control plane monitoring altogether with
+`controlPlane.enabled: false`.
+{{- end }}
+
+{{- if and .Values.enableWindows (not (include "nriKubernetes.windows.privileged" .)) }}
+Note:
+=====
+
+Windows nodes are running in unprivileged mode (windows.privileged: false). The Windows kubelet
+DaemonSet will use standard container isolation instead of HostProcess containers.
+
+In unprivileged mode:
+  - Containers run as ContainerUser
+  - Host filesystem access is not available
+  - hostNetwork is disabled; the agent uses NRIA_HOST for autodiscovery
+
+For full monitoring capabilities including network statistics, set `windows.privileged: true`
+(the default) to run as HostProcess containers with elevated privileges.
+{{- end }}
+
+{{- if and (include "newrelic.fargate" .) .Values.kubelet.affinity }}
+Warning:
+========
+
+You have specified both an EKS Fargate environment (global.fargate) and custom
+nodeAffinity rules, so we couldn't automatically exclude the kubelet daemonSet from
+Fargate nodes. In order for the integration to work, you MUST manually exclude
+the daemonSet from Fargate nodes.
+
+Please make sure your `values.yaml' contains a .kubelet.affinity.nodeAffinity that achieve the same effect as:
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: eks.amazonaws.com/compute-type
+              operator: NotIn
+              values:
+                - fargate
+{{- end }}
+
+{{- if and .Values.nodeAffinity (include "nriKubernetes.controlPlane.enabled" .) }}
+WARNING: `nodeAffinity` is deprecated
+=====================================
+
+We have applied the old `nodeAffinity` to KSM and Kubelet components, but *NOT* to the control plane component as it
+might conflict with the default nodeSelector.
+This shimming will be removed in the future, please convert your `nodeAffinity` item into:
+`ksm.affinity.nodeAffinity`, `controlPlane.affinity.nodeAffinity`, and `kubelet.affinity.nodeAffinity`.
+{{- end }}
+
+{{- if and .Values.integrations_config }}
+WARNING: `integrations_config` is deprecated
+============================================
+
+We have automatically translated `integrations_config` to the new format, but this shimming will be removed in the
+future. Please migrate your configs to the new format in the `integrations` key.
+{{- end }}
+
+{{- if or .Values.kubeStateMetricsScheme .Values.kubeStateMetricsPort .Values.kubeStateMetricsUrl .Values.kubeStateMetricsPodLabel .Values.kubeStateMetricsNamespace }}
+WARNING: `kubeStateMetrics*` are deprecated
+===========================================
+
+We have automatically translated your `kubeStateMetrics*` values to the new format, but this shimming will be removed in
+the future. Please migrate your configs to the new format in the `ksm.config` key.
+{{- end }}
+
+{{- if .Values.runAsUser }}
+WARNING: `runAsUser` is deprecated
+==================================
+
+We have automatically translated your `runAsUser` setting to the new format, but this shimming will be removed in the
+future. Please migrate your configs to the new format in the `securityContext` key.
+{{- end }}
+
+{{- if .Values.config }}
+WARNING: `config` is deprecated
+===============================
+
+We have automatically translated your `config` setting to the new format, but this shimming will be removed in the
+future. Please migrate your agent config to the new format in the `common.agentConfig` key.
+{{- end }}
+
+{{ $errors:= "" }}
+
+{{- if .Values.logFile }}
+{{ $errors = printf "%s\n\n%s" $errors (include "newrelic.compatibility.message.logFile" . ) }}
+{{- end }}
+
+{{- if .Values.resources }}
+{{ $errors = printf "%s\n\n%s" $errors (include "newrelic.compatibility.message.resources" . ) }}
+{{- end }}
+
+{{- if .Values.image }}
+{{ $errors = printf "%s\n\n%s" $errors (include "newrelic.compatibility.message.image" . ) }}
+{{- end }}
+
+{{- if ( or .Values.controllerManagerEndpointUrl  .Values.schedulerEndpointUrl .Values.etcdEndpointUrl .Values.apiServerEndpointUrl )}}
+{{ $errors = printf "%s\n\n%s" $errors (include "newrelic.compatibility.message.apiURL" . ) }}
+{{- end }}
+
+{{- if ( or .Values.etcdTlsSecretName .Values.etcdTlsSecretNamespace )}}
+{{ $errors = printf "%s\n\n%s" $errors (include "newrelic.compatibility.message.etcdSecrets" . ) }}
+{{- end }}
+
+{{- if .Values.apiServerSecurePort }}
+{{ $errors = printf "%s\n\n%s" $errors (include "newrelic.compatibility.message.apiServerSecurePort" . ) }}
+{{- end }}
+
+{{- if $errors | trim}}
+{{- fail (printf "\n\n%s\n%s" (include "newrelic.compatibility.message.common" . ) $errors )  }}
+{{- end }}
+
+{{- if .Values.kubelet.resources }}
+WARNING: `kubelet.resources` behavior is changing
+==================================================
+
+Currently, `kubelet.resources` applies the same resource values to all containers in the kubelet
+pod (including Windows). New per-container fields are now available and preferred. In a future
+release, `kubelet.resources` will be repurposed for pod-level resource setting (once Kubernetes
+pod-level resources become generally available), and container-level fallback will be removed.
+
+To silence this warning and gain independent per-container control, migrate to:
+  Linux:
+    kubelet.kubelet.resources  (nri-kubernetes scraper container)
+    kubelet.agent.resources    (infrastructure-bundle agent sidecar)
+  Windows:
+    kubelet.windows.kubelet.resources  (nri-kubernetes scraper container)
+    kubelet.windows.agent.resources    (infrastructure-bundle agent sidecar)
+
+{{- end }}
+{{- if .Values.controlPlane.resources }}
+WARNING: `controlPlane.resources` behavior is changing
+=======================================================
+
+Currently, `controlPlane.resources` applies the same resource values to both containers in the
+control plane pod. New per-container fields are now available and preferred. In a future release,
+`controlPlane.resources` will be repurposed for pod-level resource setting (once Kubernetes
+pod-level resources become generally available), and container-level fallback will be removed.
+
+To silence this warning and gain independent per-container control, migrate to:
+  controlPlane.controlplane.resources  (nri-kubernetes scraper container)
+  controlPlane.forwarder.resources     (k8s-events-forwarder sidecar)
+
+{{- end }}
+{{- if .Values.rbac.kubeletFineGrainedAuth }}
+
+Kubelet Authorization: Fine-Grained Mode (KEP-2862)
+====================================================
+
+Using fine-grained kubelet permissions for enhanced security.
+- Grants access to: nodes/metrics, nodes/stats, nodes/pods, nodes/healthz
+- Blocks write endpoints: /exec, /run, /attach, /portforward
+{{- if semverCompare "<1.32-0" .Capabilities.KubeVersion.Version }}
+
+⚠️  Note: Your cluster is running Kubernetes {{ .Capabilities.KubeVersion.Version }}.
+Fine-grained kubelet authorization (KEP-2862) is not available on this version.
+Please set rbac.kubeletFineGrainedAuth: false or upgrade to Kubernetes 1.32+.
+{{- else if semverCompare "<1.33-0" .Capabilities.KubeVersion.Version }}
+
+⚠️  Note: Your cluster is running Kubernetes {{ .Capabilities.KubeVersion.Version }}.
+Fine-grained mode requires --feature-gates=KubeletFineGrainedAuthz=true on kubelets (alpha in 1.32).
+If you experience connection errors, either:
+  1. Enable the feature gate on your kubelets, or
+  2. Set rbac.kubeletFineGrainedAuth: false in your values
+{{- end }}
+{{- else }}
+
+Kubelet Authorization: Legacy Mode
+===================================
+
+Using legacy nodes/proxy permission for kubelet access.
+- Works on all Kubernetes versions
+- nodes/proxy permission could be exploited to reach kubelet write endpoints (/exec, /run, /attach, /portforward)
+
+For enhanced security on Kubernetes 1.33+, consider setting:
+  rbac.kubeletFineGrainedAuth: true
+{{- end }}
