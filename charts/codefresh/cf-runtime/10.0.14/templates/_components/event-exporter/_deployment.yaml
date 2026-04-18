@@ -1,0 +1,62 @@
+{{- define "event-exporter.resources.deployment" -}}
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "event-exporter.fullname" . }}
+  labels:
+    {{- include "event-exporter.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicasCount }}
+  strategy:
+    type: {{ .Values.updateStrategy.type }}
+  selector:
+    matchLabels:
+      {{- include "event-exporter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "event-exporter.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver ) . | nindent 8 }}
+      serviceAccountName: {{ include "event-exporter.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: event-exporter
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+        args: [--running-in-cluster=true]
+        env:
+        {{- include "event-exporter.environment-variables" . | nindent 8 }}
+        ports:
+        - name: metrics
+          containerPort: 9102
+        resources:
+          {{- toYaml .Values.resources | nindent 12  }}
+        volumeMounts:
+        {{- with .Values.extraVolumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      volumes:
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end -}}
