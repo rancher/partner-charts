@@ -1,0 +1,104 @@
+suite: test configmap region helper and externalMetrics
+templates:
+  - templates/configmap.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has the correct region when defined in local values
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      config:
+        accountID: 111
+        region: A-REGION
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |
+            accountID: 111
+            region: A-REGION
+            cacheTTLSeconds: 30
+            nrdbClientTimeoutSeconds: 30
+  - it: has the correct region when global staging
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      config:
+        accountID: 111
+      global:
+        nrStaging: true
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |
+            accountID: 111
+            region: Staging
+            cacheTTLSeconds: 30
+            nrdbClientTimeoutSeconds: 30
+  - it: has the correct region when global values and licenseKey is from eu
+    set:
+      personalAPIKey: 21321
+      licenseKey: eu-whatever
+      cluster: test-cluster
+      config:
+        accountID: 111
+      global:
+        aRandomGlobalValue: true
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |
+            accountID: 111
+            region: EU
+            cacheTTLSeconds: 30
+            nrdbClientTimeoutSeconds: 30
+  - it: has the correct region when no global values exist and licenseKey is from eu
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      licenseKey: eu-whatever
+      config:
+        accountID: 111
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |
+            accountID: 111
+            region: EU
+            cacheTTLSeconds: 30
+            nrdbClientTimeoutSeconds: 30
+  - it: has no region when not defined and licenseKey is not from eu
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      licenseKey: us-whatever
+      config:
+        accountID: 111
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |
+            accountID: 111
+            cacheTTLSeconds: 30
+            nrdbClientTimeoutSeconds: 30
+  - it: has externalMetrics when defined
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      licenseKey: us-whatever
+      config:
+        accountID: 111
+        externalMetrics:
+          nginx_average_requests:
+            query: "FROM Metric SELECT average(nginx.server.net.requestsPerSecond)"
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |
+            accountID: 111
+            cacheTTLSeconds: 30
+            externalMetrics:
+              nginx_average_requests:
+                query: FROM Metric SELECT average(nginx.server.net.requestsPerSecond)
+            nrdbClientTimeoutSeconds: 30
