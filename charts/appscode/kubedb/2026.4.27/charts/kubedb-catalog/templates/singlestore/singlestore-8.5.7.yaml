@@ -1,0 +1,37 @@
+{{- template "kubedb-catalog.refresh-versions" . }}
+
+{{ $featureGates := .Values.featureGates }}
+{{ $ubi := .Values.distro.ubi }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+  {{ $ubi = default .Values.distro.ubi .Values.global.distro.ubi }}
+{{- end }}
+
+{{ if and $featureGates.Singlestore (not (eq $ubi "operator")) }}
+
+{{ if or (not .Values.skipEndOfLife) (has "8.5.7" .Values.enableVersions.Singlestore) }}
+apiVersion: catalog.kubedb.com/v1alpha1
+kind: SinglestoreVersion
+metadata:
+  name: '8.5.7'
+  labels:
+    {{- include "kubedb-catalog.labels" . | nindent 4 }}
+spec:
+  coordinator:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/singlestore-coordinator") $) }}:v0.19.0{{ include "catalog.ubi" $ }}'
+  db:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "appscode-images/singlestore-node") $) }}:alma-8.5.7-bf633c1a54'
+  initContainer:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/singlestore-init") $) }}:8.5-v2'
+  securityContext:
+    runAsGroup: 998
+    runAsUser: 999
+  standalone:
+    image: '{{ include "image.dockerHub" (merge (dict "_repo" "singlestore/cluster-in-a-box") $) }}:alma-8.5.7-bf633c1a54-4.0.17-1.17.8'
+  updateConstraints:
+    allowlist:
+    - '>= 8.5.7, <= 8.9.3'
+  version: 8.5.7
+  endOfLife: {{ not (has "8.5.7" .Values.enableVersions.Singlestore) }}
+{{ end }}
+{{ end }}

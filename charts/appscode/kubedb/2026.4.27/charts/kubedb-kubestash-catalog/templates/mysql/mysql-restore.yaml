@@ -1,0 +1,31 @@
+{{ $featureGates := .Values.featureGates }}
+{{ $ubi := .Values.distro.ubi }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+  {{ $ubi = default .Values.distro.ubi .Values.global.distro.ubi }}
+{{- end }}
+
+{{ if and $featureGates.MySQL (not (eq $ubi "operator")) }}
+apiVersion: addons.kubestash.com/v1alpha1
+kind: Function
+metadata:
+  name: 'mysql-restore'
+  labels:
+    {{- include "kubedb-kubestash-catalog.labels" . | nindent 4 }}
+spec:
+  args:
+  - restore
+  - --namespace=${namespace:=default}
+  - --restoresession=${restoreSession:=}
+  - --snapshot=${snapshot:=}
+  - --enable-cache=${enableCache:=}
+  - --scratch-dir=${scratchDir:=}
+  - --wait-timeout=${waitTimeout:={{ .Values.waitTimeout}}}
+  - --mysql-args=${args:={{ .Values.mysql.args }}}
+  - --db-version=${dbVersion:=}
+  availableVersions:
+  - 5.7.25
+  - 8.0.3
+  - 8.0.21
+  image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/mysql-restic-plugin") $) }}:v0.27.0_${DB_VERSION}{{ include "catalog.ubi" $ }}'
+{{ end }}

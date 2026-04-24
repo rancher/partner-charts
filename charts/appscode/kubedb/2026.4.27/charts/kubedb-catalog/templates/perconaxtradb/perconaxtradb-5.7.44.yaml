@@ -1,0 +1,44 @@
+{{- template "kubedb-catalog.refresh-versions" . }}
+
+{{ $featureGates := .Values.featureGates }}
+{{ $ubi := .Values.distro.ubi }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+  {{ $ubi = default .Values.distro.ubi .Values.global.distro.ubi }}
+{{- end }}
+
+{{ if and $featureGates.PerconaXtraDB (not (eq $ubi "operator")) }}
+
+{{ if or (not .Values.skipEndOfLife) (has "5.7.44" .Values.enableVersions.PerconaXtraDB) }}
+apiVersion: catalog.kubedb.com/v1alpha1
+kind: PerconaXtraDBVersion
+metadata:
+  name: '5.7.44'
+  labels:
+    {{- include "kubedb-catalog.labels" . | nindent 4 }}
+spec:
+  coordinator:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/percona-xtradb-coordinator") $) }}:v0.37.0{{ include "catalog.ubi" $ }}'
+  db:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "appscode-images/percona-xtradb-cluster") $) }}:5.7.44'
+  exporter:
+    image: '{{ include "image.dockerHub" (merge (dict "_repo" "prom/mysqld-exporter") $) }}:v0.18.0'
+  initContainer:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/percona-xtradb-init") $) }}:0.2.3'
+  securityContext:
+    runAsUser: 1001
+  stash:
+    addon:
+      backupTask:
+        name: perconaxtradb-backup-5.7
+      restoreTask:
+        name: perconaxtradb-restore-5.7
+  updateConstraints:
+    allowlist:
+    - '>= 5.7.44, <= 5.7.44'
+  version: 5.7.44
+  podSecurityPolicies:
+    databasePolicyName: {{ ternary "percona-xtradb-db" `""` (and .Values.psp.enabled (.Capabilities.APIVersions.Has "policy/v1beta1/PodSecurityPolicy")) }}
+  endOfLife: {{ not (has "5.7.44" .Values.enableVersions.PerconaXtraDB) }}
+{{ end }}
+{{ end }}

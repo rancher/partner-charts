@@ -1,0 +1,42 @@
+{{- template "kubedb-catalog.refresh-versions" . }}
+
+{{ $featureGates := .Values.featureGates }}
+{{ $ubi := .Values.distro.ubi }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+  {{ $ubi = default .Values.distro.ubi .Values.global.distro.ubi }}
+{{- end }}
+
+{{ if and $featureGates.PerconaXtraDB (not (eq $ubi "operator")) }}
+
+
+apiVersion: catalog.kubedb.com/v1alpha1
+kind: PerconaXtraDBVersion
+metadata:
+  name: '8.0.40'
+  labels:
+    {{- include "kubedb-catalog.labels" . | nindent 4 }}
+spec:
+  coordinator:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/percona-xtradb-coordinator") $) }}:v0.37.0{{ include "catalog.ubi" $ }}'
+  db:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "appscode-images/percona-xtradb-cluster") $) }}:8.0.40'
+  exporter:
+    image: '{{ include "image.dockerHub" (merge (dict "_repo" "prom/mysqld-exporter") $) }}:v0.18.0'
+  initContainer:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/percona-xtradb-init") $) }}:0.2.3'
+  securityContext:
+    runAsUser: 1001
+  stash:
+    addon:
+      backupTask:
+        name: perconaxtradb-backup-8.0
+      restoreTask:
+        name: perconaxtradb-restore-8.0
+  updateConstraints:
+    allowlist:
+    - '>= 8.0.40, <= 8.4.3'
+  version: 8.0.40
+  podSecurityPolicies:
+    databasePolicyName: {{ ternary "percona-xtradb-db" `""` (and .Values.psp.enabled (.Capabilities.APIVersions.Has "policy/v1beta1/PodSecurityPolicy")) }}
+{{ end }}

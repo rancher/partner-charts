@@ -1,0 +1,233 @@
+{{ $featureGates := .Values.featureGates }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+{{- end }}
+
+{{ if $featureGates.MongoDB }}
+
+apiVersion: metrics.appscode.com/v1alpha1
+kind: MetricsConfiguration
+metadata:
+  name: kubedb-com-mongodb
+spec:
+  targetRef:
+    apiVersion: kubedb.com/v1
+    kind: MongoDB
+  commonLabels:
+    - key: app
+      valuePath: .metadata.name
+    - key: app_namespace
+      valuePath: .metadata.namespace
+  metrics:
+    - name: created
+      help: "Unix creation timestamp"
+      type: gauge
+      field:
+        path: .metadata.creationTimestamp
+        type: DateTime
+      metricValue:
+        valueFromPath: .metadata.creationTimestamp
+
+    - name: status_phase
+      help: "MongoDB instance current phase"
+      type: gauge
+      field:
+        path: .status.phase
+        type: String
+      params:
+        - key: phase
+          valuePath: .status.phase
+      states:
+        labelKey: phase
+        values:
+          - labelValue: Ready
+            metricValue:
+              valueFromExpression: "int(phase == 'Ready')"
+          - labelValue: Halted
+            metricValue:
+              valueFromExpression: "int(phase == 'Halted')"
+          - labelValue: Provisioning
+            metricValue:
+              valueFromExpression: "int(phase == 'Provisioning')"
+          - labelValue: Critical
+            metricValue:
+              valueFromExpression: "int(phase == 'Critical')"
+          - labelValue: NotReady
+            metricValue:
+              valueFromExpression: "int(phase == 'NotReady')"
+          - labelValue: DataRestoring
+            metricValue:
+              valueFromExpression: "int(phase == 'DataRestoring')"
+
+    - name: info
+      help: "MongoDB instance information"
+      type: gauge
+      labels:
+        - key: clusterAuthMode
+          valuePath: .spec.clusterAuthMode
+        - key: sslMode
+          valuePath: .spec.sslMode
+        - key: storageType
+          valuePath: .spec.storageType
+        - key: deletionPolicy
+          valuePath: .spec.deletionPolicy
+        - key: version
+          valuePath: .spec.version
+      metricValue:
+        value: 1
+
+    - name: status_conditions
+      help: "MongoDB instance status condition"
+      type: gauge
+      field:
+        path: .status.conditions
+        type: Array
+      labels:
+        - key: type
+          valuePath: .status.conditions[*].type
+        - key: status
+          valuePath: .status.conditions[*].status
+      metricValue:
+        value: 1
+
+    - name: shard_enabled
+      help: "MongoDB sharded topology enable info"
+      type: gauge
+      params:
+        - key: topology
+          valuePath: .spec.shardTopology
+      metricValue:
+        valueFromExpression: "int(topology != 'nil')"
+
+    - name: resource_request_cpu
+      help: "Requested CPU by MongoDB in core"
+      type: gauge
+      labels:
+        - key: unit
+          value: core
+      params:
+        - key: obj
+          valuePath: .
+        - key: resourceType
+          value: cpu
+      metricValue:
+        valueFromExpression: total_resource_requests(obj, resourceType)
+
+    - name: resource_request_memory
+      help: "Requested memory by MongoDB in byte"
+      type: gauge
+      labels:
+        - key: unit
+          value: byte
+      params:
+        - key: obj
+          valuePath: .
+        - key: resourceType
+          value: memory
+      metricValue:
+        valueFromExpression: total_resource_requests(obj, resourceType)
+
+    - name: resource_request_storage
+      help: "Requested storage by MongoDB in byte"
+      type: gauge
+      labels:
+        - key: unit
+          value: byte
+      params:
+        - key: obj
+          valuePath: .
+        - key: resourceType
+          value: storage
+      metricValue:
+        valueFromExpression: total_resource_requests(obj, resourceType)
+
+    - name: resource_limit_cpu
+      help: "CPU limit for MongoDB in core"
+      type: gauge
+      labels:
+        - key: unit
+          value: core
+      params:
+        - key: obj
+          valuePath: .
+        - key: resourceType
+          value: cpu
+      metricValue:
+        valueFromExpression: total_resource_limits(obj, resourceType)
+
+    - name: resource_limit_memory
+      help: "Memory limit for MongoDB in byte"
+      type: gauge
+      labels:
+        - key: unit
+          value: byte
+      params:
+        - key: obj
+          valuePath: .
+        - key: resourceType
+          value: memory
+      metricValue:
+        valueFromExpression: total_resource_limits(obj, resourceType)
+
+    - name: resource_limit_storage
+      help: "Storage limit for MongoDB in byte"
+      type: gauge
+      labels:
+        - key: unit
+          value: byte
+      params:
+        - key: obj
+          valuePath: .
+        - key: resourceType
+          value: storage
+      metricValue:
+        valueFromExpression: total_resource_limits(obj, resourceType)
+
+    - name: replicas
+      help: "Number of replicas in the MongoDB replicaset"
+      type: gauge
+      field:
+        path: .spec.replicas
+        type: Integer
+      metricValue:
+        valueFromPath: .spec.replicas
+
+    ##### Metrics config for mongodb sharded database #####
+
+    - name: shard_shards
+      help: "Number of shards of the MongoDB database"
+      type: gauge
+      field:
+        path: .spec.shardTopology.shard.shards
+        type: Integer
+      metricValue:
+        valueFromPath: .spec.shardTopology.shard.shards
+
+    - name: shard_replicas
+      help: "Number of replicas in the MongoDB shards"
+      type: gauge
+      field:
+        path: .spec.shardTopology.shard.replicas
+        type: Integer
+      metricValue:
+        valueFromPath: .spec.shardTopology.shard.replicas
+
+    - name: configsvr_replicas
+      help: "Number of replicas in MongoDB config server in sharded database"
+      type: gauge
+      field:
+        path: .spec.shardTopology.configServer.replicas
+        type: Integer
+      metricValue:
+        valueFromPath: .spec.shardTopology.configServer.replicas
+
+    - name: mongos_replicas
+      help: "Number of replicas in mongodb sharded mongos"
+      type: gauge
+      field:
+        path: .spec.shardTopology.mongos.replicas
+        type: Integer
+      metricValue:
+        valueFromPath: .spec.shardTopology.mongos.replicas
+
+{{ end }}
