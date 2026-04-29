@@ -1,0 +1,581 @@
+suite: job security context
+templates:
+  - templates/admission-webhooks/job-patch/job-createSecret.yaml
+  - templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  # Tests for job-createSecret.yaml
+  - it: uses default podSecurityContext for job-createSecret when no values are set
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: uses local podSecurityContext for job-createSecret
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      podSecurityContext:
+        fsGroup: 3000
+        runAsUser: 4000
+        runAsGroup: 4000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 3000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 4000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 4000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: inherits global podSecurityContext for job-createSecret when local is not set
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        podSecurityContext:
+          fsGroup: 5000
+          runAsUser: 6000
+          runAsGroup: 6000
+          runAsNonRoot: true
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 5000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 6000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 6000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: uses local podSecurityContext over global for job-createSecret
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        podSecurityContext:
+          fsGroup: 5000
+          runAsUser: 6000
+      podSecurityContext:
+        fsGroup: 7000
+        runAsUser: 8000
+        runAsGroup: 8000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 7000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 8000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 8000
+
+  - it: uses default containerSecurityContext for job-createSecret when no values are set
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+
+  - it: uses local containerSecurityContext for job-createSecret
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: inherits global containerSecurityContext for job-createSecret when local is not set
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - NET_RAW
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: NET_RAW
+
+  - it: uses local containerSecurityContext over global for job-createSecret
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsUser: 9000
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 9000
+
+  - it: uses both pod and container local security contexts together for job-createSecret
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      podSecurityContext:
+        fsGroup: 10000
+        runAsUser: 11000
+        runAsGroup: 11000
+        runAsNonRoot: true
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+    asserts:
+      # Pod-level security context
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 11000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 11000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      # Container-level security context
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  # Tests for job-patchWebhook.yaml
+  - it: uses default podSecurityContext for job-patchWebhook when no values are set
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: uses local podSecurityContext for job-patchWebhook
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      podSecurityContext:
+        fsGroup: 3000
+        runAsUser: 4000
+        runAsGroup: 4000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 3000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 4000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 4000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: inherits global podSecurityContext for job-patchWebhook when local is not set
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        podSecurityContext:
+          fsGroup: 5000
+          runAsUser: 6000
+          runAsGroup: 6000
+          runAsNonRoot: true
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 5000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 6000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 6000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: uses local pod podSecurityContext over global for job-patchWebhook
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        podSecurityContext:
+          fsGroup: 5000
+          runAsUser: 6000
+      podSecurityContext:
+        fsGroup: 7000
+        runAsUser: 8000
+        runAsGroup: 8000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 7000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 8000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 8000
+
+  - it: uses default containerSecurityContext for job-patchWebhook when no values are set
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+
+  - it: uses local containerSecurityContext for job-patchWebhook
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: inherits global containerSecurityContext for job-patchWebhook when local is not set
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - NET_RAW
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: NET_RAW
+
+  - it: uses local containerSecurityContext over global for job-patchWebhook
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsUser: 9000
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 9000
+
+  - it: uses both pod and container security contexts for job-patchWebhook
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      podSecurityContext:
+        fsGroup: 10000
+        runAsUser: 11000
+        runAsGroup: 11000
+        runAsNonRoot: true
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+    asserts:
+      # Pod-level security context
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 11000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 11000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      # Container-level security context
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  # Combined tests - verify both jobs honor the same values
+  - it: inherits global security context settings for both jobs when local values are not
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      global:
+        podSecurityContext:
+          fsGroup: 12000
+          runAsUser: 13000
+          runAsGroup: 13000
+          runAsNonRoot: true
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+    asserts:
+      # job-createSecret pod security context
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 12000
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 13000
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      # job-createSecret container security context
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      # job-patchWebhook pod security context
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 12000
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 13000
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+      # job-patchWebhook container security context
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+
+  - it: sets comprehensive security hardening configuration for both jobs using local values
+    set:
+      cluster: test-cluster
+      customTLSCertificate: false
+      certManager.enabled: false
+      podSecurityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+    asserts:
+      # job-createSecret assertions
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 65534
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+        template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+      # job-patchWebhook assertions
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 65534
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+        template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
