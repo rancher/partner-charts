@@ -1,0 +1,145 @@
+{{/*
+CN-RWX Charts RBAC Resources
+================================
+
+Purpose:
+  Defines ServiceAccount, ClusterRole, and ClusterRoleBinding for the CN-RWX installer job
+  and cleanup hooks. These permissions enable the jobs to download, install, and manage the
+  CN-RWX operator chart.
+
+Key Permissions:
+  1. Core Resources: Pods, Services, Secrets, ConfigMaps, ServiceAccounts, PVs, PVCs, Events
+  2. RBAC: Roles, RoleBindings, ClusterRoles, ClusterRoleBindings (for operator RBAC setup)
+  3. Workloads: Deployments, StatefulSets, DaemonSets, ReplicaSets (for operator and Files pods)
+  4. CRDs: CustomResourceDefinitions (to install FileServer CRD)
+  5. CN-RWX CRDs: fileservers.nutanix.com (CRUD + status/finalizers)
+  6. Helm: Release objects (for Helm operations)
+  7. Coordination: Leases (for operator leader election)
+  8. Monitoring: PrometheusRules, ServiceMonitors, PodMonitors (for CN-RWX metrics)
+  9. Namespaces: Get, list, create (for target namespace creation)
+  10. PriorityClass: Full access (required by CN-RWX chart lookup function)
+
+Hook Configuration:
+  - Created before install/upgrade/delete operations
+  - Weight: -10 (created before jobs that use it)
+  - Cleanup: Deleted before next hook creation
+  - Shared by: installer job, pre-delete hook, post-delete hook
+
+Security Note:
+  ClusterRole required because CN-RWX operator manages cluster-scoped CRDs and may need
+  to create resources across multiple namespaces. The ServiceAccount is namespace-scoped
+  but binds to the ClusterRole for these elevated permissions.
+*/}}
+{{- if and .Values.volumeRWXSupport.enabled .Values.volumeRWXSupport.volumesRWXChartsUrl }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-sa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cn-rwx-installer
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-delete,post-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-cr
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cn-rwx-installer
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-delete,post-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  # Core resources used by installer/cleanup hooks and Helm-rendered manifests
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "secrets", "configmaps", "serviceaccounts", "services", "persistentvolumes", "persistentvolumeclaims", "events", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  # RBAC resources
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Apps resources (all resources for deployments, replicasets, etc.)
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets", "controllerrevisions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Batch resources
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Discovery resources (for service endpoints)
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # CRDs
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create"]
+  # PriorityClass (needed for helm lookup function in CN-RWX charts)
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # FileServer CRD and subresources
+  - apiGroups: ["nutanix.com"]
+    resources: ["fileservers", "fsoperators"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["nutanix.com"]
+    resources: ["fileservers/status", "fsoperators/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["nutanix.com"]
+    resources: ["fileservers/finalizers", "fsoperators/finalizers"]
+    verbs: ["update"]
+  # Coordination (required for operator leader election role creation)
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Auth proxy (required by files-operator-proxy-role)
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+  # Metrics endpoint (required by files-operator-metrics-reader)
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+  # Monitoring resources (required for CN-RWX operator to create PrometheusRules)
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["prometheuses", "prometheusrules", "servicemonitors", "podmonitors"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-crb
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cn-rwx-installer
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-delete,post-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-sa
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-cr
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -1,0 +1,221 @@
+{{/*
+CN-RWX Post-Delete Hook - CRD Cleanup
+========================================
+
+Purpose:
+  Removes FileServer CRDs after the CN-RWX Helm release and all operator/Files pods have been
+  deleted by the pre-delete hook. This is the final cleanup step in the uninstallation process.
+
+Why Post-Delete (Not Pre-Delete):
+  - CRDs must persist while operator is running (pre-delete may still have operator pods)
+  - FileServer instances must be deleted before the CRD (done in pre-delete hook)
+  - Ensures no orphaned FileServer resources exist when CRD is removed
+
+Cleanup Operations:
+  1. Verification: Checks cluster access and operator/Files pod termination status
+  2. Instance Cleanup: Removes any remaining FileServer instances across all namespaces
+  3. Finalizer Removal: Strips finalizers from stuck FileServer instances (force cleanup)
+  4. CRD Deletion: Deletes fileservers.nutanix.com CRD with 120s timeout
+  5. Force Cleanup: If deletion times out, removes CRD finalizers and retries
+
+*/}}
+{{- if and .Values.volumeRWXSupport.enabled .Values.volumeRWXSupport.volumesRWXChartsUrl }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-crd-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cn-rwx-crd-cleanup
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  template:
+    metadata:
+      name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-crd-cleanup
+      labels:
+        {{- include "nutanix-csi-storage.labels" . | nindent 8 }}
+        app.kubernetes.io/component: cn-rwx-crd-cleanup
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-sa
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: cn-rwx-crd-cleanup
+          image: {{ .Values.volumeRWXSupport.jobImage | default "alpine/k8s:1.27.3" | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              set -o pipefail 2>/dev/null || true
+
+              CURRENT_STEP="post-delete initialization"
+              log_step() {
+                CURRENT_STEP="$1"
+                echo ""
+                echo ">>> $CURRENT_STEP"
+              }
+
+              dump_post_delete_debug() {
+                rc=$?
+                set +e
+                echo ""
+                echo "CN-RWX post-delete hook failed during: ${CURRENT_STEP:-unknown} (rc=$rc)"
+                if command -v kubectl >/dev/null 2>&1; then
+                  echo "--- Remaining operator pods (if any) ---"
+                  kubectl -n {{ .Release.Namespace }} get pods -l control-plane=nutanix-cn-rwx-operator 2>/dev/null || true
+                  echo "--- Remaining Files pods (if any) ---"
+                  kubectl -n {{ .Release.Namespace }} get pods -l rwx-crd-pods=cn-rwx-crd-pods 2>/dev/null || true
+                  echo "--- CRDs matching fileserver ---"
+                  kubectl get crd | grep -i fileserver 2>/dev/null || true
+                  echo "--- Recent events ---"
+                  kubectl -n {{ .Release.Namespace }} get events --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
+                else
+                  echo "kubectl unavailable for debug dump"
+                fi
+                exit $rc
+              }
+              trap 'dump_post_delete_debug' ERR
+
+              log_step "Starting CN-RWX post-delete hook"
+              echo "========================================"
+              echo "CN-RWX Post-Delete Hook - CRD Cleanup"
+              echo "========================================"
+              echo "Started at: $(date)"
+              echo "Pod: $HOSTNAME"
+              echo "Namespace: {{ .Release.Namespace }}"
+              echo ""
+
+              CRD="fileservers.nutanix.com"
+
+              # Verify kubectl access
+              log_step "Verifying cluster access"
+              echo "=== Verifying Cluster Access ==="
+              if ! kubectl version --client > /dev/null 2>&1; then
+                echo "ERROR: kubectl not available"
+                exit 1
+              fi
+
+              if ! kubectl cluster-info > /dev/null 2>&1; then
+                echo "ERROR: Cannot connect to cluster"
+                exit 1
+              fi
+
+              echo "Cluster access verified"
+              echo ""
+
+              # Check if pre-delete resources are settled
+              log_step "Checking lingering resources"
+              echo "Checking cleanup status..."
+              if kubectl -n {{ .Release.Namespace }} get pods -l control-plane=nutanix-cn-rwx-operator > /dev/null 2>&1; then
+                echo "Note: Operator pods still terminating (this is normal)"
+              fi
+              if kubectl -n {{ .Release.Namespace }} get pods -l rwx-crd-pods=cn-rwx-crd-pods > /dev/null 2>&1; then
+                echo "Note: Files pods still terminating (this is normal)"
+              fi
+              echo ""
+
+              # Check if CRD exists
+              log_step "Evaluating FileServer CRD"
+              echo "Checking for FileServer CRD..."
+              if kubectl get crd "$CRD" > /dev/null 2>&1; then
+                echo "Found CRD: $CRD"
+                echo "Warning: Deleting this CRD will remove ALL FileServer resources cluster-wide!"
+                echo ""
+
+                # Pre-delete any remaining FileServer instances across all namespaces
+                FILESERVER_COUNT=$(kubectl get fileserver --all-namespaces -o name 2>/dev/null | wc -l)
+                if [ "$FILESERVER_COUNT" -gt 0 ]; then
+                  echo "Found $FILESERVER_COUNT remaining FileServer instance(s), deleting..."
+                  kubectl delete fileserver --all --all-namespaces --timeout=60s --ignore-not-found=true 2>&1 || true
+                  sleep 3
+
+                  # Force remove finalizers if instances still exist
+                  REMAINING=$(kubectl get fileserver --all-namespaces -o name 2>/dev/null | wc -l)
+                  if [ "$REMAINING" -gt 0 ]; then
+                    echo "Removing finalizers from stuck FileServer instances..."
+                    for fs in $(kubectl get fileserver --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name --no-headers 2>/dev/null); do
+                      NAMESPACE=$(echo $fs | awk '{print $1}')
+                      NAME=$(echo $fs | awk '{print $2}')
+                      kubectl patch fileserver -n "$NAMESPACE" "$NAME" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+                    done
+                    sleep 2
+                  fi
+                else
+                  echo "No FileServer instances found"
+                fi
+                echo ""
+                
+                # Delete the CRD
+                log_step "Deleting FileServer CRD"
+                echo "Deleting CRD: $CRD"
+                echo "This may take a moment due to finalizers..."
+                echo ""
+                
+                set +e
+                kubectl delete crd "$CRD" --ignore-not-found=true --timeout=120s 2>&1
+                DELETE_RC=$?
+                set -e
+                
+                # Check if CRD still exists
+                if ! kubectl get crd "$CRD" > /dev/null 2>&1; then
+                  echo "CRD deleted successfully"
+                elif [ $DELETE_RC -eq 0 ]; then
+                  echo "CRD deletion command succeeded"
+                else
+                  # CRD still exists and deletion timed out - force remove finalizers
+                  echo "CRD deletion timed out, attempting to remove finalizers..."
+                  kubectl patch crd "$CRD" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>&1 || true
+                  sleep 3
+                  
+                  # Try deleting again
+                  kubectl delete crd "$CRD" --ignore-not-found=true --timeout=30s 2>&1 || true
+                  
+                  # Final check
+                  if ! kubectl get crd "$CRD" > /dev/null 2>&1; then
+                    echo "CRD removed after finalizer cleanup"
+                  else
+                    echo "CRD may still exist - manual cleanup may be required"
+                    echo "Run: kubectl delete crd $CRD --timeout=5m"
+                  fi
+                fi
+              else
+                echo "CRD not found: $CRD (may already be deleted)"
+                echo "No cleanup needed"
+              fi
+              echo ""
+              
+              echo "========================================"
+              echo "Post-Delete CRD Cleanup Complete"
+              echo "========================================"
+              echo "Completed at: $(date)"
+              echo ""
+
+              log_step "Cleaning hook RBAC resources"
+              kubectl -n {{ .Release.Namespace }} delete sa {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-sa --ignore-not-found=true || true
+              kubectl delete clusterrole {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-cr --ignore-not-found=true || true
+              kubectl delete clusterrolebinding {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-crb --ignore-not-found=true || true
+              echo "Hook ServiceAccount/ClusterRole/ClusterRoleBinding cleanup attempted"
+
+              echo "The CN-RWX integration has been completely removed."
+          resources:
+            limits:
+              cpu: 50m
+              memory: 64Mi
+            requests:
+              cpu: 25m
+              memory: 32Mi
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+{{- end }}
+

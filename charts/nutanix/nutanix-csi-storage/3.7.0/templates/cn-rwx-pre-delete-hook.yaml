@@ -1,0 +1,247 @@
+{{/*
+CN-RWX Pre-Delete Hook - Synchronous Cleanup
+===============================================
+
+Purpose:
+  Performs aggressive, fast cleanup of CN-RWX resources before the main CSI release is deleted.
+  Ensures FileServer instances, Files pods, and operator are removed quickly to unblock the
+  main uninstall process. Uses short timeouts and force-deletion to avoid hanging.
+
+Why Pre-Delete (Not Post-Delete):
+  - Operator and Files pods must be removed before CRDs (post-delete removes CRDs)
+  - FileServer instances require operator to handle finalizers (or manual finalizer removal)
+  - Post-delete hook will handle CRD cleanup after this completes
+
+Cleanup Sequence:
+  1. FileServer Instances: Remove finalizers first (prevents hanging), then delete
+     - Finalizers removed to bypass operator reconciliation (operator may be terminating)
+     - 10s timeout for deletion (fast fail)
+
+  2. Files Pods: Force delete any remaining Files pods with 5s grace period
+     - Ensures Files pods don't block namespace termination
+
+  3. Helm Release Uninstall: Uninstall cn-rwx-charts release with 30s timeout
+     - Uses --no-hooks to prevent sub-chart hooks from delaying uninstall
+     - On timeout: Force deletes operator deployment and pods
+
+  4. Verification: Reports remaining pods (terminating in background is acceptable)
+
+*/}}
+{{- if and .Values.volumeRWXSupport.enabled .Values.volumeRWXSupport.volumesRWXChartsUrl }}
+{{- $namespace := .Values.volumeRWXSupport.namespace | default .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cn-rwx-cleanup
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-cleanup
+      labels:
+        {{- include "nutanix-csi-storage.labels" . | nindent 8 }}
+        app.kubernetes.io/component: cn-rwx-cleanup
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-sa
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: cn-rwx-cleanup
+          image: {{ .Values.volumeRWXSupport.jobImage | default "alpine/k8s:1.27.3" | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              set -o pipefail 2>/dev/null || true
+
+              CURRENT_STEP="initializing cleanup"
+              log_step() {
+                CURRENT_STEP="$1"
+                echo ""
+                echo ">>> $CURRENT_STEP"
+              }
+
+              dump_cleanup_debug() {
+                rc=$?
+                set +e
+                echo ""
+                echo "CN-RWX cleanup hook failed during: ${CURRENT_STEP:-unknown} (rc=$rc)"
+                if command -v kubectl >/dev/null 2>&1; then
+                  ns=${TARGET_NAMESPACE:-"{{ $namespace }}"}
+                  echo "--- Pods in ${ns} ---"
+                  kubectl -n "$ns" get pods 2>/dev/null || true
+                  echo "--- Fileserver objects ---"
+                  kubectl -n "$ns" get fileserver 2>/dev/null || true
+                  echo "--- Recent events in ${ns} ---"
+                  kubectl -n "$ns" get events --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
+                else
+                  echo "kubectl unavailable for debug dump"
+                fi
+                exit $rc
+              }
+              trap 'dump_cleanup_debug' ERR
+
+              echo "========================================"
+              echo "CN-RWX Pre-Delete Hook - Synchronous Cleanup"
+              echo "========================================"
+              echo ""
+              
+              TARGET_NAMESPACE="{{ $namespace }}"
+              RELEASE_NAME="{{ .Values.volumeRWXSupport.releaseName | default "cn-rwx-charts" }}"
+              
+              log_step "Verifying kubectl access"
+              # Verify kubectl access
+              if ! kubectl version --client > /dev/null 2>&1; then
+                echo "ERROR: kubectl not available"
+                exit 1
+              fi
+              
+              {{- if .Values.volumeRWXSupport.jobImage }}
+              # Air-gapped mode: do not download/install helm at runtime.
+              log_step "Verifying helm availability"
+              if ! command -v helm >/dev/null 2>&1; then
+                echo "ERROR: helm not found in cleanup job image"
+                echo "Please set volumeRWXSupport.jobImage to an image that includes helm."
+                exit 1
+              fi
+              {{- else }}
+              # Legacy mode: downloads helm at runtime (requires internet access).
+              log_step "Ensuring helm binary for cleanup"
+              if ! command -v helm &> /dev/null; then
+                echo "Installing helm..."
+                apk add --no-cache curl tar > /dev/null 2>&1 || true
+                curl -fsSL https://get.helm.sh/helm-v3.12.0-linux-amd64.tar.gz | tar -xzC /tmp 2>/dev/null
+                mv /tmp/linux-amd64/helm /usr/local/bin/helm 2>/dev/null || true
+                chmod +x /usr/local/bin/helm 2>/dev/null || true
+              fi
+              if ! command -v helm >/dev/null 2>&1; then
+                echo "ERROR: helm is required for CN-RWX cleanup, but it is not available"
+                exit 1
+              fi
+              {{- end }}
+              
+              # Step 1: Delete FileServer instances (with aggressive finalizer removal)
+              log_step "Deleting FileServer instances"
+              echo "=== Step 1: Deleting FileServer Instances ==="
+              if kubectl -n $TARGET_NAMESPACE get fileserver > /dev/null 2>&1; then
+                FILESERVER_COUNT=$(kubectl -n $TARGET_NAMESPACE get fileserver -o name 2>/dev/null | wc -l)
+                if [ "$FILESERVER_COUNT" -gt 0 ]; then
+                  echo "Found $FILESERVER_COUNT FileServer instance(s)"
+                  
+                  # Remove finalizers first to avoid hanging
+                  echo "Removing finalizers from FileServer instances..."
+                  for fs in $(kubectl -n $TARGET_NAMESPACE get fileserver -o name 2>/dev/null); do
+                    kubectl -n $TARGET_NAMESPACE patch $fs -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+                  done
+                  
+                  # Now delete (should be fast with no finalizers)
+                  kubectl -n $TARGET_NAMESPACE delete fileserver --all --ignore-not-found=true --timeout=10s 2>&1 || true
+                  echo "FileServer deletion completed"
+                else
+                  echo "No FileServer instances found"
+                fi
+              else
+                echo "FileServer CRD not available or no instances"
+              fi
+              echo ""
+              
+              # Step 2: Force delete Files pods if they exist
+              log_step "Force deleting Files pods"
+              echo "=== Step 2: Cleaning Up Files Pods ==="
+              remaining=$(kubectl -n $TARGET_NAMESPACE get pods -l "rwx-crd-pods=cn-rwx-crd-pods" -o name 2>/dev/null | wc -l)
+              if [ "$remaining" -gt 0 ]; then
+                echo "Force deleting $remaining Files pod(s)..."
+                kubectl -n $TARGET_NAMESPACE delete pods -l "rwx-crd-pods=cn-rwx-crd-pods" --grace-period=5 --ignore-not-found=true 2>/dev/null || true
+                echo "Files pods deletion initiated"
+              else
+                echo "No Files pods found"
+              fi
+              echo ""
+              
+              # Step 3: Uninstall CN-RWX Helm Release (with short timeout)
+              log_step "Uninstalling cn-rwx Helm release"
+              echo "=== Step 3: Uninstalling CN-RWX Helm Release ==="
+              if kubectl get namespace $TARGET_NAMESPACE > /dev/null 2>&1; then
+                if helm -n $TARGET_NAMESPACE list 2>/dev/null | grep -q "$RELEASE_NAME"; then
+                  echo "Uninstalling release: $RELEASE_NAME"
+                  
+                  # Use short timeout to avoid hanging
+                  set +e
+                  helm -n $TARGET_NAMESPACE uninstall $RELEASE_NAME --no-hooks --timeout 30s 2>&1
+                  UNINSTALL_RC=$?
+                  set -e
+                  
+                  if [ $UNINSTALL_RC -ne 0 ]; then
+                    echo "Helm uninstall timed out or failed, force cleaning resources..."
+                    # Force delete operator deployment
+                    kubectl -n $TARGET_NAMESPACE delete deployment nutanix-cn-rwx-operator --ignore-not-found=true --grace-period=5 2>/dev/null || true
+                    # Force delete any remaining operator resources
+                    kubectl -n $TARGET_NAMESPACE delete pods -l control-plane=nutanix-cn-rwx-operator --grace-period=5 --ignore-not-found=true 2>/dev/null || true
+                  fi
+                  
+                  echo "Helm uninstall completed"
+                else
+                  echo "Release not found (may already be uninstalled)"
+                fi
+              else
+                echo "Target namespace not found"
+              fi
+              echo ""
+              
+              # Step 4: Verify cleanup
+              log_step "Verifying cn-rwx cleanup"
+              echo "=== Step 4: Verifying Cleanup ==="
+              remaining_operator=$(kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o name 2>/dev/null | wc -l)
+              remaining_files=$(kubectl -n $TARGET_NAMESPACE get pods -l rwx-crd-pods=cn-rwx-crd-pods -o name 2>/dev/null | wc -l)
+              
+              if [ "$remaining_operator" -gt 0 ]; then
+                echo "Note: $remaining_operator operator pod(s) still terminating (will complete in background)"
+                echo "--- Describing remaining operator pods ---"
+                kubectl -n $TARGET_NAMESPACE describe pods -l control-plane=nutanix-cn-rwx-operator || true
+                echo "--- Operator pod logs (last 50 lines) ---"
+                for pod in $(kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o name 2>/dev/null); do
+                  echo "Logs for $pod"
+                  kubectl -n $TARGET_NAMESPACE logs ${pod##*/} --tail=50 2>/dev/null || true
+                  echo ""
+                done
+              else
+                echo "All operator pods cleaned up"
+              fi
+              
+              if [ "$remaining_files" -gt 0 ]; then
+                echo "Note: $remaining_files Files pod(s) still terminating (will complete in background)"
+                echo "--- Describing remaining Files pods ---"
+                kubectl -n $TARGET_NAMESPACE describe pods -l rwx-crd-pods=cn-rwx-crd-pods || true
+              else
+                echo "All Files pods cleaned up"
+              fi
+              echo ""
+              
+              echo "========================================"
+              echo "Pre-Delete Cleanup Complete"
+              echo "========================================"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+  backoffLimit: 1
+  activeDeadlineSeconds: 90
+{{- end }}
+

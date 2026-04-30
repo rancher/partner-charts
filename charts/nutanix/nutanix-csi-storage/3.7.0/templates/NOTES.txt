@@ -1,0 +1,42 @@
+Driver name: {{ include "nutanix-csi-storage.drivername" . }}
+{{- $existingCSIDriver := lookup "storage.k8s.io/v1" "CSIDriver" "" (include "nutanix-csi-storage.drivername" .) }}
+{{- $fsGroupPolicy := "" }}
+{{- if $existingCSIDriver }}
+  {{- $fsGroupPolicy = $existingCSIDriver.spec.fsGroupPolicy }}
+{{- else }}
+  {{- $fsGroupPolicy = .Values.fsGroupPolicy | default "File" }}
+{{- end }}
+fsGroupPolicy: {{ $fsGroupPolicy }}
+{{- if $existingCSIDriver }}
+NOTE: fsGroupPolicy is immutable. For upgrades, the existing value ({{ $fsGroupPolicy }}) is retained. To change it, delete the CSIDriver, modify the helm chart by adding desired fsGroupPolicy value and reinstall the csi driver.
+{{- else }}
+NOTE: fsGroupPolicy is set to '{{ $fsGroupPolicy }}'. This value is immutable after installation. To change it, delete the CSIDriver, modify the helm chart by adding desired fsGroupPolicy value and reinstall the csi driver.
+{{- end }}
+
+Nutanix CSI provider was deployed in namespace {{ .Release.Namespace }}. Check it's status by running:
+kubectl -n {{ .Release.Namespace }} get pods | grep 'nutanix-csi'
+
+{{- if .Values.volumeRWXSupport.enabled }}
+{{- $namespace := .Values.volumeRWXSupport.namespace | default .Release.Namespace }}
+{{- $fileserverName := "cn-rwx" }}
+{{- $fileserverInstances := 1 }}
+{{- $operatorReplicas := 2 }}
+{{- if and .Values.volumeRWXSupport.values .Values.volumeRWXSupport.values.fileserver }}
+{{- $fileserverName = .Values.volumeRWXSupport.values.fileserver.name | default "cn-rwx" }}
+{{- if .Values.volumeRWXSupport.values.fileserver.spec }}
+{{- $fileserverInstances = .Values.volumeRWXSupport.values.fileserver.spec.instances | default 1 }}
+{{- end }}
+{{- end }}
+{{- if and .Values.volumeRWXSupport.values .Values.volumeRWXSupport.values.operator }}
+{{- $operatorReplicas = .Values.volumeRWXSupport.values.operator.replicas | default 2 }}
+{{- end }}
+
+
+CN-RWX was deployed in namespace  {{ $namespace }}. Check it's status by running
+
+# Check CN-RWX pods (should see {{ $fileserverInstances }} CN-RWX pod(s) when fully deployed and {{ $operatorReplicas }} CN-RWX operator pod(s), with 1 leader Ready)
+kubectl -n {{ .Release.Namespace }} get pods -l created-by=nutanix-cn-rwx-operator
+
+The installation runs as a background job and may take a few minutes to complete.
+
+{{- end }}
