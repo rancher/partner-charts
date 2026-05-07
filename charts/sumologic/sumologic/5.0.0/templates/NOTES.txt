@@ -1,0 +1,49 @@
+Thank you for installing {{ .Chart.Name }}. 
+
+{{- if contains " " .Values.sumologic.clusterName }}
+WARNING: You defined sumologic.clusterName with spaces, which is not supported.  Spaces have been replaced with dashes.
+{{- end }}
+
+A Collector with the name {{ .Values.sumologic.collectorName | default (include "sumologic.clusterNameReplaceSpaceWithDash" . ) | quote }} has been created in your Sumo Logic account.
+
+Check the release status by running:
+  kubectl --namespace {{ template "sumologic.namespace" . }} get pods -l "release={{ .Release.Name }}"
+
+{{- if eq .Values.metadata.persistence.enabled false }}
+WARNING: Persistence for OpenTelemetry Collector is disabled.
+When persistence is enabled, the queue is being buffered to disk using file storage extension.
+If collector instance is killed while having some items in the persistent queue,
+on restart the items are being picked and the exporting is continued.
+We recommend turning this property on for production environments by setting metadata.persistence.enabled=true
+{{- end }}
+
+{{- if .Values.sumologic.traces.enabled }}
+
+Please see https://help.sumologic.com/docs/apm/traces/get-started-transaction-tracing to find out
+how to instrument your application and send traces.
+The list of endpoints in your Kubernetes cluster to which traces can be sent:
+- OTLP/http: http://{{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:4318
+- OTLP/gRPC: http://{{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:4317
+- OTLP/http/deprecated: http://{{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:55681
+- Zipkin: http://{{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:9411/api/v2/spans
+- Jaeger/gRPC: http://{{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:14250
+- Jaeger/Thrift/http: http://{{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:14268
+- Jaeger/Thrift/compact: {{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:6831
+- Jaeger/Thrift/binary: {{ template "sumologic.metadata.name.instrumentation.otelagent.service" . }}.{{ template "sumologic.namespace" . }}:6832
+{{- end }}
+
+We've tried to automatically create fields. In an unlikely scenario that this
+fails please refer to the following to create them manually:
+https://github.com/SumoLogic/sumologic-kubernetes-collection/blob/2b3ca63/deploy/docs/Installation_with_Helm.md#prerequisite
+
+{{- if not (.Values.sumologic.setup.monitors.enabled) }}
+Installation of the Sumo Logic monitors is disabled.
+You can install them with:
+https://github.com/SumoLogic/terraform-sumologic-sumo-logic-monitor/tree/main/monitor_packages/kubernetes
+{{- end }}
+
+{{- if not (.Values.sumologic.setup.dashboards.enabled) }}
+Installation of the Sumo Logic dashboards is disabled.
+You can install them manually later with:
+https://help.sumologic.com/docs/integrations/containers-orchestration/kubernetes#installing-the-kubernetes-app
+{{- end }}

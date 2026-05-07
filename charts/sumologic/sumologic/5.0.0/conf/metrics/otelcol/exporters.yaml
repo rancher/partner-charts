@@ -1,0 +1,167 @@
+{{- if eq .Values.debug.metrics.metadata.print true }}
+debug:
+  verbosity: detailed
+{{- end }}
+
+{{- if eq (include "sumologic-mock.forward-metrics-metadata" .) "true" }}
+sumologic/sumologic-mock-default:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: {{ include "metrics.otelcol.exporter.format" . }}
+  endpoint: {{ include "sumologic-mock.receiver-endpoint" . }}
+  ## Sumo doesn't yet natively support OTLP Histograms
+  decompose_otlp_histograms: true
+  decompose_otlp_summaries: true
+  ## Configuration for sending queue
+  ## ref: https://github.com/open-telemetry/opentelemetry-collector/tree/release/v0.37.x/exporter/exporterhelper#configuration
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    ## setting queue_size a high number, so we always use maximum space of the storage
+    ## minimal alert non-triggering queue size (if only one exporter is being used): 10GB/16MB = 640
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+
+sumologic/sumologic-mock-http:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: {{ include "sumologic-mock.receiver-endpoint" . }}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+{{- end }}
+
+## Configuration for Sumo Logic Exporter
+## ref: https://github.com/SumoLogic/sumologic-otel-collector/blob/main/pkg/exporter/sumologicexporter
+sumologic/default:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: {{ include "metrics.otelcol.exporter.format" . }}
+  endpoint: {{ include "metrics.otelcol.exporter.endpoint" . }}
+  ## Sumo doesn't yet natively support OTLP Histograms
+  decompose_otlp_histograms: true
+  decompose_otlp_summaries: true
+  ## Configuration for sending queue
+  ## ref: https://github.com/open-telemetry/opentelemetry-collector/tree/release/v0.37.x/exporter/exporterhelper#configuration
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    ## setting queue_size a high number, so we always use maximum space of the storage
+    ## minimal alert non-triggering queue size (if only one exporter is being used): 10GB/16MB = 640
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+{{- if eq .Values.sumologic.metrics.sourceType "http" }}
+sumologic/apiserver:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_APISERVER_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+sumologic/control_plane:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_CONTROL_PLANE_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+sumologic/controller:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_CONTROLLER_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+sumologic/kubelet:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_KUBELET_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+sumologic/node:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_NODE_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+sumologic/scheduler:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_SCHEDULER_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+sumologic/state:
+  client: {{ include "sumologic.sumo_client" . }}
+  metric_format: prometheus
+  endpoint: ${SUMO_ENDPOINT_STATE_METRICS_SOURCE}
+  sending_queue:
+    enabled: true
+{{- if .Values.metadata.persistence.enabled }}
+    storage: file_storage
+{{- end }}
+    num_consumers: 10
+    queue_size: 10_000
+  max_request_body_size: 16_777_216  # 16 MB before compression
+  ## set timeout to 30s due to big requests
+  timeout: 30s
+{{- end }}
