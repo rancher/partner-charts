@@ -1,0 +1,26 @@
+{{- if or .Values.container.enabled .Values.node.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "falcon-sensor.fullname" . }}-access-binding
+  labels:
+    app: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- if .Values.container.enabled }}
+    app.kubernetes.io/component: "container_sensor"
+    {{ else if .Values.node.enabled }}
+    app.kubernetes.io/component: "kernel_sensor"
+    {{ end -}}
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.serviceAccount.name }}
+  namespace: {{ include "falcon-sensor.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "falcon-sensor.fullname" . }}-access-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
