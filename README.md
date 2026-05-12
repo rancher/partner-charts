@@ -138,6 +138,21 @@ entries:
 > `main-source`, your branch is out of date and must be rebased before it can be merged.
 
 
+### Chart Bumps
+
+**DO:**
+* Release a new version of your chart upstream (e.g., 1.0.1 → 1.0.2)
+* Update `packages/<vendor>/<chart>/overlay/` files if needed
+* Run `PACKAGE=<vendor>/<chart> bin/partner-charts-ci update` to pull the new version
+* Submit a pull request with the generated changes
+
+**DO NOT:**
+* Manually edit files under `charts/` or `assets/` for existing chart versions
+* Attempt to modify already-released chart versions in this repository
+
+`partner-charts-ci update` only processes new upstream versions. Released versions cannot be regenerated or modified. If you need to update metadata, overlays, or chart content, release a new version upstream.
+
+
 ### How do I change the icon associated with my helm chart?
 
 Icons are located in the `assets/icons/` directory. You can see which of these
