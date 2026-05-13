@@ -1,0 +1,33 @@
+{{- if eq (include "csi-vxflexos.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "serviceMonitor" }}
+{{- if eq .Values.metrics.serviceMonitor.enabled true }}
+---
+# ServiceMonitor for Prometheus Operator integration.
+# Created when metrics.enabled AND metrics.serviceMonitor.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      path: /metrics
+      {{- if .Values.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        # The metrics endpoint uses a self-provided TLS certificate.
+        # Set insecureSkipVerify to true if the certificate is self-signed;
+        # alternatively configure ca, cert, and keySecret for full verification.
+        insecureSkipVerify: {{ .Values.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
