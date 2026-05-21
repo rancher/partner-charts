@@ -1,0 +1,26 @@
+{{- if and .Values.metrics.enabled (or .Values.compliance.enabled .Values.metrics.prometheusRules.enabled) -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "reports-server.fullname" . }}-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "reports-server.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRules.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: policy_report_rules
+      interval: 1m
+      rules:
+        - record: policy_report:results:sum
+          expr: sum by (policy, category, severity, kind, namespace, status) (policy_report_result)
+        - record: policy_report:results_total:sum
+          expr: sum by (policy, category, severity, kind, namespace) (policy_report_result)
+        - record: cluster_policy_report:results:sum
+          expr: sum by (policy, category, severity, kind, status) (cluster_policy_report_result)
+        - record: cluster_policy_report:results_total:sum
+          expr: sum by (policy, category, severity, kind) (cluster_policy_report_result)
+{{- end -}}
+
