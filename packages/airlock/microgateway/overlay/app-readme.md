@@ -9,18 +9,12 @@
 * Reverse proxy functionality with request routing rules, TLS termination, and remote IP extraction
 * Easy-to-use Grafana dashboards which provide valuable insights in allowed and blocked traffic and other metrics
 
-For a list of all features, view the **[comparison of the community and premium edition](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000056)**.
 
 ## Requirements
-* [Airlock Microgateway License](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000056)
 * [Kubernetes Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api)
 
-## Documentation and links
+  ## What’s next
 
-Check the official documentation at **[docs.airlock.com](https://docs.airlock.com/microgateway/latest/)** or the product website at **[airlock.com/microgateway](https://www.airlock.com/en/microgateway)**. The links below point out the most interesting documentation sites when starting with Airlock Microgateway.
+  After installing the Airlock Microgateway Operator, the various [Configuration Guides](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000146) describe how to deploy and configure a Gateway in your cluster and how to implement common scenarios.
 
-* [Getting Started](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000059)
-* [System Architecture](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000137)
-* [Installation](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000138)
-* [Troubleshooting](https://docs.airlock.com/microgateway/latest/index/1659430054787.html)
-* [GitHub](https://github.com/airlock/microgateway)
+  ***Note:*** Several features require a license. See [Community vs. Premium editions in detail](https://docs.airlock.com/microgateway/latest/?topic=MGW-00000056) to choose the right license type.
