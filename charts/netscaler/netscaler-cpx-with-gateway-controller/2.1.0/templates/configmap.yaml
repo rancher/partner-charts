@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cpxconfigmap.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+data:
+  LOGLEVEL: {{ .Values.gatewayController.logLevel | quote | lower }}
+  JSONLOG: {{ .Values.gatewayController.jsonLog | quote | lower }}
+{{- if eq (upper .Values.netscalerCpx.nsProtocol) "HTTPS" }}
+  NS_PROTOCOL: "https"
+  NS_PORT: "443"
+{{- else }}
+  NS_PROTOCOL: "http"
+  NS_PORT: "80"
+{{- end }}
+{{- if ne (upper .Values.netscalerCpx.nsHTTP2ServerSide) "OFF" }}
+  NS_HTTP2_SERVER_SIDE: {{ .Values.netscalerCpx.nsHTTP2ServerSide | quote }}
+{{- end }}
+{{- if ne (toString .Values.netscalerCpx.nsCookieVersion) "0" }}
+  NS_COOKIE_VERSION: {{ .Values.netscalerCpx.nsCookieVersion | quote }}
+{{- end }}
+{{- if .Values.netscalerCpx.nsDnsNameserver }}
+  NS_DNS_NAMESERVER: {{ .Values.netscalerCpx.nsDnsNameserver }}
+{{- end }}
+
+{{- if .Values.netscalerCpx.nsLbHashAlgo.required }}
+  NS_LB_HASH_ALGO: |
+    hashFingers: {{ .Values.netscalerCpx.nsLbHashAlgo.hashFingers }}
+    hashAlgorithm: {{ .Values.netscalerCpx.nsLbHashAlgo.hashAlgorithm | quote }}
+{{- end }}
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bootupconfigmap.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+data:
+  cpx.conf: |
+      #NetScaler commands
+      {{- .Values.netscalerCpx.commands | nindent 6 -}}
+      #Shell commands
+      {{- .Values.netscalerCpx.shellCommands | nindent 6 -}}
+      # end of file

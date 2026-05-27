@@ -1,0 +1,57 @@
+{{- if .Values.apiPriorityAndFairness.enabled }}
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: PriorityLevelConfiguration
+metadata:
+  name: {{ include "netscaler-cpx-ingress-controller.fullname" . }}-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "netscaler-cpx-ingress-controller.name" . }}
+    chart: {{ include "netscaler-cpx-ingress-controller.chart" . }}
+    release: {{ .Release.Name }}
+spec:
+  type: Limited
+  limited:
+    nominalConcurrencyShares: {{ .Values.apiPriorityAndFairness.priorityLevelConfiguration.nominalConcurrencyShares }}
+    lendablePercent: {{ .Values.apiPriorityAndFairness.priorityLevelConfiguration.lendablePercent }}
+    limitResponse:
+      type: {{ .Values.apiPriorityAndFairness.priorityLevelConfiguration.limitResponse.type }}
+      {{- if eq .Values.apiPriorityAndFairness.priorityLevelConfiguration.limitResponse.type "Queue" }}
+      queuing:
+        queues: {{ .Values.apiPriorityAndFairness.priorityLevelConfiguration.limitResponse.queuing.queues }}
+        handSize: {{ .Values.apiPriorityAndFairness.priorityLevelConfiguration.limitResponse.queuing.handSize }}
+        queueLengthLimit: {{ .Values.apiPriorityAndFairness.priorityLevelConfiguration.limitResponse.queuing.queueLengthLimit }}
+      {{- end }}
+---
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: FlowSchema
+metadata:
+  name: {{ include "netscaler-cpx-ingress-controller.fullname" . }}-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "netscaler-cpx-ingress-controller.name" . }}
+    chart: {{ include "netscaler-cpx-ingress-controller.chart" . }}
+    release: {{ .Release.Name }}
+spec:
+  priorityLevelConfiguration:
+    name: {{ include "netscaler-cpx-ingress-controller.fullname" . }}-{{ .Release.Namespace }}
+  matchingPrecedence: {{ .Values.apiPriorityAndFairness.flowSchema.matchingPrecedence }}
+  distinguisherMethod:
+    type: {{ .Values.apiPriorityAndFairness.flowSchema.distinguisherMethod.type }}
+  rules:
+  - subjects:
+    - kind: ServiceAccount
+      serviceAccount:
+        name: {{ include "netscaler-cpx-ingress-controller.serviceAccountName" . }}
+        namespace: {{ .Release.Namespace }}
+    resourceRules:
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: ["*"]
+      {{- if .Values.rbacRole }}
+      namespaces: [{{ .Release.Namespace | quote }}]
+      {{- else }}
+      clusterScope: true
+      namespaces: ["*"]
+      {{- end }}
+    nonResourceRules:
+    - nonResourceURLs: ["*"]
+      verbs: ["*"]
+{{- end }}
