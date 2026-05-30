@@ -1,0 +1,42 @@
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: epinio
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+  - epinio.{{ .Values.global.domain }}
+  issuerRef:
+    kind: ClusterIssuer
+    name: {{ default .Values.global.tlsIssuer .Values.global.customTlsIssuer | quote }}
+  secretName: epinio-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: epinio-ca
+  namespace: {{ .Values.certManagerNamespace | default "cert-manager" }}
+spec:
+  commonName: epinio-ca
+  isCA: true
+  issuerRef:
+    kind: ClusterIssuer
+    name: selfsigned-issuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  secretName: epinio-ca-root
+{{ else }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  annotations:
+  name: epinio-tls
+  namespace: {{ .Release.Namespace }}
+stringData:
+  ca.crt: {{ .Values.certManager.epinio.ca | quote }}
+  tls.key: {{ .Values.certManager.epinio.key | quote }}
+  tls.crt: {{ .Values.certManager.epinio.cert | quote }}
+{{- end }}

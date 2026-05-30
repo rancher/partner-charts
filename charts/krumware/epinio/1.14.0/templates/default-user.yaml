@@ -1,0 +1,58 @@
+{{- range .Values.api.users }}
+---
+apiVersion: v1
+kind: Secret
+type: BasicAuth
+metadata:
+  labels:
+    epinio.io/api-user-credentials: "true"
+  annotations:
+    epinio.io/roles: {{ join "," .roles }}
+  name: {{ include "epinio-truncate" (print "user-" .username) }}
+  namespace: {{ $.Release.Namespace }}
+stringData:
+  username: {{ .username | quote }}
+  {{- if (and $.Values.api.adminPassword (eq .username "admin" )) }}
+  password: {{ bcrypt $.Values.api.adminPassword | quote }}
+  {{- else if (and $.Values.api.epinioPassword (eq .username "epinio" )) }}
+  password: {{ bcrypt $.Values.api.epinioPassword | quote }}
+  {{- else if .passwordBcrypt }}
+  password: {{ .passwordBcrypt | quote }}
+  {{- else if .password }}
+  password: {{ bcrypt .password | quote }}
+  {{- end }}
+  namespaces: |
+    {{ join "\n" .workspaces -}}
+{{- end }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    epinio.io/role: "true"
+  name: "epinio-user-role"
+  namespace: {{ $.Release.Namespace }}
+data:
+  id: user
+  name: "Epinio User Role"
+  default: "true"
+  actions: |
+    namespace_write
+    app_read
+    configuration_read
+    service_read
+    gitconfig_read
+    export_registries_read
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    epinio.io/role: "true"
+  name: "epinio-blank-role"
+  namespace: {{ $.Release.Namespace }}
+data:
+  id: blank
+  name: "Epinio Blank Role (no permissions)"

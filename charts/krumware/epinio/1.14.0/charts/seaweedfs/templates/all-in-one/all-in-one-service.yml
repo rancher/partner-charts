@@ -1,0 +1,86 @@
+{{- if .Values.allInOne.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-all-in-one" (include "seaweedfs.fullname" .) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: seaweedfs-all-in-one
+  {{- if .Values.allInOne.service.annotations }}
+  annotations:
+    {{- toYaml .Values.allInOne.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.allInOne.service.type | default "ClusterIP" }}
+  internalTrafficPolicy: {{ .Values.allInOne.service.internalTrafficPolicy | default "Cluster" }}
+  ports:
+  # Master ports
+  - name: "swfs-master"
+    port: {{ .Values.master.port }}
+    targetPort: {{ .Values.master.port }}
+    protocol: TCP
+  - name: "swfs-master-grpc"
+    port: {{ .Values.master.grpcPort }}
+    targetPort: {{ .Values.master.grpcPort }}
+    protocol: TCP
+  
+  # Volume ports
+  - name: "swfs-volume"
+    port: {{ .Values.volume.port }}
+    targetPort: {{ .Values.volume.port }}
+    protocol: TCP
+  - name: "swfs-volume-grpc"
+    port: {{ .Values.volume.grpcPort }}
+    targetPort: {{ .Values.volume.grpcPort }}
+    protocol: TCP
+  
+  # Filer ports
+  - name: "swfs-filer"
+    port: {{ .Values.filer.port }}
+    targetPort: {{ .Values.filer.port }}
+    protocol: TCP
+  - name: "swfs-filer-grpc"
+    port: {{ .Values.filer.grpcPort }}
+    targetPort: {{ .Values.filer.grpcPort }}
+    protocol: TCP
+  
+  # S3 ports (if enabled)
+  {{- if .Values.allInOne.s3.enabled }}
+  - name: "swfs-s3"
+    port: {{ .Values.allInOne.s3.port | default .Values.s3.port }}
+    targetPort: {{ .Values.allInOne.s3.port | default .Values.s3.port }}
+    protocol: TCP
+  {{- $httpsPort := .Values.allInOne.s3.httpsPort | default .Values.s3.httpsPort }}
+  {{- if $httpsPort }}
+  - name: "swfs-s3-tls"
+    port: {{ $httpsPort }}
+    targetPort: {{ $httpsPort }}
+    protocol: TCP
+  {{- end }}
+  {{- end }}
+  
+  # SFTP ports (if enabled)
+  {{- if .Values.allInOne.sftp.enabled }}
+  - name: "swfs-sftp"
+    port: {{ .Values.allInOne.sftp.port | default .Values.sftp.port }}
+    targetPort: {{ .Values.allInOne.sftp.port | default .Values.sftp.port }}
+    protocol: TCP
+  {{- end }}
+  
+  # Server metrics port (single metrics endpoint for all services)
+  {{- if .Values.allInOne.metricsPort }}
+  - name: "server-metrics"
+    port: {{ .Values.allInOne.metricsPort }}
+    targetPort: {{ .Values.allInOne.metricsPort }}
+    protocol: TCP
+  {{- end }}
+  
+  selector:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: seaweedfs-all-in-one
+{{- end }}
