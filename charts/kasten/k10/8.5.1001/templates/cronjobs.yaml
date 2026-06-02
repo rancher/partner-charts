@@ -1,0 +1,41 @@
+{{- if include "k10.insights.enabled" . }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: insights-svc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k10.resourceAndHelmLabels" . | nindent 4 }}
+    app.kubernetes.io/component: insights
+    component: insights
+spec:
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "k10.resourceAndHelmLabels" . | nindent 8 }}
+        app.kubernetes.io/component: insights
+        component: insights
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- with merge (dict "requiredLabels" (dict "app.kubernetes.io/component" "insights" "component" "insights" "run" "insights-svc")) . }}
+              {{- include "k10.deploymentPodLabels" . | nindent 12 }}
+            {{- end }}
+        spec:
+          securityContext:
+{{ toYaml .Values.services.securityContext | indent 12 }}
+          serviceAccountName: insights-svc
+          {{- include "k10.imagePullSecrets" . | indent 10 }}
+          restartPolicy: OnFailure
+          containers:
+          {{- dict "main" . "k10_pod" "insights" "k10_container" "insights" "externalPort" (default 8000 .Values.service.externalPort) | include "k10-container" | indent 10 }}
+          {{- if .Values.features }}
+          volumes:
+          {{- dict "main" . "k10_pod" "insights" | include "k10-deployment-volumes" | indent 10 }}
+          {{- end }}
+{{- end }}
