@@ -1,0 +1,30 @@
+{{/*
+CN-RWX Charts Configuration Validation
+=========================================
+
+Purpose:
+  Validates CN-RWX configuration at Helm template rendering time (pre-install/pre-upgrade).
+  This fail-fast validation prevents incomplete deployments by catching configuration errors
+  before any Kubernetes resources are created.
+
+Validations:
+  1. volumesRWXChartsUrl Required: If volumeRWXSupport.enabled is true, volumesRWXChartsUrl must be provided
+     - This is a download URL for the cn-rwx-charts.tgz Helm chart (use an internal URL for air-gapped clusters)
+     - Without it, the installer job would fail at runtime.
+  2. ntnxInitConfigMap.usePC Required: If volumeRWXSupport.enabled is true, ntnxInitConfigMap.usePC must be true
+     - This is the deployment mode for the CSI driver
+     - Without it, the installer job would fail at runtime.
+Usage:
+  User must set in values.yaml:
+    volumeRWXSupport:
+      enabled: true
+      volumesRWXChartsUrl: "https://example.com/path/to/cn-rwx-charts.tgz"
+    ntnxInitConfigMap:
+      usePC: true
+*/}}
+{{- if and .Values.volumeRWXSupport.enabled (ne (default false .Values.ntnxInitConfigMap.usePC) true) }}
+{{- fail "volumeRWXSupport is enabled, but 'ntnxInitConfigMap.usePC' is false. volumeRWXSupport requires CSI in PC mode; set ntnxInitConfigMap.usePC=true or disable volumeRWXSupport.enabled." }}
+{{- end }}
+{{- if and .Values.volumeRWXSupport.enabled (not .Values.volumeRWXSupport.volumesRWXChartsUrl) }}
+{{- fail "volumeRWXSupport is enabled, but 'volumeRWXSupport.volumesRWXChartsUrl' is not set in values.yaml. Please provide a download URL for the cn-rwx-charts.tgz." }}
+{{- end }}

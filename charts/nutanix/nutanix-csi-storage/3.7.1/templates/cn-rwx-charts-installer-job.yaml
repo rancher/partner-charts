@@ -1,0 +1,806 @@
+{{/*
+CN-RWX Charts Installer Job
+==============================
+
+Purpose:
+  This Helm post-install/post-upgrade hook job downloads and installs the CN-RWX operator chart
+  from the configured volumesRWXChartsUrl. It enables RWX (ReadWriteMany) volume support by deploying
+  the CN-RWX operator and creating CN-RWX instances.
+
+Key Operations:
+  1. Authentication: Extracts credentials from mounted imagePullSecrets(dockerconfigjson) matching the chart URL host
+  2. Chart Download: Downloads cn-rwx-charts.tgz from the configured volumesRWXChartsUrl (auth or unauth)
+  3. CRD Installation: Manually installs FileServer CRDs (required before Helm 3 chart install)
+  4. Helm Installation: Installs/upgrades the cn-rwx-charts release in the target namespace
+  5. Validation: Verifies operator deployment, CRDs, and pod health (ImagePullBackOff, CrashLoop checks)
+  6. Background Reconciliation: Exits successfully once operator pods start (CN-RWX pods created async)
+
+Dependencies:
+  - Requires RBAC permissions defined in cn-rwx-charts-rbac.yaml
+  - Requires wget, jq, helm, kubectl, tar, base64
+  - If volumeRWXSupport.jobImage is set: image must include all above tools (air-gapped mode)
+  - If volumeRWXSupport.jobImage is empty: installs tools (wget, jq, helm, etc.) at runtime via apk
+
+Hook Configuration:
+  - Runs after CSI installation/upgrade (post-install, post-upgrade)
+  - Weight: 5 (after main CSI resources)
+  - Cleanup: Deletes on success or before next hook creation
+*/}}
+{{- if and .Values.volumeRWXSupport.enabled .Values.volumeRWXSupport.volumesRWXChartsUrl }}
+{{- $namespace := .Values.volumeRWXSupport.namespace | default .Release.Namespace }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cn-rwx-installer
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer
+      labels:
+        {{- include "nutanix-csi-storage.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer-sa
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: cn-rwx-charts-installer
+          image: {{ .Values.volumeRWXSupport.jobImage | default "alpine/k8s:1.27.3" | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              set -o pipefail 2>/dev/null || true
+
+              JOB_NAME="{{ include "nutanix-csi-storage.fullname" . }}-cn-rwx-installer"
+              JOB_NAMESPACE="{{ .Release.Namespace }}"
+              CURRENT_STEP="initializing"
+
+              log_step() {
+                CURRENT_STEP="$1"
+                echo ""
+                echo ">>> $CURRENT_STEP"
+              }
+
+              # Emit a Kubernetes event so the failure/success is visible in
+              # "kubectl get events" without having to hunt for the pod logs.
+              emit_event() {
+                local reason="$1"
+                local msg="$2"
+                local etype="${3:-Warning}"
+                local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                local event_name="${JOB_NAME}-$(date +%s)"
+
+                # Create Event resource directly using kubectl apply
+                cat <<EOF | kubectl apply -f - 2>/dev/null || true
+              apiVersion: v1
+              kind: Event
+              metadata:
+                name: ${event_name}
+                namespace: ${JOB_NAMESPACE}
+              type: ${etype}
+              reason: ${reason}
+              message: "${msg}"
+              source:
+                component: cn-rwx-installer
+              involvedObject:
+                apiVersion: batch/v1
+                kind: Job
+                name: ${JOB_NAME}
+                namespace: ${JOB_NAMESPACE}
+              firstTimestamp: ${timestamp}
+              lastTimestamp: ${timestamp}
+              count: 1
+              EOF
+              }
+
+              dump_debug() {
+                rc=$?
+                set +e
+                echo ""
+                echo "============================================================"
+                echo "CN-RWX installer FAILED during: ${CURRENT_STEP:-unknown} (exit code=$rc)"
+                echo "============================================================"
+                echo ""
+                echo ">>> HOW TO INSPECT THIS FAILURE <<<"
+                echo "  # View full installer logs:"
+                echo "  kubectl logs -n ${JOB_NAMESPACE} job/${JOB_NAME}"
+                echo ""
+                echo "  # Check job and pod status:"
+                echo "  kubectl get job,pod -n ${JOB_NAMESPACE} -l app.kubernetes.io/component=cn-rwx-installer"
+                echo ""
+                echo "  # Recent events in the release namespace:"
+                echo "  kubectl get events -n ${JOB_NAMESPACE} --sort-by=.lastTimestamp | tail -20"
+                echo ""
+                if command -v kubectl >/dev/null 2>&1; then
+                  ns="${TARGET_NAMESPACE:-{{ $namespace }}}"
+                  echo "--- Pods in ${JOB_NAMESPACE} (installer namespace) ---"
+                  kubectl -n "${JOB_NAMESPACE}" get pods -l app.kubernetes.io/component=cn-rwx-installer 2>/dev/null || true
+                  echo ""
+                  echo "--- Pods in ${ns} (target namespace) ---"
+                  kubectl -n "${ns}" get pods 2>/dev/null || true
+                  echo ""
+                  echo "--- Recent events in ${ns} ---"
+                  kubectl -n "${ns}" get events --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
+                else
+                  echo "kubectl unavailable for debug dump"
+                fi
+                emit_event "CnRwxOperatorInstallFailed" \
+                  "CN-RWX Operator installer failed during step '${CURRENT_STEP}' (rc=${rc}). Run: kubectl logs -n ${JOB_NAMESPACE} job/${JOB_NAME}" \
+                  "Error"
+                exit $rc
+              }
+              trap 'dump_debug' ERR
+
+              echo "============================================================"
+              echo "CN-RWX Charts Installer Job Starting"
+              echo "============================================================"
+              echo "  Job name : ${JOB_NAME}"
+              echo "  Namespace: ${JOB_NAMESPACE}"
+              echo ""
+              echo "To follow this job in real time:"
+              echo "  kubectl logs -n ${JOB_NAMESPACE} -f job/${JOB_NAME}"
+              echo ""
+              echo "To check job/pod status:"
+              echo "  kubectl get job,pod -n ${JOB_NAMESPACE} -l app.kubernetes.io/component=cn-rwx-installer"
+              echo "============================================================"
+              echo ""
+              echo "Starting CN-RWX Charts installation..."
+              
+              log_step "Preparing Kubernetes config"
+              # Ensure we use in-cluster config (unset any existing KUBECONFIG)
+              unset KUBECONFIG 2>/dev/null || true
+              
+              # Verify in-cluster authentication
+              log_step "Verifying Kubernetes connectivity"
+              echo "Verifying Kubernetes connectivity..."
+              if ! kubectl version --client > /dev/null 2>&1; then
+                echo "ERROR: kubectl not found or not working"
+                exit 1
+              fi
+              
+              # Test cluster connectivity
+              if ! kubectl get namespace ntnx-system > /dev/null 2>&1; then
+                echo "ERROR: Cannot connect to Kubernetes cluster"
+                echo "Checking service account token..."
+                ls -la /var/run/secrets/kubernetes.io/serviceaccount/ || echo "Service account not mounted!"
+                echo "Environment variables:"
+                env | grep KUBERNETES || echo "No KUBERNETES env vars"
+                exit 1
+              fi
+              echo "Kubernetes connectivity verified"
+              
+              {{- if .Values.volumeRWXSupport.jobImage }}
+              # Air-gapped mode: do not install packages or download binaries at runtime.
+              log_step "Verifying required tools"
+              echo "Verifying required tools are present in the job image..."
+              REQUIRED_TOOLS="kubectl helm wget jq tar base64"
+              MISSING=""
+              for tool in $REQUIRED_TOOLS; do
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                  MISSING="$MISSING $tool"
+                fi
+              done
+              if [ -n "$MISSING" ]; then
+                echo "ERROR: Required tool(s) missing from installer image:${MISSING}"
+                echo "Please set volumeRWXSupport.jobImage to an image that includes: kubectl, helm, wget, jq, tar, base64."
+                exit 1
+              fi
+              helm version 2>/dev/null || true
+              {{- else }}
+              # Legacy mode: downloads tools/packages at runtime (requires internet access).
+              # Install helm if not present (for kubectl-only images)
+              log_step "Ensuring helm binary"
+              if ! command -v helm &> /dev/null; then
+                echo "Installing helm..."
+                apk add --no-cache curl
+                curl -fsSL https://get.helm.sh/helm-v3.12.0-linux-amd64.tar.gz | tar -xzC /tmp
+                mv /tmp/linux-amd64/helm /usr/local/bin/helm
+                chmod +x /usr/local/bin/helm
+                helm version
+              fi
+              
+              # Install required tools for chart download/auth
+              log_step "Installing helper packages"
+              echo "Installing required tools..."
+              apk add --no-cache wget jq coreutils
+              {{- end }}
+              
+              DOWNLOAD_URL="{{ .Values.volumeRWXSupport.volumesRWXChartsUrl }}"
+
+              # Derive host from the chart download URL to locate matching credentials.
+              CHART_URL_NO_SCHEME="${DOWNLOAD_URL#*://}"
+              CHART_URL_HOSTPORT="${CHART_URL_NO_SCHEME%%/*}"
+              CHART_URL_HOSTPORT="${CHART_URL_HOSTPORT##*@}"
+              CHART_URL_HOST="${CHART_URL_HOSTPORT%%:*}"
+
+              log_step "Extracting chart download credentials"
+              echo ""
+              echo "=== Extracting credentials from image pull secrets ==="
+              echo "Chart URL host: ${CHART_URL_HOSTPORT:-unknown}"
+              CHART_USER=""
+              CHART_PASS=""
+              
+              {{- if .Values.imagePullSecrets }}
+              echo "Checking for mounted secrets..."
+              ls -la /var/run/secrets/image-pull/ 2>/dev/null || echo "No secrets directory found"
+              echo ""
+              
+              {{- range .Values.imagePullSecrets }}
+              if [ -z "$CHART_USER" ]; then
+                SECRET_NAME="{{ .name }}"
+                echo "Processing secret: $SECRET_NAME"
+                
+                SECRET_FILE=""
+                if [ -f "/var/run/secrets/image-pull/$SECRET_NAME/.dockerconfigjson" ]; then
+                  SECRET_FILE="/var/run/secrets/image-pull/$SECRET_NAME/.dockerconfigjson"
+                  echo "  Found secret at: $SECRET_FILE"
+                elif [ -f "/var/run/secrets/image-pull/$SECRET_NAME/dockerconfigjson" ]; then
+                  SECRET_FILE="/var/run/secrets/image-pull/$SECRET_NAME/dockerconfigjson"
+                  echo "  Found secret at: $SECRET_FILE"
+                elif [ -f "/var/run/secrets/image-pull/$SECRET_NAME/.dockerconfig" ]; then
+                  SECRET_FILE="/var/run/secrets/image-pull/$SECRET_NAME/.dockerconfig"
+                  echo "  Found secret at: $SECRET_FILE"
+                else
+                  echo "  Warning: Secret file not found for $SECRET_NAME"
+                  ls -la "/var/run/secrets/image-pull/$SECRET_NAME/" 2>/dev/null || echo "  Directory doesn't exist"
+                fi
+                
+                if [ -n "$SECRET_FILE" ]; then
+                  SECRET_DATA=$(cat "$SECRET_FILE" 2>/dev/null)
+                  if [ -z "$SECRET_DATA" ]; then
+                    echo "  Warning: Secret file is empty"
+                  else
+                    echo "  Domains found in secret:"
+                    echo "$SECRET_DATA" | jq -r '.auths | keys[]' 2>/dev/null || echo "  Could not parse secret as JSON"
+                    
+                    FOUND_KEY=""
+                    for KEY in \
+                      "$CHART_URL_HOSTPORT" \
+                      "$CHART_URL_HOST" \
+                      "https://$CHART_URL_HOSTPORT" \
+                      "https://$CHART_URL_HOST" \
+                      "http://$CHART_URL_HOSTPORT" \
+                      "http://$CHART_URL_HOST" \
+                      "https://$CHART_URL_HOSTPORT/" \
+                      "https://$CHART_URL_HOST/" \
+                      "http://$CHART_URL_HOSTPORT/" \
+                      "http://$CHART_URL_HOST/" \
+                      ; do
+                      [ -n "$KEY" ] || continue
+                      if echo "$SECRET_DATA" | jq -e ".auths[\"$KEY\"]" > /dev/null 2>&1; then
+                        FOUND_KEY="$KEY"
+                        break
+                      fi
+                    done
+
+                    if [ -z "$FOUND_KEY" ] && [ -n "$CHART_URL_HOST" ]; then
+                      AUTH_KEYS=$(echo "$SECRET_DATA" | jq -r '.auths | keys[]' 2>/dev/null || true)
+                      for KEY in $AUTH_KEYS; do
+                        case "$KEY" in
+                          *"$CHART_URL_HOST"*)
+                            FOUND_KEY="$KEY"
+                            break
+                            ;;
+                        esac
+                      done
+                    fi
+
+                    if [ -n "$FOUND_KEY" ]; then
+                      echo "  Found matching credentials entry: $FOUND_KEY"
+                      USERNAME=$(echo "$SECRET_DATA" | jq -r ".auths[\"$FOUND_KEY\"].username // empty" 2>/dev/null || echo "")
+                      PASSWORD=$(echo "$SECRET_DATA" | jq -r ".auths[\"$FOUND_KEY\"].password // empty" 2>/dev/null || echo "")
+                      if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+                        echo "  Decoding from auth field..."
+                        AUTH_STRING=$(echo "$SECRET_DATA" | jq -r ".auths[\"$FOUND_KEY\"].auth // empty" 2>/dev/null || echo "")
+                        if [ -n "$AUTH_STRING" ]; then
+                          DECODED=$(echo "$AUTH_STRING" | base64 -d 2>/dev/null || echo "")
+                          if [ -n "$DECODED" ]; then
+                            USERNAME=$(echo "$DECODED" | cut -d: -f1)
+                            PASSWORD=$(echo "$DECODED" | cut -d: -f2-)
+                          fi
+                        fi
+                      fi
+                      if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+                        CHART_USER="$USERNAME"
+                        CHART_PASS="$PASSWORD"
+                        echo "  Successfully extracted credentials"
+                        echo "  Username: ${USERNAME:0:3}***"
+                      else
+                        echo "  Warning: Found matching entry but could not extract valid credentials"
+                      fi
+                    else
+                      echo "  No matching credentials entry found for chart host"
+                    fi
+                  fi
+                fi
+              fi
+              
+              {{- end }}
+              {{- else }}
+              echo "Warning: No imagePullSecrets configured in values.yaml"
+              {{- end }}
+              
+              if [ -z "$CHART_USER" ] || [ -z "$CHART_PASS" ]; then
+                echo ""
+                echo "WARNING: Could not extract credentials for chart host from image pull secrets"
+                echo "Will attempt unauthenticated download..."
+                echo ""
+              else
+                echo ""
+                echo "Credentials extracted successfully"
+                echo ""
+              fi
+              
+              TARGET_NAMESPACE="{{ $namespace }}"
+              RELEASE_NAME="{{ .Values.volumeRWXSupport.releaseName | default "cn-rwx-charts" }}"
+              CHART_DIR="/tmp/cn-rwx-charts"
+              
+              log_step "Preparing namespace ${TARGET_NAMESPACE}"
+              echo "Creating target namespace: $TARGET_NAMESPACE"
+              kubectl get namespace $TARGET_NAMESPACE || kubectl create namespace $TARGET_NAMESPACE
+              
+              # Download chart (authenticated if credentials were found)
+              log_step "Downloading cn-rwx chart"
+              echo "Downloading chart from $DOWNLOAD_URL"
+              set +e
+              if [ -n "$CHART_USER" ] && [ -n "$CHART_PASS" ]; then
+                echo "Using authenticated wget..."
+                wget --no-check-certificate \
+                     --user="$CHART_USER" \
+                     --password="$CHART_PASS" \
+                     -O /tmp/cn-rwx-charts.tgz \
+                     "$DOWNLOAD_URL"
+              else
+                echo "Using unauthenticated wget..."
+                wget --no-check-certificate \
+                     -O /tmp/cn-rwx-charts.tgz \
+                     "$DOWNLOAD_URL"
+              fi
+              DL_RC=$?
+              set -e
+
+              if [ $DL_RC -ne 0 ]; then
+                echo "ERROR: Failed to download chart from $DOWNLOAD_URL (rc=$DL_RC)"
+                echo "Please verify:"
+                echo "  - Download URL is correct and reachable from inside the cluster: $DOWNLOAD_URL"
+                echo "  - If the endpoint requires auth: imagePullSecrets contains matching credentials"
+                echo "  - Network connectivity/DNS/TLS to the chart server"
+                exit 1
+              fi
+              echo "Chart downloaded successfully"
+
+              # Extract the chart
+              log_step "Extracting cn-rwx chart"
+              echo "Extracting chart to $CHART_DIR"
+              mkdir -p $CHART_DIR
+              tar -xzf /tmp/cn-rwx-charts.tgz -C $CHART_DIR
+              
+              # Determine the actual chart path
+              # Check if Chart.yaml exists directly in the extraction directory
+              if [ -f "$CHART_DIR/Chart.yaml" ]; then
+                CHART_PATH="$CHART_DIR"
+                echo "Chart extracted directly to $CHART_PATH"
+              else
+                # Look for Chart.yaml in subdirectories
+                echo "Looking for chart subdirectory..."
+                CHART_PATH=""
+                for dir in $CHART_DIR/*/; do
+                  if [ -f "${dir}Chart.yaml" ]; then
+                    CHART_PATH="${dir%/}"  # Remove trailing slash
+                    echo "Found chart in subdirectory: $CHART_PATH"
+                    break
+                  fi
+                done
+                
+                if [ -z "$CHART_PATH" ]; then
+                  echo "Error: Could not find Chart.yaml in $CHART_DIR or its subdirectories"
+                  echo "Contents of $CHART_DIR:"
+                  ls -la $CHART_DIR
+                  echo ""
+                  echo "Checking subdirectories:"
+                  for dir in $CHART_DIR/*/; do
+                    echo "  Checking: $dir"
+                    ls -la "$dir" | head -5
+                  done
+                  exit 1
+                fi
+              fi
+
+              # Check if CRDs directory exists in the chart
+              log_step "Checking cn-rwx CRDs"
+              echo ""
+              echo "=== Checking for CRDs in chart ==="
+              if [ -d "$CHART_PATH/crds" ]; then
+                echo "Found CRDs directory in chart"
+                ls -la "$CHART_PATH/crds/"
+                echo ""
+                echo "Installing CRDs manually (Helm 3 requirement for pre-install)..."
+                for crd_file in "$CHART_PATH/crds"/*.yaml; do
+                  if [ -f "$crd_file" ]; then
+                    echo "Installing CRD: $(basename $crd_file)"
+                    kubectl apply -f "$crd_file"
+                  fi
+                done
+                echo "CRDs installed"
+              else
+                echo "No CRDs directory found in chart"
+              fi
+              
+              # Install/Upgrade the chart
+              log_step "Installing/Upgrading cn-rwx release"
+              echo ""
+              echo "=== Installing/Upgrading Helm Chart ==="
+              echo "Release: $RELEASE_NAME"
+              echo "Namespace: $TARGET_NAMESPACE"
+              echo "Chart Path: $CHART_PATH"
+              
+              HELM_COMMAND="helm upgrade --install $RELEASE_NAME $CHART_PATH -n $TARGET_NAMESPACE --create-namespace"
+
+              # Build merged values: user-provided values + global imagePullSecrets/imagePullPolicy
+              {{- $mergedValues := dict }}
+              {{- if .Values.volumeRWXSupport.values }}
+              {{- $mergedValues = deepCopy .Values.volumeRWXSupport.values }}
+              {{- end }}
+              
+              {{/* Inject global settings into operator (if operator section exists or create minimal one) */}}
+              {{- $operator := $mergedValues.operator | default dict }}
+              {{- $operatorImage := $operator.image | default dict }}
+              {{- $_ := set $operatorImage "pullPolicy" (.Values.imagePullPolicy | default "IfNotPresent") }}
+              {{- $_ = set $operator "image" $operatorImage }}
+              {{- if .Values.imagePullSecrets }}
+              {{- $secrets := list }}
+              {{- range .Values.imagePullSecrets }}
+              {{- $secrets = append $secrets .name }}
+              {{- end }}
+              {{- $_ = set $operator "imagePullSecrets" $secrets }}
+              {{- end }}
+              {{- $_ = set $mergedValues "operator" $operator }}
+              
+              {{/* Inject global settings into fileserver (if fileserver section exists or create minimal one) */}}
+              {{- $fileserver := $mergedValues.fileserver | default dict }}
+              {{- $fileserverImage := $fileserver.image | default dict }}
+              {{- $_ := set $fileserverImage "pullPolicy" (.Values.imagePullPolicy | default "IfNotPresent") }}
+              {{- $_ = set $fileserver "image" $fileserverImage }}
+              {{- if .Values.imagePullSecrets }}
+              {{- $secrets := list }}
+              {{- range .Values.imagePullSecrets }}
+              {{- $secrets = append $secrets .name }}
+              {{- end }}
+              {{- $_ = set $fileserver "imagePullSecrets" $secrets }}
+              {{- end }}
+              {{- $_ = set $mergedValues "fileserver" $fileserver }}
+
+              VALUES_FILE="/tmp/cn-rwx-charts-values.yaml"
+              cat <<'EOF' > $VALUES_FILE
+{{ toYaml $mergedValues | indent 14 }}
+              EOF
+              HELM_COMMAND="$HELM_COMMAND -f $VALUES_FILE"
+              echo "Using values file with global settings and user overrides:"
+              cat $VALUES_FILE
+              echo ""
+
+              # Workaround: pre-delete known conflicting Secret to avoid resourceVersion patch errors
+              echo "Checking for pre-existing files-operator-quay-secrets..."
+              kubectl -n $TARGET_NAMESPACE delete secret files-operator-quay-secrets --ignore-not-found=true || true
+
+              echo "Executing Helm command: $HELM_COMMAND"
+              set +e
+              $HELM_COMMAND
+              HELM_RC=$?
+              set -e
+              if [ $HELM_RC -ne 0 ]; then
+                echo "Helm installation failed (rc=$HELM_RC)"
+                echo "Attempting remediation for potential resourceVersion conflicts..."
+                kubectl -n $TARGET_NAMESPACE delete secret files-operator-quay-secrets --ignore-not-found=true || true
+                echo "Retrying Helm installation..."
+                $HELM_COMMAND
+                HELM_RC=$?
+                if [ $HELM_RC -ne 0 ]; then
+                  echo "Helm installation failed again (rc=$HELM_RC)"
+                  echo "Checking Helm release status:"
+                  helm -n $TARGET_NAMESPACE list | grep $RELEASE_NAME || echo "Release not found"
+                  echo ""
+                  echo "Checking resources in namespace:"
+                  kubectl -n $TARGET_NAMESPACE get all
+                  exit 1
+                fi
+              fi
+              echo "Helm installation completed successfully"
+              
+              # Verify CRDs are installed
+              log_step "Verifying FileServer CRD"
+              echo ""
+              echo "=== Verifying CRDs Installation ==="
+              if ! kubectl get crd fileservers.nutanix.com > /dev/null 2>&1; then
+                echo "ERROR: FileServer CRD is not installed!"
+                echo "The CRD should have been created by the cn-rwx-charts Helm installation."
+                echo "Checking what was installed:"
+                helm -n $TARGET_NAMESPACE list
+                echo ""
+                echo "Checking for any CRDs:"
+                kubectl get crd | grep -i nutanix || echo "No Nutanix CRDs found"
+                echo ""
+                echo "This is a critical error - exiting."
+                exit 1
+              fi
+              echo "FileServer CRD is installed"
+              
+              # Verify operator deployment was created
+              log_step "Verifying cn-rwx operator deployment"
+              echo ""
+              echo "=== Verifying CN-RWX Operator Deployment ==="
+              
+              if kubectl -n $TARGET_NAMESPACE get deployment nutanix-cn-rwx-operator > /dev/null 2>&1; then
+                echo "Operator deployment created successfully"
+                REPLICAS=$(kubectl -n $TARGET_NAMESPACE get deployment nutanix-cn-rwx-operator -o jsonpath='{.spec.replicas}')
+                echo "  Replicas configured: $REPLICAS"
+                echo ""
+              elif kubectl -n $TARGET_NAMESPACE get replicaset -l control-plane=nutanix-cn-rwx-operator > /dev/null 2>&1; then
+                echo "Operator replicaset created successfully"
+                echo ""
+              else
+                echo "ERROR: Operator deployment/replicaset not found!"
+                echo "The Helm installation did not create the operator deployment."
+                echo ""
+                echo "Check Helm release status:"
+                echo "  helm -n $TARGET_NAMESPACE list"
+                echo "  helm -n $TARGET_NAMESPACE get all $RELEASE_NAME"
+                echo ""
+                exit 1
+              fi
+              
+              # Wait briefly for operator pods to start (fast fail-fast validation)
+              log_step "Waiting for operator pods"
+              echo "=== Validating Operator Pods Start ==="
+              echo "Waiting up to 20 seconds for operator pods to appear..."
+              MAX_WAIT=20
+              ELAPSED=0
+              PODS_FOUND=false
+              
+              while [ $ELAPSED -lt $MAX_WAIT ]; do
+                POD_COUNT=$(kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o name 2>/dev/null | wc -l)
+                if [ "$POD_COUNT" -gt 0 ]; then
+                  PODS_FOUND=true
+                  echo "Found $POD_COUNT operator pod(s)"
+                  break
+                fi
+                echo -n "."
+                sleep 2
+                ELAPSED=$((ELAPSED + 2))
+              done
+              echo ""
+              
+              if [ "$PODS_FOUND" = "false" ]; then
+                echo "ERROR: No operator pods appeared after 20 seconds!"
+                echo ""
+                echo "Checking deployment status:"
+                kubectl -n $TARGET_NAMESPACE describe deployment nutanix-cn-rwx-operator || true
+                echo ""
+                echo "Common causes:"
+                echo "  - Image pull secrets missing or invalid"
+                echo "  - Node resources exhausted"
+                echo "  - Image repository unreachable"
+                echo ""
+                echo "Debug commands:"
+                echo "  kubectl -n $TARGET_NAMESPACE get events --sort-by='.lastTimestamp' | tail -20"
+                echo "  kubectl -n $TARGET_NAMESPACE describe deployment nutanix-cn-rwx-operator"
+                exit 1
+              fi
+              
+              # Check for common failure modes (ImagePullBackOff, CrashLoopBackOff)
+              log_step "Checking operator pod health"
+              echo ""
+              echo "=== Checking Operator Pod Health ==="
+              sleep 5  # Give pods a moment to show issues
+              
+              POD_STATUS=$(kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{range .status.containerStatuses[*]}{.state.waiting.reason}{end}{"\n"}{end}' 2>/dev/null)
+              
+              if echo "$POD_STATUS" | grep -q "ImagePullBackOff\|ErrImagePull"; then
+                echo "ERROR: Operator pods have image pull issues!"
+                echo ""
+                kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o wide
+                echo ""
+                echo "Operator pod details:"
+                kubectl -n $TARGET_NAMESPACE describe pods -l control-plane=nutanix-cn-rwx-operator | grep -A 10 "Events:" || true
+                echo ""
+                echo "Common causes:"
+                echo "  - Image pull secrets incorrect or missing"
+                echo "  - Image repository unreachable"
+                echo "  - Image tag/name invalid"
+                echo ""
+                exit 1
+              fi
+              
+              if echo "$POD_STATUS" | grep -q "CrashLoopBackOff"; then
+                echo "ERROR: Operator pods are crashing!"
+                echo ""
+                kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o wide
+                echo ""
+                echo "Operator logs:"
+                kubectl -n $TARGET_NAMESPACE logs -l control-plane=nutanix-cn-rwx-operator --tail=50 --all-containers=true 2>/dev/null || true
+                echo ""
+                exit 1
+              fi
+              
+              # Show operator pod status
+              echo "Operator pod status:"
+              kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -o wide
+              echo ""
+              
+              # Check if at least one pod is progressing (Pending or Running)
+              HEALTHY_PODS=$(kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator --field-selector=status.phase!=Failed -o name 2>/dev/null | wc -l)
+              
+              if [ "$HEALTHY_PODS" -eq 0 ]; then
+                echo "ERROR: All operator pods failed!"
+                echo ""
+                kubectl -n $TARGET_NAMESPACE describe pods -l control-plane=nutanix-cn-rwx-operator
+                exit 1
+              fi
+              
+              echo "Operator pods are healthy and starting"
+              echo "  Note: With leader election, only 1 pod will become Ready (the leader)."
+              echo ""
+              echo "Operator will complete startup in the background."
+              echo ""
+              echo "Monitor operator pods with:"
+              echo "  kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -w"
+              echo ""
+              
+              # Check if FileServer instances were created
+              log_step "Checking FileServer resources"
+              echo "=== Checking for FileServer Resources ==="
+              if kubectl -n $TARGET_NAMESPACE get fileserver > /dev/null 2>&1; then
+                FILESERVER_COUNT=$(kubectl -n $TARGET_NAMESPACE get fileserver -o name 2>/dev/null | wc -l)
+                if [ "$FILESERVER_COUNT" -gt 0 ]; then
+                  echo "Found $FILESERVER_COUNT FileServer instance(s)"
+                  echo ""
+                  
+                  # Display FileServer resources
+                  kubectl -n $TARGET_NAMESPACE get fileserver
+                  echo ""
+                  
+                  # Get expected instances
+                  EXPECTED_INSTANCES=$(kubectl -n $TARGET_NAMESPACE get fileserver -o jsonpath='{.items[0].spec.instances}' 2>/dev/null || echo "unknown")
+                  echo "Expected files pod instances: $EXPECTED_INSTANCES"
+                  echo ""
+                  
+                  # Show FileServer status (may not be populated yet)
+                  echo "FileServer Status:"
+                  kubectl -n $TARGET_NAMESPACE get fileserver -o jsonpath='{.items[0].status}' 2>/dev/null | cat || echo "  Status not available yet (operator will update this)"
+                  echo ""
+                  echo ""
+                  
+                  echo "CN-RWX pods will be created by the operator in the background."
+                  echo "The operator will reconcile the FileServer resource and create the pods shortly."
+                  echo ""
+                  echo "Monitor CN-RWX pods creation with:"
+                  echo "  kubectl -n $TARGET_NAMESPACE get pods -l rwx-crd-pods=cn-rwx-crd-pods -w"
+                  echo ""
+                  echo "Check FileServer status with:"
+                  echo "  kubectl -n $TARGET_NAMESPACE get fileserver -o yaml"
+                  echo ""
+                else
+                  echo "No FileServer instances found"
+                  echo "This may be expected if fileserver.enabled is set to false in chart values."
+                fi
+              else
+                echo "FileServer CRD exists but no instances found"
+                echo ""
+                echo "This could mean:"
+                echo "  - FileServer resource was not created by the chart (check if fileserver.enabled: false)"
+                echo "  - Operator has not yet started reconciliation"
+                echo ""
+                echo "If you expect FileServer instances, check:"
+                echo "  - Values file has fileserver.enabled: true"
+                echo "  - Operator logs: kubectl -n $TARGET_NAMESPACE logs -l control-plane=nutanix-cn-rwx-operator"
+                echo ""
+                echo "Note: This is not a failure - operator may be starting up."
+              fi
+              
+              # Refresh CN-RWX pods so the new operator reconciles with updated images.
+              # The operator only creates CN-RWX pods when they are absent; existing pods are
+              # not restarted by the operator even when the operator chart is upgraded.
+              # Deleting them here forces the operator's reconcile loop to recreate them
+              # with the image defaults from the newly installed operator chart.
+              log_step "Refreshing CN-RWX pods after operator upgrade"
+              echo "=== Refreshing Files Pods ==="
+              FILES_POD_COUNT=$(kubectl -n $TARGET_NAMESPACE get pods \
+                -l rwx-crd-pods=cn-rwx-crd-pods -o name 2>/dev/null | wc -l)
+              if [ "$FILES_POD_COUNT" -gt 0 ]; then
+                echo "Deleting $FILES_POD_COUNT existing CN-RWX pod(s) to trigger reconciliation with new images..."
+                kubectl -n $TARGET_NAMESPACE delete pods \
+                  -l rwx-crd-pods=cn-rwx-crd-pods --ignore-not-found=true
+                echo "CN-RWX pods deleted - operator will recreate them with updated images"
+                echo "Monitor: kubectl -n $TARGET_NAMESPACE get pods -l rwx-crd-pods=cn-rwx-crd-pods -w"
+              else
+                echo "No existing CN-RWX pods found (fresh install or already clean)"
+              fi
+              echo ""
+
+              echo "=========================================="
+              echo "CN-RWX Charts Installation Complete"
+              echo "=========================================="
+              echo ""
+              echo "Installation Summary:"
+              echo "  - Helm Release: $RELEASE_NAME (in namespace $TARGET_NAMESPACE)"
+              echo "  - FileServer CRD: Installed"
+              echo "  - Operator Deployment: Created"
+              if kubectl -n $TARGET_NAMESPACE get fileserver > /dev/null 2>&1; then
+                FILESERVER_COUNT=$(kubectl -n $TARGET_NAMESPACE get fileserver -o name 2>/dev/null | wc -l)
+                echo "  - FileServer Instances: $FILESERVER_COUNT configured"
+              else
+                echo "  - FileServer Instances: None (operator-only mode)"
+              fi
+              echo ""
+              echo "Background Reconciliation:"
+              echo "  The operator will now start in the background and create CN-RWX pods."
+              echo "  This process typically takes 1-2 minutes depending on image pull times."
+              echo ""
+              echo "Monitoring Commands:"
+              echo ""
+              echo "  # Watch operator pods starting (expect 1 pod Ready as leader):"
+              echo "  kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator -w"
+              echo ""
+              echo "  # Watch CN-RWX pods being created:"
+              echo "  kubectl -n $TARGET_NAMESPACE get pods -l rwx-crd-pods=cn-rwx-crd-pods -w"
+              echo ""
+              echo "  # Check FileServer status:"
+              echo "  kubectl -n $TARGET_NAMESPACE get fileserver"
+              echo ""
+              echo "  # View operator logs:"
+              echo "  kubectl -n $TARGET_NAMESPACE logs -l control-plane=nutanix-cn-rwx-operator -f"
+              echo ""
+              echo "Verification (after ~2 minutes):"
+              echo "  # Check operator pods (with leader election, only 1/N will be Ready - this is normal):"
+              echo "  kubectl -n $TARGET_NAMESPACE get pods -l control-plane=nutanix-cn-rwx-operator"
+              echo ""
+              echo "  # Check CN-RWX pods (all should be Running):"
+              echo "  kubectl -n $TARGET_NAMESPACE get pods -l rwx-crd-pods=cn-rwx-crd-pods"
+              echo ""
+              echo "Installation job completed - operator is now managing the system."
+
+              emit_event "CnRwxInstallSucceeded" \
+                "CN-RWX installer completed successfully. Operator is now managing the system in namespace ${TARGET_NAMESPACE}." \
+                "Normal"
+          env:
+            - name: HELM_NAMESPACE
+              value: {{ .Release.Namespace }}
+          {{- if .Values.imagePullSecrets }}
+          volumeMounts:
+          {{- range .Values.imagePullSecrets }}
+            - name: image-pull-secret-{{ .name }}
+              mountPath: /var/run/secrets/image-pull/{{ .name }}
+              readOnly: true
+          {{- end }}
+          {{- end }}
+      {{- if .Values.imagePullSecrets }}
+      volumes:
+      {{- range .Values.imagePullSecrets }}
+        - name: image-pull-secret-{{ .name }}
+          secret:
+            secretName: {{ .name }}
+            optional: true
+      {{- end }}
+      {{- end }}
+  backoffLimit: 0
+  activeDeadlineSeconds: 290 # lower than default helm hook timeout of 300 seconds
+{{- end }}
