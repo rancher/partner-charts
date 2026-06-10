@@ -1,0 +1,286 @@
+suite: security context
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: uses default pod security context when not configured
+    set:
+      cluster: test-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: use local podSecurityContext
+    set:
+      cluster: test-cluster
+      podSecurityContext:
+        fsGroup: 3000
+        runAsUser: 4000
+        runAsGroup: 4000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 3000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 4000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 4000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: inherits global podSecurityContext when local podSecurityContext not set
+    set:
+      cluster: test-cluster
+      global:
+        podSecurityContext:
+          fsGroup: 5000
+          runAsUser: 6000
+          runAsGroup: 6000
+          runAsNonRoot: true
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 5000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 6000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 6000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: uses local podSecurityContext over global podSecurityContext
+    set:
+      cluster: test-cluster
+      global:
+        podSecurityContext:
+          fsGroup: 5000
+          runAsUser: 6000
+      podSecurityContext:
+        fsGroup: 7000
+        runAsUser: 8000
+        runAsGroup: 8000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 7000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 8000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 8000
+
+  - it: uses default podSecurityContext when empty podSecurityContext is set
+    set:
+      cluster: test-cluster
+      global:
+        podSecurityContext: {}
+      podSecurityContext: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: uses containerSecurityContext
+    set:
+      cluster: test-cluster
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: uses global containerSecurityContext when local containerSecurityContext not set
+    set:
+      cluster: test-cluster
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - NET_RAW
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: NET_RAW
+
+  - it: uses local containerSecurityContext over global containerSecurityContext
+    set:
+      cluster: test-cluster
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsUser: 9000
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 9000
+
+  - it: sets no containerSecurityContext when empty containerSecurityContext is set
+    set:
+      cluster: test-cluster
+      containerSecurityContext: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].securityContext
+
+  - it: uses both pod and container security contexts together
+    set:
+      cluster: test-cluster
+      podSecurityContext:
+        fsGroup: 10000
+        runAsUser: 11000
+        runAsGroup: 11000
+        runAsNonRoot: true
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+    asserts:
+      # Pod-level security context
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 11000
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 11000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      # Container-level security context
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: uses comprehensive security hardening configuration
+    set:
+      cluster: test-cluster
+      podSecurityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+    asserts:
+      # Pod-level assertions
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 65534
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 65534
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 65534
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      # Container-level assertions
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 65534
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault

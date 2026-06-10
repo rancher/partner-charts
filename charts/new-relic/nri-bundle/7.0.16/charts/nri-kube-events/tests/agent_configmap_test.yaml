@@ -1,0 +1,46 @@
+suite: test configmap for newrelic infra agent
+templates:
+  - templates/agent-configmap.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has the correct default values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: data["newrelic-infra.yml"]
+          value: |
+            is_forward_only: true
+            http_server_enabled: true
+            http_server_port: 8001
+
+  - it: integrates properly with the common library
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      fedramp.enabled: true
+      verboseLog: true
+    asserts:
+      - equal:
+          path: data["newrelic-infra.yml"]
+          value: |
+            is_forward_only: true
+            http_server_enabled: true
+            http_server_port: 8001
+
+            log:
+              level: trace
+            fedramp: true
+
+  - it: does not template if the http sink is disabled
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      sinks:
+        newRelicInfra: false
+    asserts:
+      - hasDocuments:
+          count: 0
