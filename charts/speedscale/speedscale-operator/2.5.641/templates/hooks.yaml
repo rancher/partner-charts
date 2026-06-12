@@ -1,0 +1,99 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "4"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-operator-pre-install
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
+spec:
+  backoffLimit: {{ .Values.preInstall.backoffLimit }}
+  ttlSecondsAfterFinished: 30
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
+      creationTimestamp: null
+      labels:
+        {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 8}}
+        {{- end }}
+    spec:
+      containers:
+      - args:
+        - |-
+          set -uo pipefail
+          # Always shut down the istio sidecar (if any) on exit so the Job pod
+          # can terminate. Done via trap because `set -e` skips trailing
+          # commands on failure.
+          trap 'curl -X POST http://127.0.0.1:15000/quitquitquit >/dev/null 2>&1 || true' EXIT
+
+          # Retry speedctl init to absorb transient errors (e.g. NetworkPolicy
+          # convergence races, DNS hiccups). Bounded by maxAttempts so a real
+          # misconfiguration (bad API key, wrong app URL) still fails fast.
+          MAX_ATTEMPTS={{ .Values.preInstall.maxAttempts }}
+          RETRY_DELAY={{ .Values.preInstall.retryDelaySeconds }}
+          attempt=1
+          while true; do
+            {{- if .Values.http_proxy }}
+            HTTP_PROXY={{ .Values.http_proxy | quote }} \
+            {{- end }}
+            {{- if .Values.https_proxy }}
+            HTTPS_PROXY={{ .Values.https_proxy | quote }} \
+            {{- end }}
+            {{- if .Values.no_proxy }}
+            NO_PROXY={{ .Values.no_proxy | quote }} \
+            {{- end }}
+            speedctl init --overwrite \
+              --home /tmp/speedscale \
+              --api-key $SPEEDSCALE_API_KEY \
+              --app-url $SPEEDSCALE_APP_URL && break
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "speedctl init failed after ${attempt} attempts; giving up" >&2
+              exit 1
+            fi
+            echo "speedctl init attempt ${attempt}/${MAX_ATTEMPTS} failed; retrying in ${RETRY_DELAY}s" >&2
+            attempt=$((attempt + 1))
+            sleep "$RETRY_DELAY"
+          done
+        command:
+        - bash
+        - -c
+        envFrom:
+        - secretRef:
+            name: '{{ ne .Values.apiKeySecret "" | ternary .Values.apiKeySecret "speedscale-apikey" }}'
+            optional: false
+        image: '{{ .Values.image.registry }}/speedscale-cli:{{ .Values.image.tag }}'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: speedscale-cli
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        securityContext: {{ toYaml .Values.globalPodSecurityContext | nindent 10 }}
+        resources: {{ toYaml .Values.preInstall.resources | nindent 10 }}
+      restartPolicy: Never
+      securityContext: {{ toYaml .Values.globalSecurityContext | nindent 8 }}
+      {{- if .Values.affinity }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
