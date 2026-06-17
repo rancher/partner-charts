@@ -1,0 +1,71 @@
+suite: affinity
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has no affinity by default
+    set:
+      cluster: my-cluster
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+  - it: inherits global.affinity when local affinity not set
+    set:
+      cluster: test-cluster
+      global.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: global-key
+                    operator: In
+                    values:
+                      - global-value
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity
+          value:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: global-key
+                        operator: In
+                        values:
+                          - global-value
+
+  - it: uses local affinity over global.affinity
+    set:
+      cluster: test-cluster
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: local-key
+                    operator: In
+                    values:
+                      - local-value
+      global.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: global-key
+                    operator: In
+                    values:
+                      - global-value
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity
+          value:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: local-key
+                        operator: In
+                        values:
+                          - local-value
