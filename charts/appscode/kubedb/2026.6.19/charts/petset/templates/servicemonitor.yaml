@@ -1,0 +1,52 @@
+{{- if eq "prometheus.io/operator" ( include "monitoring.agent" . ) }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "petset.fullname" . }}-metrics-token
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/service-account.name: {{ include "petset.serviceAccountName" . | quote }}
+type: kubernetes.io/service-account-token
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "petset.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if eq "true" ( include "monitoring.apply-servicemonitor-label" . ) }}
+    {{- include "monitoring.servicemonitor-label" . | nindent 4 }}
+  {{- else }}
+    {{- include "petset.selectorLabels" . | nindent 4 }}
+  {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "petset.selectorLabels" . | nindent 6 }}
+  endpoints:
+  - authorization:
+      type: Bearer
+      credentials:
+        name: {{ include "petset.fullname" . }}-metrics-token
+        key: token
+    path: /metrics
+    port: metrics
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          name: {{ include "petset.fullname" . }}-cert
+          key: ca.crt
+      cert:
+        secret:
+          name: {{ include "petset.fullname" . }}-cert
+          key: tls.crt
+      insecureSkipVerify: false
+      keySecret:
+        name: {{ include "petset.fullname" . }}-cert
+        key: tls.key
+      serverName: "{{ include "petset.fullname" . }}.{{ .Release.Namespace }}.svc"
+{{- end }}

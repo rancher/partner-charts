@@ -1,0 +1,30 @@
+{{- template "kubedb-catalog.refresh-versions" . }}
+
+{{ $featureGates := .Values.featureGates }}
+{{ $ubi := .Values.distro.ubi }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+  {{ $ubi = default .Values.distro.ubi .Values.global.distro.ubi }}
+{{- end }}
+
+{{ if and $featureGates.Solr (not (eq $ubi "operator")) }}
+
+
+apiVersion: catalog.kubedb.com/v1alpha1
+kind: SolrVersion
+metadata:
+  name: '9.6.1'
+  labels:
+    {{- include "kubedb-catalog.labels" . | nindent 4 }}
+spec:
+  db:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "appscode-images/solr") $) }}:9.6.1'
+  initContainer:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "kubedb/solr-init") $) }}:9.6.1'
+  securityContext:
+    runAsUser: 8983
+  updateConstraints:
+    allowlist:
+    - '>= 9.6.1, <= 9.9.0'
+  version: 9.6.1
+{{ end }}

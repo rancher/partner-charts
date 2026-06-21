@@ -1,0 +1,26 @@
+{{- template "kubedb-catalog.refresh-versions" . }}
+
+{{ $featureGates := .Values.featureGates }}
+{{ $ubi := .Values.distro.ubi }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+  {{ $ubi = default .Values.distro.ubi .Values.global.distro.ubi }}
+{{- end }}
+
+{{ if and $featureGates.Kafka (not (eq $ubi "operator")) }}
+
+
+apiVersion: catalog.kubedb.com/v1alpha1
+kind: SchemaRegistryVersion
+metadata:
+  name: '3.15.0'
+  labels:
+    {{- include "kubedb-catalog.labels" . | nindent 4 }}
+spec:
+  distribution: Aiven
+  registry:
+    image: '{{ include "image.ghcr" (merge (dict "_repo" "aiven-open/karapace") $) }}:3.15.0'
+  securityContext:
+    runAsUser: 1001
+  version: 3.15.0
+{{ end }}
