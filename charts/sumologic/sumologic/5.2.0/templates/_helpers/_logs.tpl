@@ -1,0 +1,425 @@
+{{/*
+Check if any logs metadata provider is enabled
+
+Example Usage:
+{{- if eq (include "logs.enabled" .) "true" }}
+
+*/}}
+{{- define "logs.enabled" -}}
+{{- $enabled := false -}}
+{{- if eq (include "logs.otelcol.enabled" .) "true" }}
+{{- $enabled = true -}}
+{{- end -}}
+{{ $enabled }}
+{{- end -}}
+
+
+{{/*
+Check if otelcol logs metadata provider is enabled
+
+Example Usage:
+{{- if eq (include "logs.otelcol.enabled" .) "true" }}
+
+*/}}
+{{- define "logs.otelcol.enabled" -}}
+{{- $enabled := false -}}
+{{- if and (eq .Values.sumologic.logs.enabled true) (eq .Values.metadata.logs.enabled true) -}}
+{{- $enabled = true -}}
+{{- end -}}
+{{ $enabled }}
+{{- end -}}
+
+{{/*
+Check if otelcol logs collector is enabled.
+It's enabled if both logs in general and the collector specifically are enabled.
+
+Example Usage:
+{{- if eq (include "logs.collector.otelcol.enabled" .) "true" }}
+
+*/}}
+{{- define "logs.collector.otelcol.enabled" -}}
+{{- $enabled := and (eq (include "logs.enabled" .) "true") (eq .Values.sumologic.logs.collector.otelcol.enabled true) -}}
+{{ $enabled }}
+{{- end -}}
+
+{{- define "logs.collector.otellogswindows.enabled" -}}
+{{- $enabled := and (eq (include "logs.enabled" .) "true") (eq .Values.sumologic.logs.collector.otellogswindows.enabled true) -}}
+{{ $enabled }}
+{{- end -}}
+
+{{/*
+Return the log format for the Sumologic exporter for container logs.
+
+'{{ include "logs.otelcol.container.exporter.format" . }}'
+*/}}
+{{- define "logs.otelcol.container.exporter.format" -}}
+{{- $jsonFormats := list "json" "fields" "json_merge" -}}
+{{- if has .Values.sumologic.logs.container.format $jsonFormats -}}
+{{- "json" -}}
+{{- else if eq .Values.sumologic.logs.container.format "text" -}}
+{{- "text" -}}
+{{- else -}}
+{{- fail "`sumologic.logs.container.format` can only be `json`, `text`, `json_merge` or `fields`" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return default exporters for routing processor for .Type pipeline.
+
+'{{- include "logs.otelcol.routing.defaultExporters" (dict "Values" .Values "Type" "containers") }}'
+*/}}
+{{- define "logs.otelcol.routing.defaultExporters" -}}
+{{- $exporters := include "logs.otelcol.defaultExporters" . | fromJsonArray }}
+{{- range $entry := .Values.sumologic.logs.otelcol.routing.fallbackExporters -}}
+{{- $exporters = append $exporters $entry -}}
+{{- end -}}
+{{- range $_, $exporter := $exporters }}
+{{ printf "- %s" $exporter }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Return default exporters for .Type pipeline
+
+'{{- $exporters := include "logs.otelcol.defaultExporters" (dict "Values" .Values "Type" "containers") | fromJsonArray }}'
+*/}}
+{{- define "logs.otelcol.defaultExporters" -}}
+{{- $exporters := list -}}
+{{- if .Values.sumologic.logs.otelcol.useDefaultExporters -}}
+{{- if eq .Values.sumologic.logs.sourceType "http" -}}
+{{- $exporters = append $exporters (printf "sumologic/%s" .Type) -}}
+{{- if eq (include "sumologic-mock.forward-logs-metadata" .) "true" -}}
+{{- $exporters = append $exporters (printf "sumologic/sumologic-mock-%s" .Type) -}}
+{{- end -}}
+{{- else if eq .Values.sumologic.logs.sourceType "otlp" -}}
+{{- $exporters = append $exporters "sumologic" -}}
+{{- if eq (include "sumologic-mock.forward-logs-metadata" .) "true" -}}
+{{- $exporters = append $exporters "sumologic/sumologic-mock" -}}
+{{- end -}}
+{{- else -}}
+{{- fail "`sumologic.logs.sourceType` can only be `http` or `otlp`" -}}
+{{- end -}}
+{{- if eq .Values.debug.logs.metadata.print true -}}
+{{- $exporters = append $exporters "debug" -}}
+{{- end -}}
+{{- end -}}
+{{ $exporters | uniq | toJson }}
+{{- end -}}
+
+{{/*
+Return all exporters for .Type pipeline
+
+'{{- include "logs.otelcol.exporters" (dict "Values" .Values "Type" "containers") }}'
+*/}}
+{{- define "logs.otelcol.exporters" -}}
+{{- $exporters := include "logs.otelcol.defaultExporters" . | fromJsonArray }}
+{{/* Iterate over all exporters used by routing */}}
+{{- if .Values.sumologic.logs.otelcol.routing.table -}}
+{{- range $entry := .Values.sumologic.logs.otelcol.routing.table -}}
+{{- $exporters = append $exporters $entry.exporter -}}
+{{- end -}}
+{{- range $exporter := .Values.sumologic.logs.otelcol.routing.fallbackExporters -}}
+{{- $exporters = append $exporters $exporter -}}
+{{- end -}}
+{{/* Routing is not enabled, so iterate over all extraExporters */}}
+{{- else -}}
+{{- range $exporter, $_ := .Values.sumologic.logs.otelcol.extraExporters -}}
+{{- $exporters = append $exporters $exporter -}}
+{{- end -}}
+{{- end -}}
+{{- $exporters = uniq $exporters -}}
+{{- range $_, $exporter := $exporters }}
+{{ printf "- %s" $exporter }}
+{{- end }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs" -}}
+{{ template "sumologic.labels.app.otelcol" . }}-logs
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.configmap" -}}
+{{- template "sumologic.metadata.name.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.windows.configmap" -}}
+{{- template "sumologic.metadata.name.logs.collector.windows" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.serviceaccount" -}}
+{{- template "sumologic.metadata.name.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.cloudwatch.serviceaccount" -}}
+{{- template "sumologic.metadata.name.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.daemonset" -}}
+{{- template "sumologic.metadata.name.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.statefulset" -}}
+{{- template "sumologic.metadata.name.logs.collector.cloudwatch" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.windows.daemonset" -}}
+{{- template "sumologic.metadata.name.logs.collector.windows" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.service" -}}
+{{- template "sumologic.metadata.name.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector" -}}
+{{- template "sumologic.fullname" . }}-otelcol-logs-collector
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.windows" -}}
+{{- template "sumologic.fullname" . }}-otellogswindows-logs-collector
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.configmap" -}}
+{{- template "sumologic.labels.app.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.windows.configmap" -}}
+{{- template "sumologic.labels.app.logs.collector.windows" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.serviceaccount" -}}
+{{- template "sumologic.labels.app.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.daemonset" -}}
+{{- template "sumologic.labels.app.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.windows.daemonset" -}}
+{{- template "sumologic.labels.app.logs.collector.windows" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.pod" -}}
+{{- template "sumologic.labels.app.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.windows.pod" -}}
+{{- template "sumologic.labels.app.logs.collector.windows" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.service" -}}
+{{- template "sumologic.labels.app.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.cloudwatch.configmap" -}}
+{{- template "sumologic.fullname" . }}-otelcloudwatch-logs-collector
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.cloudwatch.service" -}}
+{{- template "sumologic.metadata.name.logs.collector.cloudwatch" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.cloudwatch.service-headless" -}}
+{{- template "sumologic.labels.app.logs.cloudwatch.service" . }}-headless
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.collector.statefulset" -}}
+{{- template "sumologic.fullname" . }}-otelcloudwatch-logs-collector
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.cloudwatch.pvc" -}}
+{{- printf "file-storage-%s-sumologic-otelcol-logs-0" .Release.Name -}}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.pod" -}}
+{{- template "sumologic.labels.app.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.service" -}}
+{{- template "sumologic.labels.app.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.service-headless" -}}
+{{- template "sumologic.labels.app.logs.service" . }}-headless
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.configmap" -}}
+{{- template "sumologic.labels.app.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.statefulset" -}}
+{{- template "sumologic.labels.app.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.app.logs.hpa" -}}
+{{- template "sumologic.labels.app.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs" -}}
+{{ template "sumologic.metadata.name.otelcol" . }}-logs
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.service" -}}
+{{ template "sumologic.fullname" . }}-metadata-logs
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.service-headless" -}}
+{{ template "sumologic.metadata.name.logs" . }}-headless
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.configmap" -}}
+{{ template "sumologic.metadata.name.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.statefulset" -}}
+{{ template "sumologic.metadata.name.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.pdb" -}}
+{{ template "sumologic.metadata.name.logs.statefulset" . }}-pdb
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.hpa" -}}
+{{- template "sumologic.metadata.name.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector" -}}
+{{- template "sumologic.fullname" . }}-otelcol-logs-collector
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.cloudwatch" -}}
+{{- template "sumologic.fullname" . }}-otelcol-cloudwatch-collector
+{{- end -}}
+
+{{- define "sumologic.metadata.name.logs.collector.windows" -}}
+{{- template "sumologic.fullname" . }}-otelcol-windows-logs-collector
+{{- end -}}
+
+{{- define "sumologic.labels.logs" -}}
+sumologic.com/app: otelcol-logs
+sumologic.com/component: logs
+{{- end -}}
+
+{{- define "sumologic.labels.logs.collector" -}}
+sumologic.com/app: otelcol-logs-collector
+sumologic.com/component: logs
+{{- end -}}
+
+{{- define "sumologic.labels.scrape.logs" -}}
+{{ template "sumologic.label.scrape" . }}
+{{ template "sumologic.labels.logs" . }}
+{{- end -}}
+
+{{- define "sumologic.labels.scrape.logs.collector" -}}
+{{ template "sumologic.label.scrape" . }}
+{{ template "sumologic.labels.logs.collector" . }}
+{{- end -}}
+
+{{- define "sumologic.metadata.name.pvcCleaner.logs" -}}
+{{- template "sumologic.metadata.name.pvcCleaner" . }}-logs
+{{- end -}}
+
+{{- define "sumologic.labels.app.pvcCleaner.logs" -}}
+{{- template "sumologic.labels.app.pvcCleaner" . }}-logs
+{{- end -}}
+
+{{/*
+Returns list of namespaces to exclude
+
+Example:
+
+{{ include "logs.excludeNamespaces" . }}
+*/}}
+{{- define "logs.excludeNamespaces" -}}
+{{- $excludeNamespaceRegex := .Values.sumologic.logs.container.excludeNamespaceRegex | quote -}}
+{{- if eq .Values.sumologic.collectionMonitoring false -}}
+  {{- if .Values.sumologic.logs.container.excludeNamespaceRegex -}}
+  {{- $excludeNamespaceRegex = printf "%s|%s" ( include "sumologic.namespace" .  ) .Values.sumologic.logs.container.excludeNamespaceRegex | quote -}}
+  {{- else -}}
+  {{- $excludeNamespaceRegex = printf "%s" ( include "sumologic.namespace" .  ) | quote -}}
+  {{- end -}}
+{{- end -}}
+{{ print $excludeNamespaceRegex }}
+{{- end -}}
+
+{{/*
+Return the otelcol log collector image
+*/}}
+{{- define "sumologic.logs.collector.image" -}}
+{{ template "utils.getOtelImage" (dict "overrideImage" .Values.otellogs.image "defaultImage" .Values.sumologic.otelcolImage) }}
+{{- end -}}
+
+{{- define "sumologic.logs.collector.windows.image" -}}
+{{ template "utils.getOtelImage" (dict "overrideImage" .Values.otellogswindows.image "defaultImage" .Values.sumologic.otelcolImage) }}
+{{- end -}}
+
+{{- define "sumologic.logs.collector.tolerations" -}}
+{{- if .Values.otellogs.daemonset.tolerations  -}}
+{{- toYaml .Values.otellogs.daemonset.tolerations  -}}
+{{- else -}}
+{{- template "kubernetes.defaultTolerations" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if autoscaling for metadata logs is enabled.
+
+Example Usage:
+{{- if eq (include "metadata.logs.autoscaling.enabled" .) "true" }}
+
+*/}}
+{{- define "metadata.logs.autoscaling.enabled" -}}
+{{- template "is.autoscaling.enabled" (dict "autoscalingEnabled" .Values.metadata.logs.autoscaling.enabled "Values" .Values) }}
+{{- end -}}
+
+{{- define "metadata.logs.statefulset.nodeSelector" -}}
+{{- template "nodeSelector" (dict "Values" .Values "nodeSelector" .Values.metadata.logs.statefulset.nodeSelector)}}
+{{- end -}}
+
+{{- define "metadata.logs.statefulset.tolerations" -}}
+{{- if .Values.metadata.logs.statefulset.tolerations -}}
+{{- toYaml .Values.metadata.logs.statefulset.tolerations -}}
+{{- else -}}
+{{- template "kubernetes.defaultTolerations" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "metadata.logs.statefulset.affinity" -}}
+{{- if .Values.metadata.logs.statefulset.affinity -}}
+{{- toYaml .Values.metadata.logs.statefulset.affinity -}}
+{{- else -}}
+{{- template "kubernetes.defaultAffinity" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "logs.collector.files.list" }}
+{{- if eq (include "logs.collector.otelcol.enabled" .) "true" }}
+{{- $ctx := . }}
+{{- $instance := "" -}}
+{{- $daemonsets := dict "" $.Values.otellogs.daemonset  -}}
+{{- $daemonsets = deepCopy $daemonsets | merge $.Values.otellogs.additionalDaemonSets -}}
+{{- range $name, $value := $daemonsets }}
+{{- if not (eq $name "") }}
+{{- $instance = (printf "-%s" $name ) }}
+{{- end }}
+- /var/log/pods/{{ template "sumologic.namespace"  $ctx }}_{{ printf "%s%s" (include "sumologic.metadata.name.logs.collector.daemonset" $ctx) $instance | trunc 63 | trimSuffix "-" }}*/*/*.log
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "logs.collector.windows.files.list" }}
+{{- if eq (include "logs.collector.otellogswindows.enabled" .) "true" }}
+{{- $ctx := . }}
+{{- $instance := "" -}}
+{{- $daemonsets := dict "" $.Values.otellogswindows.daemonset  -}}
+{{- $daemonsets = deepCopy $daemonsets | merge $.Values.otellogswindows.additionalDaemonSets -}}
+{{- range $name, $value := $daemonsets }}
+{{- if not (eq $name "") }}
+{{- $instance = (printf "-%s" $name ) }}
+{{- end }}
+- /var/log/pods/{{ template "sumologic.namespace"  $ctx }}_{{ printf "%s%s" (include "sumologic.metadata.name.logs.collector.windows.daemonset" $ctx) $instance | trunc 63 | trimSuffix "-" }}*/*/*.log
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "logs.metadata.files.list" -}}
+- /var/log/pods/{{ template "sumologic.namespace" . }}_{{ template "sumologic.metadata.name.logs.statefulset" . }}*/*/*.log
+{{- end -}}

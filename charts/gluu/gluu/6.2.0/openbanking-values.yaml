@@ -1,0 +1,230 @@
+# -- OAuth Authorization Server, the OpenID Connect Provider, the UMA Authorization Server--this is the main Internet facing component of Gluu. It's the service that returns tokens, JWT's and identity assertions. This service must be Internet facing.
+auth-server:
+  image:
+    # -- Image pullPolicy to use for deploying.
+    pullPolicy: IfNotPresent
+    # -- Image  to use for deploying.
+    repository: gluufederation/openbanking-auth-server
+    # -- Image  tag to use for deploying.
+    tag: 6.2.0-1
+    # -- Image Pull Secrets
+    pullSecrets: [ ]
+# -- Configuration parameters for setup and initial configuration secret and config layers used by Gluu services.
+config:
+  configmap:
+    # -- Schema name used by SQL database (default to empty-string; if using MySQL, the schema name will be resolved as the database name, whereas in PostgreSQL the schema name will be resolved as `"public"`).
+    cnSqlDbSchema: ""
+    # -- SQL database dialect. `mysql` or `pgsql`
+    cnSqlDbDialect: mysql
+    # -- SQL database host uri.
+    cnSqlDbHost: my-release-mysql.default.svc.cluster.local
+    # -- SQL database port.
+    cnSqlDbPort: 3306
+    # -- SQL database name.
+    cnSqlDbName: gluu
+    # -- SQL database username.
+    cnSqlDbUser: gluu
+    # -- SQL database timezone.
+    cnSqlDbTimezone: UTC
+    # -- SQL password  injected the secrets .
+    cnSqldbUserPassword: Test1234#
+  # -- Configure any additional volumes that need to be attached to the pod
+  volumes: []
+  # -- Configure any additional volumesMounts that need to be attached to the containers
+  volumeMounts: []
+# -- Parameters used globally across all services helm charts.
+global:
+  admin-ui:
+    # -- Boolean flag to enable/disable the admin-ui chart and admin ui config api plugin.
+    enabled: false
+    ingress:
+      # -- Enable Admin UI endpoints in either istio or nginx ingress depending on users choice
+      adminUiEnabled: false
+  auth-server:
+    ingress:
+      # -- Enable mTLS on Auth server endpoint /jans-auth/restv1/token.
+      authServerProtectedToken: true
+      # -- Enable mTLS on Auth server endpoint /jans-auth/restv1/register.
+      authServerProtectedRegister: true
+  casa:
+    # -- Boolean flag to enable/disable the casa chart.
+    enabled: false
+  cloud:
+    # -- Boolean flag if enabled will strip resources requests and limits from all services.
+    testEnviroment: false
+  # -- Open banking external signing jwks uri. Used in SSA Validation.
+  cnObExtSigningJwksUri: "https://mykeystore.openbanking.wow/xxxxx/xxxxx.jwks"
+  # -- Open banking external signing jwks AS certificate authority string. Used in SSA Validation. This must be encoded using base64. Used when `.global.cnObExtSigningJwksUri` is set.
+  cnObExtSigningJwksCrt: ""
+  # -- Open banking external signing jwks AS key string. Used in SSA Validation. This must be encoded using base64. Used when `.global.cnObExtSigningJwksUri` is set.
+  cnObExtSigningJwksKey: ""
+  # -- Open banking external signing jwks AS key passphrase to unlock provided key. This must be encoded using base64. Used when `.global.cnObExtSigningJwksUri` is set.
+  cnObExtSigningJwksKeyPassPhrase: ""
+  # -- External Key ID (kid) stamped onto the header of outgoing JWTs. This tells receiving parties which public key to fetch from your JWKS URI to verify the signature.
+  cnObStaticSigningKeyKid: "XkwIzWy44xWSlcWnMiEc8iq9s2G"
+  # -- Internal Java Keystore (JKS) alias used to locate the Open Banking private signing key. To ensure correct internal mapping, this string must identically match your 'cnObStaticSigningKeyKid'.
+  cnObInternalSigningAlias: "XkwIzWy44xWSlcWnMiEc8iq9s2G"
+  # -- Open banking AS transport crt. Used in SSA Validation. This must be encoded using base64.
+  cnObTransportCrt: ""
+  # -- Open banking AS transport key. Used in SSA Validation. This must be encoded using base64.
+  cnObTransportKey: ""
+  # -- Open banking AS transport key passphrase to unlock AS transport key. This must be encoded using base64.
+  cnObTransportKeyPassPhrase: ""
+  # -- Open banking transport Alias used inside the JVM.
+  cnObTransportAlias: ""
+  # -- Open banking AS transport truststore crt. This is normally generated from the OB issuing CA, OB Root CA and Signing CA. Used when .global.cnObExtSigningJwksUri is set. Used in SSA Validation. This must be encoded using base64.
+  cnObTransportTrustStore: ""
+  # -- Fully qualified domain name to be used for Gluu installation. This address will be used to reach Gluu services.
+  fqdn: demoexample.gluu.org
+  fido2:
+    # -- Boolean flag to enable/disable the fido2 chart.
+    enabled: false
+  # -- Boolean flag to enable mapping global.lbIp  to global.fqdn inside pods on clouds that provide static ip for load balancers. On cloud that provide only addresses to the LB this flag will enable a script to actively scan config.configmap.lbAddr and update the hosts file inside the pods automatically.
+  isFqdnRegistered: false
+  istio:
+    # -- Boolean flag that enables using istio side-cars with Gluu services.
+    enabled: false
+    # -- Boolean flag that enables using istio gateway for Gluu. This assumes istio ingress is installed and hence the LB is available.
+    ingress: false
+    # -- The namespace istio is deployed in. The is normally istio-system.
+    namespace: istio-system
+    # -- Additional labels that will be added across the gateway in the format of {mylabel: "myapp"}
+    additionalLabels: { }
+    # -- Additional annotations that will be added across the gateway in the format of {cert-manager.io/issuer: "letsencrypt-prod"}
+    additionalAnnotations: { }
+    # -- Override the gateway that can be created by default. This is used when istio ingress has already been setup and the gateway exists.
+    gateways: [ ]
+  # -- The Loadbalancer IP created by the ingress controller or gateway implementation on clouds that provide static IPs. This is not needed if `global.fqdn` is globally resolvable.
+  lbIp: 22.22.22.22
+  gateway-api:
+    # -- Boolean flag to enable/disable the Kubernetes Gateway and HTTPRoute resources.
+    enabled: false
+  nginx-ingress:
+    # -- Boolean flag to enable/disable the nginx-ingress definitions chart.
+    enabled: true
+  # --  Gluu distributions supported are: default|openbanking.
+  distribution: openbanking
+  scim:
+    # -- Boolean flag to enable/disable the SCIM chart.
+    enabled: false
+  # -- Enable cleanup job
+  cleanup:
+    # -- Boolean flag to enable/disable the cleanup cronjob chart.
+    enabled: true
+# -- Gateway API implementation. We support all GA-conformant implementations (e.g., 'nginx', 'istio', 'traefik'). See https://gateway-api.sigs.k8s.io/implementations/#conformant
+gateway-api:
+  # -- Configuration for Gateway resource
+  gateway:
+    # -- Set the gatewayClassName corresponding to your installed controller.
+    className: nginx
+    # -- The name of the Gateway resource to be created
+    name: gluu-gateway
+    # -- Gateway http port number
+    httpPort: 80
+    # -- Gateway https port number
+    httpsPort: 443
+    # -- Secret containing the TLS certificate for the Gateway
+    tlsSecretName: tls-certificate
+    # -- Base64-encoded string of CA certificate used to sign client/server certificate. Required if using client cert authentication.
+    caCert: ""
+    # -- Verify client certificate for protected endpoints (if enabled, caCert must be set).
+    # See additionalConfig for implementation-wise configuration (if any).
+    verifyClientCertProtection: false
+    # -- Attach global.lbIp to Gateway spec.addresses with IPAddress type (enable this if loadbalancer doesn't assign IP address to Gateway automatically)
+    attachLbIp: false
+    # -- Specific labels for the Gateway resource
+    labels: {}
+    # -- Specific annotations for the Gateway resource
+    annotations: {}
+    # -- Gateway spec.infrastructure
+    infrastructure:
+      # -- Specific parametersRef for the infrastructure
+      parametersRef: {}
+      # -- Specific labels for the infrastructure
+      labels: {}
+      # -- Specific annotations for the infrastructure
+      annotations: {}
+  # -- Configuration for HTTPRoute and its related resources
+  routes:
+    # -- Specific labels for the HTTPRoute resource
+    labels: {}
+    # -- Specific annotations for the HTTPRoute resource
+    annotations: {}
+  # -- Additional configuration for Specific Gateway API implementation
+  additionalConfig:
+    # -- Configuration for NGINX Fabric.
+    nginx:
+      # -- Enable client certificate verification using Snippets and NginxProxy.
+      # Snippet support must be enabled during NGINX installation (otherwise endpoints will return HTTP status code 500).
+      # See https://docs.nginx.com/nginx-gateway-fabric/traffic-management/snippets#setup
+      # The NginxProxy will be attached to gateway.infrastructure.parametersRef only if it's empty.
+      enableClientCertSnippets: false
+      # -- Enable URL rewrite to forward audit gRPC requests `/io.jans.lock.audit.AuditService` to `/jans-auth/io.jans.lock.audit.AuditService`.
+      # Snippet support must be enabled during NGINX installation (otherwise endpoints will return HTTP status code 500).
+      # See https://docs.nginx.com/nginx-gateway-fabric/traffic-management/snippets#setup.
+      enableAuditGrpcRewriteSnippets: false
+    # -- Configuration for Traefik.
+    traefik: {}
+    # -- Configuration for Istio.
+    istio: {}
+    # -- Configuration for kgateway.
+    kgateway: {}
+    # -- Configuration for Cilium.
+    cilium:
+      # -- Create Cilium IP pool with the specified blocks. See https://docs.cilium.io/en/stable/network/lb-ipam/ for details.
+      ipPoolBlocks: []
+    # -- Configuration for Airlock Microgateway
+    airlock:
+      # -- Create LoadBalancer service using GatewayParameters (by default airlock-microgateway doesn't create the service).
+      # See https://docs.airlock.com/microgateway/latest/index/api/crds/gateway-parameters/v1alpha1/ for details.
+      # The GatewayParameters will be attached to gateway.infrastructure.parametersRef only if it's empty.
+      createLbService: false
+    # -- Configuration for Envoy.
+    envoy:
+      # -- Create GatewayClass named `envoy` (by default Envoy doesn't create gatewayclass). The `envoy` name can be set as value of `gateway.className` attribute.
+      createGatewayClass: false
+# -- Nginx ingress definitions chart
+nginx-ingress:
+  certManager:
+    # Enable deploying a certificate that uses dns01 challenge instead of passing an annotation nginx-ingress.ingress.additionalAnnotations for nginx http01 challenge.
+    certificate:
+      enabled: false
+      issuerKind: ClusterIssuer
+      # Issuer name which you will create manually. Can be letsencrypt-production.
+      issuerName: ""
+      issuerGroup: cert-manager.io
+  ingress:
+    # -- Additional labels that will be added across all ingress definitions in the format of {mylabel: "myapp"}
+    additionalLabels: { }
+    # -- Additional annotations that will be added across all ingress definitions in the format of {cert-manager.io/issuer: "letsencrypt-prod"}
+    # Enable client certificate authentication
+    # nginx.ingress.kubernetes.io/auth-tls-verify-client: "optional"
+    # Create the secret containing the trusted ca certificates
+    # nginx.ingress.kubernetes.io/auth-tls-secret: "gluu/tls-certificate"
+    # Specify the verification depth in the client certificates chain
+    # nginx.ingress.kubernetes.io/auth-tls-verify-depth: "1"
+    # Specify if certificates are passed to upstream server
+    # nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "true"
+    additionalAnnotations: {}
+    # Change ingressClassName to "public" if using microk8s
+    ingressClassName: nginx
+    path: /
+    hosts:
+    - demoexample.gluu.org
+    # -- Secrets holding HTTPS CA cert and key.
+    tls:
+    - secretName: tls-certificate
+      hosts:
+      - demoexample.gluu.org
+
+# -- Job to generate data and initial config for Gluu Server persistence layer.
+persistence:
+  image:
+    # -- Image pullPolicy to use for deploying.
+    pullPolicy: IfNotPresent
+    # -- Image  to use for deploying.
+    repository: gluufederation/openbanking-persistence-loader
+    # -- Image  tag to use for deploying.
+    tag: 6.2.0-1
+    # -- Image Pull Secrets
+    pullSecrets: [ ]
