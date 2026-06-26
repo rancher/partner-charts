@@ -77,6 +77,13 @@ jobs:
         echo "Pushing chart: $CHART_PACKAGE to oci://${{ env.REGISTRY }}/${{ github.repository }}"
         helm push "./charts/$CHART_PACKAGE" oci://${{ env.REGISTRY }}/${{ github.repository }}
 
+    - name: Get minor version
+      id: minor
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        MINOR=$(echo "${{ steps.version.outputs.version }}" | cut -d. -f1-2)
+        echo "minor=${MINOR}" >> $GITHUB_OUTPUT
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
@@ -84,19 +91,37 @@ jobs:
         files: |
           charts/*.tgz
         generate_release_notes: true
+        prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') }}
         body: |
-          DevGuard Helm Chart Release ${{ steps.version.outputs.version }}
-          
+          # DevGuard Helm Chart ${{ steps.version.outputs.version }}
+
+          Official Helm chart for deploying the DevGuard platform on Kubernetes.
+
           ## Installation
-          
+
           ```bash
           helm install my-devguard oci://ghcr.io/${{ github.repository }}/devguard --version ${{ steps.version.outputs.version }}
           ```
-          
+
           ## Pull Chart
-          
+
           ```bash
           helm pull oci://ghcr.io/${{ github.repository }}/devguard --version ${{ steps.version.outputs.version }}
           ```
+
+          ---
+
+          ## Versioning
+
+          All DevGuard components (`devguard`, `devguard-web`, Helm chart) share the same **minor version**. Any `v${{ steps.minor.outputs.minor }}.*` release of one component is compatible with any `v${{ steps.minor.outputs.minor }}.*` release of another. Patch versions are released independently per component — you do not need to upgrade all components simultaneously as long as the minor version matches.
+
+          📖 See [VERSIONING.md](https://github.com/l3montree-dev/devguard/blob/main/VERSIONING.md) for the full policy.
+          📋 See [Helm Chart CHANGELOG](https://github.com/l3montree-dev/devguard-helm-chart/blob/main/CHANGELOG.md) for chart-level changes.
+          📋 See [DevGuard CHANGELOG](https://github.com/l3montree-dev/devguard/blob/main/CHANGELOG.md) for API and web frontend changes.
+
+          ---
+
+          🐛 Report Issues: https://github.com/l3montree-dev/devguard/issues
+          💬 Community: https://github.com/l3montree-dev/devguard/discussions
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
