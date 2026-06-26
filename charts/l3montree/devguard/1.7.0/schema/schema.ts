@@ -55,6 +55,7 @@ export const GROUP_ORDER = [
   "Web (required for web access)",
   "Authentication",
   "Mail (required for account verification)",
+  "Storage",
   "CSAF (optional, for advisory generation)",
 ];
 
@@ -62,6 +63,7 @@ const G_API = "API (required for web and API access)";
 const G_WEB = "Web (required for web access)";
 const G_AUTH = "Authentication";
 const G_MAIL = "Mail (required for account verification)";
+const G_STORAGE = "Storage";
 const G_CSAF = "Common Security Advisory Framework (CSAF) support (optional)";
 
 // Reusable question fragments ------------------------------------------------
@@ -488,7 +490,21 @@ export const schema = {
             "Overrides the image tag whose default is the chart appVersion.",
         }),
       },
-      pvc: { size: "21Gi" },
+      pvc: {
+        size: "21Gi",
+        storageClassName: f("", {
+          comment:
+            'StorageClass for the PostgreSQL data volume.\nLeave empty to use the cluster\'s default StorageClass.\nSet explicitly (e.g. "local-path", "longhorn") on clusters that\nhave no default StorageClass.',
+          question: {
+            label: "PostgreSQL StorageClass",
+            description:
+              "StorageClass for the PostgreSQL data volume. Leave empty to use the cluster's default StorageClass; set explicitly if your cluster has no default.",
+            group: G_STORAGE,
+            type: "storageclass",
+            required: false,
+          },
+        }),
+      },
       podAnnotations: {},
       config: {
         maxConnections: f("100", {
