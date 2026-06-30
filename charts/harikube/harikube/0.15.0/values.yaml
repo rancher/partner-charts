@@ -1,0 +1,635 @@
+# Default values for harikube.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+enterprise:
+  key: ""
+  user: ""
+  password: ""
+
+mutatingAdmissionPolicy:
+  # Specifies whether the MutatingAdmissionPolicy to label non core resources with skip-controller-manager-metadata-caching should be created
+  create: false
+
+middleware:
+  # Specifies whether the middleware should be created
+  create: true
+  monitoring:
+    create: false
+  networkPolicy:
+    create: false
+  image:
+    pullPolicy: IfNotPresent
+    tag: release-v0.15.0
+  env:
+  - name: ENABLE_TELEMETRY_PUSH
+    value: "false"
+  - name: TOPOLOGY_CONFIG
+    value: secret://harikube/topology-config
+  - name: LICENSE_KEY_FILE
+    value: /etc/harikube/license
+  # - name: LIST_MAX_ITEMS
+  #   value: "10000"
+  # - name: GARBAGE_COLLECTION_EXIT_ON_ERROR
+  #   value: "false"
+  # - name: REVISION_MAPPER
+  #   value: "bbolt"
+  # - name: REVISION_MAPPER_BBOLT_SYNC_PERIOD
+  #   value: 0s
+  # - name: REVISION_MAPPER_BBOLT_BATCH_SIZE
+  #   value: "1"
+  # - name: REVISION_MAPPER_BBOLT_WRITE_QUEUE
+  #   value: "1"
+  # - name: REVISION_MAPPER
+  #   value: "sqlite"
+  # - name: REVISION_MAPPER_SQLITE_SYNCHRONOUS
+  #   value: OFF
+  # - name: REVISION_MAPPER_SQLITE_MAX_CONNECTIONS
+  #   value: "1"
+  endPoint:
+    url: sqlite:///db/main.db?_journal=WAL&cache=shared
+    caPEM: ""
+    certPEM: ""
+    keyPEM: ""
+    skipVerify: false
+  args:
+  # - --debug=true
+  - --log-format=json
+  # - --emulated-etcd-version=3.5.13
+  - --listen-address=0.0.0.0:2379
+  - --metrics-bind-address=:8080
+  - --server-cert-file=/etc/harikube-middleware-crt/tls.crt
+  - --server-key-file=/etc/harikube-middleware-crt/tls.key
+  # - --metrics-enable-profiling=true
+  # - --metrics-ignore-tls-config=true
+  - --slow-sql-threshold=2s
+  # - --slow-sql-warning-threshold=5s
+  - --datastore-max-idle-connections=50
+  - --datastore-max-open-connections=90
+  - --datastore-connection-max-lifetime=5m
+  # - --watch-progress-notify-interval=5s
+  # - --compact-interval=5m
+  # - --compact-interval-jitter=0
+  # - --compact-timeout=5s
+  # - --compact-min-retain=1000
+  # - --compact-batch-size=1000
+  # - --poll-batch-size=500
+  podAnnotations: {}
+  podLabels:
+    app: harikube-middleware
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  service:
+    apiPort:
+      type: ClusterIP
+      port: 2379
+    metrics:
+      type: ClusterIP
+      port: 8080
+  resources:
+    limits:
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+  livenessProbe:
+    httpGet:
+      scheme: HTTPS
+      port: 8080
+      path: /metrics
+    initialDelaySeconds: 15
+    timeoutSeconds: 5
+    periodSeconds: 20
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      scheme: HTTPS
+      port: 8080
+      path: /metrics
+    initialDelaySeconds: 5
+    timeoutSeconds: 3
+    periodSeconds: 10
+    failureThreshold: 3
+  volumes:
+  - name: harikube-middleware-crt
+    secret:
+      secretName: harikube-middleware-crt
+  - name: harikube-middleware-pvc
+    persistentVolumeClaim:
+      claimName: harikube-middleware-pvc
+  - name: tmp
+    emptyDir: {}
+  volumeMounts:
+  - name: harikube-middleware-crt
+    mountPath: /etc/harikube-middleware-crt
+    readOnly: true
+  - name: harikube-middleware-pvc
+    mountPath: /db
+  - name: tmp
+    mountPath: /tmp
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+              - arm64
+              - amd64
+              - s390x
+              - ppc64le
+            - key: kubernetes.io/os
+              operator: In
+              values:
+              - linux
+  pvc:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 5Gi
+    storageClassName: standard
+
+operator:
+  # Specifies whether the operator should be created
+  create: false
+  monitoring:
+    create: false
+  networkPolicy:
+    create: false
+  image:
+    pullPolicy: IfNotPresent
+    tag: release-v1.0.2
+  args:
+  - --metrics-bind-address=:8443
+  - --leader-elect
+  # - --enable-http2=true
+  - --health-probe-bind-address=:8081
+  - --metrics-secure
+  # - --metrics-cert-path=/etc/harikube-operator-metrics-crt
+  # - --metrics-cert-name=tls.crt
+  # - --metrics-cert-key=tls.key
+  - --webhook-cert-path=/etc/harikube-operator-crt
+  # - --webhook-cert-name=tls.crt
+  # - --webhook-cert-key=tls.key
+  podAnnotations: {}
+  podLabels:
+    app: harikube-operator
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  service:
+    webhook:
+      type: ClusterIP
+      port: 9443
+    metrics:
+      type: ClusterIP
+      port: 8443
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 128Mi
+  livenessProbe:
+    httpGet:
+      scheme: HTTP
+      port: 8081
+      path: /healthz
+    initialDelaySeconds: 15
+    timeoutSeconds: 5
+    periodSeconds: 20
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      scheme: HTTP
+      port: 8081
+      path: /readyz
+    initialDelaySeconds: 5
+    timeoutSeconds: 3
+    periodSeconds: 10
+    failureThreshold: 3
+  volumes:
+  - name: harikube-operator-crt
+    secret:
+      secretName: harikube-operator-crt
+  # - name: harikube-operator-metrics-crt
+  #   secret:
+  #     secretName: harikube-operator-metrics-crt
+  - emptyDir: {}
+    name: tmp
+  volumeMounts:
+  - mountPath: /etc/harikube-operator-crt
+    name: harikube-operator-crt
+    readOnly: true
+  # - mountPath: /etc/harikube-operator-metrics-crt
+  #   name: harikube-operator-metrics-crt
+  #   readOnly: true
+  - mountPath: /tmp
+    name: tmp
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+              - arm64
+              - amd64
+              - s390x
+              - ppc64le
+            - key: kubernetes.io/os
+              operator: In
+              values:
+              - linux
+  serviceAccount:
+    annotations: {}
+
+apiServer:
+  # Specifies whether the api-server should be created
+  create: false
+  monitoring:
+    create: false
+  networkPolicy:
+    create: false
+  replicas: 1
+  image:
+    pullPolicy: IfNotPresent
+    tag: v1.36.0
+  args:
+  - --service-cluster-ip-range=10.96.0.0/16
+  - --bind-address=0.0.0.0
+  - --allow-privileged=true
+  - --authorization-mode=Node,RBAC
+  - --client-ca-file=/data/pki/client-ca.crt
+  - --enable-bootstrap-token-auth=true
+  - --proxy-client-cert-file=/data/pki/front-proxy-client.crt
+  - --proxy-client-key-file=/data/pki/front-proxy-client.key
+  - --requestheader-allowed-names=front-proxy-client
+  - --requestheader-client-ca-file=/data/pki/front-proxy-ca.crt
+  - --requestheader-extra-headers-prefix=X-Remote-Extra-
+  - --requestheader-group-headers=X-Remote-Group
+  - --requestheader-username-headers=X-Remote-User
+  - --secure-port=8443
+  - --service-account-issuer=https://kubernetes.default.svc.cluster.local
+  - --service-account-key-file=/data/pki/sa.pub
+  - --service-account-signing-key-file=/data/pki/sa.key
+  - --tls-cert-file=/etc/harikube-api-server-crt/tls.crt
+  - --tls-private-key-file=/etc/harikube-api-server-crt/tls.key
+  - --profiling=false
+  - --advertise-address=127.0.0.1
+  - --endpoint-reconciler-type=none
+  - --feature-gates=WatchList=true,WatchListClient=true,VolumeAttributesClass=true,MutatingAdmissionPolicy=true
+  - --watch-cache=false
+  - --etcd-servers=https://harikube-middleware-svc:2379
+  - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+  - --etcd-certfile=/etc/kubernetes/pki/etcd/tls.crt
+  - --etcd-keyfile=/etc/kubernetes/pki/etcd/tls.key
+  - --runtime-config=admissionregistration.k8s.io/v1beta1=true
+  - --storage-media-type=application/json
+  - --max-requests-inflight=900
+  - --max-mutating-requests-inflight=300
+  podAnnotations: {}
+  podLabels:
+    app: harikube-api-server
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsGroup: 0
+    runAsUser: 0
+  service:
+    apiServer:
+      type: ClusterIP
+      port: 8443
+  resources:
+    limits:
+      memory: 4Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: data-harikube-0
+      readOnly: true
+  - name: etcd-certs
+    secret:
+      defaultMode: 420
+      items:
+      - key: ca.crt
+        path: ca.crt
+      - key: tls.crt
+        path: tls.crt
+      - key: tls.key
+        path: tls.key
+      secretName: harikube-middleware-crt
+  - name: harikube-api-server-crt
+    secret:
+      defaultMode: 420
+      items:
+      - key: ca.crt
+        path: ca.crt
+      - key: tls.crt
+        path: tls.crt
+      - key: tls.key
+        path: tls.key
+      secretName: harikube-api-server-crt
+  - emptyDir: {}
+    name: tmp
+  volumeMounts:
+  - mountPath: /data
+    name: data
+  - mountPath: /etc/kubernetes/pki/etcd
+    name: etcd-certs
+    readOnly: true
+  - mountPath: /etc/harikube-api-server-crt
+    name: harikube-api-server-crt
+    readOnly: true
+  - mountPath: /tmp
+    name: tmp
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+              - arm64
+              - amd64
+              - s390x
+              - ppc64le
+            - key: kubernetes.io/os
+              operator: In
+              values:
+              - linux
+
+controllerManager:
+  # Specifies whether the controller-manager should be created
+  create: false
+  monitoring:
+    create: false
+  networkPolicy:
+    create: false
+  replicas: 1
+  image:
+    pullPolicy: IfNotPresent
+    tag: v1.36.0
+  args:
+  - --service-cluster-ip-range=10.96.0.0/16
+  - --authentication-kubeconfig=/etc/kubernetes/kubeconfig/config
+  - --authorization-kubeconfig=/etc/kubernetes/kubeconfig/config
+  - --bind-address=0.0.0.0
+  - --client-ca-file=/data/pki/client-ca.crt
+  - --cluster-name=kubernetes
+  - --cluster-signing-cert-file=/data/pki/server-ca.crt
+  - --cluster-signing-key-file=/data/pki/server-ca.key
+  - --kubeconfig=/etc/kubernetes/kubeconfig/config
+  - --requestheader-client-ca-file=/data/pki/front-proxy-ca.crt
+  - --root-ca-file=/data/pki/server-ca.crt
+  - --service-account-private-key-file=/data/pki/sa.key
+  - --use-service-account-credentials=true
+  - --leader-elect=true
+  - --node-monitor-grace-period=1h
+  - --node-monitor-period=1h
+  - --pvclaimbinder-sync-period=60s
+  - --horizontal-pod-autoscaler-sync-period=60s
+  - --controllers=-nodeipam,-persistentvolume-binder,-attachdetach,-persistentvolume-expander,-cloud-node-lifecycle,-ttl
+  - --feature-gates=WatchList=true,WatchListClient=true,VolumeAttributesClass=true,MutatingAdmissionPolicy=true
+  - --kube-api-burst=90
+  - --kube-api-qps=60
+  - --secure-port=10257
+  - --leader-elect-resource-name=harikube-controller-manager
+  - --tls-cert-file=/etc/harikube-controller-manager-crt/tls.crt
+  - --tls-private-key-file=/etc/harikube-controller-manager-crt/tls.key
+  podAnnotations: {}
+  podLabels:
+    app: harikube-controller-manager
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsGroup: 0
+    runAsUser: 0
+  service:
+    https:
+      type: ClusterIP
+      port: 10257
+  resources:
+    limits:
+      memory: 4Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: data-harikube-0
+      readOnly: true
+  - name: kubeconfig
+    secret:
+      defaultMode: 420
+      items:
+      - key: config
+        path: config
+      secretName: vc-harikube
+  - name: harikube-controller-manager-crt
+    secret:
+      defaultMode: 420
+      items:
+      - key: ca.crt
+        path: ca.crt
+      - key: tls.crt
+        path: tls.crt
+      - key: tls.key
+        path: tls.key
+      secretName: harikube-controller-manager-crt
+  - emptyDir: {}
+    name: tmp
+  volumeMounts:
+  - mountPath: /data
+    name: data
+  - mountPath: /etc/kubernetes/kubeconfig
+    name: kubeconfig
+  - mountPath: /etc/harikube-controller-manager-crt
+    name: harikube-controller-manager-crt
+    readOnly: true
+  - mountPath: /tmp
+    name: tmp
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+              - arm64
+              - amd64
+              - s390x
+              - ppc64le
+            - key: kubernetes.io/os
+              operator: In
+              values:
+              - linux
+
+vcluster:
+  controlPlane:
+    distro:
+      k8s:
+        enabled: true
+        image:
+          registry: quay.io
+          repository: harikube/kubernetes
+          tag: v1.36.0
+        imagePullPolicy: IfNotPresent
+        apiServer:
+          enabled: true
+          extraArgs:
+          - --feature-gates=WatchList=true,WatchListClient=true,VolumeAttributesClass=true,MutatingAdmissionPolicy=true,CustomResourceFieldSelectors=true
+          - --watch-cache=false
+          - --etcd-servers=https://harikube-middleware-svc:2379
+          - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+          - --etcd-certfile=/etc/kubernetes/pki/etcd/tls.crt
+          - --etcd-keyfile=/etc/kubernetes/pki/etcd/tls.key
+          - --runtime-config=admissionregistration.k8s.io/v1=true
+          - --storage-media-type=application/json
+          - --max-requests-inflight=900
+          - --max-mutating-requests-inflight=300
+        controllerManager:
+          enabled: true
+          extraArgs:
+          - --controllers=*,-nodeipam,-persistentvolume-binder,-attachdetach,-persistentvolume-expander,-cloud-node-lifecycle,-ttl
+          - --feature-gates=WatchList=true,WatchListClient=true,VolumeAttributesClass=true,MutatingAdmissionPolicy=true,CustomResourceFieldSelectors=true
+          - --kube-api-burst=90
+          - --kube-api-qps=60
+        scheduler:
+          enabled: true
+    coredns:
+      enabled: true
+    backingStore:
+      etcd:
+        embedded:
+          enabled: false
+        deploy:
+          enabled: false
+      database:
+        embedded:
+          enabled: false
+    statefulSet:
+      highAvailability:
+        replicas: 1
+      persistence:
+        volumeClaim:
+          enabled: true
+          accessModes:
+          - ReadWriteOnce
+          retentionPolicy: Retain
+          size: 5G
+          storageClass: standard
+        addVolumes:
+        - name: etcd-certs
+          secret:
+            secretName: harikube-middleware-crt
+            items:
+            - key: ca.crt
+              path: ca.crt
+            - key: tls.crt
+              path: tls.crt
+            - key: tls.key
+              path: tls.key
+        addVolumeMounts:
+        - name: etcd-certs
+          mountPath: /etc/kubernetes/pki/etcd
+          readOnly: true
+    serviceMonitor:
+      enabled: false
+  exportKubeConfig:
+    context: harikube-context
+    server: https://harikube.harikube:443
+  sync:
+    toHost:
+      pods:
+        enabled: true
+      secrets:
+        enabled: true
+      configMaps:
+        enabled: true
+      services:
+        enabled: true
+      endpoints:
+        enabled: true
+      ingresses:
+        enabled: true
+      networkPolicies:
+        enabled: true
+      persistentVolumes:
+        enabled: true
+      persistentVolumeClaims:
+        enabled: true
+      storageClasses:
+        enabled: true
+      serviceAccounts:
+        enabled: true
+      podDisruptionBudgets:
+        enabled: true
+      priorityClasses:
+        enabled: true
+    fromHost:
+      nodes:
+        enabled: true
+      secrets:
+        enabled: true
+        mappings:
+          byName:
+            "harikube/topology-config": "harikube/topology-config"
+            "harikube/harikube-middleware-crt": "harikube/harikube-middleware-crt"
+  networking:
+    replicateServices:
+      fromHost:
+      - from: harikube/harikube
+        to: harikube/harikube
+      - from: harikube/harikube-middleware-svc
+        to: harikube/harikube-middleware-svc
