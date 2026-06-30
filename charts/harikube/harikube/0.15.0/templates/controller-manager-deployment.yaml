@@ -1,0 +1,93 @@
+{{- if .Values.controllerManager.create -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-controller-manager-deploy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.controllerManager.replicas }}
+  selector:
+    matchLabels:
+      {{- include "harikube.labels" . | nindent 6 }}
+      {{- with .Values.controllerManager.podLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.controllerManager.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "harikube.labels" . | nindent 8 }}
+        {{- with .Values.controllerManager.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.controllerManager.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controllerManager.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controllerManager.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}
+      containers:
+      - name: controller-manager
+        image: "quay.io/harikube/kube-controller-manager:{{ .Values.controllerManager.image.tag }}"
+        imagePullPolicy: {{ .Values.controllerManager.image.pullPolicy }}
+        command:
+        - kube-controller-manager
+        args:
+          {{- toYaml .Values.controllerManager.args | nindent 8 }}
+        - --leader-elect-resource-namespace={{ .Release.Namespace }}
+        ports:
+        - containerPort: {{ .Values.controllerManager.service.https.port }}
+          name: https
+        volumeMounts:
+        {{- with .Values.controllerManager.volumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        livenessProbe:
+          failureThreshold: 8
+          httpGet:
+            path: /healthz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 15 
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: https
+            scheme: HTTPS
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 15
+        startupProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /healthz
+            port: https
+            scheme: HTTPS
+        securityContext:
+          {{- toYaml .Values.controllerManager.securityContext | nindent 10 }}
+        resources:
+          {{- toYaml .Values.controllerManager.resources | nindent 10 }}
+      volumes:
+      {{- with .Values.controllerManager.volumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}
