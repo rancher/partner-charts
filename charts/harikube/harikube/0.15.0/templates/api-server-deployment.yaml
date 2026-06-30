@@ -1,0 +1,100 @@
+{{- if .Values.apiServer.create -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-api-server-deploy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.apiServer.replicas }}
+  selector:
+    matchLabels:
+      {{- include "harikube.labels" . | nindent 6 }}
+      {{- with .Values.apiServer.podLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      app: vcluster
+      release: harikube
+  template:
+    metadata:
+      {{- with .Values.apiServer.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "harikube.labels" . | nindent 8 }}
+        {{- with .Values.apiServer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app: vcluster
+        release: harikube
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.apiServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.apiServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.apiServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.apiServer.podSecurityContext | nindent 8 }}
+      containers:
+      - name: kube-apiserver
+        image: "quay.io/harikube/kube-apiserver:{{ .Values.apiServer.image.tag }}"
+        imagePullPolicy: {{ .Values.apiServer.image.pullPolicy }}
+        command:
+        - kube-apiserver
+        args:
+          {{- toYaml .Values.apiServer.args | nindent 8 }}
+        ports:
+        - containerPort: {{ .Values.apiServer.service.apiServer.port }}
+          name: api-server
+        volumeMounts:
+        {{- with .Values.apiServer.volumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        livenessProbe:
+          failureThreshold: 8
+          httpGet:
+            path: /livez
+            port: api-server
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 15
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: api-server
+            scheme: HTTPS
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 15
+        startupProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /readyz
+            port: api-server
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 15
+        securityContext:
+          {{- toYaml .Values.apiServer.securityContext | nindent 10 }}
+        resources:
+          {{- toYaml .Values.apiServer.resources | nindent 10 }}
+      volumes:
+      {{- with .Values.apiServer.volumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}

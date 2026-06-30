@@ -1,0 +1,53 @@
+{{- if .Values.middleware.create -}}
+{{- if .Values.operator.networkPolicy.create -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-operator-netpol
+  namespace: {{ .Release.Namespace }}
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          webhook: enabled
+    ports:
+    - port: {{ .Values.operator.service.webhook.port }}
+      protocol: TCP
+  podSelector:
+    matchLabels:
+    {{- with .Values.operator.podLabels }}
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
+  policyTypes:
+  - Ingress
+{{ if .Values.operator.monitoring.create }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-operator-metrics-netpol
+  namespace: {{ .Release.Namespace }}
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          metrics: enabled
+    ports:
+    - port: {{ .Values.operator.service.metrics.port }}
+      protocol: TCP
+  podSelector:
+    matchLabels:
+    {{- with .Values.operator.podLabels }}
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
+  policyTypes:
+  - Ingress
+{{ end }}
+{{- end }}
+{{- end }}
