@@ -3,13 +3,13 @@
 {{- if .Values.web.ingress.tls -}}
 {{- $protocol = "https" -}}
 {{- end -}}
-{{- $host := index .Values.web.ingress.hosts 0 -}}
+{{- $host := .Values.web.ingress.host -}}
 
 {{- $apiProtocol := "http" -}}
 {{- if .Values.api.ingress.tls -}}
 {{- $apiProtocol = "https" -}}
 {{- end -}}
-{{- $apiHost := index .Values.api.ingress.hosts 0 -}}
+{{- $apiHost := .Values.api.ingress.host -}}
 {{- $apiImage := include "devguard.image" (dict "image" .Values.api.image "defaultTag" .Chart.AppVersion) -}}
 {{- $apiImagePullPolicy := include "devguard.imagePullPolicy" (dict "image" .Values.api.image) -}}
 
@@ -76,7 +76,7 @@ spec:
                 key: postgres-password
                 name: db-secret
           - name: FRONTEND_URL
-            value: {{ printf "%s://%s" $protocol $host.host }}
+            value: {{ printf "%s://%s" $protocol $host }}
           - name: POSTGRES_USER
             value: devguard
           - name: POSTGRES_HOST
@@ -160,7 +160,7 @@ spec:
           - name: DEVGUARD_CI_COMPONENT_BASE
             value: {{ .Values.api.ciComponentBase | quote }}
           - name: FRONTEND_URL
-            value: {{ printf "%s://%s" $protocol $host.host }}
+            value: {{ printf "%s://%s" $protocol $host }}
           - name: PROFILE
             value: {{ .Values.api.debug.profile | quote }}
           - name: PPROF_PASSWORD
@@ -170,7 +170,7 @@ spec:
                 key: password
           - name: INSTANCE_DOMAIN
             {{- if .Values.api.ingress.enabled }}
-            value: {{ printf "%s://%s" $apiProtocol $apiHost.host }}
+            value: {{ printf "%s://%s" $apiProtocol $apiHost }}
             {{- else }}
             value: http://devguard-api-service.{{ .Release.Namespace }}.svc.cluster.local:8080
             {{- end }}

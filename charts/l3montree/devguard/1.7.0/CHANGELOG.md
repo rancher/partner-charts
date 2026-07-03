@@ -4,6 +4,14 @@ All notable changes to the DevGuard Helm chart are documented here.
 
 For API and web frontend changes see the [main DevGuard CHANGELOG](https://github.com/l3montree-dev/devguard/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** `api.ingress.hosts` / `web.ingress.hosts` (list) replaced by the single-host scalars `api.ingress.host` + `api.ingress.path` and `web.ingress.host` + `web.ingress.path` (pathType is always `Prefix`). The Rancher install form cannot write list entries like `hosts[0].host`, so the chart now only supports one host per ingress. Templates fail with a migration hint if the old `hosts` key is still set. If you need multiple hosts, please open a ticket describing your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues
+
+---
+
 ## [v1.7.0] — 2026-06-19
 
 ### Added

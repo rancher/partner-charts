@@ -35,17 +35,18 @@ spec:
     {{- end }}
   {{- end }}
   rules:
-    {{- range .Values.api.ingress.hosts }}
-    - host: {{ .host | quote }}
+    {{- if .Values.api.ingress.hosts }}
+    {{- fail "api.ingress.hosts has been replaced by the single-host api.ingress.host and api.ingress.path values. If you need multiple hosts, please open a ticket describing your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues" }}
+    {{- end }}
+    - host: {{ .Values.api.ingress.host | quote }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
-            pathType: {{ .pathType }}
+          - path: {{ .Values.api.ingress.path | default "/" }}
+            {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+            pathType: Prefix
             {{- end }}
             backend:
-              {{- if semverCompare ">=1.19-0" $.Capabilities.KubeVersion.GitVersion }}
+              {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
               service:
                 name: devguard-api-service
                 port:
@@ -54,6 +55,4 @@ spec:
               serviceName: devguard-api-service
               servicePort: 8080
               {{- end }}
-          {{- end }}
-    {{- end }}
 {{- end }}

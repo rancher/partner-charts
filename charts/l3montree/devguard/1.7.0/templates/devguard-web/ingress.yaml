@@ -36,17 +36,18 @@ spec:
     {{- end }}
   {{- end }}
   rules:
-    {{- range .Values.web.ingress.hosts }}
-    - host: {{ .host | quote }}
+    {{- if .Values.web.ingress.hosts }}
+    {{- fail "web.ingress.hosts has been replaced by the single-host web.ingress.host and web.ingress.path values. If you need multiple hosts, please open a ticket describing your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues" }}
+    {{- end }}
+    - host: {{ .Values.web.ingress.host | quote }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
-            pathType: {{ .pathType }}
+          - path: {{ .Values.web.ingress.path | default "/" }}
+            {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+            pathType: Prefix
             {{- end }}
             backend:
-              {{- if semverCompare ">=1.19-0" $.Capabilities.KubeVersion.GitVersion }}
+              {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
               service:
                 name: devguard-web-service
                 port:
@@ -55,6 +56,4 @@ spec:
               serviceName: devguard-web-service
               servicePort: 3000
               {{- end }}
-          {{- end }}
-    {{- end }}
 {{- end }}
