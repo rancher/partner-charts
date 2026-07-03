@@ -346,6 +346,21 @@ export const schema = {
               "The hostname for the API ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. api.devguard.example.com).",
           },
         }),
+        tls: f(false, {
+          comment:
+            "Set to true to serve the API ingress over TLS for the host above.\nThe certificate is read from the secret named by tlsSecretName.",
+          question: {
+            label: "API Ingress TLS Enabled",
+            group: G_API,
+            required: false,
+            subquestionOf: "api.ingress.enabled",
+            description: "Enable TLS for the API ingress.",
+          },
+        }),
+        tlsSecretName: f("", {
+          comment:
+            'Name of the kubernetes.io/tls secret holding the certificate for the host\nabove. Leave empty to default to "devguard-api-tls" (e.g. as the target\nsecret of a cert-manager Certificate).',
+        }),
       }, { blankBefore: true }),
       podAnnotations: f({}, { blankBefore: true }),
       podLabels: {},
@@ -420,6 +435,21 @@ export const schema = {
             description:
               "The hostname for the web ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. web.devguard.example.com).",
           },
+        }),
+        tls: f(false, {
+          comment:
+            "Set to true to serve the web ingress over TLS for the host above.\nThe certificate is read from the secret named by tlsSecretName.",
+          question: {
+            label: "Web Ingress TLS Enabled",
+            group: G_WEB,
+            required: false,
+            subquestionOf: "web.ingress.enabled",
+            description: "Enable TLS for the web ingress.",
+          },
+        }),
+        tlsSecretName: f("", {
+          comment:
+            'Name of the kubernetes.io/tls secret holding the certificate for the host\nabove. Leave empty to default to "devguard-web-tls" (e.g. as the target\nsecret of a cert-manager Certificate).',
         }),
       }, { blankBefore: true }),
       podAnnotations: f({}, { blankBefore: true }),

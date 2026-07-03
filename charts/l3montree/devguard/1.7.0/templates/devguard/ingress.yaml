@@ -24,15 +24,14 @@ spec:
   {{- if and .Values.api.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
   ingressClassName: {{ .Values.api.ingress.className }}
   {{- end }}
+  {{- if and .Values.api.ingress.tls (kindIs "slice" .Values.api.ingress.tls) }}
+  {{- fail "api.ingress.tls is now a boolean: the certificate always covers the single api.ingress.host. Set api.ingress.tls=true and optionally api.ingress.tlsSecretName (defaults to devguard-api-tls). If you need multiple TLS entries, please open a ticket describing your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues" }}
+  {{- end }}
   {{- if .Values.api.ingress.tls }}
   tls:
-    {{- range .Values.api.ingress.tls }}
     - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
+        - {{ .Values.api.ingress.host | quote }}
+      secretName: {{ .Values.api.ingress.tlsSecretName | default "devguard-api-tls" }}
   {{- end }}
   rules:
     {{- if .Values.api.ingress.hosts }}
