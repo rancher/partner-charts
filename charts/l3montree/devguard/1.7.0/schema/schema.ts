@@ -333,38 +333,31 @@ export const schema = {
         }),
         className: "",
         annotations: {},
-        hosts: [
-          {
-            host: f("api.devguard.example.com", {
-              question: {
-                label: "API Ingress Host",
-                group: G_API,
-                type: "hostname",
-                required: true,
-                subquestionOf: "api.ingress.enabled",
-                description:
-                  "The hostname for the API ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. api.devguard.example.com).",
-              },
-            }),
-            paths: [
-              {
-                path: f("/", {
-                  question: {
-                    label: "API Ingress Path",
-                    group: G_API,
-                    type: "string",
-                    required: true,
-                    default: "/",
-                    subquestionOf: "api.ingress.enabled",
-                    description:
-                      "The path for the API ingress. This should be a valid URL path (e.g. / or /devguard/).",
-                  },
-                }),
-                pathType: "Prefix",
-              },
-            ],
+        host: f("api.devguard.example.com", {
+          comment:
+            "The chart supports a single ingress host (path below, pathType Prefix)\nbecause the Rancher install form cannot address list entries like hosts[0].\nIf you need multiple hosts, please open a ticket describing your use case:\nhttps://github.com/l3montree-dev/devguard-helm-chart/issues",
+          question: {
+            label: "API Ingress Host",
+            group: G_API,
+            type: "hostname",
+            required: true,
+            subquestionOf: "api.ingress.enabled",
+            description:
+              "The hostname for the API ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. api.devguard.example.com).",
           },
-        ],
+        }),
+        path: f("/", {
+          question: {
+            label: "API Ingress Path",
+            group: G_API,
+            type: "string",
+            required: true,
+            default: "/",
+            subquestionOf: "api.ingress.enabled",
+            description:
+              "The path for the API ingress. This should be a valid URL path (e.g. / or /devguard/).",
+          },
+        }),
       }, { blankBefore: true }),
       podAnnotations: f({}, { blankBefore: true }),
       podLabels: {},
@@ -427,38 +420,31 @@ export const schema = {
         }),
         className: "",
         annotations: {},
-        hosts: [
-          {
-            host: f("devguard.example.com", {
-              question: {
-                label: "Web Ingress Host",
-                group: G_WEB,
-                type: "hostname",
-                required: true,
-                subquestionOf: "web.ingress.enabled",
-                description:
-                  "The hostname for the web ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. web.devguard.example.com).",
-              },
-            }),
-            paths: [
-              {
-                path: f("/", {
-                  question: {
-                    label: "Web Ingress Path",
-                    group: G_WEB,
-                    type: "string",
-                    required: true,
-                    default: "/",
-                    subquestionOf: "web.ingress.enabled",
-                    description:
-                      "The path for the web ingress. This should be a valid URL path (e.g. / or /devguard/).",
-                  },
-                }),
-                pathType: "Prefix",
-              },
-            ],
+        host: f("devguard.example.com", {
+          comment:
+            "The chart supports a single ingress host (path below, pathType Prefix)\nbecause the Rancher install form cannot address list entries like hosts[0].\nIf you need multiple hosts, please open a ticket describing your use case:\nhttps://github.com/l3montree-dev/devguard-helm-chart/issues",
+          question: {
+            label: "Web Ingress Host",
+            group: G_WEB,
+            type: "hostname",
+            required: true,
+            subquestionOf: "web.ingress.enabled",
+            description:
+              "The hostname for the web ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. web.devguard.example.com).",
           },
-        ],
+        }),
+        path: f("/", {
+          question: {
+            label: "Web Ingress Path",
+            group: G_WEB,
+            type: "string",
+            required: true,
+            default: "/",
+            subquestionOf: "web.ingress.enabled",
+            description:
+              "The path for the web ingress. This should be a valid URL path (e.g. / or /devguard/).",
+          },
+        }),
       }, { blankBefore: true }),
       podAnnotations: f({}, { blankBefore: true }),
       podLabels: {},
