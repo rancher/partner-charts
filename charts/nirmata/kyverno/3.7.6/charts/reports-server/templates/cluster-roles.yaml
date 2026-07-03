@@ -1,0 +1,124 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "reports-server.fullname" . }}
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: 'true'
+    {{- include "reports-server.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+    - reports.kyverno.io
+  resources:
+    - ephemeralreports
+    - clusterephemeralreports
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+    - deletecollection
+- apiGroups:
+    - "coordination.k8s.io"
+  resources:
+    - "leases"
+  verbs:
+    - "create"
+    - "get"
+    - "update"
+- apiGroups:
+    - ""
+  resources:
+    - namespaces
+  verbs:
+    - get
+- apiGroups:
+    - apiregistration.k8s.io
+  resources:
+    - apiservices
+  verbs:
+    - create
+- apiGroups:
+    - apiregistration.k8s.io
+  resources:
+    - apiservices
+  verbs:
+    - get
+    - delete
+    - update
+    - patch
+  resourceNames:
+    - v1.reports.kyverno.io
+    - v1alpha2.wgpolicyk8s.io
+    - v1alpha1.openreports.io
+- apiGroups:
+    - wgpolicyk8s.io
+  resources:
+    - policyreports
+    - policyreports/status
+    - clusterpolicyreports
+    - clusterpolicyreports/status
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+    - deletecollection
+- apiGroups:
+    - openreports.io
+  resources:
+    - reports
+    - reports/status
+    - clusterreports
+    - clusterreports/status
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+    - deletecollection
+- apiGroups:
+    - ''
+    - events.k8s.io
+  resources:
+    - events
+  verbs:
+    - create
+    - patch
+- apiGroups:
+    - authorization.k8s.io
+  resources:
+    - subjectaccessreviews
+  verbs:
+    - create
+- apiGroups:
+    - rbac.authorization.k8s.io
+  resources:
+    - clusterroles
+  verbs:
+    - get
+  resourceNames:
+    - {{ include "reports-server.fullname" . }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "reports-server.fullname" . }}
+  labels:
+    {{- include "reports-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "reports-server.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "reports-server.serviceAccountName" $ }}
+  namespace: {{ $.Release.Namespace }}

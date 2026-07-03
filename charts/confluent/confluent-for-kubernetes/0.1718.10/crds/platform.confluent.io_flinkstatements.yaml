@@ -1,0 +1,219 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+    platform.confluent.io/app-version: 3.3.0
+    platform.confluent.io/chart-version: v0.1718.10
+  name: flinkstatements.platform.confluent.io
+spec:
+  group: platform.confluent.io
+  names:
+    categories:
+      - all
+      - confluent-platform
+      - confluent
+    kind: FlinkStatement
+    listKind: FlinkStatementList
+    plural: flinkstatements
+    shortNames:
+      - flinkstatement
+    singular: flinkstatement
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .status.cfkInternalState
+          name: CFKInternalState
+          type: string
+        - jsonPath: .status.cmfSync.status
+          name: CMFSync.Status
+          type: string
+        - jsonPath: .status.cmfSync.errorMessage
+          name: CMFSync.errorMessage
+          type: string
+        - jsonPath: .status.cmfSync.lastSyncTime
+          name: CMFSync.LastSyncTime
+          type: string
+        - jsonPath: .status.phase
+          name: Phase
+          type: string
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                cmfRestClassRef:
+                  properties:
+                    name:
+                      minLength: 1
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                    - name
+                  type: object
+                computePoolName:
+                  type: string
+                flinkConfiguration:
+                  additionalProperties:
+                    type: string
+                  type: object
+                flinkEnvironment:
+                  minLength: 1
+                  type: string
+                  x-kubernetes-validations:
+                    - message: flinkEnvironment is immutable
+                      rule: self == oldSelf
+                parallelism:
+                  format: int32
+                  type: integer
+                properties:
+                  additionalProperties:
+                    type: string
+                  type: object
+                startFromSavepoint:
+                  properties:
+                    allowNonRestoredState:
+                      type: boolean
+                    initialSavepointPath:
+                      type: string
+                    savepointName:
+                      type: string
+                    savepointRedeployNonce:
+                      format: int64
+                      type: integer
+                    uid:
+                      type: string
+                  type: object
+                statement:
+                  type: string
+                stopped:
+                  type: boolean
+              required:
+                - computePoolName
+                - flinkEnvironment
+                - statement
+              type: object
+              x-kubernetes-validations:
+                - message: statement is immutable once running
+                  rule: self.statement == oldSelf.statement || oldSelf.statement == ''
+            status:
+              properties:
+                cfkInternalState:
+                  type: string
+                cmfSync:
+                  properties:
+                    errorMessage:
+                      type: string
+                    lastSyncTime:
+                      type: string
+                    status:
+                      default: Unknown
+                      enum:
+                        - Unknown
+                        - Created
+                        - Failed
+                        - Deleted
+                      type: string
+                  required:
+                    - errorMessage
+                    - lastSyncTime
+                  type: object
+                conditions:
+                  items:
+                    properties:
+                      lastProbeTime:
+                        format: date-time
+                        type: string
+                      lastTransitionTime:
+                        format: date-time
+                        type: string
+                      message:
+                        type: string
+                      reason:
+                        type: string
+                      status:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                  type: array
+                detail:
+                  type: string
+                observedGeneration:
+                  format: int64
+                  type: integer
+                phase:
+                  type: string
+                resourceSummary:
+                  properties:
+                    jobManager:
+                      properties:
+                        count:
+                          type: integer
+                        cpu:
+                          type: number
+                        memory:
+                          format: int64
+                          type: integer
+                      type: object
+                    taskManager:
+                      properties:
+                        count:
+                          type: integer
+                        cpu:
+                          type: number
+                        memory:
+                          format: int64
+                          type: integer
+                      type: object
+                  type: object
+                traits:
+                  properties:
+                    isAppendOnly:
+                      type: boolean
+                    isBounded:
+                      type: boolean
+                    schema:
+                      properties:
+                        columns:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              type:
+                                x-kubernetes-preserve-unknown-fields: true
+                            required:
+                              - name
+                              - type
+                            type: object
+                          type: array
+                      required:
+                        - columns
+                      type: object
+                    sqlKind:
+                      type: string
+                    upsertColumns:
+                      items:
+                        format: int32
+                        type: integer
+                      type: array
+                  type: object
+                warning:
+                  type: string
+              required:
+                - phase
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
