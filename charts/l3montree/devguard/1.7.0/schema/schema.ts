@@ -335,7 +335,7 @@ export const schema = {
         annotations: {},
         host: f("api.devguard.example.com", {
           comment:
-            "The chart supports a single ingress host (path below, pathType Prefix)\nbecause the Rancher install form cannot address list entries like hosts[0].\nIf you need multiple hosts, please open a ticket describing your use case:\nhttps://github.com/l3montree-dev/devguard-helm-chart/issues",
+            "The chart supports a single ingress host, served at path / (pathType Prefix),\nbecause the Rancher install form cannot address list entries like hosts[0]\nand the services do not support path prefixes.\nIf you need multiple hosts or a path prefix, please open a ticket describing\nyour use case: https://github.com/l3montree-dev/devguard-helm-chart/issues",
           question: {
             label: "API Ingress Host",
             group: G_API,
@@ -344,18 +344,6 @@ export const schema = {
             subquestionOf: "api.ingress.enabled",
             description:
               "The hostname for the API ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. api.devguard.example.com).",
-          },
-        }),
-        path: f("/", {
-          question: {
-            label: "API Ingress Path",
-            group: G_API,
-            type: "string",
-            required: true,
-            default: "/",
-            subquestionOf: "api.ingress.enabled",
-            description:
-              "The path for the API ingress. This should be a valid URL path (e.g. / or /devguard/).",
           },
         }),
       }, { blankBefore: true }),
@@ -422,7 +410,7 @@ export const schema = {
         annotations: {},
         host: f("devguard.example.com", {
           comment:
-            "The chart supports a single ingress host (path below, pathType Prefix)\nbecause the Rancher install form cannot address list entries like hosts[0].\nIf you need multiple hosts, please open a ticket describing your use case:\nhttps://github.com/l3montree-dev/devguard-helm-chart/issues",
+            "The chart supports a single ingress host, served at path / (pathType Prefix),\nbecause the Rancher install form cannot address list entries like hosts[0]\nand the services do not support path prefixes.\nIf you need multiple hosts or a path prefix, please open a ticket describing\nyour use case: https://github.com/l3montree-dev/devguard-helm-chart/issues",
           question: {
             label: "Web Ingress Host",
             group: G_WEB,
@@ -431,18 +419,6 @@ export const schema = {
             subquestionOf: "web.ingress.enabled",
             description:
               "The hostname for the web ingress. This should be a fully qualified domain name (FQDN) that resolves to the IP address of the ingress controller (e.g. web.devguard.example.com).",
-          },
-        }),
-        path: f("/", {
-          question: {
-            label: "Web Ingress Path",
-            group: G_WEB,
-            type: "string",
-            required: true,
-            default: "/",
-            subquestionOf: "web.ingress.enabled",
-            description:
-              "The path for the web ingress. This should be a valid URL path (e.g. / or /devguard/).",
           },
         }),
       }, { blankBefore: true }),
