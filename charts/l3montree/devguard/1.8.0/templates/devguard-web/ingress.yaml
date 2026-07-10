@@ -1,0 +1,58 @@
+{{- if .Values.web.ingress.enabled -}}
+
+{{- if and .Values.web.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
+  {{- if not (hasKey .Values.web.ingress.annotations "kubernetes.io/ingress.class") }}
+  {{- $_ := set .Values.web.ingress.annotations "kubernetes.io/ingress.class" .Values.web.ingress.className}}
+  {{- end }}
+{{- end }}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1
+{{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1beta1
+{{- else -}}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: devguard-web-ingress
+  labels:
+    {{- include "devguard.labels" . | nindent 4 }}
+  {{- with .Values.web.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if and .Values.web.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
+  ingressClassName: {{ .Values.web.ingress.className }}
+  {{- end }}
+  {{- if and .Values.web.ingress.tls (kindIs "slice" .Values.web.ingress.tls) }}
+  {{- fail "web.ingress.tls is now a boolean: the certificate always covers the single web.ingress.host. Set web.ingress.tls=true and optionally web.ingress.tlsSecretName (defaults to devguard-web-tls). If you need multiple TLS entries, please open a ticket describing your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues" }}
+  {{- end }}
+  {{- if .Values.web.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.web.ingress.host | quote }}
+      secretName: {{ .Values.web.ingress.tlsSecretName | default "devguard-web-tls" }}
+  {{- end }}
+  rules:
+    {{- if .Values.web.ingress.hosts }}
+    {{- fail "web.ingress.hosts has been replaced by the single-host web.ingress.host value (served at path /). If you need multiple hosts or a path prefix, please open a ticket describing your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues" }}
+    {{- end }}
+    - host: {{ .Values.web.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+            pathType: Prefix
+            {{- end }}
+            backend:
+              {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+              service:
+                name: devguard-web-service
+                port:
+                  number: 3000
+              {{- else }}
+              serviceName: devguard-web-service
+              servicePort: 3000
+              {{- end }}
+{{- end }}
