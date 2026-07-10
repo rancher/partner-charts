@@ -1,0 +1,127 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart version to release'
+        required: true
+        default: 'latest'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating releases
+      packages: write  # Required for pushing to GHCR
+      id-token: write  # Required for enhanced security
+      
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: '3.19.0'
+
+    - name: Log in to GitHub Container Registry
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+    - name: Extract version from tag or input
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          VERSION="0.0.0-main"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+          # Remove 'v' prefix if present
+          VERSION=${VERSION#v}
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Releasing version: $VERSION"
+
+    - name: Update Chart version
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        sed -i "s/^version:.*/version: $VERSION/" Chart.yaml
+        sed -i "s/^appVersion:.*/appVersion: \"v$VERSION\"/" Chart.yaml
+
+    - name: Package Helm Chart
+      run: |
+        helm dependency update
+        helm package . --destination ./charts/
+
+    - name: Push Helm Chart to GitHub Container Registry
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        CHART_PACKAGE="devguard-$VERSION.tgz"
+        echo "Pushing chart: $CHART_PACKAGE to oci://${{ env.REGISTRY }}/${{ github.repository }}"
+        helm push "./charts/$CHART_PACKAGE" oci://${{ env.REGISTRY }}/${{ github.repository }}
+
+    - name: Get minor version
+      id: minor
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        MINOR=$(echo "${{ steps.version.outputs.version }}" | cut -d. -f1-2)
+        echo "minor=${MINOR}" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          charts/*.tgz
+        generate_release_notes: true
+        prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') }}
+        body: |
+          # DevGuard Helm Chart ${{ steps.version.outputs.version }}
+
+          Official Helm chart for deploying the DevGuard platform on Kubernetes.
+
+          ## Installation
+
+          ```bash
+          helm install my-devguard oci://ghcr.io/${{ github.repository }}/devguard --version ${{ steps.version.outputs.version }}
+          ```
+
+          ## Pull Chart
+
+          ```bash
+          helm pull oci://ghcr.io/${{ github.repository }}/devguard --version ${{ steps.version.outputs.version }}
+          ```
+
+          ---
+
+          ## Versioning
+
+          All DevGuard components (`devguard`, `devguard-web`, Helm chart) share the same **minor version**. Any `v${{ steps.minor.outputs.minor }}.*` release of one component is compatible with any `v${{ steps.minor.outputs.minor }}.*` release of another. Patch versions are released independently per component — you do not need to upgrade all components simultaneously as long as the minor version matches.
+
+          📖 See [VERSIONING.md](https://github.com/l3montree-dev/devguard/blob/main/VERSIONING.md) for the full policy.
+          📋 See [Helm Chart CHANGELOG](https://github.com/l3montree-dev/devguard-helm-chart/blob/main/CHANGELOG.md) for chart-level changes.
+          📋 See [DevGuard CHANGELOG](https://github.com/l3montree-dev/devguard/blob/main/CHANGELOG.md) for API and web frontend changes.
+
+          ---
+
+          🐛 Report Issues: https://github.com/l3montree-dev/devguard/issues
+          💬 Community: https://github.com/l3montree-dev/devguard/discussions
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
