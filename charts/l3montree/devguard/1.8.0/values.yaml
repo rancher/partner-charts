@@ -9,8 +9,8 @@
 kratos:
   image:
     repository: oryd/kratos
-    tag: v25.4.0-distroless
-    digest: sha256:368667ee3713797f86ddec669c36751f6484c7d675c78fd27c795b2e79271c31
+    tag: v26.2.0-distroless
+    digest: sha256:481bfc3022e5427ffb94570eef84480b99c9f8158388378c57df8c1a4a104b3d
     pullPolicy: IfNotPresent
   webauthn:
     enabled: false
@@ -48,6 +48,25 @@ kratos:
     enabled: true
     # Default: every 10 minutes.
     schedule: "*/10 * * * *"
+
+  # If set to "true", the user will be responsible to provide a secret for kratos.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "kratos"
+  # - a data entry named "secretsDefault" with the corresponding secret used for session signing as value
+  # - a data entry named "secretsCookie" with the corresponding secret used for cookie encryption as value
+  # - a data entry named "secretsCipher" with the corresponding secret used for cipher as value
+  useExistingSecret: false
+
+  # Allows to set additional environment variables on the kratos deployment
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
 mail:
   # needs to contain key: "uri". Format should be like: smtps://<user>@<your-domain.com>:<secret>@<mail-server.de>:465/?skip_ssl_verify=false
   existingSMTPConnectionUriSecret: ""
@@ -110,7 +129,7 @@ api:
     aggregatorName: "" # e.g. "Example GmbH"
     aggregatorContactDetails: "" # e.g. "csaf@example.com"
   image:
-    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard:v1.7.0)
+    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard:v1.8.0)
     # or an object with repository/tag/digest/pullPolicy.
     repository: ghcr.io/l3montree-dev/devguard
     pullPolicy: IfNotPresent
@@ -183,9 +202,17 @@ api:
     # and the services do not support path prefixes.
     # If you need multiple hosts or a path prefix, please open a ticket describing
     # your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues
+
+    # DEPRECATED: the old `hosts` list form (`hosts: [{host, paths}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the single `host` scalar above.
     host: api.devguard.example.com
     # Set to true to serve the API ingress over TLS for the host above.
     # The certificate is read from the secret named by tlsSecretName.
+
+    # DEPRECATED: the old `tls` list form (`tls: [{hosts, secretName}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the boolean above plus tlsSecretName.
     tls: false
     # Name of the kubernetes.io/tls secret holding the certificate for the host
     # above. Leave empty to default to "devguard-api-tls" (e.g. as the target
@@ -203,6 +230,30 @@ api:
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80 # targetMemoryUtilizationPercentage: 80
 
+  # If set to "true", the user will be responsible to provide a secret for the Encryption Key.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "devguard-encryption-key"
+  # - a data entry named "key" with the corresponding encryption key as value
+  useExistingEncryptionKeySecret: false
+
+  # If set to "true", the user will be responsible to provide a secret for the pprof password
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "devguard-pprof-password"
+  # - a data entry named "password" with the corresponding pprof password as value
+  useExistingPprofPasswordSecret: false
+
+  # Allows to set additional environment variables on the api deployment
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
+
 ################################################################################################
 ## DevGuard Web Frontend Settings
 ######
@@ -218,7 +269,7 @@ web:
       cpu: 100m
       memory: 128Mi
   image:
-    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard-web:v1.7.0)
+    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard-web:v1.8.0)
     # or an object with repository/tag/digest/pullPolicy.
     repository: ghcr.io/l3montree-dev/devguard-web
     pullPolicy: IfNotPresent
@@ -240,6 +291,16 @@ web:
     # https://<your-error-tracking-dsn>
     dsn: ""
 
+  # Allows to set additional environment variables on the web deployment
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
+
   ingress:
     enabled: true
     className: ""
@@ -249,9 +310,17 @@ web:
     # and the services do not support path prefixes.
     # If you need multiple hosts or a path prefix, please open a ticket describing
     # your use case: https://github.com/l3montree-dev/devguard-helm-chart/issues
+
+    # DEPRECATED: the old `hosts` list form (`hosts: [{host, paths}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the single `host` scalar above.
     host: devguard.example.com
     # Set to true to serve the web ingress over TLS for the host above.
     # The certificate is read from the secret named by tlsSecretName.
+
+    # DEPRECATED: the old `tls` list form (`tls: [{hosts, secretName}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the boolean above plus tlsSecretName.
     tls: false
     # Name of the kubernetes.io/tls secret holding the certificate for the host
     # above. Leave empty to default to "devguard-web-tls" (e.g. as the target
@@ -274,7 +343,7 @@ web:
 ######
 postgresql:
   image:
-    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard/postgresql:v1.7.0)
+    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard/postgresql:v1.8.0)
     # or an object with repository/tag/digest/pullPolicy.
     # Please note: we are using a custom PostgreSQL image that has the required
     # extensions pre-installed.
@@ -366,6 +435,33 @@ postgresql:
     requests:
       cpu: 1000m
       memory: 2056Mi
+
+  # If set to "true", the user will be responsible to provide a secret for the database.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "db-secret"
+  # - a data entry named "postgres-password" with the corresponding password for the "devguard" database user as value
+  # - a data entry named "password" with the corresponding password for the "postgres" admin user as value
+  # - a data entry named "replication-password" with the corresponding password for the replication user as value
+  # - a data entry named "postgres-exporter-dsn" with the value "postgresql://devguard:[POSTGRES-PASSWORD]@localhost:5432/devguard?sslmode=disable", where "[POSTGRES-PASSWORD]" matches the value from the "postgres-password" key
+  useExistingSecret: false
+
+  # If set to "true", the user will be responsible to provide a secret for the kratos database.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "kratos-db-secret"
+  # - a data entry named "password" with the corresponding password for the "kratos" database user as value
+  useExistingKratosDatabaseSecret: false
+
+  # Allows to set additional environment variables on the postgresql statefulset
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
 
 ################################################################################################
 ## Observability Settings
