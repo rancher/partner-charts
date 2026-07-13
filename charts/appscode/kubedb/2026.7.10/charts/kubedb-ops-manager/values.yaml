@@ -1,0 +1,168 @@
+##
+## KubeDB chart configuration
+##
+# Declare variables to be passed into your templates.
+
+# Overrides name template
+nameOverride: ""
+# Overrides fullname template
+fullnameOverride: ""
+# Number of KubeDB operator replicas to create (only 1 is supported)
+replicaCount: 1
+# License for the product.
+# Get a license by following the steps from [here](https://stash.run/docs/latest/setup/install/enterprise#get-a-trial-license).
+# Example:
+# helm install appscode/kubedb-ops-manager \
+#   --set-file license=/path/to/license/file
+# or
+# helm install appscode/kubedb-ops-manager \
+#   --set license=<license file content>
+license: ""
+# Name of Secret with the license as key.txt key
+licenseSecretName: ""
+# Docker registry fqdn used to pull KubeDB related images
+# Set this to use docker registry hosted at ${registryFQDN}/${registry}/${image}
+registryFQDN: ghcr.io
+# Specify an array of insecure registries.
+#
+# Example:
+# helm template charts/kubedb-ops-manager \
+#   --set insecureRegistries[0]=hub.company.com \
+#   --set insecureRegistries[1]=reg.example.com
+insecureRegistries: []
+# Docker registry containing KubeDB images
+operator:
+  # Docker registry used to pull KubeDB ops manager image
+  registry: kubedb
+  # KubeDB ops manager container image
+  repository: kubedb-ops-manager
+  # KubeDB ops manager container image tag
+  tag: ""
+  # Security options this container should run with
+  securityContext: # +doc-gen:break
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  # Compute Resources required by this container
+  resources: {}
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+# Docker registry containing kubectl-nonroot images
+waitfor:
+  # Docker registry used to pull KubeDB enterprise kubectl-nonroot image
+  registry: appscode
+  # KubeDB enterprise kubectl-nonroot container image
+  repository: kubectl-nonroot
+  # KubeDB enterprise kubectl-nonroot container image tag
+  tag: "1.34"
+
+# Specify an array of imagePullSecrets.
+# Secrets must be manually created in the namespace.
+#
+# Example:
+# helm template charts/kubedb-ops-manager \
+#   --set imagePullSecrets[0].name=sec0 \
+#   --set imagePullSecrets[1].name=sec1
+imagePullSecrets: []
+# Container image pull policy
+imagePullPolicy: IfNotPresent
+# If true, installs KubeDB operator as critical addon
+criticalAddon: false
+# Log level for operator
+logLevel: 5
+# Annotations applied to operator deployment
+annotations: {}
+# Annotations passed to operator pod(s).
+podAnnotations: {}
+# Node labels for pod assignment
+nodeSelector: # +doc-gen:break
+  kubernetes.io/os: linux
+# Tolerations for pod assignment
+tolerations: []
+# Affinity rules for pod assignment
+affinity: {}
+# Security options the operator pod should run with.
+podSecurityContext: {}
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+apiserver:
+  # If true, uses kube-apiserver FQDN for AKS cluster to workaround https://github.com/Azure/AKS/issues/522 (default true)
+  useKubeapiserverFqdnForAks: true
+  healthcheck:
+    # healthcheck configures the readiness and liveliness probes for the operator pod.
+    enabled: true
+    # The port the probe endpoint binds to
+    probePort: 8081
+monitoring:
+  # The port the metric endpoint binds to
+  bindPort: 8080
+  # Name of monitoring agent (one of "prometheus.io", "prometheus.io/operator", "prometheus.io/builtin")
+  agent: ""
+  serviceMonitor:
+    # Specify the labels for ServiceMonitor.
+    # Prometheus crd will select ServiceMonitor using these labels.
+    # Only usable when monitoring agent is `prometheus.io/operator`.
+    labels: # +doc-gen:break
+      monitoring.appscode.com/prometheus: auto
+recommendationEngine:
+  # Recommendation will be generated after every given duration based on the resource status at that moment.
+  # Default value is one hour.
+  # The flag accepts a integer 64 bit value in nanosecond for time.Duration. Ref: https://pkg.go.dev/time#Duration
+  resyncPeriod: 1h0m0s
+
+  deadline:
+    # If enable is false, deadline will not be set in the generated recommendations
+    enable: false
+    # If enable is true, maxEvaluationPeriod is the value to be used as deadline time.
+    maxEvaluationPeriod: 168h0m0s
+
+  # Rotate TLS recommendation will be generated before given year of expiration.
+  rotateTLS:
+    # It also depends on gen-rotate-tls-recommendation-before-expiry-month and gen-rotate-tls-recommendation-before-expiry-year.
+    # Default values are 0(zero) for gen-rotate-tls-recommendation-before-expiry-year, 1(one) for gen-rotate-tls-recommendation-before-expiry-month,
+    # 0(zero) for gen-rotate-tls-recommendation-before-expiry-day flags.
+    genRecommendationBeforeExpiryYear: 0
+    # Rotate TLS recommendation will be generated before given month of expiration.
+    # It also depends on gen-rotate-tls-recommendation-before-expiry-year and gen-rotate-tls-recommendation-before-expiry-day flag.
+    # By default it is set as 1(one).
+    genRecommendationBeforeExpiryMonth: 1
+    # Rotate TLS recommendation will be generated before given day of expiration.
+    # It also depends on gen-rotate-tls-recommendation-before-expiry-year and gen-rotate-tls-recommendation-before-expiry-month flag.
+    # By default it is set as 0(zero).
+    genRecommendationBeforeExpiryDay: 0
+
+  # Rotate Auth recommendation will be generated before given year of expiration.
+  rotateAuth:
+    # Rotate Auth recommendation will be generated before given year of expiration.
+    genRecommendationBeforeExpiryYear: 0
+    # Rotate Auth recommendation will be generated before given month of expiration.
+    genRecommendationBeforeExpiryMonth: 1
+    # Rotate Auth recommendation will be generated before given day of expiration.
+    genRecommendationBeforeExpiryDay: 0
+
+psp:
+  enabled: false
+
+# The maximum number of concurrent reconciles which can be run
+maxConcurrentReconciles: 0
+
+# List of sources to populate environment variables in the container
+envFrom: []
+# List of environment variables to set in the container
+env: []
+
+distro:
+  openshift: false
+  ubi: ""

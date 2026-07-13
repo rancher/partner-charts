@@ -1,0 +1,48 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+rules:
+# List nodes/pods/PVCs from the kube-apiserver and call into kubelet stats.
+- apiGroups: [""]
+  resources: ["nodes", "namespaces", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes/stats"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["nodes/proxy"]
+  verbs: ["get"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+---
+# Aggregated read role for the custom metrics API the apiserver serves.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}-server-resources
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["custom.metrics.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
+---
+# Allow the HPA controller to read metrics from this server.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}-hpa-controller
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "storage-metrics-server.fullname" . }}-server-resources
+subjects:
+- kind: ServiceAccount
+  name: horizontal-pod-autoscaler
+  namespace: kube-system

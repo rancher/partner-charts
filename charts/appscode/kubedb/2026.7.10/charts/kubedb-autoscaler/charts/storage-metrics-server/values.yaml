@@ -1,0 +1,101 @@
+## storage-metrics-server default values
+
+# nameOverride / fullnameOverride let users keep the chart-generated names
+# but override one or both ends.
+nameOverride: ""
+fullnameOverride: ""
+
+# Docker registry FQDN used to pull the storage-metrics-server image.
+# Set this to use a docker registry hosted at ${registryFQDN}/${registry}/${image}
+registryFQDN: ghcr.io
+image:
+  # Docker registry used to pull the image
+  registry: appscode
+  # Name of the container image
+  repository: storage-metrics-server
+  # Container image tag; defaults to the chart appVersion when empty
+  tag: ""
+
+# Specify an array of imagePullSecrets.
+# Secrets must be manually created in the namespace.
+imagePullSecrets: []
+# Container image pull policy
+imagePullPolicy: IfNotPresent
+
+# Distro-specific overrides.
+distro:
+  # Set true, if installed in OpenShift
+  openshift: false
+  # Set operator or all to use ubi images
+  ubi: ""
+
+replicaCount: 1
+
+# Extra args appended to the container command line. Use this to override
+# kubelet TLS flags, scrape interval, log verbosity, etc.
+extraArgs:
+  - --kubelet-insecure-tls           # remove in production
+#  - --kubelet-use-node-status-port
+#  - --kubelet-preferred-address-types=InternalIP,Hostname,InternalDNS,ExternalDNS,ExternalIP
+#  - --metric-resolution=60s
+#  - --kubelet-request-timeout=10s
+#  - --v=2
+
+# Extra environment variables.
+extraEnv: []
+
+# Resource requests / limits for the apiserver container.
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    cpu: 500m
+    memory: 500Mi
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  seccompProfile:
+    type: RuntimeDefault
+
+# Configures the metrics service exposed for the APIService aggregation layer.
+service:
+  type: ClusterIP
+  port: 443
+  targetPort: 6443
+
+# Configures the APIService registered with kube-aggregator.
+apiService:
+  # Set to false if you register the APIService out-of-band (e.g. via cert-manager + apiservice-registrar).
+  create: true
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
+
+priorityClassName: system-cluster-critical
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod-disruption budget for the apiserver Deployment.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Bind the metrics-reader ClusterRole to additional subjects (e.g. Prometheus).
+# Example:
+#   metricsReaderSubjects:
+#   - kind: ServiceAccount
+#     name: prometheus
+#     namespace: monitoring
+# metricsReaderSubjects: []
+metricsReaderSubjects:
+  - kind: Group
+    name: system:unauthenticated
+    apiGroup: rbac.authorization.k8s.io
