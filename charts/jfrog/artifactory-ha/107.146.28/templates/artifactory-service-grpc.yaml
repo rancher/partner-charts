@@ -1,0 +1,42 @@
+{{- if .Values.ingressGrpc.enabled -}}
+# Service for GRPC communication.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "artifactory.serviceGrpc.fullname" . }}
+  labels:
+    app: {{ template "artifactory-ha.name" . }}
+    chart: {{ template "artifactory-ha.chart" . }}
+    component: {{ .Values.artifactory.name }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+{{- if .Values.artifactory.serviceGrpc.annotations }}
+  annotations:
+{{ toYaml .Values.artifactory.serviceGrpc.annotations | indent 4 }}
+{{- end }}
+spec:
+  {{- if .Values.artifactory.serviceGrpc.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ .Values.artifactory.serviceGrpc.ipFamilyPolicy }}
+  {{- end }}
+  {{- if not (empty .Values.artifactory.serviceGrpc.ipFamilies)}}
+  ipFamilies: {{- toYaml .Values.artifactory.serviceGrpc.ipFamilies | nindent 4 }}
+  {{- end }}
+  type: {{ .Values.artifactory.serviceGrpc.type }}
+  {{- if and (eq .Values.artifactory.serviceGrpc.type "ClusterIP") .Values.artifactory.serviceGrpc.clusterIP }}
+  clusterIP: {{ .Values.artifactory.serviceGrpc.clusterIP }}
+  {{- end }}
+  {{- if .Values.artifactory.serviceGrpc.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+{{ toYaml .Values.artifactory.serviceGrpc.loadBalancerSourceRanges | indent 4 }}
+  {{- end }}
+  ports:
+  - port: {{ .Values.artifactory.externalPort }}
+    targetPort: {{ .Values.artifactory.internalPort }}
+    protocol: TCP
+    name: http-router
+  selector:
+    role: {{ template "artifactory-ha.primary.name" . }}
+    app: {{ template "artifactory-ha.name" . }}
+    component: "{{ .Values.artifactory.name }}"
+    release: {{ .Release.Name }}
+{{- end -}}

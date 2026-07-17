@@ -1,0 +1,49 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "storage-metrics-server.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "storage-metrics-server.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+# Required by every aggregated apiserver: lets it call TokenReview /
+# SubjectAccessReview against the core kube-apiserver.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}-auth-delegator
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: {{ include "storage-metrics-server.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+# Lets the apiserver read the extension-apiserver-authentication ConfigMap
+# in kube-system, used to validate aggregator client certs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}-auth-reader
+  namespace: kube-system
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: {{ include "storage-metrics-server.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

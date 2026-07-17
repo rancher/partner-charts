@@ -1,0 +1,203 @@
+{{- if .Values.operator.create -}}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: topologyconfigs.harikube.info
+spec:
+  group: harikube.info
+  names:
+    kind: TopologyConfig
+    listKind: TopologyConfigList
+    plural: topologyconfigs
+    singular: topologyconfig
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.deployStatus
+      name: DeployStatus
+      type: string
+    - jsonPath: .spec.targetSecret
+      name: TargetSecret
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: TopologyConfig is the Schema for the topologyconfigs API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TopologyConfigSpec defines the desired state of TopologyConfig.
+            properties:
+              backends:
+                description: Backends represents the group of topology configs.
+                items:
+                  properties:
+                    backendTLS:
+                      description: BackendTLS defines TLS configuration for connection.
+                      properties:
+                        caFile:
+                          description: CAFile is the CA file for the secure connection.
+                          type: string
+                        certFile:
+                          description: CertFile is the certificate file for the secure
+                            connection.
+                          type: string
+                        keyFile:
+                          description: KeyFile is the key file for the secure connection.
+                          type: string
+                        skipVerify:
+                          description: SkipVerify skips TLS verification
+                          type: boolean
+                      type: object
+                    compactBatchSize:
+                      description: CompactBatchSize is the number of records to delete
+                        in each batch during compaction.
+                      format: int64
+                      maximum: 10000
+                      minimum: 10
+                      type: integer
+                    compactInterval:
+                      description: CompactInterval is the interval to run compaction.
+                      format: duration
+                      type: string
+                    compactIntervalJitter:
+                      description: CompactIntervalJitter is the jitter to add to the
+                        compaction interval.
+                      maximum: 1000
+                      minimum: 0
+                      type: integer
+                    compactMinRetain:
+                      description: CompactMinRetain is the minimum number of revisions
+                        to retain during compaction.
+                      format: int64
+                      maximum: 10000
+                      minimum: 10
+                      type: integer
+                    compactTimeout:
+                      description: CompactTimeout is the timeout for the compaction
+                        operation.
+                      format: duration
+                      type: string
+                    connectionPool:
+                      description: ConnectionPool defines connection pool configuration
+                        for connection.
+                      properties:
+                        maxIdle:
+                          minimum: 0
+                          type: integer
+                        maxIdleLifeTime:
+                          format: duration
+                          type: string
+                        maxLifeTime:
+                          format: duration
+                          type: string
+                        maxOpen:
+                          minimum: 0
+                          type: integer
+                      type: object
+                    customresource:
+                      description: CustomResource defines custom resource based routing.
+                      properties:
+                        group:
+                          description: Group is the API group to match.
+                          type: string
+                        kind:
+                          description: Kind is the API kind to match.
+                          type: string
+                      type: object
+                    disableStorageLevelFiltering:
+                      description: DisableStorageLevelFiltering disables storage level
+                        filtering for this backend.
+                      type: boolean
+                    endpoint:
+                      description: Endpoint is database specific connection string.
+                      type: string
+                    name:
+                      description: Name is the global unique name of the config.
+                      type: string
+                    namespace:
+                      description: Namespace defines namespace routing.
+                      properties:
+                        kinds:
+                          description: Kinds is list of kind to match.
+                          items:
+                            type: string
+                          type: array
+                        namespace:
+                          description: Namespace is the name of namespace to match.
+                          type: string
+                      type: object
+                    prefix:
+                      description: Prefix defines prefix based routing.
+                      properties:
+                        prefix:
+                          description: Prefix is the ETCD key prefix to match.
+                          type: string
+                      type: object
+                    regexp:
+                      description: RegExp defines regexp based routing.
+                      properties:
+                        key:
+                          description: Key is the regexp to match if individual operation
+                            needs different match.
+                          type: string
+                        prefix:
+                          description: Prefix is the regexp to match.
+                          type: string
+                      type: object
+                  required:
+                  - endpoint
+                  - name
+                  type: object
+                minItems: 1
+                type: array
+              targetSecret:
+                default: harikube/topology-config
+                description: TargetSecret defines the namespaced name of the generated
+                  topology config.
+                type: string
+            required:
+            - backends
+            - targetSecret
+            type: object
+          status:
+            description: TopologyConfigStatus defines the observed state of TopologyConfig.
+            properties:
+              deployOrder:
+                description: DeployOrder defines the order of config.
+                format: int64
+                type: integer
+              deployStatus:
+                default: Pending
+                description: DeployStatus defines the in cluster state of config.
+                type: string
+              deployStatusReason:
+                description: DeployStatus stores the reason of DeployStatus.
+                type: string
+            type: object
+        type: object
+    selectableFields:
+    - jsonPath: .spec.targetSecret
+    served: true
+    storage: true
+    subresources:
+      status: {}
+{{- end }}

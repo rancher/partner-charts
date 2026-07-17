@@ -1,0 +1,102 @@
+# Default values for netscaler-ipam-controller.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+imageRegistry: quay.io
+imageRepository: netscaler/netscaler-ipam-controller
+imageTag: 2.3.1
+image: "{{ .Values.imageRegistry }}/{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
+pullPolicy: IfNotPresent
+
+vipRange:    #'[{"Prod": ["10.1.2.0 - 10.1.2.255"]}]'
+nameOverride: ""
+fullnameOverride: ""
+reuseIngressVip: "True"
+
+cluster: ""
+infoblox:
+  enabled: false
+  gridHost: ""
+  credentialSecret: ""
+  httpTimeout: ""
+  maxRetries: ""
+  netView: ""
+  vipRange:
+
+dns:
+  enabled: false
+  # DNS provider type: "binddns" or "universal"
+  type: ""
+  # ── BindDNS provider config ──
+  binddns:
+    # IP address of the BIND DNS server
+    server: ""
+    # DNS zone managed by this BIND server
+    zone: ""
+    # Name of a Kubernetes Secret containing TSIG credentials
+    # Required keys: tsigKey (key name), tsigSecret (base64-encoded HMAC secret)
+    tsigKeySecret: ""
+    # TSIG clock skew tolerance in seconds (default 300)
+    fudge: "300"
+  # ── UniversalDNS provider config ──
+  universal:
+    # Host:port of the UDNS server
+    server: ""
+    # Name of a Kubernetes Secret containing UDNS credentials
+    # Required keys: username, password
+    credentialSecret: ""
+    # DNS view name passed to the WAPI host-record lookup
+    dnsView: "default"
+    # WAPI version string used in /wapi/{version}/record:host URLs
+    wapiVersion: "v2.5"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and `serviceAccount.create` is true, a name is generated using the fullname template
+  # If you want to use pre-created serviceAccount, set the name and serviceAccount.create to false.
+  name:
+  tokenExpirationSeconds: 31536000
+
+createClusterRoleAndBinding: true
+
+podAnnotations: {}
+resources:
+  requests:
+    cpu: 32m
+    memory: 128Mi
+  # Following values depends on no of ingresses configured by Ingress Controllers, so it is
+  # advised to test with maximum no of ingresses to set these values.
+  # limits:
+  #   cpu: 1000m
+  #   memory: 1000Mi
+  limits: {}
+  # Following values depends on no of ingresses configured by Ingress Controllers, so it is
+  # advised to test with maximum no of ingresses to set these values.
+  # limits:
+  #   cpu: 1000m
+  #   memory: 1000Mi
+
+affinity: {}
+nodeSelector:
+  key: ""
+  value: ""
+tolerations: []
+
+# API Priority and Fairness configuration for the IPAM controller's API server requests
+apiPriorityAndFairness:
+  enabled: false
+  priorityLevelConfiguration:
+    nominalConcurrencyShares: 40
+    lendablePercent: 25
+    limitResponse:
+      type: Queue
+      queuing:
+        queues: 16
+        handSize: 4
+        queueLengthLimit: 50
+  flowSchema:
+    matchingPrecedence: 1000
+    distinguisherMethod:
+      type: ByNamespace
