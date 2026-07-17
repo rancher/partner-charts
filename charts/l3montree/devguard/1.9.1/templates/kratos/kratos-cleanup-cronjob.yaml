@@ -1,0 +1,67 @@
+{{- if .Values.kratos.cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kratos-cleanup
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app.kubernetes.io/name: kratos
+spec:
+  schedule: {{ .Values.kratos.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: kratos
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: kratos-cleanup
+            image: "{{ .Values.kratos.image.repository }}:{{ .Values.kratos.image.tag }}{{ if .Values.kratos.image.digest }}@{{ .Values.kratos.image.digest }}{{ end }}"
+            imagePullPolicy: {{ .Values.kratos.image.pullPolicy }}
+            command:
+            - kratos
+            args:
+            - cleanup
+            - sql
+            - -e
+            - -b
+            - "1000000"
+            - --database.cleanup.sleep.tables
+            - 15s
+            env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kratos-db-secret
+                  key: password
+            - name: DSN
+              value: postgres://kratos:$(DB_PASSWORD)@postgresql:5432/kratos?sslmode=disable
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              privileged: false
+              readOnlyRootFilesystem: true
+              runAsGroup: 65534
+              runAsNonRoot: true
+              runAsUser: 65534
+              seLinuxOptions:
+                level: s0:c123,c456
+              seccompProfile:
+                type: RuntimeDefault
+          securityContext:
+            fsGroup: 65534
+            fsGroupChangePolicy: OnRootMismatch
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+{{- end }}
