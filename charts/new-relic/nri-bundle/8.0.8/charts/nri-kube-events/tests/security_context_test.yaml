@@ -1,0 +1,77 @@
+suite: test deployment security context
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: pod securityContext set to defaults when no values provided
+    set:
+      cluster: my-cluster
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsUser: 1000
+            runAsNonRoot: true
+  - it: pod securityContext set common-library values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      podSecurityContext:
+        foobar: true
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.foobar
+          value: true
+  - it: pod securityContext compatibility layer overrides values from common-library
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      runAsUser: 1001
+      podSecurityContext:
+        runAsUser: 1000
+        runAsNonRoot: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsUser: 1001
+            runAsNonRoot: false
+  - it: pod securityContext compatibility layer overrides defaults
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      runAsUser: 1001
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1001
+  - it: set to defaults when no containerSecurityContext set
+    set:
+      cluster: my-cluster
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+  - it: set containerSecurityContext custom values
+    set:
+      cluster: test-cluster
+      licenseKey: us-whatever
+      containerSecurityContext:
+        foobar: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.foobar
+          value: true
