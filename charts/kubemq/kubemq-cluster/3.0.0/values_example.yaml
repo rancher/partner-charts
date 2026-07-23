@@ -1,0 +1,157 @@
+# ============================================================================
+# kubemq-cluster — STARTER RECIPES
+# ============================================================================
+# This file is a small set of copy-and-adapt zero-config STARTER RECIPES, not
+# the full field catalog. Every value here is rendered verbatim into `spec:` of
+# the generated KubemqCluster CR, so any `KubemqCluster.spec.*` field is a Helm
+# value of the same name.
+#
+# Full field catalog (every field, default, and env var) lives in the KubeMQ
+# server repo:
+#   docs/10-configuration-reference.md
+#   https://github.com/kubemq-io/kubemq-server/blob/master/docs/10-configuration-reference.md
+#
+# Keep your real values.yaml MINIMAL — license + only the fields you must
+# override. Any uncommented value PINS that field: the server default no longer
+# applies for it, even across upgrades.
+# ----------------------------------------------------------------------------
+
+# ---- Recipe: plain cluster (minimal) ---------------------------------------
+# The smallest working install — a 3-node cluster with a license and a volume.
+replicas: 3
+key: kubemq license key
+# license: kubemq license data   # alternative to key (license data blob)
+volume:
+  size: 10Gi
+  storageClass: default
+
+# imagePullSecrets — reference existing docker-registry secrets for private
+# registries (handled specially; not rendered into spec):
+# imagePullSecrets:
+#   - name: my-registry-secret
+
+# ---- Recipe: enable a connector (the one-liner) ----------------------------
+# Opt-in connectors (mqtt/amqp/amqp10/stomp/aws/gcp/kafka) are OFF by default.
+# Turn one on with a single field. On a FRESH cluster, `kafka.enabled: true`
+# alone auto-selects the `next` storage engine and opens an in-cluster
+# PLAINTEXT endpoint at <cluster>-kafka.<namespace>.svc:9092 — no engine or
+# networking config required.
+kafka:
+  enabled: true
+  # acks caveat: the default install runs replicas: 3 — Kafka producers must
+  # use acks>=1 (acks=0 can be silently dropped on a follower).
+  #
+  # ---- Recipe: Kafka reachable from OUTSIDE the cluster ----
+  # In-cluster clients need nothing more. For clients OUTSIDE the cluster you
+  # MUST set BOTH advertisedHost AND advertisedPort to the externally reachable
+  # name/port and expose the Service. Empty advertisedHost => external clients
+  # connect then hang.
+  # expose: LoadBalancer               # or NodePort
+  # advertisedHost: kafka.example.com  # external LB DNS / NodePort node address
+  # advertisedPort: 9092               # the externally reachable port
+  #   NodePort: use the ALLOCATED node port (kubectl get svc), NOT 9092.
+  #
+  # Single advertised endpoint (D6): exactly one (host, port) is advertised.
+  # Zero-config in-cluster reach is PLAINTEXT only; TLS clients need an explicit
+  # advertisedPort=<tls port>, which then breaks plaintext clients — plaintext
+  # XOR TLS, pick one per deployment.
+  #
+  # TLS SAN: the server certificate SAN must include the advertised short form
+  # <cluster>-kafka.<namespace>.svc LITERALLY, PLUS every bootstrap name any
+  # client dials (the FQDN <cluster>-kafka.<namespace>.svc.cluster.local, and
+  # any external LB / NodePort name). Hostname verification runs against the
+  # bootstrap string on the first handshake and against the advertised string
+  # after Metadata — both must be in the SAN.
+
+# Other opt-in connectors — same one-liner:
+# mqtt:   { enabled: true }
+# amqp:   { enabled: true }
+# amqp10: { enabled: true }
+# stomp:  { enabled: true }
+# aws:    { enabled: true }
+# gcp:    { enabled: true }
+
+# ---- Recipe: expose a connector externally ---------------------------------
+# Every wire connector takes `expose` (ClusterIP | NodePort | LoadBalancer;
+# default ClusterIP). Example — expose MQTT via a LoadBalancer Service:
+# mqtt:
+#   enabled: true
+#   expose: LoadBalancer
+
+# ---- Recipe: env overlay (escape hatch for un-typed tunables) --------------
+# Any server env key that is NOT a typed CRD field is reachable via spec.env —
+# a last-wins overlay applied after all typed fields (changing it rolls pods).
+# Keys are UPPERCASED; empty values are DROPPED (cannot unset). Operator-owned
+# identity keys (STORE_ENGINE, CLUSTER_ENABLE/NAME/ROUTES, API_BIND_ADDRESS,
+# CHECKSUM, POD_NAME, and the CLUSTER_REPLICATION_* prefix) are REJECTED with a
+# ReconcileError — set the typed fields for those. Do NOT put secrets here.
+# env:
+#   CONNECTORS_KAFKA_FETCH_MAX_BYTES: "10485760"
+#   CONNECTORS_KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "3000"
+
+# ---- Recipe: envFromSecrets (inject secret-backed env) ---------------------
+# A list of existing Secret names whose keys become container env. Values never
+# transit the operator; K8s envFrom precedence applies; secret-content changes
+# do NOT roll pods (documented).
+# envFromSecrets:
+#   - my-kafka-credentials
+#   - my-tls-passwords
+
+# ============================================================================
+# Running with Docker (single node)
+# ============================================================================
+# These are `docker run` recipes (NOT Helm values) — the single-node companion
+# to the in-cluster recipes above.
+#
+# (a) User-defined network — clients on the SAME docker network:
+#       docker run --network mynet --name kubemq --hostname kubemq \
+#         -e CONNECTORS_KAFKA_ENABLE=true kubemq/kubemq:latest
+#     name == hostname so the advertised value (the container hostname)
+#     resolves on `mynet`. The default bridge network has NO DNS — the
+#     advertised name won't resolve there; always use a user-defined network.
+#
+# (b) Port-mapped host access — clients on the HOST (localhost):
+#       docker run -p 9092:9092 --name kubemq --hostname kubemq \
+#         -e CONNECTORS_KAFKA_ENABLE=true \
+#         -e CONNECTORS_KAFKA_ADVERTISED_HOST=localhost kubemq/kubemq:latest
+#     The published host port must EQUAL CONNECTORS_KAFKA_PORT (9092). If you
+#     publish a different host port, also set
+#     CONNECTORS_KAFKA_ADVERTISED_PORT=<host-port>.
+#
+# Recipes (a) and (b) each serve ONE audience (a single advertised endpoint) —
+# pick one per deployment; they cannot be combined.
+#
+# (c) Persistent volume — keep --name kubemq --hostname kubemq (stable
+#     advertised name AND stable store host-subdir across restarts):
+#       docker run -v kubemq-data:/kubemq/store --name kubemq --hostname kubemq \
+#         -e CONNECTORS_KAFKA_ENABLE=true kubemq/kubemq:latest
+# ============================================================================
+
+# ---- Recipe: store engine (persistence) ------------------------------------
+# KubeMQ Store Configuration - https://docs.kubemq.io/configuration/cluster/set-store-settings
+# store:
+  # engine selects the persistence engine: "legacy" (default) or "next".
+  # next-ness is immutable (born-one-mode). engine=next requires spec.volume.size.
+  #
+  # Clustered next (standalone: false, replicas > 1) runs the Dragonboat raft
+  # replication plane on port 5229 PLAINTEXT by default (mTLS is opt-in via
+  # spec.configData). REQUIRED: bound the raft port to the cluster's own pods with a
+  # NetworkPolicy — any pod that can reach 5229 can read/inject replicated writes.
+  # Example (replace <cluster-name> with metadata.name):
+  #   apiVersion: networking.k8s.io/v1
+  #   kind: NetworkPolicy
+  #   metadata:
+  #     name: <cluster-name>-raft
+  #   spec:
+  #     podSelector:
+  #       matchLabels: { app: <cluster-name> }
+  #     policyTypes: [Ingress]
+  #     ingress:
+  #       - from:
+  #           - podSelector:
+  #               matchLabels: { app: <cluster-name> }
+  #         ports:
+  #           - protocol: TCP
+  #             port: 5229
+  #
+  # engine: next

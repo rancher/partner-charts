@@ -1,0 +1,23 @@
+apiVersion: core.k8s.kubemq.io/v1beta1
+kind: KubemqCluster
+metadata:
+  name: {{ include "kubemq.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "kubemq.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  {{- if .Values.key }}
+  key: {{ .Values.key }}
+  {{- else if .Values.license }}
+  license: {{ .Values.license }}
+  {{- else if or .Values.keySecretRef .Values.licenseSecretRef }}
+  {{- /* license sourced from a Secret (keySecretRef/licenseSecretRef); emitted via the passthrough below */}}
+  {{- else }}
+  {{- fail "A license is required: set key or license, or reference a Secret via keySecretRef/licenseSecretRef" }}
+  {{- end }}
+{{- with (omit .Values "imagePullSecrets" "key" "license") }}
+{{ toYaml . | indent 2 }}
+{{- end }}
