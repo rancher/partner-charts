@@ -1,0 +1,149 @@
+{{- if (include "vap.check" .) }}
+apiVersion: {{ include "get.vapApiVersion" . }}
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: "kasten.policy.permissions"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:   ["config.kio.kasten.io"]
+        apiVersions: ["v1alpha1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["policies"]
+  validations:
+    {{/* The CEL expressions below are specific checks for restore parameters
+    allowed to be defined for a basic user, specifically the following:
+    1) Target namespace - It should be defined compulsorily for a basic user and
+    should be equal to the policy namespace
+    2) RestoreClusterResources - It should be set to false if defined.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, has(r.restoreParameters.targetNamespace) && r.restoreParameters.targetNamespace == object.metadata.namespace)"
+      message: "target namespace is a required field in the restore action and must be the same as the policy namespace"
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.restoreClusterResources) || r.restoreParameters.restoreClusterResources == false)"
+      message: "user is not allowed to restore cluster resources. RestoreClusterResources under restore action should be set to false"
+    {{/* For all policies, the CEL expression checks if the user has permissions
+    to 'get' the 'policy preset' resource, which is referenced in the Policy spec.
+    Since presetRef is optional, expression first checks if presetRef is defined.*/}}
+    - expression: "!has(object.spec.presetRef) ||  authorizer.group('config.kio.kasten.io').resource('policypresets').namespace(object.spec.presetRef.namespace).name(object.spec.presetRef.name).check('get').allowed()"
+      message: "user does not have permission to access policy preset specified in policy spec"
+    {{/* For export and import actions, the CEL expression checks
+    if the user has permissions to 'get' the 'migrationToken' secret, which is
+    referenced under 'actionParameters' in the Policy spec. Since migrationToken
+    is optional, expression first checks if migrationToken is defined.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.migrationToken) || authorizer.group('').resource('secrets').namespace(e.exportParameters.migrationToken.namespace).name(e.exportParameters.migrationToken.name).check('get').allowed())"
+      message: "user does not have permission to access migration token specified in export action"
+    - expression: "object.spec.actions.filter(x, x.action == 'import').all(i, !has(i.importParameters.migrationToken) || authorizer.group('').resource('secrets').namespace(i.importParameters.migrationToken.namespace).name(i.importParameters.migrationToken.name).check('get').allowed())"
+      message: "user does not have permission to access migration token specified in import action"
+    {{/* // TODO: https://kasten.atlassian.net/browse/K10-27480
+    This blocks creation of restore actions which refer ONLY inline transforms
+    in the same transform object. This will still allow restore actions which
+    refer to inline AND transformRef in the same transform object. This is a
+    rare case and policy validation will fail eventually for such policies.*/}}
+    {{/* If it is a restore action, the CEL expression checks if the user has
+    specified inline transforms. If restore paramaters have transforms, the CEL
+    checks if the transform object has transformSetRef set. This ensures that
+    transforms with ONLY inline transforms are rejected. Since transforms
+    parameter is optional, expression first checks if transforms are defined.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.transforms) || r.restoreParameters.transforms.all(t, has(t.transformSetRef)))"
+      message: "user does not have permission to create the inline transformSet specified in restore action"
+    {{/* If it is a restore action, the CEL expression checks if the user has
+    permissions to 'get' the transform resource which is referenced
+    under 'restoreParameters' in the Policy spec. Since transforms are optional,
+    expression first checks if transforms are defined. If transforms are defined,
+    a transformSetRef is mandatory.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.transforms) || r.restoreParameters.transforms.all(t, has(t.transformSetRef) && authorizer.group('config.kio.kasten.io').resource('transformsets').namespace(t.transformSetRef.namespace).name(t.transformSetRef.name).check('get').allowed()))"
+      message: "user does not have permission to access transformSet specified in restore action"
+    {{/* For backup, export, impor, and restore actions, the CEL expression checks
+    if the user has permissions to 'get' the 'profile' resource, which is
+    referenced under 'actionParameters' in the Policy spec. Since profile
+    is optional, expression first checks if profile is defined. For backup,
+    since backupParameters are optional, expression first checks that they exist.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'backup').all(b, !has(b.backupParameters) || !has(b.backupParameters.profile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(b.backupParameters.profile.namespace).name(b.backupParameters.profile.name).check('get').allowed())"
+      message: "user does not have permission to access profile specified in backup action"
+    - expression: "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.profile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(e.exportParameters.profile.namespace).name(e.exportParameters.profile.name).check('get').allowed())"
+      message: "user does not have permission to access profile specified in export action"
+    - expression: "object.spec.actions.filter(x, x.action == 'import').all(i, !has(i.importParameters.profile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(i.importParameters.profile.namespace).name(i.importParameters.profile.name).check('get').allowed())"
+      message: "user does not have permission to access profile specified in import action"
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.profile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(r.restoreParameters.profile.namespace).name(r.restoreParameters.profile.name).check('get').allowed())"
+      message: "user does not have permission to access profile specified in restore action"
+    {{/*The CEL expression checks if user has 'get' access to the optional field
+    imageRepoProfile in the backup action, if the field has been defined. For backup,
+    since backupParameters are option, expression first checks that they exist.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'backup').all(b, !has(b.backupParameters) || !has(b.backupParameters.imageRepoProfile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(b.backupParameters.imageRepoProfile.namespace).name(b.backupParameters.imageRepoProfile.name).check('get').allowed())"
+      message: "user does not have access to ImageRepoProfile specified in the backup action"
+    {{/* If it is an export action, the CEL expression checks if the user has
+    permissions to 'get' the 'blockModeProfile' resource, which is referenced
+    under 'exportParameters' in the Policy spec. Since blockModeProfile is optional,
+    expression first checks if blockModeProfile is defined.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.blockModeProfile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(e.exportParameters.blockModeProfile.namespace).name(e.exportParameters.blockModeProfile.name).check('get').allowed())"
+      message: "user does not have permission to access block mode profile specified in export action"
+    {{/* If it is an restore action, the CEL expression checks if the user has
+    permissions to 'get' the 'artifactOverrideProfile' resource, which is referenced
+    under 'restoreParameters' in the Policy spec. Since artifactOverrideProfile is optional,
+    expression first checks if trtifactOverrideProfile is defined.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.artifactOverrideProfile) || authorizer.group('config.kio.kasten.io').resource('profiles').namespace(r.restoreParameters.artifactOverrideProfile.namespace).name(r.restoreParameters.artifactOverrideProfile.name).check('get').allowed())"
+      message: "user does not have permission to access artifactOverrideProfile specified in restore action"
+    {{/* The CEL expressions below checks if the user has 'get' access to the
+    blueprint referenced under 'hooks' in the 'backupParameters' during a
+    restore action. Since hooks are optional, each expression first checks if
+    hooks are defined and in turn if it is an onSuccess, onFailure or preHook
+    respectively before checking the blueprint 'get' permissions. For backup,
+    since backupParameters are optional, expression first checks that they exist.*/}}
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'backup').all(b,!has(b.backupParameters) ||  !has(b.backupParameters.hooks) || !has(b.backupParameters.hooks.preHook) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(b.backupParameters.hooks.preHook.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the pre-action hook specified in the backup action"
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'backup').all(b, !has(b.backupParameters) || !has(b.backupParameters.hooks) || !has(b.backupParameters.hooks.onSuccess) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(b.backupParameters.hooks.onSuccess.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the onSuccess hook specified in the backup action"
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'backup').all(b, !has(b.backupParameters) || !has(b.backupParameters.hooks) || !has(b.backupParameters.hooks.onFailure) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(b.backupParameters.hooks.onFailure.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the onFailure hook specified in the backup action"
+    {{/* The CEL expressions below checks if the user has 'get' access to the
+    blueprint referenced under 'hooks' in the 'exportParameters' during a
+    restore action. Since hooks are optional, each expression first checks if
+    hooks are defined and in turn if it is an onSuccess, onFailure or preHook
+    respectively before checking the blueprint 'get' permissions.*/}}
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.hooks) || !has(e.exportParameters.hooks.preHook) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(e.exportParameters.hooks.preHook.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the pre-action hook specified in the export action"
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.hooks) || !has(e.exportParameters.hooks.onSuccess) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(e.exportParameters.hooks.onSuccess.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the onSuccess hook specified in the export action"
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.hooks) || !has(e.exportParameters.hooks.onFailure) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(e.exportParameters.hooks.onFailure.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the onFailure hook specified in the export action"
+    {{/* The CEL expressions below checks if the user has 'get' access to the
+    blueprint referenced under 'hooks' in the 'restoreParameters' during a
+    restore action. Since hooks are optional, each expression first checks if
+    hooks are defined and in turn if it is an onSuccess, onFailure or preHook
+    respectively before checking the blueprint 'get' permissions.*/}}
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.hooks) || !has(r.restoreParameters.hooks.preHook) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(r.restoreParameters.hooks.preHook.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the pre-action hook specified in the restore action"
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.hooks) || !has(r.restoreParameters.hooks.onSuccess) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(r.restoreParameters.hooks.onSuccess.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the onSuccess hook specified in the restore action"
+    - expression: {{printf "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.hooks) || !has(r.restoreParameters.hooks.onFailure) || authorizer.group('cr.kanister.io').resource('blueprints').namespace('%s').name(r.restoreParameters.hooks.onFailure.blueprint).check('get').allowed())" .Release.Namespace}}
+      message: "user does not have permission to access blueprint specified in the onFailure hook specified in the restore action"
+    {{/*The CEL expressions below check if the user has 'get' access to the
+    optional field - ActionPodSpec referenced in the policy under the respective
+    actions - backup, export, import and restore. For backup, since backupParameters
+    are optional, expression first checks that they exist.*/}}
+    - expression: "object.spec.actions.filter(x, x.action == 'backup').all(b, !has(b.backupParameters) || !has(b.backupParameters.actionPodSpec) || authorizer.group('config.kio.kasten.io').resource('actionpodspecs').namespace(b.backupParameters.actionPodSpec.namespace).name(b.backupParameters.actionPodSpec.name).check('get').allowed())"
+      message: "user does not have permission to access ActionPodSpec specified in the backup action"
+    - expression: "object.spec.actions.filter(x, x.action == 'export').all(e, !has(e.exportParameters.actionPodSpec) || authorizer.group('config.kio.kasten.io').resource('actionpodspecs').namespace(e.exportParameters.actionPodSpec.namespace).name(e.exportParameters.actionPodSpec.name).check('get').allowed())"
+      message: "user does not have permission to access ActionPodSpec specified in the export action"
+    - expression: "object.spec.actions.filter(x, x.action == 'import').all(i, !has(i.importParameters.actionPodSpec) || authorizer.group('config.kio.kasten.io').resource('actionpodspecs').namespace(i.importParameters.actionPodSpec.namespace).name(i.importParameters.actionPodSpec.name).check('get').allowed())"
+      message: "user does not have permission to access ActionPodSpec specified in the import action"
+    - expression: "object.spec.actions.filter(x, x.action == 'restore').all(r, !has(r.restoreParameters.actionPodSpec) || authorizer.group('config.kio.kasten.io').resource('actionpodspecs').namespace(r.restoreParameters.actionPodSpec.namespace).name(r.restoreParameters.actionPodSpec.name).check('get').allowed())"
+      message: "user does not have permission to access ActionPodSpec specified in the restore action"
+{{- end }}
+---
+{{- if (include "vap.check" .) }}
+apiVersion: {{ include "get.vapApiVersion" . }}
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: "kasten.policy.permissions.binding"
+spec:
+  policyName: "kasten.policy.permissions"
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - {{ $.Release.Namespace }}
+{{- end }}
