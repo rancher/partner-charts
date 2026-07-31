@@ -1,0 +1,27 @@
+apiVersion: application.epinio.io/v1
+kind: BuilderImage
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: standard
+  # Applied as a post-install/post-upgrade hook so that on an upgrade which
+  # first introduces the BuilderImage CRD (see templates/crd-upgrade.yaml),
+  # the CRD is established by the pre-upgrade hook Job before this seed is
+  # built and applied. As a plain manifest it would fail REST mapping during
+  # Helm's up-front build of the main manifest. resource-policy: keep leaves
+  # the seed in place on uninstall; the hook re-applies (updates in place) on
+  # every upgrade.
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/resource-policy": keep
+  labels:
+    app.kubernetes.io/component: epinio
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/name: epinio-standard-builderimage
+    app.kubernetes.io/part-of: epinio
+    app.kubernetes.io/version: {{ default .Chart.AppVersion .Values.image.epinio.tag }}
+spec:
+  default: true
+  shortDescription: Epinio standard builder image
+  description: Epinio standard builder image using the Paketo jammy full builder
+  image: "{{ .Values.image.builder.repository }}:{{ .Values.image.builder.tag }}"

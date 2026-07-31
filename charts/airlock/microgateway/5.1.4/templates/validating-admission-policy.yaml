@@ -1,0 +1,55 @@
+{{- if (semverCompare ">=1.30 || >=1.30.1-0" .Capabilities.KubeVersion.Version) -}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "airlock-microgateway.fullname" . }}-immutable-labels-{{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.labels" . | nindent 4 }}
+  annotations:
+  {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        resources: ["replicasets"]
+        operations: ["UPDATE"]
+    objectSelector:
+      matchLabels:
+        microgateway.airlock.com/controllerName: {{ include "airlock-microgateway.controllerNameWithoutPrefix" . | quote }}
+  validations:
+    - expression: "!oldObject.metadata.?labels[?'microgateway.airlock.com/controllerName'].hasValue() || object.metadata.?labels[?'microgateway.airlock.com/controllerName'] == oldObject.metadata.?labels[?'microgateway.airlock.com/controllerName']"
+      message: "label 'microgateway.airlock.com/controllerName' is immutable"
+    - expression: "object.spec.template.metadata.?labels[?'microgateway.airlock.com/controllerName'] == oldObject.spec.template.metadata.?labels[?'microgateway.airlock.com/controllerName']"
+      message: "label 'microgateway.airlock.com/controllerName' is immutable"
+    - expression: "object.metadata.?labels[?'gateway.networking.k8s.io/gateway-name'] == oldObject.metadata.?labels[?'gateway.networking.k8s.io/gateway-name']"
+      message: "label 'gateway.networking.k8s.io/gateway-name' is immutable"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "airlock-microgateway.fullname" . }}-envoycluster-name-{{ .Release.Namespace }}
+  labels:
+    {{- include "airlock-microgateway.labels" . | nindent 4 }}
+  annotations:
+  {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["microgateway.airlock.com"]
+        apiVersions: ["v1alpha1"]
+        resources: ["envoyclusters"]
+        operations: ["CREATE", "UPDATE"]
+  variables:
+    - expression: "object.metadata.namespace + '/' + object.metadata.name"
+      name: namespacedName
+  validations:
+    - expression: "has(object.spec.value) && object.spec.value.name == 'envoycluster/' + variables.namespacedName"
+      messageExpression: '"spec.value.name must be set to ''envoycluster/" + variables.namespacedName + "'' based on this EnvoyCluster''s namespaced name"'
+{{- end -}}
