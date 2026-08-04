@@ -1,0 +1,141 @@
+key:
+
+# Optional — source the license from an existing Kubernetes Secret instead of the literal
+# key/license above, so the raw token is never stored in the KubemqCluster object or in
+# Helm's saved release values. Create the Secret first, then set the ref. A ref is mutually
+# exclusive with its literal. Data-key defaults: "key" / "license" (override via *SecretKey).
+#   kubectl create secret generic my-kubemq-license --from-literal=key=<your-license-key>
+# keySecretRef: my-kubemq-license
+# keySecretKey: key
+# licenseSecretRef: my-kubemq-license
+# licenseSecretKey: license
+
+# --- Pinning a server version ------------------------------------------------------
+#
+# `image.image` is ONE full reference — repository, and tag or digest together. There is
+# no separate `image.tag`: every key under `values` is passed straight through into the
+# KubemqCluster object, so `--set image.tag=...` reaches the API server as an undeclared
+# field and the install fails with
+#   .spec.image.tag: field not declared in schema
+# Set the whole reference instead, and prefer a digest — a tag can be moved under you on
+# any registry push, a digest cannot.
+#
+# image:
+#   image: kubemq/kubemq@sha256:<digest>     # or kubemq/kubemq:v3.1.3
+#   pullPolicy: IfNotPresent
+
+# Health / liveness probe.
+# Enabling this also binds the management API to 0.0.0.0 (instead of loopback),
+# so the dashboard/API is reachable via the Service and `kubectl port-forward`.
+# Probe timings are left to the operator defaults; override here if the server
+# cold-start is slow (e.g. health.initialDelaySeconds).
+health:
+  enabled: true
+
+# --- Availability -----------------------------------------------------------------
+#
+# A KubeMQ cluster forms quorum across its replicas, so losing two of three at once
+# loses the cluster. Both settings below default to ON for a multi-replica cluster and
+# only need to appear here if you want to change or disable them.
+#
+# podDisruptionBudget keeps voluntary evictions (a node-pool upgrade, a drain) from
+# taking quorum. minAvailable defaults to the majority — 2 of 3, 3 of 5. It is not
+# created for a standalone or single-replica cluster, which has no quorum to protect.
+# With exactly 2 replicas the majority is 2, so NO voluntary eviction is ever allowed
+# and node drains will block indefinitely — that is arithmetically correct for a
+# 2-member quorum. Run 3 replicas, or set minAvailable: 1 and accept that a drain can
+# take the cluster down.
+# podDisruptionBudget:
+#   enabled: true
+#   minAvailable: 2
+#
+# podAntiAffinity spreads replicas across nodes so one node failure is one replica
+# failure. The trade-off is real and worth choosing deliberately:
+#   required: false (default) — pods always schedule, but two replicas MAY share a
+#                               node, so one node loss can still cost quorum.
+#   required: true            — the spread is guaranteed, but a replica stays Pending
+#                               while there are fewer schedulable nodes than replicas.
+# podAntiAffinity:
+#   enabled: true
+#   required: false
+
+# --- Shutdown ---------------------------------------------------------------------
+#
+# terminationGracePeriodSeconds is the pod's shutdown budget. The server splits it
+# between connector teardown — which requeues in-flight messages that would otherwise
+# be lost — and store shutdown. Kubernetes does not expose this value to the container,
+# so the operator both sets the pod spec AND passes the same number to the server; they
+# always move together. Left unset, Kubernetes uses 30s and the server assumes 30s.
+# Raise it if connectors hold long in-flight batches.
+# terminationGracePeriodSeconds: 120
+
+# --- Connector exposure -----------------------------------------------------------
+#
+# Every connector below takes `expose` (ClusterIP | NodePort | LoadBalancer, default
+# ClusterIP), `sessionAffinity` (None | ClientIP), and pinned node ports — `nodePort`,
+# plus `tlsNodePort` / `wsNodePort` where the connector has those listeners. Node ports
+# are honoured only when expose is NodePort; unset means the kernel assigns one, which
+# cannot be configured into a client ahead of the install.
+#
+# SESSION AFFINITY IS NOT OPTIONAL FOR THE CLOUD CONNECTORS:
+#   aws — an SQS receipt handle is bound to the replica that issued it and is the only
+#         way to delete a message. A delete that lands elsewhere is refused, the message
+#         reappears at the visibility timeout, and the queue never drains. A client on a
+#         single keep-alive connection is pinned by accident and never sees this; it
+#         bites when the connection breaks or the client does not pool connections.
+#   gcp — an ack id minted by one replica and acked on another is refused, with no
+#         disruption required to trigger it. Ordered subscriptions additionally need
+#         stickiness for per-key ordering.
+# ClientIP affinity is unreliable when clients share a NAT/egress IP; prefer ingress
+# cookie affinity where an ingress exists.
+#
+# aws:
+#   enabled: true
+#   expose: NodePort
+#   sessionAffinity: ClientIP
+#   nodePort: 30171
+# gcp:
+#   enabled: true
+#   expose: NodePort
+#   sessionAffinity: ClientIP
+#   nodePort: 32439
+#
+# AMQP 0.9.1 and AMQP 1.0 share ONE listener on 5672/5671 — enabling both is supported
+# and they are both served through the "<release>-amqp" Service. Enabling amqp10 also
+# creates a "<release>-amqp10" Service as a discoverability alias onto that same
+# listener; expose/sessionAffinity are shared between the two blocks (last one wins).
+#
+# CloudEvents has no port or Service of its own: it rides the server's shared HTTP
+# listener alongside REST, and is reached and exposed through `rest.expose` /
+# `rest.nodePort`. There is deliberately no ce.expose.
+#
+# KAFKA ON A MULTI-REPLICA CLUSTER — READ THIS BEFORE SETTING kafka.expose.
+#
+# Kafka hands every client one address PER BROKER (the Metadata response). A single
+# Service — ClusterIP, NodePort or LoadBalancer — is ONE address that round-robins across
+# all brokers, so it cannot address a 3-broker cluster. Setting `kafka.expose:
+# LoadBalancer` on a multi-replica cluster does NOT give you working external Kafka; it
+# gives you one address that lands on an arbitrary broker per connection.
+#
+#   IN-CLUSTER (supported, zero config): leave `kafka.peers` and `kafka.advertisedHost`
+#   unset. The operator derives per-broker addresses from the pods' stable DNS names and
+#   gives each pod its own advertised host. Nothing else to do.
+#
+#   EXTERNAL, SINGLE REPLICA: works with `kafka.expose` + `kafka.advertisedHost`.
+#
+#   EXTERNAL, MULTI-REPLICA: YOU must provision one client-reachable address per broker
+#   — a Service or LoadBalancer per pod, or a per-pod NodePort — and then list them in
+#   `kafka.peers`. The operator does NOT create per-broker addressing for you. Leave
+#   advertisedHost unset: with a peer map each broker advertises itself from its own
+#   entry, and one advertisedHost could only ever be right for one of them.
+#
+# kafka:
+#   enabled: true
+#   peers: "1@broker-0.kafka.example.com:9092,2@broker-1.kafka.example.com:9092,3@broker-2.kafka.example.com:9092"
+
+# Image pull secrets for private registries
+# Reference existing secrets created by kubectl or other methods
+# Example:
+#   imagePullSecrets:
+#     - name: my-registry-secret
+imagePullSecrets: []
