@@ -1,0 +1,1 @@
+A Helm chart to install the ECK Operator: the official Kubernetes operator from Elastic to orchestrate Elasticsearch, Kibana, APM Server, Enterprise Search, and Beats on Kubernetes.
