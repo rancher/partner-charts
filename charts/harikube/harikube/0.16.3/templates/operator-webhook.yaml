@@ -1,0 +1,32 @@
+{{- if .Values.operator.create -}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/inject-ca-from: harikube/harikube-operator-crt
+  name: harikube-operator-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: harikube-operator-svc
+      namespace: {{ .Release.Namespace }}
+      path: /validate-harikube-info-v1-topologyconfig
+  failurePolicy: Fail
+  name: vtopologyconfig-v1.kb.io
+  rules:
+  - apiGroups:
+    - harikube.info
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - topologyconfigs
+  sideEffects: None
+{{- end }}
