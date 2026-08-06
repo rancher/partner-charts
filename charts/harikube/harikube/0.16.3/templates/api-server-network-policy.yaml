@@ -1,0 +1,30 @@
+{{- if .Values.apiServer.create -}}
+{{- if .Values.apiServer.networkPolicy.create -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-api-server-netpol
+  namespace: {{ .Release.Namespace }}
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          harikube.info/{{ .Release.Namespace }}-apiserver: enabled
+    ports:
+    - port: {{ .Values.apiServer.service.apiServer.port }}
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      {{- include "harikube.labels" . | nindent 6 }}
+      {{- with .Values.apiServer.podLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      app: vcluster
+      release: harikube
+  policyTypes:
+  - Ingress
+{{- end }}
+{{- end }}
