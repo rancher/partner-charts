@@ -1,0 +1,187 @@
+{{- if .Values.testing.enabled -}}
+{{- if .Values.node.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "falcon-sensor.fullname" . }}-test-ds-sensor-running"
+  namespace: {{ include "falcon-sensor.namespace" . }}
+  labels:
+    {{- include "falcon-sensor.testLabels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+    sensor.falcon-system.crowdstrike.com/injection: disabled
+spec:
+  containers:
+    - name: kubectl
+      image: docker.io/bitnami/kubectl
+      command:
+      - /bin/sh
+      - -c
+      - |
+        FAILED=0
+
+        echo "--- Waiting for pods to initialize ---"
+        kubectl rollout status daemonset \
+          "{{ include "falcon-sensor.fullname" . }}" \
+          -n "{{ include "falcon-sensor.namespace" . }}" \
+          --timeout=300s
+
+        echo "--- Checking all sensor pods are running ---"
+        # Get all pods with the sensor label, filter out test pods
+        ALL_PODS=$(kubectl get pods -n "{{ include "falcon-sensor.namespace" . }}" \
+          -l "app.kubernetes.io/component=kernel_sensor" \
+          --field-selector=status.phase!=Running \
+          -o jsonpath="{.items[*].metadata.name}" 2>&1)
+
+        # Filter out test pods (any pod with 'test-' in the name)
+        NON_RUNNING=""
+        for POD in ${ALL_PODS}; do
+            if [[ ! "${POD}" =~ test- ]]; then
+                NON_RUNNING="${NON_RUNNING} ${POD}"
+            fi
+        done
+
+        if [ -n "${NON_RUNNING}" ]; then
+            echo "[FAIL]: Not all sensor pods are running"
+            kubectl get pods -n "{{ include "falcon-sensor.namespace" . }}" \
+              -l "app.kubernetes.io/component=kernel_sensor" \
+              --no-headers 2>&1 | grep -v "test-"
+            FAILED=1
+        else
+            echo "[OK]: Sensor pods are running"
+        fi
+
+        echo "--- Checking ConfigMap ---"
+        CM_NAME="{{ include "falcon-sensor.configMapName" . }}"
+        if ! kubectl get configmap "${CM_NAME}" -n "{{ include "falcon-sensor.namespace" . }}" > /dev/null 2>&1; then
+            echo "[FAIL]: ConfigMap '${CM_NAME}' not found"
+            FAILED=1
+        else
+            echo "[OK]: ConfigMap '${CM_NAME}' exists"
+        fi
+
+        echo "--- Checking DaemonSet configuration ---"
+        DS_NAME="{{ include "falcon-sensor.fullname" . }}"
+        if ! kubectl get daemonset "${DS_NAME}" -n "{{ include "falcon-sensor.namespace" . }}" > /dev/null 2>&1; then
+            echo "[FAIL]: DaemonSet '${DS_NAME}' not found"
+            FAILED=1
+        else
+            echo "[OK]: DaemonSet '${DS_NAME}' exists"
+        fi
+
+        echo "--- Checking service account ---"
+        SA_NAME="{{ .Values.serviceAccount.name }}"
+        if ! kubectl get serviceaccount "${SA_NAME}" -n "{{ include "falcon-sensor.namespace" . }}" > /dev/null 2>&1; then
+            echo "[FAIL]: ServiceAccount '${SA_NAME}' not found"
+            FAILED=1
+        else
+            echo "[OK]: ServiceAccount '${SA_NAME}' exists"
+        fi
+
+        echo "--- Checking RBAC resources ---"
+        # Check ClusterRole exists
+        if ! kubectl get clusterrole "{{ include "falcon-sensor.fullname" . }}-access-role" > /dev/null 2>&1; then
+            echo "[FAIL]: ClusterRole '{{ include "falcon-sensor.fullname" . }}-access-role' not found"
+            FAILED=1
+        else
+            echo "[OK]: ClusterRole exists"
+        fi
+
+        # Check ClusterRoleBinding exists
+        if ! kubectl get clusterrolebinding "{{ include "falcon-sensor.fullname" . }}-access-binding" > /dev/null 2>&1; then
+            echo "[FAIL]: ClusterRoleBinding '{{ include "falcon-sensor.fullname" . }}-access-binding' not found"
+            FAILED=1
+        else
+            echo "[OK]: ClusterRoleBinding exists"
+        fi
+
+        echo "--- Checking pod annotations ---"
+        PODS=$(kubectl get pods -n "{{ include "falcon-sensor.namespace" . }}" \
+          -l "app.kubernetes.io/component=kernel_sensor" \
+          -o jsonpath="{.items[*].metadata.name}" 2>&1)
+        if [ -z "${PODS}" ]; then
+            echo "[FAIL]: No sensor pods found"
+            FAILED=1
+        else
+            for POD in ${PODS}; do
+                # Check injection disabled annotation
+                INJECTION_ANNOTATION=$(kubectl get pod "${POD}" \
+                  -n "{{ include "falcon-sensor.namespace" . }}" \
+                  -o jsonpath="{.metadata.annotations.{{ .Values.node.daemonset.podAnnotationKey | replace "." "\\." }}}" 2>&1)
+                if [ "${INJECTION_ANNOTATION}" != "disabled" ]; then
+                    echo "[FAIL]: Pod '${POD}' injection annotation is '${INJECTION_ANNOTATION}', expected 'disabled'"
+                    FAILED=1
+                else
+                    echo "[OK]: Pod '${POD}' has injection=disabled annotation"
+                fi
+
+                # Check checksum/configmap annotation
+                CHECKSUM_ANNOTATION=$(kubectl get pod "${POD}" \
+                  -n "{{ include "falcon-sensor.namespace" . }}" \
+                  -o jsonpath="{.metadata.annotations.checksum/configmap}" 2>&1)
+                if [ -z "${CHECKSUM_ANNOTATION}" ]; then
+                    echo "[FAIL]: Pod '${POD}' is missing checksum/configmap annotation"
+                    FAILED=1
+                else
+                    echo "[OK]: Pod '${POD}' has checksum/configmap annotation"
+                fi
+            done
+        fi
+
+        {{- if .Values.testing.labelNamespace }}
+        echo "--- Checking PSS namespace labels ---"
+        NS_NAME="{{ include "falcon-sensor.namespace" . }}"
+        for LABEL in "pod-security.kubernetes.io/enforce=privileged" "pod-security.kubernetes.io/warn=privileged" "pod-security.kubernetes.io/audit=privileged"; do
+            KEY="${LABEL%%=*}"
+            VALUE="${LABEL##*=}"
+            ACTUAL=$(kubectl get namespace "${NS_NAME}" -o json 2>&1 | jq -r --arg key "${KEY}" '.metadata.labels[$key] // ""')
+            if [ "${ACTUAL}" != "${VALUE}" ]; then
+                echo "[FAIL]: Namespace '${NS_NAME}' label '${KEY}' is '${ACTUAL}', expected '${VALUE}'"
+                FAILED=1
+            else
+                echo "[OK]: Namespace '${NS_NAME}' has label '${KEY}=${VALUE}'"
+            fi
+        done
+        {{- end }}
+
+        echo "--- Checking pod labels ---"
+        for POD in ${PODS}; do
+            # Check component label
+            COMPONENT_LABEL=$(kubectl get pod "${POD}" \
+              -n "{{ include "falcon-sensor.namespace" . }}" \
+              -o jsonpath="{.metadata.labels.app\.kubernetes\.io/component}" 2>&1)
+            if [ "${COMPONENT_LABEL}" != "kernel_sensor" ]; then
+                echo "[FAIL]: Pod '${POD}' component label is '${COMPONENT_LABEL}', expected 'kernel_sensor'"
+                FAILED=1
+            else
+                echo "[OK]: Pod '${POD}' has correct component label"
+            fi
+
+            # Check provider label
+            PROVIDER_LABEL=$(kubectl get pod "${POD}" \
+              -n "{{ include "falcon-sensor.namespace" . }}" \
+              -o jsonpath="{.metadata.labels.crowdstrike\.com/provider}" 2>&1)
+            if [ "${PROVIDER_LABEL}" != "crowdstrike" ]; then
+                echo "[FAIL]: Pod '${POD}' provider label is '${PROVIDER_LABEL}', expected 'crowdstrike'"
+                FAILED=1
+            else
+                echo "[OK]: Pod '${POD}' has correct provider label"
+            fi
+        done
+
+        if [ "${FAILED}" -eq 1 ]; then
+            exit 1
+        fi
+        exit 0
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+  serviceAccountName: {{ include "falcon-sensor.fullname" . }}-test-sa
+  restartPolicy: Never
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,45 @@
+{{- if or .Values.container.enabled .Values.node.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "falcon-sensor.fullname" . }}-access-role
+  labels:
+    app: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/name: {{ include "falcon-sensor.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- if .Values.container.enabled }}
+    app.kubernetes.io/component: "container_sensor"
+    {{ else if .Values.node.enabled }}
+    app.kubernetes.io/component: "kernel_sensor"
+    {{ end -}}
+    crowdstrike.com/provider: crowdstrike
+    helm.sh/chart: {{ include "falcon-sensor.chart" . }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - secrets
+  {{- if .Values.node.enabled }}
+  - pods
+  - services
+  - nodes
+  {{- end }}
+  verbs:
+  - get
+  {{- if .Values.node.enabled }}
+  - watch
+  - list
+  {{- end }}
+{{- if and (include "falcon-sensor.openshiftEnabled" . | eq "true") (not (include "falcon-sensor.openshiftCreateSCC" . | eq "true")) .Values.node.openshift.sccName }}
+- apiGroups:
+  - security.openshift.io
+  resources:
+  - securitycontextconstraints
+  resourceNames:
+  - {{ include "falcon-sensor.sccName" . }}
+  verbs:
+  - use
+{{- end }}
+{{- end }}
