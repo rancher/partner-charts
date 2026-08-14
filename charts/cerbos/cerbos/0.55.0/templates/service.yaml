@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cerbos.fullname" . }}
+  labels:
+    {{- include "cerbos.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- with .Values.service.clusterIP }}
+  clusterIP: {{ . }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- if .Values.service.internalTrafficPolicy }}
+  internalTrafficPolicy: {{ .Values.service.internalTrafficPolicy }}
+  {{- else if eq .Values.type "daemonset" }}
+  internalTrafficPolicy: Local
+  {{- end }}
+  ports:
+    - port: {{ .Values.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+      name: http
+      {{ if eq .Values.service.type "NodePort" -}}
+      nodePort: {{ .Values.service.httpNodePort }}
+      {{- end }}
+    - port: {{ .Values.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+      {{ if eq .Values.service.type "NodePort" -}}
+      nodePort: {{ .Values.service.grpcNodePort }}
+      {{- end }}
+  selector:
+    {{- include "cerbos.selectorLabels" . | nindent 4 }}
+  {{- with .Values.service.trafficDistribution }}
+  trafficDistribution: {{ quote . }}
+  {{- end }}
