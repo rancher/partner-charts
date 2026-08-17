@@ -1,0 +1,433 @@
+global:
+  security:
+    # -- Required by the Bitnami common library because the postgresql
+    # subchart image is redirected to docker.io/bitnamilegacy (see
+    # postgresql.image below); without it the render fails with "Original
+    # containers have been substituted for unrecognized ones". Ignored by
+    # this chart's own templates and harmless when the subchart is disabled.
+    allowInsecureImages: true
+  compatibility:
+    openshift:
+      # -- OpenShift restricted-v2 SCC compatibility: "auto" drops the chart's
+      # fixed runAsUser/runAsGroup/fsGroup (letting the SCC assign range-valid
+      # IDs) when the API server is OpenShift, "force" always drops them,
+      # "disabled" never does. The Bitnami postgresql subchart honours the
+      # same value.
+      adaptSecurityContext: auto
+
+# -- Number of replicas. Note: SQLite storage mode only supports 1 replica.
+# The agent runtime carries a second single-instance constraint: its zero-config
+# durable backend keeps run state on local disk behind file locks, and each pod
+# gets its own copy, so a run started on one replica is invisible to the next
+# request. Lifting it needs WORKFLOW_TARGET_WORLD=@workflow/world-postgres,
+# which the published image cannot load yet - so the chart REFUSES TO RENDER
+# when an agent could run here and more than one replica is asked for. Set
+# agent.enabled=false to run Studio on many replicas without agents. See
+# "Agent Runtime" in the chart README.
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: ghcr.io/libredb/libredb-studio
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (default: Chart appVersion)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+# =============================================================================
+# Secrets — sensitive values stored in a Kubernetes Secret
+# =============================================================================
+secrets:
+  # -- Use an existing Secret instead of creating one.
+  # When set, all other secret values are ignored.
+  existingSecret: ""
+  # -- Key name mapping for existing secrets.
+  # Override if your existing secret uses different key names.
+  existingSecretKeys:
+    jwtSecret: jwt-secret
+    adminEmail: admin-email
+    adminPassword: admin-password
+    userEmail: user-email
+    userPassword: user-password
+    llmApiKey: llm-api-key
+    oidcClientId: oidc-client-id
+    oidcClientSecret: oidc-client-secret
+    storagePostgresUrl: storage-postgres-url
+  # -- JWT signing secret (min 32 chars). Required in strict mode (config.authBootstrap=off);
+  # otherwise generated on first start.
+  jwtSecret: ""
+  # -- Admin account email. Mirrors the app's own default; set to "" to let the app apply it
+  # instead (no ADMIN_EMAIL is then written to the Secret or the pod).
+  adminEmail: "admin@libredb.org"
+  # -- Admin account password. Required in strict mode (config.authBootstrap=off);
+  # otherwise generated on first start.
+  adminPassword: ""
+  # -- Regular user account email (used only when userPassword is set). Mirrors the app's own
+  # default; set to "" to let the app apply it instead.
+  userEmail: "user@libredb.org"
+  # -- Regular user account password. Optional: the non-admin account exists only when set;
+  # it is never generated.
+  userPassword: ""
+  # -- LLM API key (optional, for AI features)
+  llmApiKey: ""
+  # -- OIDC client ID (required when authProvider=oidc)
+  oidcClientId: ""
+  # -- OIDC client secret (required when authProvider=oidc)
+  oidcClientSecret: ""
+  # -- PostgreSQL connection URL for storage (required when storageProvider=postgres and postgresql.enabled=false)
+  storagePostgresUrl: ""
+
+# =============================================================================
+# Config — non-sensitive values stored in a ConfigMap
+# =============================================================================
+
+# -- Authentication provider: "local" or "oidc"
+authProvider: "local"
+
+config:
+  # -- Log level
+  logLevel: "info"
+  # -- Auth bootstrap mode: "" (default: AUTH_BOOTSTRAP is omitted and the app's zero-config
+  # first run applies — missing JWT_SECRET / ADMIN_PASSWORD are auto-generated on first start,
+  # printed once to the pod log, and stored in /app/data/auth-bootstrap.json), "on" (same,
+  # explicit), or "off" (strict: secrets.jwtSecret and secrets.adminPassword are required
+  # and a missing value fails the install).
+  # The zero-config default makes the chart deployable with default values (e.g. Rancher Apps).
+  authBootstrap: ""
+  # -- Storage provider: "local" (browser), "sqlite" (file), or "postgres" (database)
+  storageProvider: "local"
+  # -- SQLite database file path (when storageProvider=sqlite)
+  storageSqlitePath: "/app/data/libredb-storage.db"
+  # -- LLM provider: gemini, openai, ollama, custom (optional)
+  llmProvider: ""
+  # -- LLM model name (optional)
+  llmModel: ""
+  # -- LLM API URL for ollama/custom providers (optional)
+  llmApiUrl: ""
+  # -- OIDC issuer URL (required when authProvider=oidc)
+  oidcIssuer: ""
+  # -- OIDC scopes (space-separated)
+  oidcScope: "openid profile email"
+  # -- OIDC claim path for role extraction
+  oidcRoleClaim: ""
+  # -- OIDC admin role values (comma-separated)
+  oidcAdminRoles: "admin"
+
+# =============================================================================
+# Agent Runtime
+# =============================================================================
+# The read-only investigation agent is NOT a separate on-switch: the app derives
+# whether it can run from what is true at runtime - a model configured through
+# the AI settings above (there is no second place to enter a key) plus a writable
+# ledger directory - and GET /api/agent/config reports which of the two failed.
+# The chart sets WORKFLOW_LOCAL_DATA_DIR=/app/data/workflow itself, inside the
+# volume mounted on /app/data in every render, so the ledger is writable under
+# readOnlyRootFilesystem: true with nothing to configure. It sets it rather than
+# leaning on the image because image.tag defaults to this chart's appVersion, and
+# the container image gained its own default for that variable in a LATER app
+# version: on the image a default install pulls today, an unset variable resolves
+# to .workflow-data under WORKDIR /app, which is read-only, and every run refuses
+# with LEDGER_UNAVAILABLE. Both name the same path, so the two agree once such an
+# image ships. Override it through extraEnv (written after this, so it wins).
+#
+# WHERE RUN HISTORY LIVES: in that ledger, under /app/data. With
+# persistence.enabled=false that path is an emptyDir - the agent works, every run
+# is written, and the whole history goes with the pod. Set persistence.enabled=true
+# if a finished run should still be readable after a restart or a node drain.
+agent:
+  # -- Explicit off-switch, and nothing else. Leave it unset (the default) and the
+  # chart writes no LIBREDB_AGENT_ENABLED at all, so the runtime keeps deriving the
+  # answer. `false` writes LIBREDB_AGENT_ENABLED=false, which is the supported way
+  # to have AI configured and no agent - use it when upgrading a deployment that
+  # already has an LLM key and does not want an agent. `true` is accepted and
+  # explicit, but it cannot conjure a model: with no AI configuration the agent
+  # still reports itself absent. The value is rendered as a quoted string, so no
+  # --set-string is needed.
+  enabled: null
+
+# =============================================================================
+# Persistence — PVC for SQLite storage mode
+# =============================================================================
+persistence:
+  # -- Enable persistent storage. Auto-enabled when storageProvider=sqlite.
+  enabled: false
+  # -- Storage class name (leave empty for default)
+  storageClassName: ""
+  # -- Access modes
+  accessModes:
+    - ReadWriteOnce
+  # -- Storage size
+  size: 1Gi
+  # -- Use an existing PVC instead of creating one
+  existingClaim: ""
+  # -- Annotations for the PVC
+  annotations: {}
+  # -- Size limit for the /app/data emptyDir used when persistence is disabled (e.g. "512Mi").
+  # Empty means unlimited, which is the historical behaviour; a limit makes the kubelet evict
+  # the pod once the volume grows past it, so set it only if you know the workload's ceiling.
+  emptyDirSizeLimit: ""
+  # -- Chown the mounted /app/data volume to podSecurityContext.runAsUser:fsGroup before the app
+  # starts, via a short root init container. Only for statically provisioned volumes the kubelet
+  # does not apply fsGroup to (hostPath, some local PVs), where the app otherwise hits EACCES.
+  # Requires a volume (persistence.enabled or storageProvider=sqlite). Rendering FAILS when the
+  # OpenShift security-context adaptation is active: restricted-v2 rejects a root container, and
+  # there the pod's UID/GID come from the namespace range, so the chown would target the wrong
+  # owner. Use a storage class whose volumes get fsGroup applied instead.
+  fixPermissions: false
+
+# =============================================================================
+# Security
+# =============================================================================
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- Annotations (e.g., for IRSA or Workload Identity)
+  annotations: {}
+  # -- ServiceAccount name (auto-generated if empty)
+  name: ""
+  # -- Automount API credentials
+  automountServiceAccountToken: false
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Pod annotations
+podAnnotations: {}
+# -- Pod labels
+podLabels: {}
+
+# =============================================================================
+# Probes — uses /api/db/health endpoint
+# =============================================================================
+startupProbe:
+  httpGet:
+    path: /api/db/health
+    port: http
+  failureThreshold: 30
+  periodSeconds: 2
+
+readinessProbe:
+  httpGet:
+    path: /api/db/health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /api/db/health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+# =============================================================================
+# Resources
+# =============================================================================
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# =============================================================================
+# Networking
+# =============================================================================
+service:
+  # -- Service type: ClusterIP, NodePort, or LoadBalancer
+  type: ClusterIP
+  # -- Service port
+  port: 80
+  # -- Container target port
+  targetPort: 3000
+  # -- NodePort (only when type=NodePort)
+  nodePort: ""
+  # -- Service annotations
+  annotations: {}
+
+ingress:
+  # -- Enable Ingress
+  enabled: false
+  # -- Ingress class name (e.g., nginx, traefik)
+  className: ""
+  # -- Ingress annotations
+  annotations: {}
+  # -- Ingress hosts
+  hosts:
+    - host: libredb.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration
+  tls: []
+  #  - secretName: libredb-tls
+  #    hosts:
+  #      - libredb.local
+
+route:
+  # -- Labels added to every enabled route (a per-route `labels` entry with the
+  # same key wins). Because `labels` and `annotations` are read as shared
+  # settings here, they are reserved key names and cannot be used as route names.
+  labels: {}
+  # -- Annotations added to every enabled route (a per-route `annotations` entry
+  # with the same key wins). Reserved key name, as `labels` above.
+  annotations: {}
+
+  main:
+    # -- Enables or disables the route
+    enabled: false
+
+    # -- Set the route apiVersion, e.g. gateway.networking.k8s.io/v1 or gateway.networking.k8s.io/v1alpha2
+    apiVersion: gateway.networking.k8s.io/v1
+    # -- Set the route kind. `HTTPRoute` is the only accepted value (enforced by
+    # values.schema.json): only an HTTPRoute-shaped body is rendered, so any other
+    # kind would produce a manifest the API server rejects.
+    kind: HTTPRoute
+
+    annotations: {}
+    labels: {}
+
+    hostnames: []
+    # - libredb.local
+    # -- Required whenever this route is enabled: rendering fails without it. It
+    # cannot be defaulted because the Gateway to attach to is specific to each
+    # cluster's Gateway API install (name, namespace and listener).
+    parentRefs: []
+    # - name: traefik-gateway
+    #   namespace: traefik
+    #   sectionName: websecure
+
+    matches:
+      - path:
+          type: PathPrefix
+          value: /
+
+    ## Filters define the filters that are applied to requests that match this rule.
+    filters: []
+
+    ## Additional custom rules that can be added to the route
+    additionalRules: []
+
+    ## httpsRedirect adds a filter for redirecting to https (HTTP 301 Moved Permanently).
+    httpsRedirect: false
+
+networkPolicy:
+  # -- Enable NetworkPolicy
+  enabled: false
+  # -- Additional ingress rules
+  additionalIngress: []
+  # -- Additional egress rules
+  additionalEgress: []
+
+# =============================================================================
+# Autoscaling & HA
+# =============================================================================
+autoscaling:
+  # -- Enable HorizontalPodAutoscaler
+  enabled: false
+  # -- Minimum replicas
+  minReplicas: 2
+  # -- Maximum replicas
+  maxReplicas: 10
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 75
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  # -- Enable PodDisruptionBudget
+  enabled: false
+  # -- Minimum available pods (mutually exclusive with maxUnavailable; unset the
+  # default with --set podDisruptionBudget.minAvailable=null when using maxUnavailable)
+  minAvailable: 1
+  # -- Maximum unavailable pods (mutually exclusive with minAvailable)
+  # maxUnavailable: 1
+
+# =============================================================================
+# PostgreSQL Subchart (Bitnami)
+# =============================================================================
+postgresql:
+  # -- Deploy a PostgreSQL instance for storage backend
+  enabled: false
+  # Broadcom's August 2025 Bitnami catalog freeze removed the version-pinned
+  # postgresql images from docker.io/bitnami (the chart-pinned tag now 404s);
+  # they live on unchanged under docker.io/bitnamilegacy, which receives no
+  # further updates. This override keeps the subchart installable. For
+  # production, prefer an external database (secrets.storagePostgresUrl) or a
+  # dedicated operator such as CloudNativePG.
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+  # The subchart's optional helper images moved to bitnamilegacy the same way.
+  volumePermissions:
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/os-shell
+  metrics:
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/postgres-exporter
+  auth:
+    # -- PostgreSQL username
+    username: "libredb"
+    # -- PostgreSQL password
+    password: ""
+    # -- PostgreSQL database name
+    database: "libredb_storage"
+
+# =============================================================================
+# Scheduling
+# =============================================================================
+# -- Node selector
+nodeSelector: {}
+# -- Tolerations
+tolerations: []
+# -- Affinity rules
+affinity: {}
+# -- Topology spread constraints
+topologySpreadConstraints: []
+
+# =============================================================================
+# Extra configuration
+# =============================================================================
+# -- Additional environment variables
+extraEnv: []
+#  - name: MY_VAR
+#    value: "my-value"
+
+# -- Additional envFrom references
+extraEnvFrom: []
+#  - configMapRef:
+#      name: my-config
+
+# -- Seed connections: pre-configured database connections
+seedConnections:
+  # -- Enable seed connections feature
+  enabled: false
+  # -- Inline config (rendered as YAML in ConfigMap)
+  config: {}
+  # -- Use an existing ConfigMap instead of inline config
+  existingConfigMap: ""
+  # -- Key within the ConfigMap containing the YAML config
+  configMapKey: "seed-connections.yaml"
+  # -- Cache TTL in milliseconds for config reloading
+  cacheTTL: 60000
