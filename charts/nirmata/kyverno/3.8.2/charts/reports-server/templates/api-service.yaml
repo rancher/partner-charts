@@ -1,0 +1,41 @@
+{{- if and .Values.apiServicesManagement.installApiServices.enabled (not .Values.apiServicesManagement.migrateReportsServer.enabled) }}
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha2.wgpolicyk8s.io
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "reports-server.labels" . | nindent 4 }}
+    kube-aggregator.kubernetes.io/automanaged: "false"
+spec:
+  group: wgpolicyk8s.io
+  groupPriorityMinimum: 100
+  insecureSkipTLSVerify: true
+  service:
+    name: {{ include "reports-server.fullname" . }}
+    namespace: {{ $.Release.Namespace }}
+  version: v1alpha2
+  versionPriority: 100
+
+{{- if .Values.apiServicesManagement.installApiServices.installEphemeralReportsService }}
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1.reports.kyverno.io
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "reports-server.labels" . | nindent 4 }}
+    kube-aggregator.kubernetes.io/automanaged: "false"
+spec:
+  group: reports.kyverno.io
+  groupPriorityMinimum: 100
+  insecureSkipTLSVerify: true
+  service:
+    name: {{ include "reports-server.fullname" . }}
+    namespace: {{ $.Release.Namespace }}
+  version: v1
+  versionPriority: 100
+{{- end }}
+{{- end }}

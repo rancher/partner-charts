@@ -1,0 +1,69 @@
+{{- if .Values.admissionController.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "kyverno.fullname" . }}-admission-controller-readiness
+  namespace: {{ template "kyverno.namespace" . }}
+  labels:
+    {{- include "kyverno.test.labels" . | nindent 4 }}
+  annotations:
+    {{- include "kyverno.test.annotations" . | nindent 4 }}
+spec:
+  automountServiceAccountToken: {{ .Values.test.automountServiceAccountToken }}
+  restartPolicy: Never
+  {{- with .Values.test.imagePullSecrets | default .Values.global.imagePullSecrets }}
+  imagePullSecrets:
+    {{- tpl (include "kyverno.sortedImagePullSecrets" .) $ | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: test
+      image: {{ template "kyverno.test.image" . }}
+      imagePullPolicy: {{ template "kyverno.test.imagePullPolicy" . }}
+      {{- with .Values.test.resources }}
+      resources:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.test.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      args:
+        - check-http
+        - --service-name={{ template "kyverno.admission-controller.serviceName" . }}
+        - --namespace={{ template "kyverno.namespace" . }}
+        - --port={{ .Values.admissionController.service.port }}
+        - --path=health/readiness
+        - --https
+  {{- with .Values.test.nodeSelector | default .Values.global.nodeSelector }}
+  nodeSelector:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.test.tolerations | default .Values.global.tolerations}}
+  tolerations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- if not .Values.test.automountServiceAccountToken }}
+  volumes:
+    - name: serviceaccount-token
+      projected:
+        defaultMode: 0444
+        sources:
+          - serviceAccountToken:
+              expirationSeconds: {{ .Values.test.projectedServiceAccountToken.expirationSeconds | default 3600 }}
+              path: token
+              {{- with .Values.test.projectedServiceAccountToken.audience }}
+              audience: {{ . }}
+              {{- end }}
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+                - key: ca.crt
+                  path: ca.crt
+          - downwardAPI:
+              items:
+                - path: namespace
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+  {{- end }}
+{{- end -}}
