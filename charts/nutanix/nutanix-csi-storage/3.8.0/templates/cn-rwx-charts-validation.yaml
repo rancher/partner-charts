@@ -1,0 +1,43 @@
+{{/*
+CN-RWX Charts Configuration Validation
+=========================================
+
+Purpose:
+  Validates CN-RWX configuration at Helm template rendering time (pre-install/pre-upgrade).
+  This fail-fast validation prevents incomplete deployments by catching configuration errors
+  before any Kubernetes resources are created.
+
+Validations:
+  1. volumesRWXChartsUrl Required: If volumeRWXSupport.enabled is true, volumesRWXChartsUrl must be provided
+     - This is a download URL for the cn-rwx-charts.tgz Helm chart (use an internal URL for air-gapped clusters)
+     - Without it, the installer job would fail at runtime.
+  2. ntnxInitConfigMap.usePC Required: If volumeRWXSupport.enabled is true, ntnxInitConfigMap.usePC must be true
+     - This is the deployment mode for the CSI driver
+     - Without it, the installer job would fail at runtime.
+Usage:
+  User must set in values.yaml:
+    volumeRWXSupport:
+      enabled: true
+      volumesRWXChartsUrl: "https://<internal-host>/cn-rwx-charts.tgz"
+    ntnxInitConfigMap:
+      usePC: true
+*/}}
+{{- $volumeRWXSupport := .Values.volumeRWXSupport | default dict -}}
+{{- if and .Values.volumeRWXSupport.enabled (ne (default false .Values.ntnxInitConfigMap.usePC) true) }}
+{{- fail "volumeRWXSupport is enabled, but 'ntnxInitConfigMap.usePC' is false. volumeRWXSupport requires CSI in PC mode; set ntnxInitConfigMap.usePC=true or disable volumeRWXSupport.enabled." }}
+{{- end }}
+{{- if and .Values.volumeRWXSupport.enabled (not .Values.volumeRWXSupport.volumesRWXChartsUrl) }}
+{{- fail "volumeRWXSupport is enabled, but 'volumeRWXSupport.volumesRWXChartsUrl' is not set in values.yaml. Please provide a download URL for the cn-rwx-charts.tgz." }}
+{{- end }}
+{{- /*
+Block upgrade path: CN-RWX was previously enabled and is now disabled.
+Detect using CN-RWX operator deployment and/or FileServer CRD.
+*/ -}}
+{{- if and .Release.IsUpgrade (not $volumeRWXSupport.enabled) }}
+{{- $targetNamespace := $volumeRWXSupport.namespace | default .Release.Namespace -}}
+{{- $operatorDeployment := (lookup "apps/v1" "Deployment" $targetNamespace "nutanix-cn-rwx-operator") -}}
+{{- $fileServerCRD := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "fileservers.nutanix.com") -}}
+{{- if or $operatorDeployment $fileServerCRD }}
+{{- fail (printf "Helm upgrade blocked: CN-RWX appears to be enabled in the current installation, but this upgrade sets volumeRWXSupport.enabled=false. Disabling CN-RWX through upgrade is not supported. To remove CN-RWX, uninstall CSI by running 'helm uninstall %s' and then reinstall again with volumeRWXSupport.enabled=false." .Release.Name) }}
+{{- end }}
+{{- end }}

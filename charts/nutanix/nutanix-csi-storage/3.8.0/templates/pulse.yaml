@@ -1,0 +1,199 @@
+{{- if .Values.pulse.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{.Release.Name}}-pulse-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.selectorLabels" . | nindent 4 }}
+data:
+  csiVersion: {{ .Chart.AppVersion | quote }}
+  deploymentType: {{ .Values.kubernetesClusterDeploymentType | quote }}
+  {{- if eq .Values.ntnxInitConfigMap.usePC true }}
+  managementPlane: "pc"
+  {{- else }}
+  managementPlane: "pe"
+  {{- end }}
+  {{- if eq .Values.ntnxInitConfigMap.usePETopology true }}
+  topologyEnabled: "true"
+  {{- else }}
+  topologyEnabled: "false"
+  {{- end }}
+  {{- if eq .Values.ntnxInitConfigMap.usePEFallback true }}
+  peFallBackEnabled: "true"
+  {{- else }}
+  peFallBackEnabled: "false"
+  {{- end }}
+  {{- if eq .Values.ntnxInitConfigMap.associateCategoriesToVolume true }}
+  vgCategoryAssociation: "true"
+  {{- else }}
+  vgCategoryAssociation: "false"
+  {{- end }}
+  secretManagementType: {{ include "nutanix-csi-storage.secretManagementType" . | quote }}
+  {{- if eq (default "basic-auth" .Values.authType) "service-auth" }}
+  secretAuthType: "service"
+  {{- else }}
+  secretAuthType: "basic"
+  {{- end }}
+  stretchedPECount: {{ len .Values.peSecrets | quote }}
+  maxVolumesPerNode: {{ .Values.maxVolumesPerNode | quote }}
+  csiControllerReplicas: {{ .Values.controller.replicas | quote }}
+  csiDriverName: {{ include "nutanix-csi-storage.drivername" . }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{.Release.Name}}-pulse-serviceaccount
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.selectorLabels" . | nindent 4 }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{.Release.Name}}-pulse-role
+  labels:
+    {{- include "nutanix-csi-storage.selectorLabels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes", "persistentvolumeclaims", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csidrivers"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["kube-system"]
+    verbs: ["get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csidrivers"]
+    verbs: ["get"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{.Release.Name}}-pulse-binding
+  labels:
+    {{- include "nutanix-csi-storage.selectorLabels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{.Release.Name}}-pulse-serviceaccount
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{.Release.Name}}-pulse-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{.Release.Name}}-pulse-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nutanix-csi-storage.selectorLabels" . | nindent 4 }}
+spec:
+  schedule: "{{ randInt 0 60 }} {{ randInt 0 24 }} * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  startingDeadlineSeconds: 43200
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "nutanix-csi-storage.selectorLabels" . | nindent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "nutanix-csi-storage.selectorLabels" . | nindent 12 }}
+        spec:
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          restartPolicy: Never
+          serviceAccountName: {{.Release.Name}}-pulse-serviceaccount
+          containers:
+            - name: ntnx-csi-pulse
+              image: {{ .Values.pulse.image }}
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
+              args:
+                - --use-nusights-test={{ eq .Values.pulse.useNusightsTest true }}
+              env:
+                - name: CSI_SECRET_DIR
+                  value: {{ .Values.csiSecretDir }}
+                - name: CSI_PE_SECRET_DIR
+                  value: {{ include "nutanix-csi-storage.peSecretDir" . }}
+                - name: USE_PC
+                  value: {{ eq .Values.ntnxInitConfigMap.usePC true | quote }}
+                - name: USE_PE_TOPOLOGY
+                  value: {{ eq .Values.ntnxInitConfigMap.usePETopology true | quote }}
+                - name: CRONJOB_NAME
+                  value: {{ printf "%s-pulse-collector" .Release.Name | quote }}
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: PULSE_CONFIG_MAP_DIR
+                  value: /etc/ntnx-csi/pulse-config
+              volumeMounts:
+                - name: pulse-config-volume
+                  mountPath: /etc/ntnx-csi/pulse-config
+                  readOnly: true
+                {{- if eq .Values.ntnxInitConfigMap.usePC true}}
+                - mountPath: {{ .Values.csiSecretDir }}
+                  name: pc-secret
+                  readOnly: true
+                {{- else if eq .Values.ntnxInitConfigMap.usePETopology false }}
+                - mountPath: {{ include "nutanix-csi-storage.peSecretDir" . }}
+                  name: pe-secret
+                  readOnly: true
+                {{- else }}
+                {{- range $index, $peSecret := .Values.peSecrets }}
+                - mountPath: {{ include "nutanix-csi-storage.peSecretDir" . }}/{{ printf "pe-secret-%d" $index }}
+                  name: pe-secret-{{ $index }}
+                  readOnly: true
+                {{- end }}
+                {{- end }}
+              {{- with .Values.pulse.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: pulse-config-volume
+              configMap:
+                name: {{.Release.Name}}-pulse-config
+            {{- if eq .Values.ntnxInitConfigMap.usePC true }}
+            {{/* For PC mode, we need to mount the central PC secret for pulse */}}
+            - name: pc-secret
+              secret:
+                secretName: {{ .Values.pcSecretName }}
+            {{- else if eq .Values.ntnxInitConfigMap.usePETopology false }}
+            {{/* For PE mode without topology, we need to mount the central PE secret for pulse */}}
+            - name: pe-secret
+              secret:
+                secretName: {{ .Values.peSecretName }}
+            {{- else }}
+            {{- range $index, $peSecret := .Values.peSecrets }}
+            {{/* For PE mode with topology, we need to mount the multi PE secrets for pulse */}}
+            - name: pe-secret-{{ $index }}
+              secret:
+                {{- if $.Values.createPESecrets }}
+                secretName: {{ default (printf "pe-secret-%d" $index) $peSecret.secretName }}
+                {{- else }}
+                secretName: {{ $peSecret.secretName }}
+                {{- end }}
+            {{- end }}
+            {{- end }}
+      backoffLimit: 2
+{{- end }}
