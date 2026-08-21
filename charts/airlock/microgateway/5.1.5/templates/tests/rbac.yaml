@@ -1,0 +1,166 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+subjects:
+- kind: ServiceAccount
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+    - gateway.networking.k8s.io
+  resources:
+    - gateways
+  verbs:
+    - create
+- apiGroups:
+    - gateway.networking.k8s.io
+  resources:
+    - gateways
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-gw"
+  verbs:
+    - get
+    - list
+    - watch
+    - delete
+- apiGroups:
+    - gateway.networking.k8s.io
+  resources:
+    - httproutes
+  verbs:
+    - create
+- apiGroups:
+    - gateway.networking.k8s.io
+  resources:
+    - httproutes
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-http-route"
+  verbs:
+    - get
+    - list
+    - watch
+    - delete
+- apiGroups:
+    - ""
+  resources:
+    - events
+  verbs:
+    - list
+- apiGroups:
+    - "apps"
+  resources:
+    - deployments
+    - "{{ include "airlock-microgateway.fullname" . }}-test-gw"
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - ""
+  resources:
+    - pods
+    - pods/log
+    - pods/status
+    - pods/attach
+  verbs:
+    - get
+    - list
+    - create
+    - watch
+    - delete
+- apiGroups:
+    - microgateway.airlock.com
+  resources:
+    - gatewayparameters
+  verbs:
+    - create
+- apiGroups:
+    - microgateway.airlock.com
+  resources:
+    - gatewayparameters
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-gw"
+  verbs:
+    - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests-{{ .Release.Namespace }}"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests-{{ .Release.Namespace }}"
+subjects:
+  - kind: ServiceAccount
+    name: "{{ include "airlock-microgateway.fullname" . }}-tests"
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: tests
+    app.kubernetes.io/name: {{ include "airlock-microgateway.name" . }}-tests
+    {{- include "airlock-microgateway.sharedLabels" . | nindent 4 }}
+  name: "{{ include "airlock-microgateway.fullname" . }}-tests-{{ .Release.Namespace }}"
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - namespaces
+  verbs:
+    - get
+    - list
+- apiGroups:
+    - gateway.networking.k8s.io
+  resources:
+    - gatewayclasses
+  verbs:
+    - create
+- apiGroups:
+    - gateway.networking.k8s.io
+  resources:
+    - gatewayclasses
+  resourceNames:
+    - "{{ include "airlock-microgateway.fullname" . }}-test-gwc"
+  verbs:
+    - get
+    - list
+    - watch
+    - delete
+{{- end -}}
