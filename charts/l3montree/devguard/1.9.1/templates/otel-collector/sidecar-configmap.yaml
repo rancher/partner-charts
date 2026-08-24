@@ -1,0 +1,66 @@
+{{- if .Values.api.tracing.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-sidecar-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "devguard.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- if .Values.api.tracing.existingSecretName }}
+    extensions:
+      basicauth/otlp:
+        client_auth:
+          username: ${OTEL_EXPORTER_BASIC_AUTH_USERNAME}
+          password: ${OTEL_EXPORTER_BASIC_AUTH_PASSWORD}
+    {{- end }}
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: localhost:4317
+          http:
+            endpoint: localhost:4318
+
+    connectors:
+      spanmetrics:
+        histogram:
+          explicit:
+            buckets: {{ .Values.api.tracing.spanMetrics.histogram.buckets | toJson }}
+        dimensions:
+          {{- range .Values.api.tracing.spanMetrics.dimensions }}
+          - name: {{ .name }}
+            {{- if .default }}
+            default: {{ .default }}
+            {{- end }}
+          {{- end }}
+        exemplars:
+          enabled: true
+        metrics_flush_interval: 15s
+
+    exporters:
+      {{- if .Values.api.tracing.otlpEndpoint }}
+      otlphttp:
+        endpoint: {{ .Values.api.tracing.otlpEndpoint }}
+        {{- if .Values.api.tracing.existingSecretName }}
+        auth:
+          authenticator: basicauth/otlp
+        {{- end }}
+      {{- end }}
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+
+    service:
+      {{- if .Values.api.tracing.existingSecretName }}
+      extensions: [basicauth/otlp]
+      {{- end }}
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [spanmetrics{{- if .Values.api.tracing.otlpEndpoint }}, otlphttp{{- end }}]
+        metrics:
+          receivers: [spanmetrics]
+          exporters: [prometheus]
+{{- end }}

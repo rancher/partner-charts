@@ -1,0 +1,529 @@
+# DO NOT EDIT — generated from schema/schema.ts. Run `bun run generate` in schema/.
+# Default values for devguard.
+# This is a YAML-formatted file.
+# Declare variables to be passed into templates.
+
+################################################################################################
+## Authentication Related Settings (Kratos)
+######
+kratos:
+  image:
+    repository: oryd/kratos
+    tag: v26.2.0-distroless
+    digest: sha256:481bfc3022e5427ffb94570eef84480b99c9f8158388378c57df8c1a4a104b3d
+    pullPolicy: IfNotPresent
+  webauthn:
+    enabled: false
+  password:
+    enabled: true
+  passkey:
+    enabled: true
+  totp:
+    enabled: false
+  verificationAfterSignUp:
+    enabled: true
+  oidc:
+    enabled: false
+    # - id: github
+    #   provider: github
+    #   clientId: "sample-client-id"
+    #   disableTicketSync: false
+    #   existingClientSecretName: github-client-secret # needs to contain key "secret"
+    # - id: gitlab
+    #   provider: gitlab
+    #   issuerUrl: https://gitlab.de
+    #   clientId: client-id
+    #   existingClientSecretName: gitlab-secret
+    #   existingAdminTokenSecretName: gitlab-admin-token # needs to contain key "token"
+    #   scope:
+    #     - read_user
+    #     - openid
+    #     - profile
+    #     - email
+    # ingressNamespaceSelectorKey: "role"
+    # ingressNamespaceSelectorValue: "ingress"
+    providers: []
+  # Cleans up expired flows
+  cleanup:
+    enabled: true
+    # Default: every 10 minutes.
+    schedule: "*/10 * * * *"
+
+  # If set to "true", the user will be responsible to provide a secret for kratos.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "kratos"
+  # - a data entry named "secretsDefault" with the corresponding secret used for session signing as value
+  # - a data entry named "secretsCookie" with the corresponding secret used for cookie encryption as value
+  # - a data entry named "secretsCipher" with the corresponding secret used for cipher as value
+  useExistingSecret: false
+
+  # Allows to set additional environment variables on the kratos deployment
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
+mail:
+  # needs to contain key: "uri". Format should be like: smtps://<user>@<your-domain.com>:<secret>@<mail-server.de>:465/?skip_ssl_verify=false
+  existingSMTPConnectionUriSecret: ""
+  fromAddress: noreply@devguard.org
+  fromName: DevGuard
+
+################################################################################################
+## Miscellaneous Settings
+######
+networkPolicy:
+  enabled: true
+
+kyvernoPolicy:
+  enabled: false
+  # Enforce blocks non-compliant pods; Audit only logs violations
+  validationFailureAction: Audit
+
+################################################################################################
+## DevGuard API Settings
+######
+api:
+  # Gen a keypair using the devguard-cli gen-admin-key (https://github.com/l3montree-dev/devguard/blob/main/cmd/devguard-cli/commands/gen_admin_key.go)
+  # command. Place only the PUBLIC key here. The corresponding private key allows you access to the instance admin /admin dashboard. 
+  # Ensure to keep the private key secret and secure. 
+  # Keeping it empty disables admin endpoint access.
+  # adminPublicKey: ""
+  debug:
+    profile: false # set to "true" to enable pprof profiling endpoints on /debug/pprof
+  replicaCount: 1
+  ciComponentBase: https://gitlab.com/l3montree/devguard/-/raw/v1.9.0
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2048Mi
+    requests:
+      cpu: 100m
+      memory: 1024Mi
+  migrate:
+    resources:
+      limits:
+        cpu: "2"
+        memory: 3048Mi
+      requests:
+        cpu: 100m
+        memory: 1548Mi
+  csaf:
+    ######### CSAF Keys
+    # needs to contain keys: "passphrase", "privateKey", "publicKey", "fingerprint"
+    # the openGpg keys need to be in pem format.
+    # Generate keys: gpg --full-generate-key
+    # List key ids: gpg --list-secret-keys --keyid-format LONG
+    # Export public key: gpg --armor --export "$KEY_ID" > public.asc
+    # Export private key: gpg --armor --export-secret-keys "$KEY_ID" > private.asc
+    # Get fingerprint: gpg --fingerprint "$KEY_ID"
+    # kubectl create secret generic csaf-key-pair --from-file=privateKey=private.asc --from-file=publicKey=public.asc --from-literal=passphrase="..." --from-literal=fingerprint="1C10 446..." -n devguard
+    ####
+    # If you don't want to use CSAF features, leave this as empty string.
+    existingCsafSecretName: ""
+    aggregatorNamespace: "" # e.g. "example.com"
+    aggregatorName: "" # e.g. "Example GmbH"
+    aggregatorContactDetails: "" # e.g. "csaf@example.com"
+  image:
+    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard:v1.9.0)
+    # or an object with repository/tag/digest/pullPolicy.
+    repository: ghcr.io/l3montree-dev/devguard
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: v1.9.0
+  imagePullSecrets: []
+  errorTracking:
+    # https://<your-error-tracking-dsn>
+    dsn: ""
+    # can be dev, stage or prod
+    environment: dev
+  tracing:
+    enabled: false
+    # Fraction of requests to sample for distributed tracing (0.0 - 1.0)
+    sampleRate: "0.1"
+    # OTLP endpoint the sidecar collector forwards traces to, e.g. https://jaeger:4318
+    otlpEndpoint: ""
+    # Existing secret with basic auth credentials for the OTLP exporter (keys: username, password)
+    existingSecretName: ""
+    spanMetrics:
+      # OTel Collector sidecar image — receives traces from the API on localhost:4317,
+      # generates span metrics (port 8889) and forwards traces to otlpEndpoint.
+      image:
+        repository: otel/opentelemetry-collector-contrib
+        tag: 0.147.0
+      histogram:
+        buckets:
+          - 100us
+          - 1ms
+          - 2ms
+          - 6ms
+          - 10ms
+          - 100ms
+          - 250ms
+      dimensions:
+        - name: http.method
+        - name: http.status_code
+        - name: http.route
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+  intoto:
+    # When true, the chart generates the EC (prime256v1) private key used for
+    # signing In-Toto attestations and stores it in the secret named below.
+    # The key is generated once and preserved across upgrades.
+    # Set to false to bring your own secret (must contain key "privateKey"):
+    # openssl ecparam -name prime256v1 -genkey -noout -out private.ec.key
+    # kubectl create secret generic ec-private-key --from-file=privateKey=private.ec.key -n devguard"
+    generate: true
+    existingPrivateKeySecretName: ec-private-key
+  # GitHub App Integration Settings
+  github:
+    enabled: true
+    appId: abc
+    # needs to contain "webhookSecret"
+    existingWebhookSecretSecretName: github-app-webhook-secret
+    # needs to contain key "privateKey"
+    existingPrivateKeySecretName: github-app-private-key
+
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    # The API ingress host, served at path / (pathType Prefix).
+    # Example: api.devguard.example.com
+    # The chart supports a single ingress host because the Rancher install form
+    # cannot address list entries like hosts[0] and the services do not support
+    # path prefixes. If you need multiple hosts or a path prefix, please open a
+    # ticket describing your use case:
+    # https://github.com/l3montree-dev/devguard-helm-chart/issues
+
+    # Left empty by default on purpose: this lets the deprecated `hosts` list
+    # (below) still take effect for values files written before the single-host
+    # migration. A non-empty default here would silently override those hosts.
+
+    # DEPRECATED: the old `hosts` list form (`hosts: [{host, paths}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the single `host` scalar above.
+    host: ""
+    # Set to true to serve the API ingress over TLS for the host above.
+    # The certificate is read from the secret named by tlsSecretName.
+
+    # DEPRECATED: the old `tls` list form (`tls: [{hosts, secretName}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the boolean above plus tlsSecretName.
+    tls: false
+    # Name of the kubernetes.io/tls secret holding the certificate for the host
+    # above. Leave empty to default to "devguard-api-tls" (e.g. as the target
+    # secret of a cert-manager Certificate).
+    tlsSecretName: ""
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 80 # targetMemoryUtilizationPercentage: 80
+
+  # If set to "true", the user will be responsible to provide a secret for the Encryption Key.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "devguard-encryption-key"
+  # - a data entry named "key" with the corresponding encryption key as value
+  useExistingEncryptionKeySecret: false
+
+  # If set to "true", the user will be responsible to provide a secret for the pprof password
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "devguard-pprof-password"
+  # - a data entry named "password" with the corresponding pprof password as value
+  useExistingPprofPasswordSecret: false
+
+  # Allows to set additional environment variables on the api deployment
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
+
+################################################################################################
+## DevGuard Web Frontend Settings
+######
+web:
+  # needs to match the setting in the kratos.yaml
+  registrationEnabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: "0.5"
+      memory: 1024Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  image:
+    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard-web:v1.9.0)
+    # or an object with repository/tag/digest/pullPolicy.
+    repository: ghcr.io/l3montree-dev/devguard-web
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: v1.9.0
+  imagePullSecrets: []
+
+  ciComponentBase: https://gitlab.com/l3montree/devguard/-/raw/v1.9.0
+  devguardApiUrl: http://devguard-api-service:8080
+  devguardApiUrlPublicInternet: ""
+  privacyPolicyLink: ""
+  termsOfUseLink: ""
+  imprintLink: ""
+  accountDeletionMail: ""
+  # Custom Theme URLs (leave empty to use default theme)
+  themeJsUrl: ""
+  themeCssUrl: ""
+  errorTracking:
+    # https://<your-error-tracking-dsn>
+    dsn: ""
+
+  # Allows to set additional environment variables on the web deployment
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
+
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    # The web ingress host, served at path / (pathType Prefix).
+    # Example: devguard.example.com
+    # This host also drives the app's FRONTEND_URL (login/OAuth redirect target).
+    # The chart supports a single ingress host because the Rancher install form
+    # cannot address list entries like hosts[0] and the services do not support
+    # path prefixes. If you need multiple hosts or a path prefix, please open a
+    # ticket describing your use case:
+    # https://github.com/l3montree-dev/devguard-helm-chart/issues
+
+    # Left empty by default on purpose: this lets the deprecated `hosts` list
+    # (below) still take effect for values files written before the single-host
+    # migration. A non-empty default here would silently override those hosts and
+    # redirect users to the placeholder domain.
+
+    # DEPRECATED: the old `hosts` list form (`hosts: [{host, paths}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the single `host` scalar above.
+    host: ""
+    # Set to true to serve the web ingress over TLS for the host above.
+    # The certificate is read from the secret named by tlsSecretName.
+
+    # DEPRECATED: the old `tls` list form (`tls: [{hosts, secretName}]`) is still
+    # rendered for backwards compatibility, but is deprecated and will be removed in
+    # the next major version. Migrate to the boolean above plus tlsSecretName.
+    tls: false
+    # Name of the kubernetes.io/tls secret holding the certificate for the host
+    # above. Leave empty to default to "devguard-web-tls" (e.g. as the target
+    # secret of a cert-manager Certificate).
+    tlsSecretName: ""
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 80 # targetMemoryUtilizationPercentage: 80
+
+################################################################################################
+## DevGuard PostgreSQL Database Settings
+######
+postgresql:
+  image:
+    # Accepts either a full image string (e.g. ghcr.io/l3montree-dev/devguard/postgresql:v1.9.0)
+    # or an object with repository/tag/digest/pullPolicy.
+    # Please note: we are using a custom PostgreSQL image that has the required
+    # extensions pre-installed.
+    repository: ghcr.io/l3montree-dev/devguard/postgresql
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: v1.9.0
+  pvc:
+    size: 21Gi
+    # StorageClass for the PostgreSQL data volume.
+    # Leave empty to use the cluster's default StorageClass.
+    # Set explicitly (e.g. "local-path", "longhorn") on clusters that
+    # have no default StorageClass.
+    storageClassName: ""
+  podAnnotations: {}
+  config:
+    # Max number of concurrent connections. (change requires restart)
+    maxConnections: "100"
+    # Recommended: 25% of total RAM. (change requires restart)
+    sharedBuffers: 1GB
+    # Hint to the query planner: shared_buffers + OS page cache. Rule of thumb: 75% of total RAM.
+    # Does not allocate memory — only affects query planning decisions.
+    effectiveCacheSize: 3GB
+    # Memory for VACUUM, CREATE INDEX, ALTER TABLE. Recommended: 5–10% of total RAM.
+    maintenanceWorkMem: 256MB
+    # Per-sort / per-hash memory. Each query can use this multiple times.
+    # Formula: (RAM - sharedBuffers) / (maxConnections * 3) for worst-case safety.
+    # For web workloads with low actual concurrency, 32–64MB is a good balance.
+    workMem: 32MB
+    # WAL write buffer. -1 = auto (1/32 of sharedBuffers). Only change if you see WAL write bottlenecks.
+    walBuffers: "-1"
+    # Concurrent I/O requests for bitmap heap scans. SSD: 200, HDD: 2–4.
+    # Note: for network-attached volumes (EBS, GCP PD) the optimal value varies — tune if needed.
+    effectiveIoConcurrency: "200"
+    # Planner cost for random page access relative to sequential. SSD: 1.1, HDD: 4.0 (default).
+    randomPageCost: "1.1"
+    # Lower bound on WAL disk space retained. Prevents constant WAL recycling under write load.
+    minWalSize: 1GB
+    # Max WAL size before forcing a checkpoint. Higher = fewer checkpoints, more I/O smoothing.
+    maxWalSize: 4GB
+    # Total background worker processes. Should not exceed CPU count. (change requires restart)
+    maxWorkerProcesses: "4"
+    # Max parallel workers across all parallel operations. Should not exceed CPU count.
+    maxParallelWorkers: "4"
+  # Shared memory size for /dev/shm. Should be at least as large as sharedBuffers.
+  # Kubernetes caps /dev/shm at 64Mi by default — this overrides that limit.
+  shm:
+    sizeLimit: 2Gi
+  # An init container that chowns the data directory to UID/GID 999 before
+  # postgres starts. Required because the chart's postgresql image ships with
+  # USER 999 baked in, which prevents the upstream entrypoint from chowning
+  # the volume itself. On storage classes that mount volumes as root (e.g.
+  # Azure Disk on AKS, hostpath on minikube), this init container is what
+  # makes the data dir writable by the postgres user.
+  volumePermissions:
+    enabled: true
+    image:
+      repository: busybox
+      tag: 1.37.0@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 10m
+        memory: 16Mi
+  # Pod-level security context. fsGroup is left unset by default — the init
+  # container above handles ownership. Set fsGroup if you need it for other
+  # reasons (e.g. shared sidecar access to the data volume).
+  podSecurityContext: {}
+  # Container-level security context for the postgresql container. Runs as
+  # UID 999 (matches the image's USER directive); the volume has already
+  # been chowned by the init container.
+  containerSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 8024Mi
+    requests:
+      cpu: 1000m
+      memory: 2056Mi
+
+  # If set to "true", the user will be responsible to provide a secret for the database.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "db-secret"
+  # - a data entry named "postgres-password" with the corresponding password for the "devguard" database user as value
+  # - a data entry named "password" with the corresponding password for the "postgres" admin user as value
+  # - a data entry named "replication-password" with the corresponding password for the replication user as value
+  # - a data entry named "postgres-exporter-dsn" with the value "postgresql://devguard:[POSTGRES-PASSWORD]@localhost:5432/devguard?sslmode=disable", where "[POSTGRES-PASSWORD]" matches the value from the "postgres-password" key
+  useExistingSecret: false
+
+  # If set to "true", the user will be responsible to provide a secret for the kratos database.
+  # This is useful for situations where the helm "lookup" function cannot be used (e.g. ArgoCD)
+  # Requirements for that secret:
+  # - the secret name must match "kratos-db-secret"
+  # - a data entry named "password" with the corresponding password for the "kratos" database user as value
+  useExistingKratosDatabaseSecret: false
+
+  # Allows to set additional environment variables on the postgresql statefulset
+  # Expects "key: value" definitions.
+  # The value is parsed through the `tpl` function, so it allows to reference other values
+
+  # Example:
+  # additionalEnvs:
+  #   TEST_CHART_VERSION: "{{ .Chart.Version }}"
+  #   MY_ENV_VAR: "my-value"
+  additionalEnvs: []
+
+################################################################################################
+## Observability Settings
+######
+observability:
+  serviceMonitor:
+    # Set to true if you have the Prometheus Operator installed
+    enabled: false
+    # Labels added to every ServiceMonitor (used by Prometheus Operator to discover monitors)
+    additionalLabels: {}
+    # Namespace where Prometheus is running — used to open NetworkPolicy egress
+    prometheusNamespace: monitoring
+    # Namespace selector key/value used in NetworkPolicy to allow Prometheus scraping
+    prometheusNamespaceSelectorKey: kubernetes.io/metadata.name
+    interval: 30s
+    scrapeTimeout: 10s
+  grafanaDashboard:
+    # Set to true to deploy Grafana dashboard ConfigMaps for span metrics and postgresql
+    # Requires the Grafana sidecar to watch for ConfigMaps with the label you can configure below
+    enabled: false
+    # The label name which the Grafana sidecar is searching for. Defaults to "grafana_dashboard"
+    # labelName: "grafana_dashboard"
+    # The label value which the Grafana sidecar is searching for. Defaults to "1"
+    # labelValue: "1"
+  api:
+    metrics:
+      # Path of the metrics endpoint exposed by the DevGuard API
+      path: /api/v1/metrics
+  postgresql:
+    exporter:
+      image:
+        repository: prometheuscommunity/postgres-exporter
+        tag: v0.19.1
+        pullPolicy: IfNotPresent
+      # Container-level security context for the postgres-exporter sidecar.
+      containerSecurityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 10m
+          memory: 32Mi

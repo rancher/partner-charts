@@ -1,0 +1,82 @@
+{{- if .Values.api.tracing.enabled }}
+{{- $memMib := include "devguard.otelMemLimitMib" . | int }}
+{{- $limitMib := div (mul $memMib 80) 100 }}
+{{- $spikeMib := div (mul $limitMib 20) 100 }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-sidecar-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "devguard.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- if .Values.api.tracing.existingSecretName }}
+    extensions:
+      basicauth/otlp:
+        client_auth:
+          username: ${OTEL_EXPORTER_BASIC_AUTH_USERNAME}
+          password: ${OTEL_EXPORTER_BASIC_AUTH_PASSWORD}
+    {{- end }}
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: localhost:4317
+          http:
+            endpoint: localhost:4318
+
+    processors:
+      # memory_limiter must be the FIRST processor in every pipeline: it checks
+      # memory periodically and refuses new data (applying backpressure) before
+      # the collector reaches its Kubernetes memory limit
+      # ({{ .Values.api.tracing.spanMetrics.resources.limits.memory }}), avoiding hard OOM kills.
+      memory_limiter:
+        check_interval: 1s
+        # hard limit ~80% of the container memory limit; soft limit (limit - spike) is where refusal starts
+        limit_mib: {{ $limitMib }}
+        spike_limit_mib: {{ $spikeMib }}
+
+    connectors:
+      spanmetrics:
+        histogram:
+          explicit:
+            buckets: {{ .Values.api.tracing.spanMetrics.histogram.buckets | toJson }}
+        dimensions:
+          {{- range .Values.api.tracing.spanMetrics.dimensions }}
+          - name: {{ .name }}
+            {{- if .default }}
+            default: {{ .default }}
+            {{- end }}
+          {{- end }}
+        exemplars:
+          enabled: true
+        metrics_flush_interval: 15s
+
+    exporters:
+      {{- if .Values.api.tracing.otlpEndpoint }}
+      otlphttp:
+        endpoint: {{ .Values.api.tracing.otlpEndpoint }}
+        {{- if .Values.api.tracing.existingSecretName }}
+        auth:
+          authenticator: basicauth/otlp
+        {{- end }}
+      {{- end }}
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+
+    service:
+      {{- if .Values.api.tracing.existingSecretName }}
+      extensions: [basicauth/otlp]
+      {{- end }}
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [spanmetrics{{- if .Values.api.tracing.otlpEndpoint }}, otlphttp{{- end }}]
+        metrics:
+          receivers: [spanmetrics]
+          processors: [memory_limiter]
+          exporters: [prometheus]
+{{- end }}
