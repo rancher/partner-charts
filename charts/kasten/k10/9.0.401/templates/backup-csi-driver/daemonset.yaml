@@ -1,0 +1,186 @@
+{{- if .Values.features.csiDriverIntegration }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "backup-csi-driver.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backup-csi-driver.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "backup-csi-driver.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10%
+  template:
+    metadata:
+      labels:
+        {{- include "backup-csi-driver.selectorLabels" . | nindent 8 }}
+        {{- if and .Values.backupCsiDriver.kopiaServer.serviceAccount.azureClientID .Values.backupCsiDriver.kopiaServer.serviceAccount.azureTenantID }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ include "backup-csi-driver.metricsPort" . }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      hostNetwork: false
+      {{- /*
+      The 5s preStop sleep below plus the driver's own 40s graceful-shutdown timer
+      add up to 45s, which must stay under this grace period. Otherwise the kubelet
+      SIGKILLs the driver before it can unmount volumes and close its repository.
+      */}}
+      terminationGracePeriodSeconds: 60
+      priorityClassName: {{ include "backup-csi-driver.fullname" . }}
+      serviceAccountName: {{ include "backup-csi-driver.fullname" . }}-node-sa
+      {{- /* The node plugin has to run wherever workloads have volumes, so it
+      targets every Linux node and tolerates every taint. */}}
+      nodeSelector:
+        kubernetes.io/os: linux
+      {{- include "k10.imagePullSecrets" . | indent 6 }}
+      containers:
+        - name: backup-csi-driver
+          {{- include "serviceImage" (dict "main" . "k10_service" "backup-csi-driver") | nindent 10 }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          args:
+            - --mode=node
+            - --endpoint=unix:///csi/csi.sock
+            - --nodeid=$(KUBE_NODE_NAME)
+            - --verbosity=4
+            - --metrics-address=:{{ include "backup-csi-driver.metricsPort" . }}
+            - --snapshot-port={{ include "backup-csi-driver.snapshotPort" . }}
+            - --snapshot-tls-dir=/etc/snapshot-tls
+          ports:
+            - name: metrics
+              containerPort: {{ include "backup-csi-driver.metricsPort" . }}
+              protocol: TCP
+            - name: snapshot-grpc
+              containerPort: {{ include "backup-csi-driver.snapshotPort" . }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ include "backup-csi-driver.healthzPort" . }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            privileged: true
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: KUBE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          lifecycle:
+            preStop:
+              exec:
+                {{- /* Matches the sidecars' preStop delay, so in-flight CSI RPCs
+                from them can land before the driver starts shutting down. */}}
+                command: ["sleep", "5"]
+          volumeMounts:
+            - name: kubelet-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+            - name: plugin-dir
+              mountPath: /csi
+            - name: device-dir
+              mountPath: /dev
+            - name: snapshot-grpc-tls
+              mountPath: /etc/snapshot-tls
+              readOnly: true
+            - name: node-state
+              mountPath: /var/lib/backup-csi-driver
+          {{- dict "main" . "k10_service_pod_name" "backup-csi-driver" "k10_service_container_name" "backup-csi-driver" | include "k10.resource.request" | trim | nindent 10 }}
+
+        - name: csi-driver-registrar
+          image: {{ include "backup-csi-driver.registrarImage" . }}
+          imagePullPolicy: {{ include "backup-csi-driver.sidecarPullPolicy" . }}
+          args:
+            - --v=5
+            - --csi-address=/csi/csi.sock
+            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+          env:
+            - name: DRIVER_REG_SOCK_PATH
+              value: /var/lib/kubelet/plugins/{{ include "backup-csi-driver.driverName" . }}/csi.sock
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+          {{- dict "main" . "k10_service_pod_name" "backup-csi-driver" "k10_service_container_name" "csi-driver-registrar" | include "k10.resource.request" | trim | nindent 10 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+
+        - name: liveness-probe
+          image: {{ include "backup-csi-driver.livenessProbeImage" . }}
+          imagePullPolicy: {{ include "backup-csi-driver.sidecarPullPolicy" . }}
+          args:
+            - --v=5
+            - --csi-address=/csi/csi.sock
+            - --http-endpoint=:{{ include "backup-csi-driver.healthzPort" . }}
+          ports:
+            - name: healthz
+              containerPort: {{ include "backup-csi-driver.healthzPort" . }}
+              protocol: TCP
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+          {{- dict "main" . "k10_service_pod_name" "backup-csi-driver" "k10_service_container_name" "liveness-probe" | include "k10.resource.request" | trim | nindent 10 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: Directory
+        - name: kubelet-dir
+          hostPath:
+            path: /var/lib/kubelet/pods/
+            type: Directory
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/{{ include "backup-csi-driver.driverName" . }}/
+            type: DirectoryOrCreate
+        - name: device-dir
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: node-state
+          hostPath:
+            path: /var/lib/backup-csi-driver
+            type: DirectoryOrCreate
+        - name: snapshot-grpc-tls
+          secret:
+            secretName: {{ include "backup-csi-driver.fullname" . }}-snapshot-grpc-tls
+            optional: true
+      tolerations:
+        - operator: Exists
+{{- end }}

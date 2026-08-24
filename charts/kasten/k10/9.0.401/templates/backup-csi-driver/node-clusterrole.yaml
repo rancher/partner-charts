@@ -1,0 +1,41 @@
+{{- if .Values.features.csiDriverIntegration }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "backup-csi-driver.fullname" . }}-node
+  labels:
+    {{- include "backup-csi-driver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node
+rules:
+  # Kopia server pod lifecycle
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "get"]
+  # Event reporting
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+  # Fetch repository configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+  # Fetch repo password and storage credentials; TLS secret lifecycle for Kopia server
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "delete"]
+  # PV annotation for snapshot node discovery
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "update", "patch"]
+  # Kopia server headless service lifecycle
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "delete", "get"]
+  # VolumeSnapshot creation for ephemeral pod snapshots
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["create"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create"]
+{{- end }}
