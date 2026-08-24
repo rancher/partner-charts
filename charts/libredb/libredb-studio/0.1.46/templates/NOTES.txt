@@ -1,0 +1,135 @@
+LibreDB Studio has been deployed successfully!
+
+{{- if .Values.ingress.enabled }}
+
+Access LibreDB Studio via Ingress:
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+
+{{- else if contains "NodePort" .Values.service.type }}
+
+Access LibreDB Studio via NodePort:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "libredb-studio.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "http://${NODE_IP}:${NODE_PORT}"
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+Access LibreDB Studio via LoadBalancer:
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  Watch status with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "libredb-studio.fullname" . }}
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "libredb-studio.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo "http://${SERVICE_IP}:{{ .Values.service.port }}"
+
+{{- else }}
+
+Access LibreDB Studio via port-forward:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "libredb-studio.fullname" . }} {{ .Values.service.targetPort }}:{{ .Values.service.port }}
+  Open http://localhost:{{ .Values.service.targetPort }}
+
+{{- end }}
+
+Configuration:
+  Auth Provider:    {{ .Values.authProvider }}
+  Storage Provider: {{ include "libredb-studio.storageProvider" . }}
+{{- if .Values.postgresql.enabled }}
+  PostgreSQL:       Built-in (subchart)
+{{- end }}
+{{- if include "libredb-studio.autoscalingEnabled" . }}
+  Autoscaling:      {{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} replicas
+{{- end }}
+
+Health check:
+  kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "libredb-studio.fullname" . }} -- wget -qO- http://localhost:{{ .Values.service.targetPort }}/api/db/health
+
+IMPORTANT: if every action (including login) starts returning 403 after a `helm upgrade` behind an
+ingress that rewrites the Host header, set ALLOWED_ORIGINS to this deployment's public origin via
+extraEnv (there is no dedicated values field for it - see README.md's "Rate Limiting Across
+Replicas" section):
+  helm upgrade libredb libredb/libredb-studio \
+    --set extraEnv[0].name=ALLOWED_ORIGINS \
+    --set extraEnv[0].value=https://libredb.example.com
+
+{{- if and (not (include "libredb-studio.authStrict" .)) (eq .Values.authProvider "local") (not .Values.secrets.adminPassword) (not .Values.secrets.existingSecret) }}
+
+First-run credentials (zero-config bootstrap):
+  secrets.adminPassword was not set, so LibreDB Studio generates admin
+  credentials on first start and prints them once to the pod log. Retrieve them:
+
+    kubectl --namespace {{ .Release.Namespace }} logs deployment/{{ include "libredb-studio.fullname" . }} | grep -A 4 "generated admin credentials"
+
+  Nothing printed? The banner appears once, in the log of the container that ran
+  the first start:
+  - after a container restart, add --previous to the command above
+  - or read the file the app stored them in:
+      kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "libredb-studio.fullname" . }} -- cat /app/data/auth-bootstrap.json
+{{- if gt (int .Values.replicaCount) 1 }}
+  - with {{ .Values.replicaCount }} replicas, `logs deployment/...` reads one pod
+    chosen arbitrarily; list pods by start time and read the oldest one instead
+{{- end }}
+
+  - The default install is admin-only. Set secrets.userPassword to enable the
+    second, non-admin user account.
+{{- if include "libredb-studio.persistenceEnabled" . }}
+  - Generated credentials are stored in the persistent data volume
+    (/app/data/auth-bootstrap.json) and survive pod restarts and recreation.
+{{- else }}
+  - Generated credentials are stored in /app/data/auth-bootstrap.json on an
+    emptyDir volume: they survive container restarts but are regenerated when
+    the pod is recreated. For stable credentials set persistence.enabled=true
+    or provide secrets.jwtSecret / secrets.adminPassword yourself.
+{{- end }}
+{{- end }}
+
+{{- if and (not (include "libredb-studio.authStrict" .)) (not .Values.secrets.jwtSecret) (not .Values.secrets.existingSecret) (or .Values.secrets.adminPassword (eq .Values.authProvider "oidc")) }}
+
+NOTE: secrets.jwtSecret was not set, so the JWT signing secret is generated on
+first start (stored in /app/data/auth-bootstrap.json).
+{{- if not (include "libredb-studio.persistenceEnabled" .) }}
+  Without persistence that file lives on an emptyDir: recreating the pod
+  regenerates the secret and invalidates all sessions. For stable sessions set
+  secrets.jwtSecret (helm upgrade --set secrets.jwtSecret=$(openssl rand -base64 32))
+  or persistence.enabled=true.
+{{- end }}
+{{- end }}
+
+{{- if and (include "libredb-studio.agentPossible" .) (not (include "libredb-studio.persistenceEnabled" .)) }}
+
+NOTE: this release can run the investigation agent (an AI configuration is set),
+and run history is not persistent. The agent's ledger lives under /app/data,
+which is an emptyDir here: every run is written and the whole history goes with
+the pod. Set persistence.enabled=true to keep it, or agent.enabled=false to run
+no agent at all.
+{{- end }}
+
+{{- if and (eq (include "libredb-studio.storageProvider" .) "sqlite") (gt (int .Values.replicaCount) 1) }}
+
+WARNING: SQLite storage with multiple replicas is not recommended.
+SQLite is a single-writer database. Consider using storageProvider=postgres for multi-replica setups.
+{{- end }}
+
+{{- if and (eq (include "libredb-studio.storageProvider" .) "sqlite") .Values.autoscaling.enabled }}
+
+WARNING: autoscaling.enabled is ignored with SQLite storage.
+SQLite is a single-writer database, so the HorizontalPodAutoscaler was not
+rendered and the deployment stays at replicaCount ({{ .Values.replicaCount }}).
+Use storageProvider=postgres for multi-replica setups.
+{{- end }}
+
+{{- if and (include "libredb-studio.serviceWantsIPv6" .) (include "libredb-studio.bindPinnedToIPv4" .) }}
+
+WARNING: this Service asks for an IPv6 address, but this release pins the
+container to {{ include "libredb-studio.effectiveBindAddress" . }} (IPv4 only).
+Kubernetes populates the IPv6 EndpointSlice from the pod's own IPv6 address
+without checking what the process bound, so connections to that address are
+refused - and the kubelet probes only the pod's primary IP, so the pod still
+reports Ready and nothing self-heals. Drop the pin and the container resolves
+its own address, preferring a dual-stack "::" it verifies at startup:
+  helm upgrade libredb libredb/libredb-studio --set config.bindAddress=""
+Or force it, if you would rather say it than leave it to the image:
+  helm upgrade libredb libredb/libredb-studio --set-string config.bindAddress=::
+{{- end }}

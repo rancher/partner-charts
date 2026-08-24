@@ -1,0 +1,608 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Values shared with subcharts",
+      "properties": {
+        "security": {
+          "type": "object",
+          "properties": {
+            "allowInsecureImages": {
+              "type": "boolean",
+              "description": "Bitnami common library escape hatch, required for the bitnamilegacy postgresql image redirect"
+            }
+          }
+        },
+        "compatibility": {
+          "type": "object",
+          "properties": {
+            "openshift": {
+              "type": "object",
+              "properties": {
+                "adaptSecurityContext": {
+                  "type": "string",
+                  "enum": ["auto", "force", "disabled"],
+                  "description": "Drop fixed runAsUser/runAsGroup/fsGroup for OpenShift SCC compatibility: auto (detect), force, or disabled"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of replicas"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Container image repository"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "description": "Image pull policy"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag override"
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the image pull Secret"
+          }
+        }
+      },
+      "description": "Image pull secrets for private registries"
+    },
+    "authProvider": {
+      "type": "string",
+      "enum": ["local", "oidc"],
+      "description": "Authentication provider"
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "description": "Name of existing secret"
+        },
+        "jwtSecret": {
+          "type": "string",
+          "anyOf": [{ "maxLength": 0 }, { "minLength": 32 }],
+          "description": "JWT signing secret: empty (zero-config bootstrap generates one on first start) or at least 32 characters"
+        },
+        "adminEmail": {
+          "type": "string",
+          "anyOf": [{ "maxLength": 0 }, { "format": "email" }],
+          "description": "Admin account email: empty means the app's own default (admin@libredb.org), otherwise a valid address"
+        },
+        "adminPassword": {
+          "type": "string",
+          "description": "Admin account password"
+        },
+        "userEmail": {
+          "type": "string",
+          "anyOf": [{ "maxLength": 0 }, { "format": "email" }],
+          "description": "User account email: empty means the app's own default (user@libredb.org), otherwise a valid address"
+        },
+        "userPassword": {
+          "type": "string",
+          "description": "User account password"
+        },
+        "llmApiKey": {
+          "type": "string",
+          "description": "LLM API key"
+        },
+        "oidcClientId": {
+          "type": "string",
+          "description": "OIDC client ID"
+        },
+        "oidcClientSecret": {
+          "type": "string",
+          "description": "OIDC client secret"
+        },
+        "storagePostgresUrl": {
+          "type": "string",
+          "description": "PostgreSQL connection URL for storage"
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "description": "Log level"
+        },
+        "bindAddress": {
+          "type": "string",
+          "description": "Address the container listens on, written to HOSTNAME. Empty (the default) lets the image resolve it and prefer a verified dual-stack \"::\"; set \"::\" to force that, or an IPv4 literal such as \"0.0.0.0\" to pin the container to IPv4."
+        },
+        "storageProvider": {
+          "type": "string",
+          "enum": ["local", "sqlite", "postgres"],
+          "description": "Storage provider"
+        },
+        "authBootstrap": {
+          "type": "string",
+          "pattern": "^(\\s*([Oo][Nn]|[Oo][Ff][Ff]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|0|1)\\s*)?$",
+          "description": "AUTH_BOOTSTRAP for the app: \"\" (chart default: omit the variable, the app's zero-config first run applies), \"on\" (explicit zero-config), or \"off\" (strict: secrets.jwtSecret and secrets.adminPassword are required). The app's synonyms \"true\"/\"1\" (on) and \"false\"/\"0\" (off) are accepted for upgrade compatibility, case-insensitive."
+        },
+        "storageSqlitePath": {
+          "type": "string",
+          "description": "SQLite database file path"
+        },
+        "llmProvider": {
+          "type": "string",
+          "enum": ["", "gemini", "openai", "ollama", "custom"],
+          "description": "LLM provider"
+        },
+        "llmModel": {
+          "type": "string",
+          "description": "LLM model name"
+        },
+        "llmApiUrl": {
+          "type": "string",
+          "description": "LLM API URL"
+        },
+        "oidcIssuer": {
+          "type": "string",
+          "description": "OIDC issuer URL"
+        },
+        "oidcScope": {
+          "type": "string",
+          "description": "OIDC scopes"
+        },
+        "oidcRoleClaim": {
+          "type": "string",
+          "description": "OIDC role claim path"
+        },
+        "oidcAdminRoles": {
+          "type": "string",
+          "description": "OIDC admin role values"
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": ["boolean", "null"],
+          "description": "Explicit off-switch for the agent runtime: null (default) writes nothing and lets the app derive availability from the AI configuration plus a writable ledger, false writes LIBREDB_AGENT_ENABLED=false, true declines the off-switch without conjuring a model"
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable persistent storage"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(Gi|Mi|Ti)$",
+          "description": "Storage size"
+        },
+        "existingClaim": {
+          "type": "string",
+          "description": "Existing PVC name"
+        },
+        "storageClassName": {
+          "type": "string",
+          "description": "Storage class name"
+        },
+        "accessModes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "PVC access modes"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations for the PVC"
+        },
+        "emptyDirSizeLimit": {
+          "type": "string",
+          "anyOf": [{ "maxLength": 0 }, { "pattern": "^[0-9]+(Ki|Mi|Gi|Ti)$" }],
+          "description": "Size limit for the /app/data emptyDir used when persistence is disabled: empty (unlimited) or a quantity such as 512Mi"
+        },
+        "fixPermissions": {
+          "type": "boolean",
+          "description": "Chown the mounted /app/data volume to runAsUser:fsGroup in a root init container (statically provisioned volumes the kubelet does not fsGroup, e.g. hostPath)"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "description": "Service type"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Service port"
+        },
+        "targetPort": {
+          "type": "integer",
+          "description": "Container target port"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Service annotations"
+        },
+        "ipFamilyPolicy": {
+          "type": "string",
+          "enum": ["", "SingleStack", "PreferDualStack", "RequireDualStack"],
+          "description": "Service address families: SingleStack, PreferDualStack or RequireDualStack; empty renders no field and leaves the cluster default"
+        },
+        "ipFamilies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["IPv4", "IPv6"]
+          },
+          "maxItems": 2,
+          "uniqueItems": true,
+          "description": "Explicit address-family order, e.g. [IPv4, IPv6]; entry 0 is the immutable primary family. Two entries require ipFamilyPolicy PreferDualStack or RequireDualStack"
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Ingress"
+        },
+        "className": {
+          "type": "string",
+          "description": "Ingress class name"
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Hostname"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "URL path"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "enum": ["Prefix", "Exact", "ImplementationSpecific"],
+                      "description": "Kubernetes path type"
+                    }
+                  }
+                },
+                "description": "Paths for this host"
+              }
+            }
+          },
+          "description": "Ingress hosts"
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretName": {
+                "type": "string",
+                "description": "TLS certificate Secret name"
+              },
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Hostnames covered by the certificate"
+              }
+            }
+          },
+          "description": "Ingress TLS configuration"
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "description": "Route configuration (gateway API). Keys are route names; top-level `labels` and `annotations` apply to all routes.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Per-route configuration",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this route is enabled",
+            "default": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "description": "Kubernetes API version for the route",
+            "default": "gateway.networking.k8s.io/v1"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Kubernetes resource kind for the route. Only HTTPRoute is supported: the template renders an HTTPRoute-shaped body (path matches), which other route kinds reject",
+            "enum": ["HTTPRoute"],
+            "default": "HTTPRoute"
+          },
+          "parentRefs": {
+            "type": "array",
+            "description": "parentRefs for the route (see Gateway API)",
+            "items": { "type": "object" }
+          },
+          "hostnames": {
+            "type": "array",
+            "description": "Hostnames for the route",
+            "items": { "type": "string" }
+          },
+          "additionalRules": {
+            "type": "array",
+            "description": "Additional rules to append to `spec.rules`",
+            "items": { "type": "object" }
+          },
+          "httpsRedirect": {
+            "type": "boolean",
+            "description": "If true, add an HTTPS redirect filter"
+          },
+          "filters": {
+            "type": "array",
+            "description": "List of route filters",
+            "items": { "type": "object" }
+          },
+          "matches": {
+            "type": "array",
+            "description": "List of match rules",
+            "items": { "type": "object" }
+          },
+          "labels": {
+            "type": "object",
+            "description": "Labels specific to this route",
+            "additionalProperties": { "type": "string" }
+          },
+          "annotations": {
+            "type": "object",
+            "description": "Annotations specific to this route",
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "additionalProperties": true
+      },
+      "properties": {
+        "labels": {
+          "type": "object",
+          "description": "Labels to add to all route resources",
+          "additionalProperties": { "type": "string" }
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations to add to all route resources",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable HPA"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum replicas"
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum replicas"
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Target CPU utilization"
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Target memory utilization"
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable PDB"
+        },
+        "minAvailable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum available pods (mutually exclusive with maxUnavailable; unset with null when using maxUnavailable)"
+        },
+        "maxUnavailable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum unavailable pods (mutually exclusive with minAvailable)"
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create a ServiceAccount"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "ServiceAccount annotations (e.g., for IRSA or Workload Identity)"
+        },
+        "name": {
+          "type": "string",
+          "description": "ServiceAccount name (auto-generated if empty)"
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean",
+          "description": "Automount API credentials"
+        }
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "description": "Pod-level security context (Kubernetes PodSecurityContext)"
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container-level security context (Kubernetes SecurityContext)"
+    },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Tolerations (Kubernetes Toleration objects)"
+    },
+    "affinity": {
+      "type": "object",
+      "description": "Affinity rules (Kubernetes Affinity)"
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Topology spread constraints (Kubernetes TopologySpreadConstraint objects)"
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable NetworkPolicy"
+        },
+        "additionalIngress": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Additional ingress rules"
+        },
+        "additionalEgress": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Additional egress rules"
+        }
+      }
+    },
+    "extraEnv": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Additional environment variables (Kubernetes EnvVar objects)"
+    },
+    "extraEnvFrom": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Additional envFrom references (Kubernetes EnvFromSource objects)"
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Deploy PostgreSQL subchart"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "registry": {
+              "type": "string",
+              "description": "PostgreSQL image registry"
+            },
+            "repository": {
+              "type": "string",
+              "description": "PostgreSQL image repository (bitnamilegacy after the Bitnami catalog freeze)"
+            }
+          }
+        },
+        "volumePermissions": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "object",
+              "properties": {
+                "registry": { "type": "string" },
+                "repository": {
+                  "type": "string",
+                  "description": "volumePermissions helper image repository (bitnamilegacy after the Bitnami catalog freeze)"
+                }
+              }
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "object",
+              "properties": {
+                "registry": { "type": "string" },
+                "repository": {
+                  "type": "string",
+                  "description": "postgres-exporter image repository (bitnamilegacy after the Bitnami catalog freeze)"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "seedConnections": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "config": { "type": "object" },
+        "existingConfigMap": { "type": "string", "default": "" },
+        "configMapKey": { "type": "string", "default": "seed-connections.yaml" },
+        "cacheTTL": { "type": "integer", "default": 60000, "minimum": 5000 }
+      }
+    }
+  }
+}
