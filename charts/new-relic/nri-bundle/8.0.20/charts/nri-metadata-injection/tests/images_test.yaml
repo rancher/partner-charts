@@ -1,0 +1,68 @@
+suite: images
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: uses default image registry when nothing is set
+    set:
+      cluster: test-cluster
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^docker.io/newrelic/k8s-metadata-injection
+
+  - it: inherits global.images.registry when local image.registry not set
+    set:
+      cluster: test-cluster
+      global.images.registry: global-registry.io
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^global-registry\.io/
+
+  - it: uses local image.registry over global.images.registry
+    set:
+      cluster: test-cluster
+      image.registry: local-registry.io
+      global.images.registry: global-registry.io
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^local-registry\.io/
+
+  - it: has no pullSecrets by default
+    set:
+      cluster: test-cluster
+    asserts:
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: inherits global.images.pullSecrets when local image.pullSecrets not set
+    set:
+      cluster: test-cluster
+      global.images.pullSecrets:
+        - name: global-pull-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: global-pull-secret
+
+  - it: merges local image.pullSecrets with global.images.pullSecrets
+    set:
+      cluster: test-cluster
+      image.pullSecrets:
+        - name: local-pull-secret
+      global.images.pullSecrets:
+        - name: global-pull-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: local-pull-secret
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: global-pull-secret
