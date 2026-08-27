@@ -1,0 +1,2941 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: rewritepolicies.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: rewritepolicy 
+    plural: rewritepolicies
+    singular: rewritepolicy 
+  scope: Namespaced
+  versions: 
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              gatewayClassName:
+                type: string
+                description: "Name of the GatewayClass that this SSL profile should be applied to."
+              targetRef:
+                type: array
+                description: "A list of target resources where this profile will be applied."
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the target resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the target resource."
+                    group:
+                      type: string
+                      description: "Group of the target resource."
+                    kind:
+                      type: string
+                      description: "Kind of the target resource."
+                    sectionName:
+                      type: string
+                      description: "Specific section within the target resource."
+              rewrite-policies:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servicenames:
+                      description: 'Name of the services that needs to be binded to rewrite policy.'
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 127
+                    goto-priority-expression:
+                      description: 'Expression or other value specifying the next policy to be
+                                    evaluated if the current policy evaluates to TRUE.
+                                    Specify one of the following values:
+                                    * NEXT - Evaluate the policy with the next higher priority number.
+                                    * END - End policy evaluation.
+                                    Default value of goto-priority-expression: END'
+                      type: string
+                      maxLength: 1499
+                    logpackets:
+                      type: object
+                      description: 'Adds an audit message action.
+                                    The action specifies whether to log the message, and to which log.'
+                      properties:
+                        logexpression:
+                          description: 'Default-syntax expression that defines the format and content of the log message.'
+                          type: string
+                          maxLength: 7991
+                        loglevel:
+                          description: 'Audit log level, which specifies the severity level of the log message being generated.'
+                          type: string
+                          enum: ["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG"]
+                      required: [logexpression, loglevel]
+                    rewrite-policy:
+                      type: object
+                      properties:
+                        rewrite-criteria:
+                          description: 'Expression against which traffic is evaluated.'
+                          type: string
+                          maxLength: 1299
+                        default-action:
+                          description: 'Action to perform if the result of policy evaluation is undefined (UNDEF). 
+                                        An UNDEF event indicates an internal error condition.'
+                          type: string
+                          maxLength: 77
+                          enum: ['NOREWRITE', 'RESET', 'DROP']
+                        operation:
+                          description: 'Type of user-defined rewrite action.'
+                          type: string
+                          enum: ["noop", "delete", "insert_http_header", "delete_http_header",
+                                  "corrupt_http_header", "insert_before", "insert_after", "replace",
+                                  "replace_http_res", "delete_all", "replace_all", "insert_before_all",
+                                  "insert_after_all", "clientless_vpn_encode", "clientless_vpn_encode_all",
+                                  "clientless_vpn_decode", "clientless_vpn_decode_all", "insert_sip_header",
+                                  "delete_sip_header", "corrupt_sip_header", "replace_sip_res", "replace_diameter_header_field",
+                                  "replace_dns_header_field", "replace_dns_answer_section"]
+                        target:
+                          description: 'Default syntax expression that specifies which part of the request or response to rewrite.'
+                          type: string
+                          maxLength: 1229
+                        modify-expression:
+                          description: 'Default syntax expression that specifies the content to insert into the request 
+                                        or response at the specified location, or that replaces the specified string.'
+                          type: string
+                          maxLength: 7991
+                        multiple-occurence-modify:
+                          description: 'Search facility that is used to match multiple strings in the request or response.'
+                          type: string
+                          maxLength: 171
+                        additional-multiple-occurence-modify:
+                          description: 'Specify additional criteria to refine the results of the search.
+                                        Always starts with the "extend(m,n)" operation, where "m" specifies number of bytes to the left of selected data
+                                        and "n" specifies number of bytes to the right of selected data.
+                                        You can use refineSearch only on body expressions, and only when rewrite-criteria is any one of this:
+                                        INSERT_BEFORE_ALL, INSERT_AFTER_ALL, REPLACE_ALL, and DELETE_ALL.'
+                          type: string
+                          maxLength: 1299
+                        direction:
+                          description: 'Bind point to which to bind the policy.'
+                          type: string
+                          enum: ["REQUEST","RESPONSE"]
+                        comment:
+                          description: 'Any comments to preserve information about this rewrite policy.' 
+                          type: string
+                          maxLength: 255
+                      required: [rewrite-criteria, operation, target, direction]
+                  required: [rewrite-policy]
+
+              responder-policies:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servicenames:
+                      description: 'Name of the services that needs to be binded to responder policy.' 
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 127
+                    goto-priority-expression:
+                      description: 'Expression or other value specifying the next policy to be
+                                    evaluated if the current policy evaluates to TRUE.
+                                    Specify one of the following values:
+                                    * NEXT - Evaluate the policy with the next higher priority number.
+                                    * END - End policy evaluation.
+                                    Default value of goto-priority-expression: END'
+                      type: string
+                      maxLength: 1499
+                    logpackets:
+                      type: object
+                      description: 'Adds an audit message action.
+                                    The action specifies whether to log the message, and to which log.'
+                      properties:
+                        logexpression:
+                          description: 'Default-syntax expression that defines the format and content of the log message.'
+                          type: string
+                          maxLength: 7991
+                        loglevel:
+                          description: 'Audit log level, which specifies the severity level of the log message being generated.'
+                          type: string
+                          enum: ["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING",
+                                  "NOTICE", "INFORMATIONAL", "DEBUG"]
+                      required: [logexpression, loglevel]
+                    responder-policy:
+                      type: object
+                      properties:
+                        redirect:
+                          type: object
+                          description: 'Use this option when you want to Redirect the request when request matches to policy.'
+                          properties:
+                            url:
+                              description: 'URL on which you want to redirect the request.'
+                              type: string
+                              maxLength: 7991
+                            redirect-status-code:
+                              description: 'HTTP response status code, for example 200, 302, 404, etc.'
+                              type: integer
+                              minimum: 100
+                              maximum: 599
+                            redirect-reason:
+                              description: 'Expression specifying the reason for redirecting the request.'
+                              type: string
+                              maxLength: 7991
+                          required: [url]
+                        respondwith:
+                          type: object
+                          description: 'Use this parameter when you want to respond to the request when request matches to policy.'
+                          properties:
+                            http-payload-string:
+                              description: 'Expression that you want to sent as response to the request.'
+                              type: string
+                              maxLength: 7991
+                          required: [http-payload-string]
+                        noop:
+                          type: string
+                          description: 'Use this option when you want to send the request to the protected server instead of 
+                                        responding to it when request matches to policy.'
+                          properties:
+                            target:
+                              description: 'Default syntax expression that specifies to perform noop operation on'
+                              type: string
+                              maxLength: 1229
+                        reset:
+                          type: string
+                          description: 'Use this option when you want to Reset the client connection by closing it when request matches to policy.'
+                          properties:
+                        drop:
+                          type: string
+                          description: 'Use this option when you want to drop the request without sending a response to the user when request matches to policy.'
+                          properties:
+                        respond-criteria:
+                          description: 'Default syntax expression that the policy uses to determine whether to respond to the specified request.'
+                          type: string
+                          maxLength: 1299
+                        default-action:
+                          description: 'Action to perform if the result of policy evaluation is undefined (UNDEF).
+                                        An UNDEF event indicates an internal error condition.'
+                          type: string
+                          maxLength: 77
+                          enum: ['NOOP', 'RESET', 'DROP']
+                        comment:
+                          description: 'Any comments to preserve information about this responder policy.'
+                          type: string
+                          maxLength: 255
+                      required: [respond-criteria]
+                      oneOf: [required: [redirect], required: [respondwith], required: [noop], required: [reset], required: [drop]]
+                  required: [responder-policy]
+
+              dataset:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'Name of the dataset.'
+                      type: string
+                      maxLength: 32
+                    type:
+                      description: 'Type of value to bind to the dataset.'
+                      type: string
+                      enum: ["ipv4", "number", "ipv6", "ulong", "double", "mac"]
+                    comment:
+                      description: 'Any comments to preserve information about this dataset.'
+                      type: string
+                      maxLength: 255
+                    values:
+                      description: 'Value of the specified type that is associated with this dataset.'
+                      type: array
+                      items:
+                        type: string
+                  required: [name, type, values]
+
+              patset:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'Name of the Patset.'
+                      type: string
+                      maxLength: 32
+                    comment:
+                      description: 'Any comments to preserve information about this patset.'
+                      type: string
+                      maxLength: 255
+                    values:
+                      description: 'String of characters that constitutes a pattern and is associated with this patset.'
+                      type: array
+                      items:
+                        type: string
+                  required: [name, values]
+
+              stringmap:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'Name of the Stringmap.'
+                      type: string
+                      maxLength: 32
+                    comment:
+                      description: 'Any comments to preserve information about this stringmap.'
+                      type: string
+                      maxLength: 255
+                    values:
+                      description: 'List of (key,value) pairs to be bound to this string map.'
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          key:
+                            description: 'Character string constituting the key to be bound to this string map.'
+                            type: string
+                            maxLength: 2047
+                          value:
+                            description: 'Character string constituting the value associated with the key.'
+                            type: string
+                            maxLength: 2047
+                  required: [name, values]
+
+              httpcallout_policy:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: 'httpcallout name'
+                      type: string
+                      maxLength: 32
+                    server_ip:
+                      description: 'IP Address of the server(callout agent) to which the callout is sent.'
+                      type: string
+                    server_port:
+                      description: 'Port of the server(callout agent) to which the callout is sent.'
+                      type: integer
+                      minimum: 1
+                      maximum: 65535
+                    http_method:
+                      description: |+
+                                   'Method used in the HTTP request that this callout sends.
+                                    Default http method is GET'
+                      type: string
+                      enum: ['GET', 'POST']
+                    host_expr:
+                      description: |+
+                                   'String expression to configure the Host header. Can contain a literal value
+                                    (for example, 10.101.10.11) or a derived value (for example, http.req.header("Host")).
+                                    The literal value can be an IP address or a fully qualified domain name. Mutually
+                                    exclusive with the full HTTP request expression.'
+                      type: string
+                      maxLength: 255
+                    url_stem_expr: 
+                      description: |+
+                                   'String expression for generating the URL stem. Can contain a literal string
+                                    (for example, "/mysite/index.html") or an expression that derives the value
+                                    (for example, http.req.url).'
+                      type: string
+                      maxLength: 8191
+                    headers:
+                      type: array
+                      description: |+
+                                   'One or more headers to insert into the HTTP request. Each header is represented by
+                                    name and expr, where expr is an expression that is evaluated at runtime to provide
+                                    the value for the named header. You can configure a maximum of eight headers for
+                                    an HTTP callout.'
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            description: 'header name'
+                            type: string                   
+                          expr:
+                            description: 'header expression'
+                            type: string    
+                    parameters:
+                      type: array
+                      description: |+
+                                   'One or more query parameters to insert into the HTTP request URL (for a GET request)
+                                    or into the request body (for a POST request). Each parameter is represented by
+                                    name and expr, where expr is an expression that is evaluated at run time to provide
+                                    the value for the named parameter (name=value). The parameter values are URL encoded.'
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            description: 'parameter name'
+                            type: string                   
+                          expr:
+                            description: 'parameter expression'
+                            type: string  
+                    body_expr:
+                      description: |+
+                                   'An advanced string expression for generating the body of the request.
+                                    The expression can contain a literal string or an expression that derives
+                                    the value (for example, client.ip.src).'
+                      type: string
+                    full_req_expr:
+                      description: |+
+                                   'Exact HTTP request, in the form of an expression, which the NetScaler sends
+                                    to the callout agent. The request expression is constrained by the feature
+                                    for which the callout is used. For example, an HTTP.RES expression cannot be
+                                    used in a request-time policy bank or in a TCP content switching policy bank.'
+                      type: string
+                    scheme:
+                      description: |+
+                                   'Type of scheme for the callout server.
+                                    Default scheme is HTTP'
+                      type: string
+                      enum: ['HTTP', 'HTTPS']
+                    cache_for_secs:
+                      description: |+
+                                   'Duration, in seconds, for which the callout response is cached.
+                                    The cached responses are stored in an integrated caching content
+                                    group named "calloutContentGroup". If no duration is configured, 
+                                    the callout responses will not be cached unless normal caching
+                                    configuration is used to cache them. This parameter takes precedence over any
+                                    normal caching configuration that would otherwise apply to these responses.'
+                      type: integer
+                      minimum: 1
+                      maximum: 31536000
+                    return_type:
+                      description: |+
+                                   'Type of data that the target callout agent returns in response to the callout
+                                    Available settings function as follows:
+                                    * TEXT - Treat the returned value as a text string.
+                                    * NUM - Treat the returned value as a number.
+                                    * BOOL - Treat the returned value as a Boolean value.'
+                      type: string
+                      enum: ['TEXT', 'NUM', 'BOOL']
+                    result_expr:
+                      description: |+
+                                   'Expression that extracts the callout results from the response sent by the HTTP callout
+                                    agent. Must be a response based expression, that is, it must begin with HTTP.RES. The
+                                    operations in this expression must match the return type. For example, if you configure
+                                    a return type of TEXT, the result expression must be a text based expression. If the
+                                    return type is NUM, the result  expression (resultExpr) must return a numeric value,
+                                    as in the following example: http.res.body(10000).length.'       
+                      type: string
+                      maxLength: 8191
+                    comment:
+                      description: 'Any comments to preserve information about this HTTP callout.'
+                      type: string
+                      maxLength: 255
+                  allOf:
+                  - properties:
+                    required: [name, server_ip, server_port]
+                  - properties:
+                    oneOf:
+                    - properties:
+                      required: [full_req_expr]
+                    - properties:
+                      anyOf:
+                      - properties:
+                        required: [http_method]
+                      - properties:
+                        required: [host_expr]
+                      - properties:
+                        required: [url_stem_expr]
+                      - properties:
+                        required: [headers]
+                      - properties:
+                        required: [parameters]
+                      - properties:
+                        required: [body_expr]
+            anyOf: [required: [rewrite-policies], required: [responder-policies]]
+---
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ratelimits.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: ratelimit
+    plural: ratelimits
+    singular: ratelimit
+  scope: Namespaced
+  versions: 
+  - name: v1beta1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              servicenames:
+                description: 'Name of the services to which the ratelimit policies are applied.'
+                type: array
+                items:
+                  type: string
+                  maxLength: 127
+              gatewayClassName:
+                type: string
+                description: "Name of the GatewayClass that this SSL profile should be applied to."
+              targetRef:
+                type: array
+                description: "A list of target resources where this profile will be applied."
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the target resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the target resource."
+                    group:
+                      type: string
+                      description: "Group of the target resource."
+                    kind:
+                      type: string
+                      description: "Kind of the target resource."
+                    sectionName:
+                      type: string
+                      description: "Specific section within the target resource."
+              selector_keys:
+                type: object
+                description: 'Traffic match criteria to which apply above rate-limit/throttling. All keys are applied as AND condition. If no keys are specified, rate-limit applies at service level'
+                properties:
+                  basic:
+                    type: object
+                    description: "Basic traffic stream selection criteria to which to apply the ratelimit"
+                    properties:
+                      path:
+                        type: array
+                        description: "api resource path prefix match. e.g. /api/v1/products"
+                        items:
+                          type: string
+                      method:
+                        type: array
+                        items:
+                          type: string
+                          enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT','PATCH', 'UNKNOWN_METHOD']
+                      header_name:
+                        description: "HTTP header that identifies the unique API client for e.g. X-apikey"
+                        type: string
+                      per_client_ip:
+                        description: "Setting this applies the throttling limit to each unique Client IP address accessing the API resource"
+                        type: boolean
+              ratelimits:
+                type: array
+                description: 'List of stream identifier configurations for traffic analytics and tracking.'
+                items:
+                  type: object
+                  required: [req_threshold]
+                  properties:
+                    req_threshold:
+                      description: 'Max requests per timeslice units to be allowed'
+                      type: integer
+                    timeslice:
+                      description: 'Timeslice in miliseconds in multiple of 10. Defaults to 1000 miliseconds'
+                      type: integer
+                    limittype:
+                      description: "Burst mode or smooth. Defaults to smooth limittype if not specified"
+                      type: string
+                      enum: ['BURSTY','SMOOTH']
+                    mode:
+                      description: "Burst mode or smooth. Defaults to smooth limittype if not specified"
+                      type: string
+                      enum: ['REQUEST_RATE', 'CONNECTION', 'TOKEN_RATE']
+                    alertsintimeslice:
+                      description: "Burst mode or smooth. Defaults to smooth limittype if not specified"
+                      type: integer
+                    throttle_action:
+                      type: string
+                      enum: ['DROP', 'RESET','REDIRECT', 'RESPOND', 'NOOP']
+                      description: "Drop will drop the requests exceeding limits, RESET will reset the client connection, Redirect will redirect to specified URL, respond will respond with 429 'Exceeded allowed rate of requests'"
+                    redirect_url:
+                      type: string
+                      description: "Redirect-URL"
+                    logpackets:
+                      type: object
+                      description: 'Adds an audit message action. The action specifies whether to log the message, and to which log.'
+                      properties:
+                        logexpression:
+                          description: 'Default-syntax expression that defines the format and content of the log message.'
+                          type: string
+                          maxLength: 7991
+                        loglevel:
+                          description: 'Audit log level, which specifies the severity level of the log message being generated.'
+                          type: string
+                          enum: ["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG"]
+                      required: [logexpression, loglevel]
+              streams:
+                type: array
+                description: 'List of stream identifier configurations for traffic analytics and tracking.'
+                items:
+                  type: object
+                  required: [sort]
+                  properties:
+                    interval:
+                      type: integer
+                      description: "Number of minutes of data to use when calculating session statistics (number of requests, bandwidth, and response times)."
+                      minimum: 1
+                      maximum: 10080
+                    sampleCount:
+                      type: integer
+                      description: "Size of the sample from which to select a request for evaluation. To evaluate all requests, set the sample count to 1."
+                      minimum: 1
+                      maximum: 65535
+                    sort:
+                      type: string
+                      description: "Sort stored records by the specified statistics column, in descending order."
+                      enum: ['REQUESTS', 'CONNECTIONS', 'RESPTIME', 'BANDWIDTH', 'RESPTIME_BREACHES', 'TOKENS', 'NONE']
+                      default: 'REQUESTS'
+                    snmpTrap:
+                      type: string
+                      description: "Enable/disable SNMP trap for stream identifier."
+                      enum: ['ENABLED', 'DISABLED']
+                    appflowLog:
+                      type: string
+                      description: "Enable/disable Appflow logging for stream identifier."
+                      enum: ['ENABLED', 'DISABLED']
+                    trackAckOnlyPackets:
+                      type: string
+                      description: "Track ack only packets as well. Applicable only when packet rate limiting is being used."
+                      enum: ['ENABLED', 'DISABLED']
+                    trackTransactions:
+                      type: string
+                      description: "Track transactions exceeding configured threshold. When set to TOKENS, minTransactionThreshold, maxTransactionThreshold, acceptanceThreshold and breachThreshold are not applicable."
+                      enum: ['RESPTIME', 'TOKENS', 'NONE']
+                    maxTransactionThreshold:
+                      type: integer
+                      description: "Maximum per transaction value of metric. Metric to be tracked is specified by trackTransactions attribute."
+                      minimum: 0
+                    minTransactionThreshold:
+                      type: integer
+                      description: "Minimum per transaction value of metric. Metric to be tracked is specified by trackTransactions attribute."
+                      minimum: 0
+                    acceptanceThreshold:
+                      type: string
+                      description: "Non-Breaching transactions to Total transactions threshold expressed in percent. Maximum of 6 decimal places is supported."
+                      maxLength: 10
+                    breachThreshold:
+                      type: integer
+                      description: "Breaching transactions threshold calculated over interval."
+                      minimum: 0
+                    log:
+                      type: string
+                      description: "Location where objects collected on the identifier will be logged."
+                      enum: ['SYSLOG', 'NONE']
+                    logInterval:
+                      type: integer
+                      description: "Time interval in minutes for logging the collected objects. Should be greater than or equal to the interval of the stream identifier."
+                      minimum: 1
+                      maximum: 10080
+                    logLimit:
+                      type: integer
+                      description: "Maximum number of objects to be logged in the log interval."
+                      minimum: 1
+                      maximum: 1000
+            anyOf:
+              - required: [ratelimits]
+              - required: [streams]
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: wafs.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: waf
+    plural: wafs
+    singular: waf
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        required: [spec]
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              servicenames:
+                description: 'Name of the services to which the waf policies are applied.'
+                type: array
+                items:
+                  type: string
+                  maxLength: 127
+              application_type:
+                description: 'Type of applications to protect'
+                type: array
+                items:
+                  type: string
+                  enum: ['HTML', 'JSON', 'XML']
+              signatures:
+                description: 'Location of external signature file'
+                type: string
+              redirect_url:
+                description: 'When a URL is blocked/down, redirect_url represents the alternate URL where the client requests should be sent.'
+                type: string
+              html_error_object:
+                description: 'Location of customized error page to respond when html or common violation are hit'
+                type: string
+              xml_error_object:
+                description: 'Location of customized error page to respond when xml violations are hit'
+                type: string
+              json_error_object:
+                description: 'Location of customized error page to respond when json violations are hit'
+                type: string
+              ip_reputation:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+                description: 'Enabling IP reputation feature'
+              target:
+                description: 'To control what traffic to be inspected by Web Application Firewall. If you do not provide the target, everything will be inspected by default'
+                type: object
+                properties:
+                  path:
+                    type: array
+                    description: "List of http urls to inspect"
+                    items:
+                      type: string
+                      description: "URL path"
+                  method:
+                    type: array
+                    description: "List of http methods to inspect"
+                    items:
+                      type: string
+                      enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT','PATCH', 'UNKNOWN_METHOD']
+                  header:
+                    type: array
+                    description: "List of http headers to inspect"
+                    items:
+                      type: string
+                      description: "header name"
+              exclude:
+                description: 'To control what traffic to be excluded by Web Application Firewall. If you do not provide the exclude list, nothing will be skipped by default explicitly'
+                type: object
+                properties:
+                  path:
+                    type: array
+                    description: "List of http urls to exclude"
+                    items:
+                      type: string
+                      description: "URL path"
+                  method:
+                    type: array
+                    description: "List of http methods to exclude"
+                    items:
+                      type: string
+                      enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT', 'UNKNOWN_METHOD']
+                  header:
+                    type: array
+                    description: "List of http headers to exclude"
+                    items:
+                      type: string
+                      description: "header name"
+              security_checks:
+                description: 'To enable/disable application firewall security checks'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              settings:
+                description: 'To fine tune application firewall security checks default settings'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              relaxations:
+                description: 'Section which contains relaxation rules for known traffic and false positives'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              enforcements:
+                description: 'Section which contains enforcement or restriction rules'
+                type: object
+                properties:
+                  common:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  html:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  json:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  xml:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: bots.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: bot
+    plural: bots
+    singular: bot
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        required: [spec]
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              ingressclass:
+                type: string
+                description: "Ingress class, if not specified then all NetScaler Ingress Controllers in the cluster will process the resource otherwise only the controller with that ingress class will process this resource"
+              servicenames:
+                description: 'Name of the services to which the bot policies are applied.'
+                type: array
+                items:
+                  type: string
+                  maxLength: 127
+              signatures:
+                description: 'Location of external bot signature file'
+                type: string
+              redirect_url:
+                description: 'url to redirect when bot violation is hit'
+                type: string
+              target:
+                description: 'To control what traffic to be inspected by BOT. If you do not provide the target, everything will be inspected by default'
+                type: object
+                properties:
+                  path:
+                    type: array
+                    description: "List of http urls to inspect"
+                    items:
+                      type: string
+                      description: "URL path"
+                  method:
+                    type: array
+                    description: "List of http methods to inspect"
+                    items:
+                      type: string
+                      enum: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT','PATCH', 'UNKNOWN_METHOD']
+                  header:
+                    type: array
+                    description: "List of http headers to inspect"
+                    items:
+                      type: string
+                      description: "header name"
+              security_checks:
+                description: 'To enable/disable bot ecurity checks'
+                type: object
+                properties:
+                  allow_list:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  block_list:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  device_fingerprint:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  device_fingerprint_action:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  headless_browser:
+                    type: string
+                    enum: ['ON','OFF']
+                  reputation:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  ratelimit:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  tps:
+                    type: string
+                    enum: ['ON', 'OFF']
+                  trap:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              bindings:
+                description: 'Section which contains binding rules for bot security checks'
+                type: object
+                properties:
+                  allow_list:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ip:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6_subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        expression:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+
+                  block_list:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ip:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ipv6_subnet:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        expression:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                  ratelimit:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        url:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        ip:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        cookie:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        geolocation:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                  reputation:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  captcha:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                  logexp:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                  kbmexpr:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                  tps:
+                    type: object
+                    properties:
+                      geolocation:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      host:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      ip:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      url:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                  trapinsertion:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: appqoepolicies.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: appqoepolicy
+    plural: appqoepolicies
+    singular: appqoepolicy
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      description: "Current Status of the CRD"
+      jsonPath: .status.state
+    - name: Message
+      type: string
+      description: "Status Message"
+      jsonPath: .status.status_message
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          status:
+            type: object
+            properties:
+              state:
+                 type: string
+              status_message:
+                 type: string
+          spec:
+            type: object
+            properties:
+              appqoe-policies:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servicenames:
+                      description: 'Name of the services that needs to be binded to appqoe policy.'
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 127
+                    appqoe-policy:
+                      type: object
+                      properties:
+                        operation-retry:
+                          type: object
+                          properties:
+                            on-reset:
+                              description: "To set Retry on Connection Reset or Not"
+                              type: string
+                              enum: ['YES','NO']
+                            on-timeout:
+                              description: "Time in milliseconds for retry"
+                              type: integer
+                              minimum: 30
+                              maximum: 2000
+                        number-of-retries:
+                          description: "To set number of retries"
+                          type: integer
+                          minimum: 1
+                          maximum: 7
+                          required: [operation-retry]
+                        appqoe-criteria:
+                          description: 'Expression against which traffic is evaluated.'
+                          type: string
+                          maxLength: 1299
+                        direction:
+                          description: 'Bind point to which to bind the policy.'
+                          type: string
+                          enum: ["REQUEST","RESPONSE"]
+                      required: [appqoe-criteria, operation-retry]
+                  required: [appqoe-policy]
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: httpprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  status_message:
+                    type: string
+            spec:
+              type: object
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this HTTP profile should be applied to."
+                targetRef:
+                  type: array
+                  description: "A list of target resources where this profile will be applied."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the target resource."
+                      namespace:
+                        type: string
+                        description: "Namespace of the target resource."
+                      group:
+                        type: string
+                        description: "Group of the target resource."
+                      kind:
+                        type: string
+                        description: "Kind of the target resource."
+                      sectionName:
+                        type: string
+                        description: "Specific section within the target resource."
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in HTTP profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom profile. Customers can specify any valid Nitro HTTP profile parameters."
+                  additionalProperties: true
+                  maxProperties: 127
+  scope: Namespaced
+  names:
+    plural: httpprofiles
+    singular: httpprofile
+    kind: httpprofile
+    shortNames:
+    - httpp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tcpprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  status_message:
+                    type: string
+            spec:
+              type: object
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this TCP profile should be applied to."
+                targetRef:
+                  type: array
+                  description: "A list of target resources where this profile will be applied."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the target resource."
+                      namespace:
+                        type: string
+                        description: "Namespace of the target resource."
+                      group:
+                        type: string
+                        description: "Group of the target resource."
+                      kind:
+                        type: string
+                        description: "Kind of the target resource."
+                      sectionName:
+                        type: string
+                        description: "Specific section within the target resource."
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in TCP profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom profile. Customers can specify any valid Nitro TCP profile parameters."
+                  additionalProperties: true
+                  maxProperties: 127
+  scope: Namespaced
+  names:
+    plural: tcpprofiles
+    singular: tcpprofile
+    kind: tcpprofile
+    shortNames:
+    - tcpp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: sslprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+                type: object
+                properties:
+                  state:
+                    type: string
+                  status_message:
+                    type: string
+            spec:
+              type: object
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this SSL profile should be applied to."
+                targetRef:
+                  type: array
+                  description: "A list of target resources where this profile will be applied."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the target resource."
+                      namespace:
+                        type: string
+                        description: "Namespace of the target resource."
+                      group:
+                        type: string
+                        description: "Group of the target resource."
+                      kind:
+                        type: string
+                        description: "Kind of the target resource."
+                      sectionName:
+                        type: string
+                        description: "Specific section within the target resource."
+                sslciphers:
+                  type: array
+                  description: "List of ciphers to be bound to the ssl profile for the listener. Priority is as per the order in the list. A cipher suite, predefined cipher group or User created cipher group can be mentioned"
+                  minItems: 1
+                  items:
+                    type: string
+                    description: "Cipher suite, cipher group name"
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in SSL profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom profile. Customers can specify any valid Nitro SSL profile parameters."
+                  additionalProperties: true
+  scope: Namespaced
+  names:
+    plural: sslprofiles
+    singular: sslprofile
+    kind: sslprofile
+    shortNames:
+    - sslp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: owasppolicies.citrix.com
+spec:
+  conversion:
+    strategy: None
+  group: citrix.com
+  names:
+    kind: owasppolicy
+    listKind: owasppolicyList
+    plural: owasppolicies
+    singular: owasppolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Current Status of the CRD
+      jsonPath: .status.state
+      name: Status
+      type: string
+    - description: Status Message
+      jsonPath: .status.status_message
+      name: Message
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              bot:
+                properties:
+                  allow-and-block-list:
+                    properties:
+                      rules:
+                        items:
+                          properties:
+                            action:
+                              enum:
+                              - allow
+                              - block
+                              type: string
+                            expression:
+                              description: Rule expression for allow/block logic
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  bot-signature:
+                    type: string
+                  bot-tps:
+                    type: object
+                    properties:
+                      action:
+                        default: drop
+                        enum:
+                        - reset
+                        - drop
+                        - none
+                        type: string
+                      enforcement-type:
+                        type: string
+                        description: Bot requests per second (TPS) based enforcement type
+                        default: ClientIP
+                        enum: 
+                        - ClientIP
+                        - GeoLocation
+                        - Host
+                        - SourceUrl
+                      minimum-tps:
+                        type: integer
+                        description: Minimum bot TPS threshold for enforcement
+                      maximum-tps-percentage:
+                        type: integer
+                        description: Maximum TPS increase percentage (per 30-minute interval)
+                  bot-trap:
+                    properties:
+                      enforcements:
+                        items:
+                          properties:
+                            action:
+                              default: block
+                              enum:
+                              - block
+                              - log
+                              - redirect
+                              - none
+                              type: string
+                            enforcement-url:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  device-fingerprint:
+                    properties:
+                      action:
+                        default: log
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                    type: object
+                  geo-blocking:
+                    properties:
+                      blocked-countries:
+                        items:
+                          description: ISO country codes to block (e.g., US, CN, RU)
+                          type: string
+                        type: array
+                    type: object
+                  ip-reputation:
+                    properties:
+                      categories:
+                        properties:
+                          anonymous-or-suspicious-proxies:
+                            default: true
+                            type: boolean
+                          botnets-ransomware-ccs:
+                            default: true
+                            type: boolean
+                          cloud:
+                            default: true
+                            type: boolean
+                          cloud-aws:
+                            default: true
+                            type: boolean
+                          cloud-azure:
+                            default: true
+                            type: boolean
+                          cloud-ibm:
+                            default: true
+                            type: boolean
+                          cloud-oracle:
+                            default: true
+                            type: boolean
+                          cloud-salesforce:
+                            default: true
+                            type: boolean
+                          dos:
+                            default: true
+                            type: boolean
+                          ip:
+                            default: true
+                            type: boolean
+                          mobile-threats:
+                            default: true
+                            type: boolean
+                          network:
+                            default: true
+                            type: boolean
+                          phishing:
+                            default: true
+                            type: boolean
+                          reputation:
+                            default: true
+                            type: boolean
+                          scanners:
+                            default: true
+                            type: boolean
+                          spam-sources:
+                            default: true
+                            type: boolean
+                          tor-proxies:
+                            default: true
+                            type: boolean
+                          web-exploits:
+                            default: true
+                            type: boolean
+                          windows-exploits:
+                            default: true
+                            type: boolean
+                        type: object
+                    type: object
+                  rate-limit:
+                    properties:
+                      policies:
+                        items:
+                          type: object
+                          properties:
+                            action:
+                              type: string
+                              description: "Action to take when rate limit is exceeded"
+                              enum:
+                              - drop
+                              - log
+                              - reset
+                            requests-per-second:
+                              type: integer
+                              description: "Number of requests allowed per second"
+                            url-pattern:
+                              type: string
+                              description: "URL pattern for rate limiting (regex supported)"
+                            session-cookie:
+                              type: string
+                              description: "Cookie name to use for rate limiting"
+                            sourceip:
+                              type: boolean
+                              description: "Enable rate limiting based on source IP"
+                              enum: [true]
+                          required:
+                          - requests-per-second
+                          oneOf:
+                          - required:
+                            - url-pattern
+                          - required:
+                            - session-cookie
+                          - required:
+                            - sourceip
+                        type: array
+                    type: object
+                type: object
+              ingressclass:
+                description: Ingress class, if not specified then all NetScaler Ingress
+                  Controllers in the cluster will process the resource otherwise only
+                  the controller with that ingress class will process this resource
+                type: string
+              servicenames:
+                description: Name of the services to which the owasp policies are
+                  applied.
+                items:
+                  maxLength: 127
+                  type: string
+                type: array
+              waf:
+                properties:
+                  buffer-overflow:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      json-protection:
+                        properties:
+                          max-array-length:
+                            default: 10000
+                            type: integer
+                          max-container-depth:
+                            default: 5
+                            type: integer
+                          max-document-length:
+                            default: 20000000
+                            type: integer
+                          max-object-key-count:
+                            default: 10000
+                            type: integer
+                          max-object-key-length:
+                            default: 128
+                            type: integer
+                          max-string-length:
+                            default: 1000000
+                            type: integer
+                        type: object
+                      max-cookie-length:
+                        default: 4096
+                        type: integer
+                      max-header-length:
+                        default: 4096
+                        type: integer
+                      max-url-length:
+                        default: 1024
+                        type: integer
+                    type: object
+                  command-injection:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      content-type:
+                        default: all
+                        enum:
+                        - HTML
+                        - JSON
+                        - all
+                        type: string
+                      exceptions:
+                        items:
+                          properties:
+                            type:
+                              enum:
+                              - JSON
+                              - HTML
+                              type: string
+                            url-pattern:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  cookie-consistency:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      exceptions:
+                        items:
+                          properties:
+                            cookie-name:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  cross-site-scripting:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      content-type:
+                        default: all
+                        enum:
+                        - HTML
+                        - JSON
+                        - all
+                        type: string
+                      exceptions:
+                        items:
+                          properties:
+                            type:
+                              enum:
+                              - JSON
+                              - HTML
+                              type: string
+                            url-pattern:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  csrf:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      content-type:
+                        default: HTML
+                        enum:
+                        - HTML
+                        type: string
+                      exceptions:
+                        items:
+                          properties:
+                            url-pattern:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  data-leak-prevention:
+                    properties:
+                      safe-objects:
+                        items:
+                          properties:
+                            action:
+                              default: block
+                              enum:
+                              - block
+                              - log
+                              - mask
+                              - none
+                              type: string
+                            max-match-length:
+                              type: integer
+                            regex:
+                              description: Custom regex pattern for Custom type
+                              type: string
+                            type:
+                              enum:
+                              - SSN
+                              - CreditCard
+                              - Custom
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  field-consistency:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      content-type:
+                        default: HTML
+                        enum:
+                        - HTML
+                        type: string
+                      exceptions:
+                        items:
+                          properties:
+                            url-pattern:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  field-format:
+                    properties:
+                      enforcements:
+                        items:
+                          properties:
+                            action:
+                              default: block
+                              enum:
+                              - block
+                              - log
+                              - none
+                              type: string
+                            field-name:
+                              description: Regex pattern for field name (default .* for all fields)
+                              type: string
+                            customregex:
+                              description: Custom regex pattern when field-format
+                                is 'Custom'
+                              type: string
+                            format:
+                              enum:
+                              - Integer
+                              - Alphabets
+                              - Alphanumeric
+                              - NoHTML
+                              - Any
+                              - SSN
+                              - CreditCard
+                              - Custom
+                              type: string
+                            max-length:
+                              type: integer
+                            min-length:
+                              type: integer
+                            url-pattern:
+                              type: string
+                          type: object
+                          x-kubernetes-validations:
+                          - rule: "!has(self.customregex) || self.format == 'Custom'"
+                            message: "custom regex can only be specified when format is 'Custom'"
+                          - rule: "self.format != 'Custom' || has(self.customregex)"
+                            message: "custom regex is required when format is 'Custom'"
+                        type: array
+                    type: object
+                  sql-injection:
+                    properties:
+                      action:
+                        default: block
+                        enum:
+                        - block
+                        - log
+                        - none
+                        type: string
+                      exceptions:
+                        items:
+                          properties:
+                            type:
+                              enum:
+                              - JSON
+                              - HTML
+                              type: string
+                            url-pattern:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  waf-signature:
+                    type: string
+                type: object
+            type: object
+          status:
+            properties:
+              state:
+                type: string
+              status_message:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: aigatewayprofiles.citrix.com
+spec:
+  group: citrix.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Status
+        type: string
+        description: "Current Status of the CRD"
+        jsonPath: .status.state
+      - name: Message
+        type: string
+        description: "Status Message"
+        jsonPath: .status.status_message
+      - name: Profile Type
+        type: string
+        description: "Type of AI Gateway Profile"
+        jsonPath: .spec.config.profiletype
+      - name: Endpoint Type
+        type: string
+        description: "Endpoint Type"
+        jsonPath: .spec.config.endpointtype
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+              type: object
+              properties:
+                state:
+                  type: string
+                status_message:
+                  type: string
+            spec:
+              type: object
+              required:
+                - gatewayClassName
+              x-kubernetes-validations:
+                - rule: "has(self.preconfigured) != has(self.config)"
+                  message: "preconfigured and config are mutually exclusive fields. Please specify exactly one of them."
+              properties:
+                gatewayClassName:
+                  type: string
+                  description: "Name of the GatewayClass that this AI Gateway profile should be applied to. The profile is applied only when this matches a GatewayClass managed by this controller."
+                preconfigured:
+                  type: string
+                  description: "Mutually exclusive with 'config'. Name of a preconfigured, built-in AI Gateway profile on the NetScaler to use."
+                config:
+                  type: object
+                  description: "Mutually exclusive with 'preconfigured'. Contains all the parameters related to the NetScaler Nitro API for a fully custom AI Gateway profile. Customers can specify any valid Nitro AI Gateway profile parameters."
+                  x-kubernetes-validations:
+                    - rule: "!has(oldSelf.profiletype) || !has(self.profiletype) || self.profiletype == oldSelf.profiletype"
+                      message: "profiletype is immutable once set"
+                    - rule: "!has(oldSelf.endpointtype) || !has(self.endpointtype) || self.endpointtype == oldSelf.endpointtype"
+                      message: "endpointtype is immutable once set"
+                    - rule: "!has(oldSelf.authtoken) || !has(self.authtoken) || self.authtoken == oldSelf.authtoken"
+                      message: "authtoken is immutable once set"
+                  properties:
+                    profiletype:
+                      type: string
+                      description: "Type of AI Gateway profile: backend or frontend"
+                      enum:
+                        - backend
+                        - frontend
+                    endpointtype:
+                      type: string
+                      description: "Type of AI endpoint (e.g., azureopenai, openai, anthropic, etc.)"
+                      enum:
+                        - azureopenai
+                    tokenquota:
+                      type: integer
+                      description: "Token quota limit for backend profiles. Only applicable when profiletype is 'backend'."
+                      minimum: 0
+                      maximum: 2147483647
+                    quotarefreshfrequency:
+                      type: integer
+                      description: "Quota refresh rate, in minutes."
+                      minimum: 1
+                      maximum: 65535
+                    authtoken:
+                      type: object
+                      description: "Authentication token/API Key for the AI GW Endpoint, sourced from a Kubernetes Secret."
+                      required:
+                        - name
+                      properties:
+                        name:
+                          type: string
+                          description: "Name of the Kubernetes Secret object containing the auth token."
+                          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        namespace:
+                          type: string
+                          description: "Namespace of the Kubernetes Secret object. Defaults to the namespace of the AI Gateway Profile."
+                          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                  additionalProperties: true
+  scope: Namespaced
+  names:
+    plural: aigatewayprofiles
+    singular: aigatewayprofile
+    kind: aigatewayprofile
+    shortNames:
+    - aigwp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: aigatewayroutes.citrix.com
+spec:
+  group: citrix.com
+  names:
+    kind: aigatewayroute
+    listKind: aigatewayroutelist
+    plural: aigatewayroutes
+    singular: aigatewayroute
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.parents[0].conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.parents[0].conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AIGatewayRoute combines multiple AIServiceBackends and attaches them to Gateway resources
+          for the NetScaler Kubernetes Gateway.
+
+          This serves as a way to define a "unified" AI API for a Gateway which allows downstream
+          clients to use a single schema API to interact with multiple AI backends across providers.
+
+          NetScaler Kubernetes Gateway provides the following capabilities for AIGatewayRoute:
+
+            - Header and policy-based routing to AI backends via HTTPRoute of the Gateway API.
+              The name of the HTTPRoute is the same as the AIGatewayRoute.
+            - Priority-based model spillover to backup backends, enabling automatic failover
+              when primary AI backends are unavailable or overloaded.
+            - Separate frontend and backend AI gateway profiles for multi-provider deployments,
+              allowing independent configuration of client-facing and upstream AI service policies.
+            - RateLimit and Rewrite Policy CRD support for fine-grained traffic control
+              and request/response transformation.
+            - SSLProfile, TCPProfile, and HTTPProfile CRDs for protocol-level tuning
+              of AI backend connections.
+            - Built-in TCP, HTTP, and streaming analytics for observability of AI traffic
+              patterns, token usage, and backend performance.
+
+          All of these resources are created in the same namespace as the AIGatewayRoute. You can
+          customize the default behavior by attaching NetScaler policy CRDs (RateLimit, Rewrite,
+          SSLProfile, TCPProfile, HTTPProfile) to the generated HTTPRoute.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the details of the AIGatewayRoute.
+            properties:
+              aigatewayprofiles:
+                description: |-
+                  AIGatewayProfiles defines the default AI gateway profiles to apply to
+                  the generated lbvservers and servicegroups. Frontend profiles are applied
+                  to the client-facing lbvserver, spillover-frontend profiles to the spillover
+                  lbvserver, and default-backend profiles to all backend servicegroups unless
+                  overridden per-backendRef.
+                properties:
+                  frontend:
+                    description: |-
+                      Frontend AI gateway profile applied to the primary lbvserver.
+                    properties:
+                      name:
+                        description: Name of the aigatewayprofile CRD resource.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the aigatewayprofile. Defaults to the AIGatewayRoute namespace.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  spillover-frontend:
+                    description: |-
+                      Spillover-frontend AI gateway profile applied to the spillover lbvserver.
+                    properties:
+                      name:
+                        description: Name of the aigatewayprofile CRD resource.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the aigatewayprofile. Defaults to the AIGatewayRoute namespace.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  default-backend:
+                    description: |-
+                      Default backend AI gateway profile applied to all backend servicegroups
+                      unless overridden by a per-backendRef backend-aigatewayprofile.
+                    properties:
+                      name:
+                        description: Name of the aigatewayprofile CRD resource.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the aigatewayprofile. Defaults to the AIGatewayRoute namespace.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              hostnames:
+                description: |-
+                  Hostnames defines a set of hostnames that should match against the HTTP Host
+                  header to select an AIGatewayRoute used to process the request. Implementations
+                  MUST ignore any port value specified in the HTTP Host header while
+                  performing a match and (absent of any applicable header modification
+                  configuration) MUST forward this header unmodified to the backend.
+
+                  Valid values for Hostnames are determined by RFC 1123 definition of a
+                  hostname with 2 notable exceptions:
+
+                  1. IPs are not allowed.
+                  2. A hostname may be prefixed with a wildcard label (`*.`). The wildcard
+                     label must appear by itself as the first label.
+
+                  If a hostname is specified by both the Listener and AIGatewayRoute, there
+                  must be at least one intersecting hostname for the AIGatewayRoute to be
+                  attached to the Listener.
+
+                  Hostnames that are prefixed with a wildcard label (`*.`) are interpreted
+                  as a suffix match. That means that a match for `*.example.com` would match
+                  both `test.example.com`, and `foo.test.example.com`, but not `example.com`.
+
+                  If both the Listener and AIGatewayRoute have specified hostnames, and none
+                  match with the criteria above, then the AIGatewayRoute is not accepted. The
+                  implementation must raise an 'Accepted' Condition with a status of
+                  `False` in the corresponding RouteParentStatus.
+
+                  Support: Core
+                items:
+                  description: |-
+                    Hostname is the fully qualified domain name of a network host. This matches
+                    the RFC 1123 definition of a hostname with 2 notable exceptions:
+
+                     1. IPs are not allowed.
+                     2. A hostname may be prefixed with a wildcard label (`*.`). The wildcard
+                        label must appear by itself as the first label.
+
+                    Hostname can be "precise" which is a domain name without the terminating
+                    dot of a network host (e.g. "foo.example.com") or "wildcard", which is a
+                    domain name prefixed with a single wildcard label (e.g. `*.example.com`).
+
+                    Note that as per RFC1035 and RFC1123, a *label* must consist of lower case
+                    alphanumeric characters or '-', and must start and end with an alphanumeric
+                    character. No other punctuation is allowed.
+                  maxLength: 253
+                  minLength: 1
+                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                  type: string
+                maxItems: 16
+                type: array
+                x-kubernetes-list-type: atomic
+              parentRefs:
+                description: |-
+                  ParentRefs references the resources (usually Gateways) that a Route wants
+                  to be attached to. Note that the referenced parent resource needs to
+                  allow this for the attachment to be complete. For Gateways, that means
+                  the Gateway needs to allow attachment from Routes of this kind and
+                  namespace. For Services, that means the Service must either be in the same
+                  namespace for a "producer" route, or the mesh implementation must support
+                  and allow "consumer" routes for the referenced Service. ReferenceGrant is
+                  not applicable for governing ParentRefs to Services - it is not possible to
+                  create a "producer" route for a Service in a different namespace from the
+                  Route.
+
+                  There are two kinds of parent resources with "Core" support:
+
+                  * Gateway (Gateway conformance profile)
+                  * Service (Mesh conformance profile, ClusterIP Services only)
+
+                  This API may be extended in the future to support additional kinds of parent
+                  resources.
+
+                  ParentRefs must be _distinct_. This means either that:
+
+                  * They select different objects.  If this is the case, then parentRef
+                    entries are distinct. In terms of fields, this means that the
+                    multi-part key defined by `group`, `kind`, `namespace`, and `name` must
+                    be unique across all parentRef entries in the Route.
+                  * They do not select different objects, but for each optional field used,
+                    each ParentRef that selects the same object must set the same set of
+                    optional fields to different values. If one ParentRef sets a
+                    combination of optional fields, all must set the same combination.
+
+                  Some examples:
+
+                  * If one ParentRef sets `sectionName`, all ParentRefs referencing the
+                    same object must also set `sectionName`.
+                  * If one ParentRef sets `port`, all ParentRefs referencing the same
+                    object must also set `port`.
+                  * If one ParentRef sets `sectionName` and `port`, all ParentRefs
+                    referencing the same object must also set `sectionName` and `port`.
+
+                  It is possible to separately reference multiple distinct objects that may
+                  be collapsed by an implementation. For example, some implementations may
+                  choose to merge compatible Gateway Listeners together. If that is the
+                  case, the list of routes attached to those resources should also be
+                  merged.
+
+                  Note that for ParentRefs that cross namespace boundaries, there are specific
+                  rules. Cross-namespace references are only valid if they are explicitly
+                  allowed by something in the namespace they are referring to. For example,
+                  Gateway has the AllowedRoutes field, and ReferenceGrant provides a
+                  generic way to enable other kinds of cross-namespace reference.
+                items:
+                  description: |-
+                    ParentReference identifies an API object (usually a Gateway) that can be considered
+                    a parent of this resource (usually a route). There are two kinds of parent resources
+                    with "Core" support:
+
+                    * Gateway (Gateway conformance profile)
+                    * Service (Mesh conformance profile, ClusterIP Services only)
+
+                    This API may be extended in the future to support additional kinds of parent
+                    resources.
+
+                    The API object must be valid in the cluster; the Group and Kind must
+                    be registered in the cluster for this reference to be valid.
+                  properties:
+                    group:
+                      default: gateway.networking.k8s.io
+                      description: |-
+                        Group is the group of the referent.
+                        When unspecified, "gateway.networking.k8s.io" is inferred.
+                        To set the core API group (such as for a "Service" kind referent),
+                        Group must be explicitly set to "" (empty string).
+
+                        Support: Core
+                      maxLength: 253
+                      pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                      type: string
+                    kind:
+                      default: Gateway
+                      description: |-
+                        Kind is kind of the referent.
+
+                        There are two kinds of parent resources with "Core" support:
+
+                        * Gateway (Gateway conformance profile)
+                        * Service (Mesh conformance profile, ClusterIP Services only)
+
+                        Support for other resources is Implementation-Specific.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                      type: string
+                    name:
+                      description: |-
+                        Name is the name of the referent.
+
+                        Support: Core
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace is the namespace of the referent. When unspecified, this refers
+                        to the local namespace of the Route.
+
+                        Note that there are specific rules for ParentRefs which cross namespace
+                        boundaries. Cross-namespace references are only valid if they are explicitly
+                        allowed by something in the namespace they are referring to. For example:
+                        Gateway has the AllowedRoutes field, and ReferenceGrant provides a
+                        generic way to enable any other kind of cross-namespace reference.
+
+                        Support: Core
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    port:
+                      description: |-
+                        Port is the network port this Route targets. It can be interpreted
+                        differently based on the type of parent resource.
+
+                        When the parent resource is a Gateway, this targets all listeners
+                        listening on the specified port that also support this kind of Route(and
+                        select this Route). It's not recommended to set `Port` unless the
+                        networking behaviors specified in a Route must apply to a specific port
+                        as opposed to a listener(s) whose port(s) may be changed. When both Port
+                        and SectionName are specified, the name and port of the selected listener
+                        must match both specified values.
+
+                        Implementations MAY choose to support other parent resources.
+                        Implementations supporting other types of parent resources MUST clearly
+                        document how/if Port is interpreted.
+
+                        For the purpose of status, an attachment is considered successful as
+                        long as the parent resource accepts it partially. For example, Gateway
+                        listeners can restrict which Routes can attach to them by Route kind,
+                        namespace, or hostname. If 1 of 2 Gateway listeners accept attachment
+                        from the referencing Route, the Route MUST be considered successfully
+                        attached. If no Gateway listeners accept attachment from this Route,
+                        the Route MUST be considered detached from the Gateway.
+
+                        Support: Extended
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    sectionName:
+                      description: |-
+                        SectionName is the name of a section within the target resource. In the
+                        following resources, SectionName is interpreted as the following:
+
+                        * Gateway: Listener name. When both Port (experimental) and SectionName
+                        are specified, the name and port of the selected listener must match
+                        both specified values.
+                        * Service: Port name. When both Port (experimental) and SectionName
+                        are specified, the name and port of the selected listener must match
+                        both specified values.
+
+                        Implementations MAY choose to support attaching Routes to other resources.
+                        If that is the case, they MUST clearly document how SectionName is
+                        interpreted.
+
+                        When unspecified (empty string), this will reference the entire resource.
+                        For the purpose of status, an attachment is considered successful if at
+                        least one section in the parent resource accepts it. For example, Gateway
+                        listeners can restrict which Routes can attach to them by Route kind,
+                        namespace, or hostname. If 1 of 2 Gateway listeners accept attachment from
+                        the referencing Route, the Route MUST be considered successfully
+                        attached. If no Gateway listeners accept attachment from this Route, the
+                        Route MUST be considered detached from the Gateway.
+
+                        Support: Core
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: sectionName must be specified when parentRefs includes
+                    2 or more references to the same parent
+                  rule: 'self.all(p1, self.all(p2, p1.group == p2.group && p1.kind
+                    == p2.kind && p1.name == p2.name && (((!has(p1.__namespace__)
+                    || p1.__namespace__ == '''') && (!has(p2.__namespace__) || p2.__namespace__
+                    == '''')) || (has(p1.__namespace__) && has(p2.__namespace__) &&
+                    p1.__namespace__ == p2.__namespace__ )) ? ((!has(p1.sectionName)
+                    || p1.sectionName == '''') == (!has(p2.sectionName) || p2.sectionName
+                    == '''')) : true))'
+                - message: sectionName must be unique when parentRefs includes 2 or
+                    more references to the same parent
+                  rule: self.all(p1, self.exists_one(p2, p1.group == p2.group && p1.kind
+                    == p2.kind && p1.name == p2.name && (((!has(p1.__namespace__)
+                    || p1.__namespace__ == '') && (!has(p2.__namespace__) || p2.__namespace__
+                    == '')) || (has(p1.__namespace__) && has(p2.__namespace__) &&
+                    p1.__namespace__ == p2.__namespace__ )) && (((!has(p1.sectionName)
+                    || p1.sectionName == '') && (!has(p2.sectionName) || p2.sectionName
+                    == '')) || (has(p1.sectionName) && has(p2.sectionName) && p1.sectionName
+                    == p2.sectionName))))
+              rules:
+                description: |-
+                  Rules is the list of AIGatewayRouteRule that this AIGatewayRoute will match the traffic to.
+
+                  The NetScaler AI Gateway controller will generate routing configuration based on these rules,
+                  supporting header-based and policy-based routing to AI backends, priority-based model spillover,
+                  and attachment of NetScaler policy CRDs via ExtensionRef filters.
+
+                  In the matching conditions, the `x-ai-eg-model` header is available for routing decisions
+                  based on the model name. The model name is extracted from the request content before routing.
+                items:
+                  description: AIGatewayRouteRule is a rule that defines the routing
+                    behavior of the AIGatewayRoute.
+                  properties:
+                    backendRefs:
+                      description: |-
+                        BackendRefs is the list of AI service backends that this rule will route the traffic to.
+                        Each backend can have a weight and priority that determine traffic distribution and
+                        spillover behavior.
+
+                        Priority-based model spillover is supported: backends with lower priority values are
+                        preferred. When a primary backend (priority 0) is unavailable or overloaded, traffic
+                        automatically spills over to backup backends with higher priority values.
+
+                        The namespace of each backend defaults to the same namespace as the AIGatewayRoute
+                        when not specified.
+                      items:
+                        description: |-
+                          AIGatewayRouteRuleBackendRef is a reference to an AI service backend
+                          with weight and priority for traffic distribution and spillover.
+                        properties:
+                          group:
+                            default: ""
+                            description: |-
+                              Group is the group of the referent. For example, "gateway.networking.k8s.io".
+                              When unspecified or empty string, core API group is inferred.
+                            maxLength: 253
+                            pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                            type: string
+                          kind:
+                            default: Service
+                            description: |-
+                              Kind is the Kubernetes resource kind of the referent. For example
+                              "Service".
+
+                              Defaults to "Service" when not specified.
+
+                              ExternalName services can refer to CNAME DNS records that may live
+                              outside of the cluster and as such are difficult to reason about in
+                              terms of conformance. They also may not be safe to forward to (see
+                              CVE-2021-25740 for more information). Implementations SHOULD NOT
+                              support ExternalName Services.
+
+                              Support: Core (Services with a type other than ExternalName)
+
+                              Support: Implementation-specific (Services with type ExternalName)
+                            maxLength: 63
+                            minLength: 1
+                            pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                            type: string
+                          name:
+                            description: |-
+                              Name is the name of the backend Service resource.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: |-
+                              Namespace is the namespace of the backend resource.
+                              When unspecified, this refers to the local namespace of the AIGatewayRoute.
+                            maxLength: 63
+                            minLength: 1
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                            type: string
+                          port:
+                            description: |-
+                              Port specifies the destination port number to use for this backend.
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          weight:
+                            default: 1
+                            description: |-
+                              Weight determines the proportion of traffic to send to this backend
+                              relative to other backends in the same rule.
+
+                              Default is 1.
+                            format: int32
+                            minimum: 0
+                            type: integer
+                          is_spillover:
+                            default: false
+                            description: |-
+                              Indicates whether this backend is a spillover backend.
+                              When set to true, this backend receives traffic only when
+                              the primary backends become unavailable or overloaded.
+                              Only one backendRef in the list may have is_spillover set to true.
+
+                              Default is false.
+                            type: boolean
+                          backend-aigatewayprofile:
+                            description: |-
+                              Backend AI gateway profile to apply to this specific backend's
+                              servicegroup. Overrides the spec-level default-backend profile.
+                            properties:
+                              name:
+                                description: Name of the aigatewayprofile CRD resource.
+                                minLength: 1
+                                type: string
+                              namespace:
+                                description: |-
+                                  Namespace of the aigatewayprofile. Defaults to the AIGatewayRoute namespace.
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          filters:
+                            description: |-
+                              Filters define per-backend NetScaler policy CRDs to attach to this specific
+                              backend. Use ExtensionRef filter type to reference policy CRDs such as
+                              rewritepolicy for backend-specific request/response transformations
+                              (e.g., spillover-specific rewrite policies).
+                            items:
+                              description: |-
+                                Filter defines a processing step to apply to requests routed to this backend.
+                              properties:
+                                type:
+                                  description: |-
+                                    Type identifies the type of filter. Currently only ExtensionRef is supported
+                                    for referencing NetScaler policy CRDs.
+                                  enum:
+                                  - ExtensionRef
+                                  type: string
+                                extensionRef:
+                                  description: |-
+                                    ExtensionRef is a reference to a NetScaler policy CRD resource.
+                                    Supported kinds include: ratelimit, rewritepolicy, sslprofile,
+                                    tcprofile, httpprofile.
+                                  properties:
+                                    group:
+                                      description: |-
+                                        Group is the API group of the referent, e.g. "citrix.com".
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                      type: string
+                                    kind:
+                                      description: |-
+                                        Kind is the kind of the referent, e.g. "ratelimit", "rewritepolicy",
+                                        "sslprofile", "tcprofile", "httpprofile".
+                                      maxLength: 63
+                                      minLength: 1
+                                      pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                                      type: string
+                                    name:
+                                      description: |-
+                                        Name is the name of the referent.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - group
+                                  - kind
+                                  - name
+                                  type: object
+                              required:
+                              - type
+                              - extensionRef
+                              type: object
+                              x-kubernetes-validations:
+                              - message: extensionRef must be specified for ExtensionRef filter type
+                                rule: 'self.type == ''ExtensionRef'' ? has(self.extensionRef) : true'
+                            maxItems: 16
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                        - name
+                        type: object
+                      maxItems: 128
+                      type: array
+                      x-kubernetes-validations:
+                      - message: Only one backendRef may have is_spillover set to true
+                        rule: 'self.filter(b, has(b.is_spillover) && b.is_spillover == true).size() <= 1'
+                    filters:
+                      description: |-
+                        Filters define the NetScaler policy CRDs to attach to this rule.
+                        Use ExtensionRef filter type to reference policy CRDs such as ratelimit,
+                        rewritepolicy, aigatewayprofile, sslprofile, tcprofile, and httpprofile.
+                      items:
+                        description: |-
+                          Filter defines a processing step to apply to requests matching this rule.
+                        properties:
+                          type:
+                            description: |-
+                              Type identifies the type of filter. Currently only ExtensionRef is supported
+                              for referencing NetScaler policy CRDs.
+                            enum:
+                            - ExtensionRef
+                            type: string
+                          extensionRef:
+                            description: |-
+                              ExtensionRef is a reference to a NetScaler policy CRD resource.
+                              Supported kinds include: ratelimit, rewritepolicy, aigatewayprofile,
+                              sslprofile, tcprofile, httpprofile.
+                            properties:
+                              group:
+                                description: |-
+                                  Group is the API group of the referent, e.g. "citrix.com".
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                type: string
+                              kind:
+                                description: |-
+                                  Kind is the kind of the referent, e.g. "ratelimit", "rewritepolicy",
+                                  "aigatewayprofile", "sslprofile", "tcprofile", "httpprofile".
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                                type: string
+                              name:
+                                description: |-
+                                  Name is the name of the referent.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - group
+                            - kind
+                            - name
+                            type: object
+                        required:
+                        - type
+                        - extensionRef
+                        type: object
+                        x-kubernetes-validations:
+                        - message: extensionRef must be specified for ExtensionRef filter type
+                          rule: 'self.type == ''ExtensionRef'' ? has(self.extensionRef) : true'
+                      maxItems: 16
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    matches:
+                      description: |-
+                        Matches is the list of conditions that determine when this rule applies.
+                        Supports path-based, header-based, and policy expression matching.
+                      items:
+                        properties:
+                          path:
+                            default:
+                              type: PathPrefix
+                              value: /
+                            description: |-
+                              Path specifies a HTTP request path matcher. If this field is not
+                              specified, a default prefix match on the "/" path is provided.
+                            properties:
+                              type:
+                                default: PathPrefix
+                                description: |-
+                                  Type specifies how to match against the path Value.
+
+                                  Support: Core (Exact, PathPrefix)
+
+                                  Support: Implementation-specific (RegularExpression)
+                                enum:
+                                - Exact
+                                - PathPrefix
+                                - RegularExpression
+                                type: string
+                              value:
+                                default: /
+                                description: Value of the HTTP path to match against.
+                                maxLength: 256
+                                type: string
+                            type: object
+                            x-kubernetes-validations:
+                            - message: value must be an absolute path and start with
+                                '/' when type one of ['Exact', 'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? self.value.startsWith(''/'')
+                                : true'
+                            - message: must not contain '//' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''//'') : true'
+                            - message: must not contain '/./' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''/./'') : true'
+                            - message: must not contain '/../' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''/../'') : true'
+                            - message: type must be one of ['Exact', 'PathPrefix',
+                                'RegularExpression']
+                              rule: self.type in ['Exact','PathPrefix'] || self.type
+                                == 'RegularExpression'
+                          headers:
+                            description: |-
+                              Headers specifies HTTP request header matchers.
+                              Multiple match values are ANDed together.
+                            items:
+                              description: |-
+                                HTTPHeaderMatch describes how to select a HTTP route by matching HTTP request headers.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name is the name of the HTTP Header to be matched. Name matching MUST be
+                                    case-insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                  maxLength: 256
+                                  minLength: 1
+                                  pattern: ^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$
+                                  type: string
+                                type:
+                                  default: Exact
+                                  description: |-
+                                    Type specifies how to match against the value of the header.
+
+                                    Support: Core (Exact)
+                                    Support: Implementation-specific (RegularExpression)
+                                  enum:
+                                  - Exact
+                                  - RegularExpression
+                                  type: string
+                                value:
+                                  description: Value is the value of HTTP Header to
+                                    be matched.
+                                  maxLength: 4096
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            maxItems: 16
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          policyExpression:
+                            description: |-
+                              PolicyExpression is a NetScaler policy expression for advanced matching.
+                              When specified, the expression is evaluated in addition to header matches.
+                              An empty string means no additional policy expression is applied.
+                            type: string
+                        type: object
+                      maxItems: 128
+                      type: array
+                    timeouts:
+                      description: |-
+                        Timeouts defines the timeouts that can be configured for an HTTP request.
+
+                        For streaming responses (like chat completions with stream=true), consider setting
+                        longer timeouts as the response may take time until the completion.
+                      properties:
+                        backendRequest:
+                          description: |-
+                            BackendRequest specifies a timeout for an individual request from the gateway
+                            to a backend. This covers the time from when the request first starts being
+                            sent from the gateway to when the full response has been received from the backend.
+
+                            Support: Extended
+                          pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                          type: string
+                        request:
+                          description: |-
+                            Request specifies the maximum duration for a gateway to respond to an HTTP request.
+                            If the gateway has not been able to respond before this deadline is met, the gateway
+                            MUST return a timeout error.
+
+                            Support: Extended
+                          pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: backendRequest timeout cannot be longer than request
+                          timeout
+                        rule: '!(has(self.request) && has(self.backendRequest) &&
+                          duration(self.request) != duration(''0s'') && duration(self.backendRequest)
+                          > duration(self.request))'
+                  type: object
+                maxItems: 128
+                type: array
+            required:
+            - rules
+            type: object
+          status:
+            description: Status defines the current state of AIGatewayRoute.
+            properties:
+              parents:
+                description: |-
+                  Parents is a list of parent resources (usually Gateways) that are
+                  associated with the route, and the status of the route with respect to
+                  each parent.
+
+                  A maximum of 32 Gateways will be represented in this list. An empty list
+                  means the route has not been attached to any Gateway.
+                items:
+                  description: |-
+                    RouteParentStatus describes the status of a route with respect to an
+                    associated Parent.
+                  properties:
+                    conditions:
+                      description: |-
+                        Conditions describes the status of the route with respect to the Gateway.
+                        Known condition types are: "Accepted", "Programmed", "ResolvedRefs".
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      maxItems: 8
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - type
+                      x-kubernetes-list-type: map
+                    controllerName:
+                      description: |-
+                        ControllerName is a domain/path string that indicates the name of the
+                        controller that wrote this status. This corresponds with the
+                        controllerName field on GatewayClass.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$
+                      type: string
+                    parentRef:
+                      description: |-
+                        ParentRef corresponds with a ParentRef in the spec that this
+                        RouteParentStatus struct describes the status of.
+                      properties:
+                        group:
+                          default: gateway.networking.k8s.io
+                          description: Group is the group of the referent.
+                          maxLength: 253
+                          pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                          type: string
+                        kind:
+                          default: Gateway
+                          description: Kind is kind of the referent.
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                          type: string
+                        name:
+                          description: Name is the name of the referent.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                        namespace:
+                          description: |-
+                            Namespace is the namespace of the referent. When unspecified, this refers
+                            to the local namespace of the Route.
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        port:
+                          description: Port is the network port this Route targets.
+                          format: int32
+                          maximum: 65535
+                          minimum: 1
+                          type: integer
+                        sectionName:
+                          description: SectionName is the name of a section within
+                            the target resource.
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  required:
+                  - conditions
+                  - controllerName
+                  - parentRef
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: atomic
+            required:
+            - parents
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---

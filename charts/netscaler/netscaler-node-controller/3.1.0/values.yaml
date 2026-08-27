@@ -1,0 +1,65 @@
+# Default values for netscaler-node-controller.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+imageRegistry: quay.io
+imageRepository: netscaler/netscaler-k8s-node-controller
+imageTag: 3.1.0
+image: "{{ .Values.imageRegistry }}/{{ .Values.imageRepository }}:{{ .Values.imageTag }}"
+pullPolicy: IfNotPresent
+nameOverride: ""
+fullnameOverride: ""
+license:
+  accept: no
+nsIP:
+adcCredentialSecret:
+network:
+vtepIP:
+vxlan:
+  id:
+  port: 
+cniType:
+dsrIPRange:
+clusterName:
+nsncConfigMap:
+  name:
+  tolerationsInJson:
+deploymentTolerations:
+  - key:
+    effect:
+    operator:
+nsncRouterImage: quay.io/netscaler/nsnc-router:2.1.0
+nsncRouterName:
+
+# CUST-43567: Kubernetes-native health checks for the Node Controller pod.
+# These are file-based exec probes:
+#   readiness -> /tmp/cnc-ready   (written once the informer caches have synced)
+#   liveness  -> /tmp/cnc-alive   (heartbeat file; restarts the pod if it goes stale)
+# Supported by controller image 3.1.0+ (which writes these files). Set `enabled: false`
+# if you pin an older controller image, otherwise the liveness probe will restart it.
+# Partial rollback (CN-3530 #20): if you roll back to this chart but pin a pre-3.1.0
+# controller image, also roll the chart back or set `enabled: false` here — otherwise
+# the liveness probe CrashLoopBackOffs the pod and blocks the rollback.
+# The router pod's probes are set by the controller in code, not here.
+healthProbes:
+  enabled: true
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+    # Restart the controller if the heartbeat file is older than this many seconds.
+    stalenessThresholdSeconds: 45
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and `create` is true, a name is generated using the fullname template
+  # name:
+  tokenExpirationSeconds: 31536000
