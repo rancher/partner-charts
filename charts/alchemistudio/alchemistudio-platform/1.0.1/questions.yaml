@@ -1,0 +1,161 @@
+# Rancher Apps install form for alchemistudio-platform.
+# Images pull from our registry with a baked cred, and it runs in fixed-seats mode
+# (no license needed). For production (own registry + license), contact
+# support@alchemistudio.ai. Asks ONLY app config — VNet/nodes/cluster are
+# pre-provisioned. Fixed (NOT asked): registry creds (baked), license (Zenith),
+# redis (bundled), keycloak (bundled).
+questions:
+
+  # ─────────────── Access & TLS ───────────────
+  - variable: global.domain
+    label: "Base domain"
+    description: "Base domain. Each app is served at <subdomain>.<domain> (defaults below). e.g. alchemi.acme.com"
+    type: hostname
+    required: true
+    group: "Access & TLS"
+  # Per-app subdomains — override to change any app's hostname (blank/default keeps app/auth/ops/zenith).
+  - {variable: global.subdomains.app,    label: "Web subdomain",    type: string, default: "app",    group: "Access & TLS", description: "Web UI at <this>.<domain>"}
+  - {variable: global.subdomains.auth,   label: "Auth subdomain",   type: string, default: "auth",   group: "Access & TLS", description: "Keycloak login at <this>.<domain>"}
+  - {variable: global.subdomains.ops,    label: "Ops subdomain",    type: string, default: "ops",    group: "Access & TLS", description: "OpenObserve at <this>.<domain>"}
+  - {variable: global.subdomains.zenith, label: "Zenith subdomain", type: string, default: "zenith", group: "Access & TLS", description: "Zenith console at <this>.<domain>"}
+  - variable: tls.mode
+    label: "HTTPS certificate — Bring Your Own Certificate (recommended) or Let's Encrypt"
+    description: |-
+      How the platform gets its HTTPS certificate:
+      • Bring Your Own Certificate (value "byo", DEFAULT & RECOMMENDED) — paste your own certificate + private key below. Works on ANY cluster and ANY DNS provider, and login works immediately over trusted TLS. This is the standard production path.
+      • Let's Encrypt (value "acme") — automatic, free certificate via HTTP-01. Your subdomains' DNS A-records must ALREADY point at the gateway's external IP and port 80 must be reachable from the internet BEFORE install; the cert is then issued and auto-renewed. Only an A-record is needed — no DNS API/credentials.
+    type: enum
+    options: ["byo", "acme"]
+    default: "byo"
+    group: "Access & TLS"
+  # Bring Your Own Certificate: paste cert + key — the chart builds the Kubernetes TLS secret.
+  # Both are REQUIRED when this path is selected (it is the default), so the install can never
+  # come up without a valid certificate.
+  - variable: tls.certPem
+    label: "Bring Your Own Certificate — full-chain certificate (PEM)"
+    description: "Paste your full-chain certificate, starting with -----BEGIN CERTIFICATE-----. Use a cert valid for each app host (a wildcard *.<domain> covers all of them)."
+    type: multiline
+    required: true
+    show_if: "tls.mode=byo"
+    group: "Access & TLS"
+  - variable: tls.keyPem
+    label: "Bring Your Own Certificate — private key (PEM)"
+    description: "Paste the matching private key, starting with -----BEGIN PRIVATE KEY----- (or RSA/EC PRIVATE KEY). Stored only in a Kubernetes TLS secret."
+    type: multiline
+    required: true
+    show_if: "tls.mode=byo"
+    group: "Access & TLS"
+  - variable: tls.secretName
+    label: "Existing TLS secret name (advanced)"
+    description: "byo, advanced: instead of pasting a cert/key above, point at a kubernetes.io/tls secret you have already created in the 'apisix' namespace. Leave as default if you pasted a cert above."
+    type: string
+    default: "apisix-ssl-secret"
+    show_if: "tls.mode=byo"
+    group: "Access & TLS"
+  # acme: Let's Encrypt account email (renewal notices). Defaults to the admin email if blank.
+  - variable: tls.acme.email
+    label: "Let's Encrypt email"
+    description: "acme: email for the Let's Encrypt account (expiry/renewal notices). Defaults to the admin email if left blank. IMPORTANT: point your DNS A-records at the gateway IP and open port 80 BEFORE installing, or issuance will fail."
+    type: string
+    show_if: "tls.mode=acme"
+    group: "Access & TLS"
+  - variable: tls.acme.staging
+    label: "Use Let's Encrypt STAGING (testing)"
+    description: "acme: issue from Let's Encrypt's STAGING CA (untrusted, but no rate limits) to validate the setup first. Turn OFF for a real, trusted certificate."
+    type: boolean
+    default: false
+    show_if: "tls.mode=acme"
+    group: "Access & TLS"
+
+  # NOTE (trial): the image registry + pull credentials are PRE-BAKED into this trial
+  # chart (images pull from alchemiacr.azurecr.io with a shared trial token), and the
+  # license runs in fixed-seats mode (managed by Zenith) — so neither is asked here.
+  # For production (your own registry + a license) contact support@alchemistudio.ai.
+
+  # ─────────────── Admin (first user + Keycloak) ───────────────
+  - variable: admin.email
+    label: "Admin email"
+    description: "First-user + Keycloak admin. MUST be the email you log in with. Initial password is generated (retrieve from the FIRST_USER_PASSWORD secret post-install)."
+    type: string
+    required: true
+    group: "Admin"
+  - variable: admin.name
+    label: "Admin display name (optional)"
+    type: string
+    group: "Admin"
+  - variable: admin.orgName
+    label: "Organization name (optional)"
+    type: string
+    group: "Admin"
+  - variable: admin.initialPassword
+    label: "Admin initial password (optional)"
+    description: "Leave BLANK to auto-generate (recommended) — retrieve it after install from the FIRST_USER_PASSWORD secret (see the post-install notes). If you set one here it is used as the initial password. EITHER WAY it is temporary: Keycloak forces you to set a new password on first login. Note: a value entered here is stored in the Helm release values, so blank + generated is the more private choice."
+    type: password
+    group: "Admin"
+
+  # ─────────────── Database ───────────────
+  - variable: postgres.mode
+    label: "PostgreSQL"
+    description: "bundled = in-cluster pgvector. external = your managed PostgreSQL (pre-create the DBs + vector/uuid-ossp/pgcrypto extensions)."
+    type: enum
+    options: ["bundled", "external"]
+    default: "bundled"
+    group: "Database"
+  - {variable: postgres.external.host,            label: "Host",             type: string,   required: true, show_if: "postgres.mode=external", group: "Database"}
+  - {variable: postgres.external.port,            label: "Port",             type: int,      default: 5432,  show_if: "postgres.mode=external", group: "Database"}
+  - {variable: postgres.external.database,        label: "App database",     type: string,   default: "alchemiapp_db", show_if: "postgres.mode=external", group: "Database"}
+  - {variable: postgres.external.computeDatabase, label: "Compute database", type: string,   default: "compute_db",     show_if: "postgres.mode=external", group: "Database"}
+  - {variable: postgres.external.user,            label: "User",             type: string,   default: "alchemiadmin",   show_if: "postgres.mode=external", group: "Database"}
+  - {variable: postgres.external.password,        label: "Password",         type: password, required: true, show_if: "postgres.mode=external", group: "Database"}
+  - variable: postgres.external.sslMode
+    label: "SSL mode"
+    type: enum
+    options: ["require", "disable"]
+    default: "require"
+    show_if: "postgres.mode=external"
+    group: "Database"
+
+  # ─────────────── Object storage ───────────────
+  - variable: objectStore.mode
+    label: "Object storage"
+    description: "bundled = in-cluster SeaweedFS (S3). external = Azure Blob (provide a connection string OR account name+key+endpoint)."
+    type: enum
+    options: ["bundled", "external"]
+    default: "bundled"
+    group: "Object Storage"
+  - {variable: objectStore.external.connectionString, label: "Azure connection string (wins if set)", type: password, show_if: "objectStore.mode=external", group: "Object Storage"}
+  - {variable: objectStore.external.accountName,      label: "Storage account name",                  type: string,   show_if: "objectStore.mode=external", group: "Object Storage"}
+  - {variable: objectStore.external.accountKey,       label: "Storage account key",                   type: password, show_if: "objectStore.mode=external", group: "Object Storage"}
+  - {variable: objectStore.external.blobEndpoint,     label: "Blob endpoint",                         type: string,   show_if: "objectStore.mode=external", group: "Object Storage"}
+
+  # ─────────────── Sizing ───────────────
+  - variable: global.tier
+    label: "Deployment tier (replicas)"
+    description: "Controls REPLICAS of the load-bearing services (web + ai) — no CPU/memory change, no autoscaling. basic = 1 replica each (minimal footprint, fits small clusters). standard = 2 replicas each (better throughput + availability under load). Everything else stays 1 replica either way. RECOMMENDED: pick 'standard' if you enable AI guardrails below (guardrails adds latency on the AI path, so extra web/ai replicas help). Standard adds ~0.75 CPU / 1.5Gi."
+    type: enum
+    options: ["basic", "standard"]
+    default: "basic"
+    group: "Sizing"
+
+  # ─────────────── AI Features ───────────────
+  - variable: guardrails.enabled
+    label: "Enable AI guardrails"
+    description: "AI-safety tier (PII / secret-detection / jailbreak / toxicity / topical / content-filter). OFF by default — it adds 6 services (~2.2 CPU / 6.6Gi) and pulls several GB of model images, which lengthens the FIRST install. Recommended: leave OFF for the initial install, then enable it later on an upgrade with a 30-min timeout (see the post-install notes)."
+    type: boolean
+    default: false
+    group: "AI Features"
+
+  # ─────────────── Email (optional) ───────────────
+  - variable: smtp.mode
+    label: "Email (SMTP)"
+    type: enum
+    options: ["none", "smtp"]
+    default: "none"
+    group: "Email"
+  - {variable: smtp.host,     label: "SMTP host",    type: string,   show_if: "smtp.mode=smtp", group: "Email"}
+  - {variable: smtp.port,     label: "SMTP port",    type: int, default: 587, show_if: "smtp.mode=smtp", group: "Email"}
+  - {variable: smtp.user,     label: "SMTP user",    type: string,   show_if: "smtp.mode=smtp", group: "Email"}
+  - {variable: smtp.password, label: "SMTP password",type: password, show_if: "smtp.mode=smtp", group: "Email"}
+  - {variable: smtp.from,     label: "From address", type: string,   show_if: "smtp.mode=smtp", group: "Email"}
+
+  # LLM provider keys are not asked in the form — configured post-install (or via Zenith).

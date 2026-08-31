@@ -1,0 +1,339 @@
+# =============================================================================
+# OpenBao init/unseal/configure Job — runs as a Helm post-install+post-upgrade hook.
+# Uses python:3.11-alpine (urllib only, no curl/kubectl deps) to call OpenBao's
+# REST API and the k8s API directly.
+#
+# What it does:
+#   1. Waits for OpenBao to be reachable (up to 6 min)
+#   2. If not initialized: init (1 share/1 threshold), saves keys to k8s Secret
+#   3. Unseal using the saved key
+#   4. Enable kubernetes auth method (ESO login path)
+#   5. Enable KV v2 at path "alchemi"
+#   6. Create ESO policy (read alchemi/data/*)
+#   7. Create k8s role "eso" bound to eso-openbao-sa in external-secrets
+#   8. Write LLM provider keys from env → alchemi/data/llm
+#   9. Write SMTP creds (if provided) → alchemi/data/smtp
+#
+# On re-runs (post-upgrade): skips init/unseal if already done; re-applies auth
+# config (idempotent) and re-writes LLM keys if values changed.
+# =============================================================================
+{{- if .Values.openbao.enabled }}
+{{- $baons := .Values.openbao.namespace | default "openbao" -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-init-script
+  namespace: {{ $baons }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  init-openbao.py: |
+    import os, json, time, ssl, base64
+    import urllib.request, urllib.error
+
+    BAO_ADDR  = os.environ.get("OPENBAO_ADDR", "http://openbao.openbao.svc:8200")
+    K8S_API   = "https://kubernetes.default.svc"
+    SA_TOKEN  = open("/var/run/secrets/kubernetes.io/serviceaccount/token").read().strip()
+    CA_CERT   = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    BAO_NS    = os.environ.get("OPENBAO_NAMESPACE", "openbao")
+    KEYS_NAME = "alchemi-openbao-keys"
+
+    def k8s_ctx():
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(CA_CERT)
+        return ctx
+
+    def k8s(method, path, body=None):
+        url = K8S_API + path
+        data = json.dumps(body).encode() if body else None
+        req = urllib.request.Request(url, data=data, method=method,
+              headers={"Authorization": f"Bearer {SA_TOKEN}",
+                       "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, context=k8s_ctx()) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode()
+            if e.code == 404: return None
+            if e.code == 409: return {"conflict": True}
+            raise RuntimeError(f"k8s {method} {path} -> {e.code}: {body_text}")
+
+    def bao(method, path, body=None, token=None):
+        url = BAO_ADDR + "/v1/" + path
+        data = json.dumps(body).encode() if body else None
+        headers = {"Content-Type": "application/json"}
+        if token: headers["X-Vault-Token"] = token
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as r:
+                txt = r.read()
+                return json.loads(txt) if txt else {}
+        except urllib.error.HTTPError as e:
+            txt = e.read().decode()
+            if e.code in (400, 404, 405):
+                return {"already": True, "body": txt}
+            raise RuntimeError(f"bao {method} /v1/{path} -> {e.code}: {txt}")
+
+    # 1. Wait for OpenBao ---------------------------------------------------
+    print("Waiting for OpenBao to be reachable...")
+    health = None
+    for attempt in range(72):          # 72 x 5s = 6 min
+        try:
+            health = bao("GET", "sys/health?standbyok=true&uninitcode=200&sealedcode=200")
+            break
+        except Exception as ex:
+            if attempt % 6 == 0:
+                print(f"  not ready yet ({ex}), retrying...")
+            time.sleep(5)
+    if health is None:
+        raise SystemExit("OpenBao did not become reachable in 6 min — check pod logs")
+    print(f"OpenBao reachable: initialized={health.get('initialized')}, sealed={health.get('sealed')}")
+
+    # 2. Load existing init keys (upgrade path) -----------------------------
+    unseal_key  = None
+    root_token  = None
+    if health.get("initialized"):
+        existing = k8s("GET", f"/api/v1/namespaces/{BAO_NS}/secrets/{KEYS_NAME}")
+        if existing and "data" in existing:
+            unseal_key = base64.b64decode(existing["data"].get("unseal-key-1", "")).decode()
+            root_token = base64.b64decode(existing["data"].get("root-token", "")).decode()
+            print("Loaded existing init keys from k8s Secret")
+        else:
+            print("WARNING: OpenBao initialized but no keys Secret found — manual recovery needed")
+
+    # 3. Initialize if needed -----------------------------------------------
+    if not health.get("initialized"):
+        print("Initializing OpenBao (1 share / 1 threshold)...")
+        result = bao("PUT", "sys/init", {"secret_shares": 1, "secret_threshold": 1})
+        unseal_key = result["keys"][0]
+        root_token = result["root_token"]
+        secret_body = {
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": {
+                "name": KEYS_NAME,
+                "namespace": BAO_NS,
+                "labels": {"app.kubernetes.io/part-of": "alchemistudio-platform"},
+                "annotations": {"helm.sh/resource-policy": "keep"}
+            },
+            "data": {
+                "unseal-key-1": base64.b64encode(unseal_key.encode()).decode(),
+                "root-token":   base64.b64encode(root_token.encode()).decode(),
+            }
+        }
+        k8s("POST", f"/api/v1/namespaces/{BAO_NS}/secrets", secret_body)
+        print(f"Saved init keys to Secret {KEYS_NAME} in namespace {BAO_NS}")
+
+    # 4. Unseal if needed ---------------------------------------------------
+    status = bao("GET", "sys/health?standbyok=true&uninitcode=200&sealedcode=200")
+    if status.get("sealed"):
+        if not unseal_key:
+            raise SystemExit("OpenBao is sealed but unseal key not available — manual unseal required")
+        print("Unsealing...")
+        result = bao("PUT", "sys/unseal", {"key": unseal_key})
+        if result.get("sealed"):
+            raise SystemExit("Unseal failed — wrong key?")
+        print("Unsealed OK")
+    else:
+        print("Already unsealed")
+
+    if not root_token:
+        raise SystemExit("No root token — cannot configure OpenBao")
+
+    # 5. Enable & configure kubernetes auth ---------------------------------
+    print("Configuring kubernetes auth method...")
+    bao("POST", "sys/auth/kubernetes", {"type": "kubernetes"}, token=root_token)
+    bao("POST", "auth/kubernetes/config",
+        {"kubernetes_host": "https://kubernetes.default.svc"}, token=root_token)
+    print("kubernetes auth configured")
+
+    # 6. Enable KV v2 at 'alchemi' -----------------------------------------
+    print("Enabling KV v2 at path 'alchemi'...")
+    bao("POST", "sys/mounts/alchemi",
+        {"type": "kv", "options": {"version": "2"}}, token=root_token)
+
+    # 7. Create ESO policy --------------------------------------------------
+    policy = (
+        'path "alchemi/data/*"     { capabilities = ["read"] }\n'
+        'path "alchemi/metadata/*" { capabilities = ["list", "read"] }\n'
+    )
+    bao("PUT", "sys/policies/acl/eso-alchemi", {"policy": policy}, token=root_token)
+    print("ESO policy created")
+
+    # 8. Create k8s role for ESO -------------------------------------------
+    bao("POST", "auth/kubernetes/role/eso", {
+        "bound_service_account_names":      ["eso-openbao-sa"],
+        "bound_service_account_namespaces": ["external-secrets"],
+        "policies":                         ["eso-alchemi"],
+        "ttl":                              "1h",
+    }, token=root_token)
+    print("ESO k8s role created")
+
+    # 9. Write LLM provider keys -------------------------------------------
+    llm_keys = {}
+    for k in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY",
+              "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION",
+              "PERPLEXITY_API_KEY", "XAI_API_KEY"]:
+        v = os.environ.get(k, "").strip()
+        if v:
+            llm_keys[k] = v
+
+    if llm_keys:
+        bao("POST", "alchemi/data/llm", {"data": llm_keys}, token=root_token)
+        print(f"Wrote {len(llm_keys)} LLM key(s) to alchemi/data/llm")
+    else:
+        # Write a placeholder so the ESO ExternalSecret path exists from the start
+        bao("POST", "alchemi/data/llm",
+            {"data": {"_placeholder": "no-keys-provided"}}, token=root_token)
+        print("No LLM keys provided — wrote placeholder. Add keys via: bao kv put alchemi/llm KEY=val")
+
+    # 10. Write SMTP creds (if provided) ------------------------------------
+    smtp_keys = {}
+    for k in ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"]:
+        v = os.environ.get(k, "").strip()
+        if v:
+            smtp_keys[k] = v
+    if smtp_keys:
+        bao("POST", "alchemi/data/smtp", {"data": smtp_keys}, token=root_token)
+        print(f"Wrote SMTP credentials to alchemi/data/smtp")
+
+    print("\nOpenBao initialization complete!")
+---
+# ServiceAccount for the init job (created at hook-weight -1, before the job)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-init-sa
+  namespace: {{ $baons }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openbao-init
+  namespace: {{ $baons }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openbao-init
+  namespace: {{ $baons }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openbao-init
+subjects:
+  - kind: ServiceAccount
+    name: openbao-init-sa
+    namespace: {{ $baons }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-init
+  namespace: {{ $baons }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: openbao-init-sa
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: {{ .Values.openbao.initImage | default "alchemiacr.azurecr.io/platform/azure-cli:2.60.0" | quote }}
+          command: [python3, /scripts/init-openbao.py]
+          env:
+            - name: OPENBAO_ADDR
+              value: {{ include "alchemi.baoAddr" . | quote }}
+            - name: OPENBAO_NAMESPACE
+              value: {{ $baons | quote }}
+            # LLM keys — passed here so the init job writes them to OpenBao KV.
+            # After first install these values can be blanked; OpenBao holds them.
+            {{- if .Values.llm.anthropicApiKey }}
+            - name: ANTHROPIC_API_KEY
+              value: {{ .Values.llm.anthropicApiKey | quote }}
+            {{- end }}
+            {{- if .Values.llm.openaiApiKey }}
+            - name: OPENAI_API_KEY
+              value: {{ .Values.llm.openaiApiKey | quote }}
+            {{- end }}
+            {{- if .Values.llm.azureOpenaiApiKey }}
+            - name: AZURE_OPENAI_API_KEY
+              value: {{ .Values.llm.azureOpenaiApiKey | quote }}
+            {{- end }}
+            {{- if .Values.llm.azureOpenaiEndpoint }}
+            - name: AZURE_OPENAI_ENDPOINT
+              value: {{ .Values.llm.azureOpenaiEndpoint | quote }}
+            {{- end }}
+            {{- if .Values.llm.azureOpenaiApiVersion }}
+            - name: AZURE_OPENAI_API_VERSION
+              value: {{ .Values.llm.azureOpenaiApiVersion | quote }}
+            {{- end }}
+            {{- if .Values.llm.perplexityApiKey }}
+            - name: PERPLEXITY_API_KEY
+              value: {{ .Values.llm.perplexityApiKey | quote }}
+            {{- end }}
+            {{- if .Values.llm.xaiApiKey }}
+            - name: XAI_API_KEY
+              value: {{ .Values.llm.xaiApiKey | quote }}
+            {{- end }}
+            # SMTP (for alchemi/data/smtp in OpenBao — worker reads it via ESO)
+            {{- if and (eq .Values.smtp.mode "smtp") .Values.smtp.host }}
+            - name: SMTP_HOST
+              value: {{ .Values.smtp.host | quote }}
+            - name: SMTP_PORT
+              value: {{ .Values.smtp.port | toString | quote }}
+            - name: SMTP_FROM
+              value: {{ .Values.smtp.from | default (printf "noreply@%s" .Values.global.domain) | quote }}
+            {{- end }}
+            {{- if .Values.smtp.user }}
+            - name: SMTP_USER
+              value: {{ .Values.smtp.user | quote }}
+            {{- end }}
+            {{- if .Values.smtp.password }}
+            - name: SMTP_PASSWORD
+              value: {{ .Values.smtp.password | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: openbao-init-script
+{{- end }}

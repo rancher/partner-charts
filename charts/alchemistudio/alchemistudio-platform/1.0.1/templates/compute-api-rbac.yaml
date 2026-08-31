@@ -1,0 +1,145 @@
+# =============================================================================
+# compute-api RBAC
+#
+# compute-api needs three sets of permissions:
+#   1. App namespace (alchemi): read its own SA + manage the alchemi-image-pins CM
+#   2. Sandbox namespace (albox): full pod/service/PVC/CM/secret/netpol lifecycle
+#      for AIOS workloads and session sandboxes
+#   3. kube-system: read kube-dns service (needed for custom DNS resolution)
+#   4. Cluster-wide: read nodes + node metrics
+#
+# All bindings use the `alchemi-compute-api` SA in the app namespace.
+# The cross-namespace RoleBindings are the key: SA in alchemi -> Roles in albox
+# and kube-system. This matches the dev+demo pattern exactly.
+# =============================================================================
+{{- if .Values.computeApi.enabled }}
+{{- $appns     := .Values.global.namespaces.app -}}
+{{- $sandboxns := .Values.global.namespaces.sandbox -}}
+# ---- 1. App namespace: image-pins configmap write ---------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: alchemi-compute-api-app
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch, update, patch]
+    resourceNames: [alchemi-image-pins]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alchemi-compute-api-app
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+subjects:
+  - kind: ServiceAccount
+    name: alchemi-compute-api
+    namespace: {{ $appns }}
+roleRef:
+  kind: Role
+  name: alchemi-compute-api-app
+  apiGroup: rbac.authorization.k8s.io
+---
+# ---- 2. Sandbox namespace: full workload lifecycle --------------------------
+# compute-api creates/deletes pods, services, PVCs, configmaps, secrets,
+# and network policies in albox for each session sandbox and AIOS workload.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: alchemi-compute-api-sandbox
+  namespace: {{ $sandboxns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, pods/status, pods/exec, pods/portforward]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [services, endpoints]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [configmaps, secrets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alchemi-compute-api-sandbox
+  namespace: {{ $sandboxns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+subjects:
+  - kind: ServiceAccount
+    name: alchemi-compute-api
+    namespace: {{ $appns }}      # SA lives in app ns; role lives in sandbox ns
+roleRef:
+  kind: Role
+  name: alchemi-compute-api-sandbox
+  apiGroup: rbac.authorization.k8s.io
+---
+# ---- 3. kube-system: read kube-dns service ----------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: alchemi-compute-api-dns
+  namespace: kube-system
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+rules:
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get]
+    resourceNames: [kube-dns]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alchemi-compute-api-dns
+  namespace: kube-system
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+subjects:
+  - kind: ServiceAccount
+    name: alchemi-compute-api
+    namespace: {{ $appns }}
+roleRef:
+  kind: Role
+  name: alchemi-compute-api-dns
+  apiGroup: rbac.authorization.k8s.io
+---
+# ---- 4. Cluster-wide: node info + metrics -----------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alchemi-compute-api-nodes
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alchemi-compute-api-nodes
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+subjects:
+  - kind: ServiceAccount
+    name: alchemi-compute-api
+    namespace: {{ $appns }}
+roleRef:
+  kind: ClusterRole
+  name: alchemi-compute-api-nodes
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

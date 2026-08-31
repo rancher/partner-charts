@@ -1,0 +1,139 @@
+# =============================================================================
+# APISIX routes — THE subdomain->service map (lives in APISIX, not the LB).
+# Helm-templated: hosts come from global.domain via env; the container script's
+# $shell vars are left intact (Helm only touches its own template actions).
+# Ported from on-prem v5.1.0. See ../../10-domain-and-routing.md §2.
+# Only for the bundled APISIX (uses apisix-admin.apisix.svc). An external gateway
+# is configured by the customer with these same routes.
+# =============================================================================
+{{- if eq .Values.gateway.mode "bundled" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-apisix-routes
+  namespace: apisix
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: gateway-config }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata: { labels: { app.kubernetes.io/name: apisix-routes } }
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      volumes:
+        - name: ssl-certs
+          secret: { secretName: {{ .Values.tls.secretName | quote }}, optional: true }
+      containers:
+        - name: route-setup
+          image: {{ .Values.global.image.registry }}/platform/curl:8.5.0
+          volumeMounts:
+            - { name: ssl-certs, mountPath: /certs, readOnly: true }
+          env:
+            - { name: APP_HOST,          value: {{ include "alchemi.appHost" . | quote }} }
+            - { name: AUTH_HOST,         value: {{ include "alchemi.authHost" . | quote }} }
+            - { name: OPS_HOST,          value: {{ include "alchemi.opsHost" . | quote }} }
+            - { name: ZENITH_HOST,       value: {{ include "alchemi.zenithHost" . | quote }} }
+            - { name: APP_NAMESPACE,     value: {{ .Values.global.namespaces.app | quote }} }
+            - { name: DATA_NAMESPACE,    value: {{ .Values.global.namespaces.data | quote }} }
+            - { name: OBJECT_BUCKET,     value: {{ .Values.objectStore.bucket | default "alchemi-objects" | quote }} }
+            - { name: OBJECT_STORE_MODE, value: {{ .Values.objectStore.mode | quote }} }
+            - { name: SANDBOX_NAMESPACE, value: {{ .Values.global.namespaces.sandbox | quote }} }
+            - { name: DOMAIN,            value: {{ required "global.domain is required" .Values.global.domain | quote }} }
+            - { name: ENABLE_SANDBOXES,  value: {{ .Values.computeApi.enabled | quote }} }
+            - { name: APISIX_ADMIN_KEY,  value: {{ .Values.gateway.adminKey | quote }} }
+            - { name: EXPOSE_ZENITH,     value: {{ .Values.gateway.exposeZenith | quote }} }
+            - { name: ENABLE_APISIX_TLS, value: {{ .Values.tls.enabled | quote }} }
+            - { name: TLS_MODE,          value: {{ .Values.tls.mode | quote }} }
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              ADMIN_URL="http://apisix-admin.apisix.svc:9180"
+              echo "Waiting for APISIX Admin API..."
+              n=0; until curl -sf -o /dev/null "${ADMIN_URL}/apisix/admin/routes" -H "X-API-KEY: ${APISIX_ADMIN_KEY}"; do
+                n=$((n+1)); [ "$n" -ge 60 ] && { echo "ERROR: admin API not ready"; exit 1; }
+                echo "  ${n}/60 — retry 5s"; sleep 5; done
+              echo "APISIX Admin API ready."
+
+              if [ "${EXPOSE_ZENITH}" = "true" ]; then ZH="${ZENITH_HOST}"; else ZH=""; fi
+
+              if [ "${ENABLE_APISIX_TLS}" = "true" ]; then
+                if [ -f /certs/tls.crt ] && [ -f /certs/tls.key ]; then
+                  TLS_CERT=$(awk '{printf "%s\\n", $0}' /certs/tls.crt)
+                  TLS_KEY=$(awk '{printf "%s\\n", $0}' /certs/tls.key)
+                  SNIS=""
+                  for d in "${APP_HOST}" "${AUTH_HOST}" "${OPS_HOST}" "${ZH}"; do
+                    [ -n "$d" ] && SNIS="${SNIS:+$SNIS,}\"$d\""; done
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "${ADMIN_URL}/apisix/admin/ssls/1" \
+                    -H "X-API-KEY: ${APISIX_ADMIN_KEY}" -H "Content-Type: application/json" \
+                    -d "{\"cert\": \"${TLS_CERT}\", \"key\": \"${TLS_KEY}\", \"snis\": [${SNIS}]}")
+                  [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { echo "ERROR: SSL PUT HTTP $code"; exit 1; }
+                  echo "SSL object created ($code)"
+                elif [ "${TLS_MODE}" = "acme" ]; then
+                  # acme: the cert is issued asynchronously by cert-manager AFTER install
+                  # (once DNS resolves + the HTTP-01 challenge passes). Don't fail here —
+                  # serve HTTP now; the cert-sync CronJob loads the SSL object once issued.
+                  echo "TLS=acme: certificate not issued yet — skipping SSL object (cert-sync will add it)."
+                else
+                  echo "ERROR: TLS on but cert/key missing at /certs (mode=${TLS_MODE})"; exit 1
+                fi
+              fi
+
+              route() {  # route <id> <name> <json>
+                echo "route ${2} (id ${1})"
+                code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "${ADMIN_URL}/apisix/admin/routes/${1}" \
+                  -H "X-API-KEY: ${APISIX_ADMIN_KEY}" -H "Content-Type: application/json" -d "${3}")
+                [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { echo "  ERROR ${2} HTTP $code"; exit 1; }; echo "  ok ($code)"; }
+
+              # ---- ACME HTTP-01 challenge forward (acme mode) ----
+              # Let's Encrypt fetches http://<host>/.well-known/acme-challenge/<token>, which
+              # arrives at APISIX (DNS points here). Forward it to nginx-ingress (via the
+              # kube-system ClusterIP Service), where cert-manager's solver answers it. High
+              # priority + NO http->https redirect so the plain-HTTP challenge is served.
+              if [ "${TLS_MODE}" = "acme" ]; then
+                CH_HOSTS=""
+                for d in "${APP_HOST}" "${AUTH_HOST}" "${OPS_HOST}" "${ZH}"; do
+                  [ -n "$d" ] && CH_HOSTS="${CH_HOSTS:+$CH_HOSTS,}\"$d\""; done
+                route 20 acme-challenge '{"name":"acme-challenge","uri":"/.well-known/acme-challenge/*","hosts":['"${CH_HOSTS}"'],"priority":100,"upstream":{"type":"roundrobin","nodes":{"alchemi-acme-http-solver.kube-system.svc:80":1}},"plugins":{"request-id":{}}}'
+              fi
+
+              route 1 alchemi-web '{"name":"alchemi-web","uri":"/*","host":"'"${APP_HOST}"'","priority":10,"timeout":{"connect":60,"send":1200,"read":1200},"upstream":{"type":"roundrobin","nodes":{"alchemi-web.'"${APP_NAMESPACE}"'.svc:3000":1}},"plugins":{"cors":{},"request-id":{},"limit-req":{"rate":100,"burst":50,"key_type":"var","key":"remote_addr","rejected_code":429}}}'
+              route 3 keycloak-realms '{"name":"keycloak-realms","uri":"/realms/*","host":"'"${AUTH_HOST}"'","priority":11,"timeout":{"connect":60,"send":1200,"read":1200},"upstream":{"type":"roundrobin","nodes":{"keycloak.auth.svc:8080":1}},"plugins":{"cors":{"allow_origins":"*","allow_methods":"GET,POST,PUT,DELETE,PATCH,OPTIONS","allow_headers":"*","allow_credential":false,"max_age":86400},"redirect":{"http_to_https":true},"request-id":{}}}'
+              route 4 keycloak '{"name":"keycloak","uri":"/*","host":"'"${AUTH_HOST}"'","priority":10,"timeout":{"connect":60,"send":1200,"read":1200},"upstream":{"type":"roundrobin","nodes":{"keycloak.auth.svc:8080":1}},"plugins":{"redirect":{"http_to_https":true},"request-id":{}}}'
+              route 6 openobserve '{"name":"openobserve","uri":"/*","host":"'"${OPS_HOST}"'","priority":10,"upstream":{"type":"roundrobin","nodes":{"openobserve.observability.svc:5080":1}},"plugins":{"request-id":{}}}'
+
+              # ---- File downloads (bundled SeaweedFS only) — see docs/16-aios-storage-and-download-routing.md ----
+              # The app emits INTERNAL, UNSIGNED object URLs (http://seaweedfs.<ns>.svc:8333/<bucket>/<key>)
+              # the browser can't reach. Route 9 exposes them at <APP_HOST>/filestore/* (SeaweedFS serves them
+              # anonymously by key — see the 'anonymous' identity in seaweedfs-s3-config). Route 10 rewrites the
+              # internal URL -> public /filestore path in /api/files/* JSON responses so the browser gets a
+              # reachable link. Uploads stay on the internal signed endpoint (untouched).
+              if [ "${OBJECT_STORE_MODE}" = "bundled" ]; then
+                if [ "${ENABLE_APISIX_TLS}" = "true" ]; then PUBSCHEME="https"; else PUBSCHEME="http"; fi
+                route 9 filestore '{"name":"filestore","uri":"/filestore/*","host":"'"${APP_HOST}"'","priority":20,"upstream":{"type":"roundrobin","nodes":{"seaweedfs.'"${DATA_NAMESPACE}"'.svc:8333":1}},"plugins":{"proxy-rewrite":{"regex_uri":["^/filestore/(.*)","/$1"]},"request-id":{}}}'
+                route 10 web-api-files-rewrite '{"name":"web-api-files-rewrite","uri":"/api/files/*","host":"'"${APP_HOST}"'","priority":15,"timeout":{"connect":60,"send":1200,"read":1200},"upstream":{"type":"roundrobin","nodes":{"alchemi-web.'"${APP_NAMESPACE}"'.svc:3000":1}},"plugins":{"proxy-rewrite":{"headers":{"set":{"Accept-Encoding":"identity"}}},"response-rewrite":{"filters":[{"regex":"http://seaweedfs.'"${DATA_NAMESPACE}"'.svc:8333/","scope":"global","replace":"'"${PUBSCHEME}"'://'"${APP_HOST}"'/filestore/"}]},"cors":{},"request-id":{}}}'
+                echo "Filestore download routes (9,10) configured."
+              else echo "skip filestore routes (external object store)"; fi
+
+              if [ -n "${ZH}" ]; then
+                route 7 alchemi-zenith '{"name":"alchemi-zenith","uri":"/*","host":"'"${ZH}"'","priority":10,"upstream":{"type":"roundrobin","nodes":{"alchemi-zenith.'"${APP_NAMESPACE}"'.svc:3000":1}},"plugins":{"cors":{},"request-id":{}}}'
+              else echo "skip zenith route (internal)"; fi
+
+              if [ "${ENABLE_SANDBOXES}" = "true" ]; then
+                # Route 8 — all sandbox subdomains: *.domain at priority 5 (below specific-host
+                # routes at 10-11, so susetestapp/auth/ops still hit their own routes first).
+                # Nginx-router internally discriminates runtime vs published-app vs passthrough.
+                route 8 sandbox-wildcard '{"name":"sandbox-wildcard","uri":"/*","host":"*.'"${DOMAIN}"'","priority":5,"timeout":{"connect":60,"send":1200,"read":1200},"upstream":{"type":"roundrobin","nodes":{"alchemi-nginx-router.'"${APP_NAMESPACE}"'.svc:80":1}},"plugins":{"proxy-rewrite":{"headers":{"set":{"X-Forwarded-Host":"$http_host"}}},"request-id":{}}}'
+                echo "Sandbox route 8 configured."
+              else echo "skip sandbox route (computeApi.enabled=false)"; fi
+
+              echo "All APISIX routes configured."
+{{- end }}

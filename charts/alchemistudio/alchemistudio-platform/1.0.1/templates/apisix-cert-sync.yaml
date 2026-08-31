@@ -1,0 +1,73 @@
+# =============================================================================
+# apisix-cert-sync (acme only) — bridges cert-manager -> standalone APISIX.
+#
+# Standalone APISIX (Admin-API-configured, no apisix-ingress-controller) does
+# NOT watch Kubernetes TLS secrets. When cert-manager issues/renews the acme
+# cert into tls.secretName, this CronJob picks it up and PUTs it into the APISIX
+# SSL object — so the first issuance lights up HTTPS, and every renewal refreshes
+# it. Idempotent: it only PUTs when the mounted cert differs from a marker, and
+# it no-ops until the cert exists.
+# =============================================================================
+{{- if and .Values.tls.enabled (eq .Values.tls.mode "acme") (eq .Values.gateway.mode "bundled") }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-apisix-cert-sync
+  namespace: apisix
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: gateway-config }
+spec:
+  schedule: "*/2 * * * *"            # every 2 min — picks up issuance + renewals
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 120
+      template:
+        metadata: { labels: { app.kubernetes.io/name: apisix-cert-sync } }
+        spec:
+          restartPolicy: Never
+          {{- with .Values.global.image.pullSecret }}
+          imagePullSecrets: [{ name: {{ . }} }]
+          {{- end }}
+          volumes:
+            - name: ssl-certs
+              secret: { secretName: {{ .Values.tls.secretName | quote }}, optional: true }
+          containers:
+            - name: cert-sync
+              image: {{ .Values.global.image.registry }}/platform/curl:8.5.0
+              volumeMounts:
+                - { name: ssl-certs, mountPath: /certs, readOnly: true }
+              env:
+                - { name: APP_HOST,        value: {{ include "alchemi.appHost" . | quote }} }
+                - { name: AUTH_HOST,       value: {{ include "alchemi.authHost" . | quote }} }
+                - { name: OPS_HOST,        value: {{ include "alchemi.opsHost" . | quote }} }
+                - { name: ZENITH_HOST,     value: {{ include "alchemi.zenithHost" . | quote }} }
+                - { name: EXPOSE_ZENITH,   value: {{ .Values.gateway.exposeZenith | quote }} }
+                - { name: APISIX_ADMIN_KEY, value: {{ .Values.gateway.adminKey | quote }} }
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  ADMIN_URL="http://apisix-admin.apisix.svc:9180"
+                  if [ ! -f /certs/tls.crt ] || [ ! -f /certs/tls.key ]; then
+                    echo "cert not issued yet — nothing to sync."; exit 0; fi
+                  if [ "${EXPOSE_ZENITH}" = "true" ]; then ZH="${ZENITH_HOST}"; else ZH=""; fi
+                  # skip the PUT if APISIX already serves this exact cert (avoid churn)
+                  FP=$(md5sum /certs/tls.crt | cut -d' ' -f1)
+                  CUR=$(curl -s "${ADMIN_URL}/apisix/admin/ssls/1" -H "X-API-KEY: ${APISIX_ADMIN_KEY}" 2>/dev/null || true)
+                  case "$CUR" in *"\"alchemi_fp\":\"${FP}\""*) echo "APISIX already has this cert ($FP) — no change."; exit 0;; esac
+                  TLS_CERT=$(awk '{printf "%s\\n", $0}' /certs/tls.crt)
+                  TLS_KEY=$(awk '{printf "%s\\n", $0}' /certs/tls.key)
+                  SNIS=""
+                  for d in "${APP_HOST}" "${AUTH_HOST}" "${OPS_HOST}" "${ZH}"; do
+                    [ -n "$d" ] && SNIS="${SNIS:+$SNIS,}\"$d\""; done
+                  code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "${ADMIN_URL}/apisix/admin/ssls/1" \
+                    -H "X-API-KEY: ${APISIX_ADMIN_KEY}" -H "Content-Type: application/json" \
+                    -d "{\"cert\": \"${TLS_CERT}\", \"key\": \"${TLS_KEY}\", \"snis\": [${SNIS}], \"labels\": {\"alchemi_fp\": \"${FP}\"}}")
+                  [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { echo "ERROR: SSL PUT HTTP $code"; exit 1; }
+                  echo "APISIX SSL object updated with acme cert ($FP) — HTTP $code."
+{{- end }}

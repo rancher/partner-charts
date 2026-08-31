@@ -1,0 +1,245 @@
+# =============================================================================
+# AIOS (AI Operating System) workers + data plane + image pins
+#
+# Three workers — learning, files, maintenance — share a single RWX PVC
+# (aios-data-plane) mounted at /mnt/aios-data.  compute-api reads the
+# alchemi-image-pins ConfigMap to know which container image to pull when
+# spawning AIOS sandbox pods.
+#
+# REQUIRES: a StorageClass that supports ReadWriteMany
+#   - Longhorn RWX: create a custom SC or enable Longhorn's NFS-based RWX
+#   - NFS CSI provisioner is another option
+# Set aios.dataPlane.storageClass to the RWX-capable class on your cluster.
+#
+# aios.workers.tag is separate from global.image.tag — AIOS has its own
+# release cadence and is retag'd rather than rebuilt on every release.
+# =============================================================================
+{{- if .Values.aios.enabled }}
+{{- $ns := .Values.global.namespaces.app -}}
+{{- $reg := .Values.global.image.registry -}}
+{{- $workerImage := .Values.aios.workers.image | default (printf "%s/alchemi-aios:%s" $reg .Values.aios.workers.tag) -}}
+{{- $sandboxRef  := .Values.aios.sandbox.ref   | default (printf "%s/aios-sandbox:%s" $reg .Values.aios.sandbox.tag) -}}
+# ---- ServiceAccount shared by all aios workers ------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alchemi-ai
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-aios
+---
+# ---- Shared data-plane PVC moved to aios-data-plane-pvc.yaml (created ALWAYS,
+#      not gated on aios.enabled, because web/ai always mount it) --------------
+# ---- Image pins: compute-api reads these to provision AIOS sandbox pods -----
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-image-pins
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    alchemi.io/release: {{ .Values.aios.workers.tag | quote }}
+data:
+  aios-sandbox: {{ $sandboxRef | quote }}
+---
+# ---- learning worker ---------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-aios-learning
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-aios
+    app.kubernetes.io/component: learning-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alchemi-aios-learning
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: alchemi-aios-learning
+        app.kubernetes.io/name: alchemi-aios
+        app.kubernetes.io/component: learning-worker
+    spec:
+      serviceAccountName: alchemi-ai
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      nodeSelector: { agentpool: apppool }
+      terminationGracePeriodSeconds: 75
+      containers:
+        - name: aios-worker
+          image: {{ $workerImage }}
+          imagePullPolicy: IfNotPresent
+          args: [learning]
+          env:
+            - { name: PGSSLMODE, value: {{ include "alchemi.pgSslMode" . | quote }} }
+            - { name: HOME, value: "/tmp" }
+          envFrom:
+            - configMapRef: { name: alchemi-ai-config }
+            - secretRef: { name: alchemi-ai-secrets }
+          ports:
+            - { name: health, containerPort: 8086, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: { cpu: 200m, memory: 1Gi }
+            limits: { cpu: "1", memory: 4Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - { name: aios-data, mountPath: /mnt/aios-data }
+      volumes:
+        - name: aios-data
+          persistentVolumeClaim: { claimName: aios-data-plane }
+---
+# ---- files worker ------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-aios-files
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-aios
+    app.kubernetes.io/component: files-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alchemi-aios-files
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: alchemi-aios-files
+        app.kubernetes.io/name: alchemi-aios
+        app.kubernetes.io/component: files-worker
+    spec:
+      serviceAccountName: alchemi-ai
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      nodeSelector: { agentpool: apppool }
+      terminationGracePeriodSeconds: 75
+      containers:
+        - name: aios-worker
+          image: {{ $workerImage }}
+          imagePullPolicy: IfNotPresent
+          args: [files]
+          env:
+            - { name: PGSSLMODE, value: {{ include "alchemi.pgSslMode" . | quote }} }
+            - { name: HOME, value: "/tmp" }
+          envFrom:
+            - configMapRef: { name: alchemi-ai-config }
+            - secretRef: { name: alchemi-ai-secrets }
+          ports:
+            - { name: health, containerPort: 8086, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: { cpu: 300m, memory: 1Gi }
+            limits: { cpu: "2", memory: 6Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - { name: aios-data, mountPath: /mnt/aios-data }
+      volumes:
+        - name: aios-data
+          persistentVolumeClaim: { claimName: aios-data-plane }
+---
+# ---- maintenance worker (Recreate — safe: owns the compaction lock) ----------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-aios-maintenance
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-aios
+    app.kubernetes.io/component: maintenance-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alchemi-aios-maintenance
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: alchemi-aios-maintenance
+        app.kubernetes.io/name: alchemi-aios
+        app.kubernetes.io/component: maintenance-worker
+    spec:
+      serviceAccountName: alchemi-ai
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      nodeSelector: { agentpool: apppool }
+      terminationGracePeriodSeconds: 75
+      containers:
+        - name: aios-worker
+          image: {{ $workerImage }}
+          imagePullPolicy: IfNotPresent
+          args: [maintenance]
+          env:
+            - { name: PGSSLMODE, value: {{ include "alchemi.pgSslMode" . | quote }} }
+            - { name: HOME, value: "/tmp" }
+          envFrom:
+            - configMapRef: { name: alchemi-ai-config }
+            - secretRef: { name: alchemi-ai-secrets }
+          ports:
+            - { name: health, containerPort: 8086, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { cpu: "1", memory: 2Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - { name: aios-data, mountPath: /mnt/aios-data }
+      volumes:
+        - name: aios-data
+          persistentVolumeClaim: { claimName: aios-data-plane }
+{{- end }}

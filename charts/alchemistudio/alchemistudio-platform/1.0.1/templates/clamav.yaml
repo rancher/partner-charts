@@ -1,0 +1,123 @@
+# =============================================================================
+# ClamAV — antivirus scanner for file uploads
+#
+# Used by alchemi-web and alchemi-aios workers for scanning uploaded files.
+# The NetworkPolicy restricts ingress to only those two workloads on port 3310.
+#
+# Resource note: ClamAV needs ~3Gi RAM to load its signature databases.
+# The PVC stores the database files so startup doesn't require a full DB download.
+# Set clamav.enabled: true only when the cluster has nodes with >= 4Gi allocatable.
+#
+# Image pinned to digest for security (scanner image is security-critical).
+# Bump the digest when ClamAV releases updated signatures or CVE fixes.
+# =============================================================================
+{{- if .Values.clamav.enabled }}
+{{- $ns  := .Values.global.namespaces.app -}}
+{{- $img := .Values.clamav.image | default (printf "%s/alchemi-clamav:%s" .Values.global.image.registry .Values.global.image.tag) -}}
+# ---- PVC: signature database storage ----------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clamav-db
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app: clamav }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+# ---- Deployment --------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-clamav
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: clamav
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: clamav }
+  strategy:
+    type: Recreate       # RWO PVC — only one replica can mount it
+  template:
+    metadata:
+      labels:
+        app: clamav
+        app.kubernetes.io/name: clamav
+    spec:
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      nodeSelector: { agentpool: apppool }
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: clamav
+          image: {{ $img }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: clamd, containerPort: 3310, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: clamd }
+            initialDelaySeconds: 60       # DB load takes ~45s on cold start
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: clamd }
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: { cpu: 200m, memory: 2Gi }
+            limits:   { cpu: "1",  memory: 5Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - { name: db,  mountPath: /var/lib/clamav }
+            - { name: log, mountPath: /var/log/clamav }
+      volumes:
+        - name: db
+          persistentVolumeClaim: { claimName: clamav-db }
+        - name: log
+          emptyDir: {}
+---
+# ---- Service -----------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-clamav
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app: clamav }
+spec:
+  selector: { app: clamav }
+  ports:
+    - { name: clamd, port: 3310, targetPort: clamd }
+---
+# ---- NetworkPolicy: only web + aios workers can reach clamd -----------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clamav-ingress
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  podSelector:
+    matchLabels: { app: clamav }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: alchemi-web }
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: alchemi-aios }
+      ports:
+        - { port: 3310, protocol: TCP }
+{{- end }}

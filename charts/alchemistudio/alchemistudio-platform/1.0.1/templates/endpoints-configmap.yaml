@@ -1,0 +1,37 @@
+# =============================================================================
+# alchemi-endpoints — the single source of the derived hosts/URLs, computed ONCE
+# from global.domain. This is how the domain fans out to the app pods WITHOUT
+# templating values.yaml (Helm can't template values, but it CAN template this).
+#
+# ⚠️ APP-CHART INTEGRATION POINT (proposed app-chart change, not done here):
+#   the alchemi-* app charts should `envFrom` this ConfigMap so APP_HOST /
+#   KEYCLOAK_HOSTNAME / NEXTAUTH_URL / the redirect URI reach the containers, e.g.
+#     envFrom:
+#       - configMapRef: { name: alchemi-endpoints }
+#   Until they do, set the same values via each subchart's config.data in a values
+#   override. The umbrella-owned pieces (APISIX routes + TLS SNIs) already use the
+#   derived hosts directly, so routing/TLS work regardless.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-endpoints
+  namespace: {{ .Values.global.namespaces.app }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  APP_HOST: {{ include "alchemi.appHost" . | quote }}
+  AUTH_HOST: {{ include "alchemi.authHost" . | quote }}
+  OPS_HOST: {{ include "alchemi.opsHost" . | quote }}
+  ZENITH_HOST: {{ include "alchemi.zenithHost" . | quote }}
+  APP_URL: {{ include "alchemi.appUrl" . | quote }}
+  NEXTAUTH_URL: {{ include "alchemi.nextauthUrl" . | quote }}
+  KEYCLOAK_HOSTNAME: {{ include "alchemi.authUrl" . | quote }}
+  KEYCLOAK_REDIRECT_URI: {{ include "alchemi.redirectUri" . | quote }}
+  AUTH_PROVIDER: "KEYCLOAK"
+  ADMIN_EMAIL: {{ required "admin.email is required (must match the Keycloak login email)" .Values.admin.email | quote }}
+  ADMIN_NAME: {{ include "alchemi.adminName" . | quote }}
+  ACCOUNT_NAME: {{ include "alchemi.accountName" . | quote }}
+  CUSTOMER_DOMAIN: {{ required "global.domain is required" .Values.global.domain | quote }}
+  TIER: {{ .Values.global.tier | default "basic" | quote }}

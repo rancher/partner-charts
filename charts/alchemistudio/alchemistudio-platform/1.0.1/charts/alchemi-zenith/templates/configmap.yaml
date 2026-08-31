@@ -1,0 +1,95 @@
+{{- if .Values.config.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alchemi-zenith.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "alchemi-zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zenith-frontend
+data:
+  # ---------------------------------------------------------------------------
+  # Environment
+  # ---------------------------------------------------------------------------
+  NODE_ENV: {{ .Values.config.data.NODE_ENV | quote }}
+  NEXT_TELEMETRY_DISABLED: {{ .Values.config.data.NEXT_TELEMETRY_DISABLED | quote }}
+  ENVIRONMENT: {{ .Values.config.data.ENVIRONMENT | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Public URLs
+  # NEXT_PUBLIC_API_URL / BASE_URL used by on-prem; NEXTAUTH_URL required by
+  # NextAuth in all envs; AUTH_TRUST_HOST allows APISIX x-forwarded-host
+  # to set the callback URL correctly.
+  # ---------------------------------------------------------------------------
+  NEXT_PUBLIC_API_URL: {{ .Values.config.data.NEXT_PUBLIC_API_URL | quote }}
+  BASE_URL: {{ .Values.config.data.BASE_URL | quote }}
+  NEXTAUTH_URL: {{ .Values.config.data.NEXTAUTH_URL | quote }}
+  AUTH_TRUST_HOST: {{ .Values.config.data.AUTH_TRUST_HOST | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Auth provider selector
+  # Resolver: apps/zenith/src/lib/iam/index.ts
+  # KEYCLOAK → org provisioning + invite flow via Keycloak Admin REST API
+  # ZITADEL (or unset) → legacy Zitadel Management API
+  # ---------------------------------------------------------------------------
+  AUTH_PROVIDER: {{ .Values.config.data.AUTH_PROVIDER | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Keycloak — used by zenith's IamClient when AUTH_PROVIDER=KEYCLOAK.
+  # Admin ops (createUser, sendInviteEmail, createOrganization) go through
+  # the Admin REST API via client_credentials on the alchemi-admin-svc client.
+  # KEYCLOAK_ADMIN_CLIENT_SECRET → secret template.
+  # ---------------------------------------------------------------------------
+  KEYCLOAK_ISSUER: {{ .Values.config.data.KEYCLOAK_ISSUER | quote }}
+  KEYCLOAK_REALM: {{ .Values.config.data.KEYCLOAK_REALM | quote }}
+  KEYCLOAK_ADMIN_CLIENT_ID: {{ .Values.config.data.KEYCLOAK_ADMIN_CLIENT_ID | quote }}
+  # Must be the realm that OWNS alchemi-admin-svc (usually matches KEYCLOAK_REALM).
+  KEYCLOAK_ADMIN_REALM: {{ .Values.config.data.KEYCLOAK_ADMIN_REALM | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Zitadel — legacy invite flow (retained for one-line rollback)
+  # ZITADEL_PAT secret is in the secret template.
+  # ---------------------------------------------------------------------------
+  ZITADEL_ISSUER: {{ .Values.config.data.ZITADEL_ISSUER | quote }}
+  ZITADEL_MANAGEMENT_API_URL: {{ .Values.config.data.ZITADEL_MANAGEMENT_API_URL | quote }}
+  ZITADEL_DEFAULT_ORG_ID: {{ .Values.config.data.ZITADEL_DEFAULT_ORG_ID | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Invite relay — registration links routed via alchemi-web /api/invite/activate
+  # ---------------------------------------------------------------------------
+  ALCHEMI_WEB_BASE_URL: {{ .Values.config.data.ALCHEMI_WEB_BASE_URL | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Internal service URLs (service-to-service, cluster-local)
+  # ---------------------------------------------------------------------------
+  # zenith → alchemi-ai (model catalog reload, etc.)
+  AI_API_URL: {{ .Values.config.data.AI_API_URL | quote }}
+  # zenith → alchemi-migrator-api (Database page / migration panel)
+  DB_TOOLS_API_URL: {{ .Values.config.data.DB_TOOLS_API_URL | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Feature flags
+  # ---------------------------------------------------------------------------
+  ENABLE_SETUP_CONTROL: {{ .Values.config.data.ENABLE_SETUP_CONTROL | quote }}
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  DB_HOST: {{ .Values.config.data.DB_HOST | quote }}
+  DB_PORT: {{ .Values.config.data.DB_PORT | quote }}
+  DB_NAME: {{ .Values.config.data.DB_NAME | quote }}
+  DB_SSL: {{ .Values.config.data.DB_SSL | quote }}
+  DB_USER: {{ .Values.config.data.DB_USER | quote }}
+
+  # ---------------------------------------------------------------------------
+  # Redis — BullMQ email queue
+  # Zenith uses BullMQ which requires non-cluster Redis; REDIS_CLUSTER must
+  # stay "false" unless the Redis tier natively supports cluster mode.
+  # ---------------------------------------------------------------------------
+  REDIS_HOST: {{ .Values.config.data.REDIS_HOST | quote }}
+  REDIS_PORT: {{ .Values.config.data.REDIS_PORT | quote }}
+  REDIS_TLS: {{ .Values.config.data.REDIS_TLS | quote }}
+  REDIS_USERNAME: {{ .Values.config.data.REDIS_USERNAME | quote }}
+  REDIS_DB: {{ .Values.config.data.REDIS_DB | quote }}
+  REDIS_CLUSTER: {{ .Values.config.data.REDIS_CLUSTER | quote }}
+{{- end }}

@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alchemi-ai.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "alchemi-ai.labels" . | nindent 4 }}
+    app: {{ include "alchemi-ai.fullname" . }}
+    alchemi.io/license-managed: "true"
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  # tier=standard -> 2 replicas of this load-bearing service (global.tier, set by the umbrella); basic -> replicaCount (1)
+  replicas: {{ if eq (.Values.global.tier | default "basic") "standard" }}2{{ else }}{{ .Values.replicaCount }}{{ end }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "alchemi-ai.selectorLabels" . | nindent 6 }}
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "alchemi-ai.selectorLabels" . | nindent 8 }}
+        app: {{ include "alchemi-ai.fullname" . }}
+        alchemi.io/license-managed: "true"
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Wait for the migrator (main-resource db-init Job) to create the schema, so this
+        # app starts cleanly (Init state) instead of crash-looping. Polls its own DSN.
+        - name: wait-for-schema
+          image: {{ printf "%s/platform/pgvector:pg17" .Values.global.image.registry }}
+          command: ["/bin/sh","-c"]
+          env:
+            - name: WFS_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: alchemi-ai-secrets
+                  key: APP_POSTGRES_URI
+          args:
+            - |
+              echo "waiting for schema table allowances ..."
+              until psql "$WFS_DSN" -tAc "SELECT to_regclass('public.allowances')" 2>/dev/null | grep -q allowances; do sleep 3; done
+              echo "schema table allowances ready"
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.service.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- end }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.config.create .Values.config.existingConfigMap .Values.secret.create .Values.secret.existingSecret }}
+          envFrom:
+            {{- if .Values.config.create }}
+            - configMapRef:
+                name: {{ include "alchemi-ai.fullname" . }}-config
+            {{- else if .Values.config.existingConfigMap }}
+            - configMapRef:
+                name: {{ .Values.config.existingConfigMap }}
+            {{- end }}
+            {{- if .Values.secret.create }}
+            - secretRef:
+                name: {{ include "alchemi-ai.fullname" . }}-secrets
+            {{- else if .Values.secret.existingSecret }}
+            - secretRef:
+                name: {{ .Values.secret.existingSecret }}
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          {{- if .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if .Values.aiosDataPlane.enabled }}
+          # AIOS shared data plane (RWX) — ai reads/writes agent ~/Files here
+          # (STORAGE_FS_ROOT=/mnt/aios-data, AIOS_STORAGE_PROVIDER=fs). Matches
+          # cluster-deployments ai; without it AIOS file ops fail with EACCES.
+          volumeMounts:
+            - name: aios-data
+              mountPath: {{ .Values.aiosDataPlane.mountPath | default "/mnt/aios-data" }}
+          {{- end }}
+      {{- if .Values.aiosDataPlane.enabled }}
+      volumes:
+        - name: aios-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.aiosDataPlane.claimName | default "aios-data-plane" }}
+      {{- end }}

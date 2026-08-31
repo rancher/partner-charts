@@ -1,0 +1,74 @@
+replicaCount: 1
+
+image:
+  repository: alchemiacr.azurecr.io/alchemi-keycloak
+  tag: "26.6.3-alchemi.25"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+serviceAccountName: keycloak
+
+namespace: auth
+
+nodeSelector:
+  agentpool: usernpv2
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Bump this to the sha256 of configmap.yaml to trigger rolling restarts.
+# Regenerate with: sha256sum platform/auth/configmap.yaml
+configChecksum: ""
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  http:
+    port: 8080
+  https:
+    port: 8443
+  management:
+    port: 9000
+
+envFrom:
+  - configMapRef:
+      name: keycloak-config
+  - secretRef:
+      name: keycloak-secrets
+
+# KC_DB_URL is constructed from configmap values at runtime via variable substitution.
+# Set to false to disable (e.g. if using an external secret that supplies the full URL directly).
+dbUrlEnabled: true
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+vpa:
+  enabled: false
+  updateMode: "Off"
+  minAllowed:
+    cpu: 250m
+    memory: 512Mi
+  maxAllowed:
+    cpu: 4000m
+    memory: 4Gi

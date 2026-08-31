@@ -1,0 +1,299 @@
+replicaCount: 1
+
+image:
+  repository: alchemiacr.azurecr.io/alchemi-ai
+  tag: "1.0.19"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+nodeSelector:
+  agentpool: apppool
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: alchemi-ai
+          topologyKey: kubernetes.io/hostname
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+env:
+  - name: PYTHONUNBUFFERED
+    value: "1"
+  - name: WORKERS
+    value: "4"
+  - name: PGSSLMODE
+    value: "require"
+  - name: HOME
+    value: "/tmp"
+
+# config / secret toggle
+# Set create: true to have the chart render a ConfigMap / Secret from the data
+# blocks below.  Set create: false and supply existingConfigMap / existingSecret
+# to reference objects that already exist in the cluster (e.g. managed by
+# ExternalSecrets or applied by the on-prem bootstrap scripts).
+config:
+  create: false
+  existingConfigMap: "alchemi-ai-config"
+  data:
+    # --- Service Identity ---
+    SERVICE_NAME: ""
+    OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    OTEL_SERVICE_NAME: ""
+    ENVIRONMENT: ""
+    # --- LangSmith ---
+    LANGSMITH_ENDPOINT: ""
+    LANGSMITH_TRACING: ""
+    LANGSMITH_PROJECT: ""
+    # --- Frontend ---
+    FRONTEND_URL: ""
+    FRONTEND_ORIGIN: ""
+    # --- Security ---
+    ALCHEMI_AI_INTERNAL_SIGNATURE_TTL_SECONDS: ""
+    ALCHEMI_ALLOW_PRIVATE_OUTBOUND: ""
+    # --- Credits ---
+    MAX_CREDIT_REQUESTS_PER_MONTH: ""
+    # --- PostgreSQL ---
+    DB_HOST: ""
+    DB_PORT: ""
+    DB_NAME: ""
+    DB_SSL: ""
+    PG_AI_POOL_MIN_SIZE: ""
+    PG_AI_POOL_MAX_SIZE: ""
+    PG_AI_POOL_MAX_IDLE: ""
+    PG_AI_POOL_TIMEOUT: ""
+    PG_CONNECT_TIMEOUT: ""
+    PG_STATEMENT_TIMEOUT: ""
+    PG_MAX_RETRY_ATTEMPTS: ""
+    PG_KEEPALIVES_ENABLED: ""
+    PG_KEEPALIVES_IDLE: ""
+    PG_KEEPALIVES_INTERVAL: ""
+    PG_KEEPALIVES_COUNT: ""
+    # --- Redis ---
+    REDIS_HOST: ""
+    REDIS_PORT: ""
+    REDIS_TLS: ""
+    REDIS_TLS_SKIP_VERIFY: ""
+    REDIS_USERNAME: ""
+    REDIS_DB: ""
+    REDIS_CLUSTER: ""
+    # --- Perplexity ---
+    PERPLEXITY_MAX_RETRIES: ""
+    PERPLEXITY_TIMEOUT_READ: ""
+    PERPLEXITY_TIMEOUT_CONNECT: ""
+    PERPLEXITY_MAX_KEEPALIVE: ""
+    PERPLEXITY_MAX_CONNECTIONS: ""
+    PERPLEXITY_KEEPALIVE_EXPIRY: ""
+    PERPLEXITY_TIMEOUT_WRITE: ""
+    PERPLEXITY_TIMEOUT_POOL: ""
+    # --- Exa ---
+    EXA_MAX_RETRIES: ""
+    # --- Context Limits ---
+    LONG_RUNNING_TASK_TIMEOUT: ""
+    ARTIFACTS_CONTEXT_LIMIT: ""
+    THREADS_CONTEXT_LIMIT: ""
+    AGENT_CONTEXT_LIMIT: ""
+    MAX_CONTEXT_LENGTH: ""
+    ENABLE_LONG_RUNNING_RESEARCH_POLLING: ""
+    # --- Sandbox / Albox ---
+    AIBOX_API_URL: ""
+    AIBOX_USE_ALCHEMI_INTERNAL_AUTH: ""
+    MAX_SANDBOXES: ""
+    SANDBOX_TTL_SECONDS: ""
+    SANDBOX_EXTEND_SECONDS: ""
+    SANDBOX_IMAGE_REF: ""
+    # --- Token / Chat ---
+    CONSOLE_LLM_REQUEST_TIMEOUT: ""
+    MAX_CHAT_TOKEN_COUNT: ""
+    MINIMUM_CONVERSATION_TOKEN_PCT_BUDGET_FOR_SUMMARIZATION: ""
+    SUMMARIZATION_THRESHOLD_PCT: ""
+    OUTPUT_TOKEN_LIMIT: ""
+    SAFETY_HEADROOM: ""
+    CREDITS_FACTOR: ""
+    # --- Guardrails ---
+    GUARDRAILS_ENABLED: ""
+    GUARDRAILS_PII_URL: ""
+    GUARDRAILS_TOXIC_URL: ""
+    GUARDRAILS_JAILBREAK_URL: ""
+    GUARDRAILS_SECRET_DETECTION_URL: ""
+    GUARDRAILS_CONTENT_FILTER_URL: ""
+    GUARDRAILS_TOPICAL_URL: ""
+    GUARDRAILS_TIMEOUT: ""
+    # --- Output ---
+    ENABLE_OUTPUT_MDX: ""
+    # --- AIOS ---
+    AIOS_ENABLE_HERMES_RUNTIME: ""
+    AIOS_ENABLE_BROWSER: ""
+    AIOS_ENABLE_TIER2: ""
+    # --- Logging ---
+    APP_LOG_TO_OPENOBSERVE: ""
+    APP_LOG_LEVEL: ""
+    AUDIT_LOG_MODE: ""
+    # --- OpenObserve ---
+    OPENOBSERVE_ENABLED: ""
+    OPENOBSERVE_ENV: ""
+    OPENOBSERVE_URL: ""
+    OPENOBSERVE_USER: ""
+    OPENOBSERVE_ORG: ""
+    OPENOBSERVE_TIMEOUT: ""
+    # --- Daytona ---
+    DAYTONA_API_URL: ""
+    # --- Azure OpenAI (GPT) ---
+    AZURE_OPENAI_ENDPOINT: ""
+    AZURE_OPENAI_API_VERSION: ""
+    AZURE_OPENAI_MODELS: ""
+    # --- Azure Anthropic (Claude) ---
+    AZURE_ANTHROPIC_ENDPOINT: ""
+    AZURE_ANTHROPIC_MODELS: ""
+    OPUS_MODEL: ""
+    SONNET_MODEL: ""
+    HAIKU_MODEL: ""
+    # --- Azure xAI (Grok) ---
+    AZURE_XAI_ENDPOINT: ""
+    AZURE_XAI_MODELS: ""
+    # --- Vertex AI (Gemini) ---
+    VERTEX_AI_MODELS: ""
+    # --- Default Models ---
+    DEFAULT_INSTANT_MODEL_ID: ""
+    DEFAULT_SMART_MODEL_ID: ""
+    DEFAULT_THINKING_MODEL_ID: ""
+    DEFAULT_BALANCED_MODEL_ID: ""
+    DEFAULT_GEMINI_KNOWLEDGE_MODEL_ID: ""
+    # --- Media Generation ---
+    IMAGE_GENERATION_MODEL: ""
+    AUDIO_GENERATION_MODEL: ""
+    VIDEO_GENERATION_MODEL: ""
+
+secret:
+  create: false
+  existingSecret: "alchemi-ai-secrets"
+  data:
+    # --- PostgreSQL ---
+    DB_USER: ""
+    DB_PASSWORD: ""
+    DATABASE_URL: ""
+    POSTGRES_URL: ""
+    POSTGRES_URI: ""
+    APP_POSTGRES_URI: ""
+    # --- Redis ---
+    REDIS_PASSWORD: ""
+    REDIS_URI: ""
+    REDIS_URL: ""
+    # --- Azure AI ---
+    AZURE_OPENAI_API_KEY: ""
+    AZURE_AI_KEY: ""
+    AZURE_TENANT_ID: ""
+    AZURE_CLIENT_ID: ""
+    AZURE_CLIENT_SECRET: ""
+    AZURE_STORAGE_CONNECTION_STRING: ""
+    AZURE_ANTHROPIC_API_KEY: ""
+    AZURE_XAI_API_KEY: ""
+    # --- OpenAI / LiteLLM ---
+    OPENAI_API_KEY: ""
+    LITELLM_API_KEY: ""
+    # --- Third-Party AI Providers ---
+    ANTHROPIC_API_KEY: ""
+    GOOGLE_API_KEY: ""
+    GROQ_API_KEY: ""
+    PERPLEXITY_API_KEY: ""
+    XAI_API_KEY: ""
+    TAVILY_API_KEY: ""
+    EXA_API_KEY: ""
+    # --- Sandbox ---
+    AIBOX_API_KEY: ""
+    # --- Integrations ---
+    COMPOSIO_API_KEY: ""
+    NANGO_SECRET_KEY: ""
+    DAYTONA_API_KEY: ""
+    # --- Observability ---
+    LANGCHAIN_API_KEY: ""
+    LANGSMITH_API_KEY: ""
+    OPENOBSERVE_PASSWORD: ""
+    # --- Encryption ---
+    ALCHEMI_ENCRYPTION_KEY: ""
+    ACCESS_TOKEN_PEPPER: ""
+    # --- Internal Service Auth ---
+    ALCHEMI_AI_INTERNAL_TOKEN: ""
+    COMPUTE_INTERNAL_TOKEN: ""
+    GUARDRAILS_INTERNAL_TOKEN: ""
+
+namespace: alchemi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
+  targetMemoryAverageValue: 1640Mi
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+vpa:
+  enabled: false
+  updateMode: "Off"
+  minAllowed:
+    cpu: 200m
+    memory: 512Mi
+  maxAllowed:
+    cpu: 4000m
+    memory: 8Gi
+
+aiosDataPlane:
+  enabled: false
+  claimName: aios-data-plane
+  mountPath: /mnt/aios-data

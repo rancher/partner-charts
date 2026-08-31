@@ -1,0 +1,77 @@
+# =============================================================================
+# Bundled OpenObserve (single-node) — folded in from phase-03. Optional: the ops
+# route degrades gracefully if this is absent. Skipped when observability.mode
+# != bundled. Root user = the form's admin.email; password from alchemi-secrets
+# (complexity-safe — OpenObserve rejects weak passwords). emptyDir by default;
+# observability.persist=true uses a PVC.
+# =============================================================================
+{{- if eq .Values.observability.mode "bundled" }}
+{{- $ns := .Values.global.namespaces.observability -}}
+{{- $img := .Values.observability.image | default (printf "%s/platform/openobserve:v0.91.1" .Values.global.image.registry) -}}
+{{- if .Values.observability.persist }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openobserve-data
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.global.storageClass | default "longhorn" }}
+  resources: { requests: { storage: {{ .Values.observability.storage }} } }
+---
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openobserve-auth
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+type: Opaque
+stringData:
+  ZO_ROOT_USER_EMAIL: {{ required "admin.email is required" .Values.admin.email | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openobserve
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: observability }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }          # RWO volume — Recreate avoids the rollout PVC deadlock
+  selector: { matchLabels: { app: openobserve } }
+  template:
+    metadata: { labels: { app: openobserve } }
+    spec:
+      securityContext: { fsGroup: 2000, runAsUser: 10000, runAsGroup: 3000, runAsNonRoot: true }
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: openobserve
+          image: {{ $img }}
+          env:
+            - { name: ZO_ROOT_USER_EMAIL, valueFrom: { secretKeyRef: { name: openobserve-auth, key: ZO_ROOT_USER_EMAIL } } }
+            - { name: ZO_ROOT_USER_PASSWORD, valueFrom: { secretKeyRef: { name: alchemi-secrets, key: OPENOBSERVE_PASSWORD } } }
+            - { name: ZO_DATA_DIR, value: /data }
+          ports: [{ containerPort: 5080 }]
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes:
+        - name: data
+          {{- if .Values.observability.persist }}
+          persistentVolumeClaim: { claimName: openobserve-data }
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openobserve
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  selector: { app: openobserve }
+  ports: [{ name: http, port: 5080, targetPort: 5080 }]
+{{- end }}

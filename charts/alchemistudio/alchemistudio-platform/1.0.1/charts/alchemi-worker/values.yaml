@@ -1,0 +1,156 @@
+replicaCount: 1
+
+image:
+  repository: alchemiacr.azurecr.io/alchemi-worker
+  tag: "1.0.19"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+# Worker has no HTTP service — queue-driven via Redis/KEDA
+service:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - pgrep -f node || exit 1
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    failureThreshold: 3
+  # Worker has no HTTP readiness probe — set to null
+  readiness: ~
+
+nodeSelector:
+  agentpool: apppool
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: alchemi-worker
+          topologyKey: kubernetes.io/hostname
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+env: []
+
+# --- ConfigMap -----------------------------------------------------------------
+# config.create=true  → chart creates a ConfigMap from config.data
+# config.existingConfigMap (non-empty) → skip create; reference that name in the Deployment
+# If neither is set the Deployment references <fullname>-config (must exist externally)
+config:
+  create: false
+  existingConfigMap: "alchemi-worker-config"
+  data:
+    # Environment
+    NODE_ENV: "production"
+    ENVIRONMENT: "production"
+    LOG_LEVEL: "info"
+
+    # Redis (Azure Managed Redis — ioredis non-cluster mode, TLS on port 10000)
+    REDIS_HOST: ""
+    REDIS_PORT: "10000"
+    REDIS_TLS: "true"
+    REDIS_CLUSTER: "false"
+
+    # PostgreSQL
+    POSTGRES_HOST: ""
+    POSTGRES_PORT: "5432"
+    POSTGRES_USER: ""
+    POSTGRES_DATABASE: ""
+    POSTGRES_DB: ""
+    PGSSLMODE: "require"
+
+    # Worker tuning
+    WORKER_CONCURRENCY: "5"
+    QUEUE_PREFIX: ""
+    CREDIT_BUDGET_RESET_CRON: "55 23 * * *"
+    EMAIL_WORKER_CONCURRENCY: "1"
+    SCHEDULER_WORKER_CONCURRENCY: "5"
+    EMAIL_RATE_LIMIT_MAX: "5"
+    EMAIL_RATE_LIMIT_DURATION_MS: "1000"
+
+    # Email / SMTP
+    EMAIL_PROVIDER: "smtp"
+    SMTP_HOST: ""
+    SMTP_PORT: "1025"
+    SMTP_FROM: ""
+
+    # OpenTelemetry
+    OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+    OTEL_SERVICE_NAME: "alchemi-worker"
+
+# --- Secret --------------------------------------------------------------------
+# secret.create=true  → chart creates a Secret from secret.data (plain text; Helm stores as stringData)
+# secret.existingSecret (non-empty) → skip create; reference that name in the Deployment
+# If neither is set the Deployment references <fullname>-secrets (must exist externally)
+secret:
+  create: false
+  existingSecret: "alchemi-worker-secrets"
+  data:
+    POSTGRES_PASSWORD: ""
+    REDIS_PASSWORD: ""
+    # SMTP credentials — required for production SMTP relay; leave blank for Mailpit (dev/demo)
+    SMTP_USER: ""
+    SMTP_PASSWORD: ""
+    # Azure Communication Services — optional email transport (used by Sumeru)
+    AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING: ""
+    AZURE_COMMUNICATION_SERVICES_SENDER_ADDRESS: ""
+
+namespace: alchemi
+
+# Worker is scaled by KEDA (Redis queue depth) in production; HPA is the fallback.
+# Set autoscaling.enabled=true to deploy the HPA instead of a fixed replica count.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryAverageValue: 400Mi
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+vpa:
+  enabled: false
+  updateMode: "Off"
+  minAllowed:
+    cpu: 50m
+    memory: 128Mi
+  maxAllowed:
+    cpu: 2000m
+    memory: 1Gi
