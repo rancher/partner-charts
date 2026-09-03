@@ -1,0 +1,163 @@
+{{- if and .Values.master.enable .Values.master.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "node-feature-discovery.fullname" . }}
+  labels:
+    {{- include "node-feature-discovery.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - watch
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - nodes/status
+  verbs:
+  - get
+  - patch
+  - update
+  - list
+- apiGroups:
+  - nfd.k8s-sigs.io
+  resources:
+  - nodefeatures
+  - nodefeaturerules
+  - nodefeaturegroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - nfd.k8s-sigs.io
+  resources:
+  - nodefeaturegroups/status
+  verbs:
+  - patch
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  resourceNames:
+  - "nfd-master.nfd.kubernetes.io"
+  verbs:
+  - get
+  - update
+{{- end }}
+
+{{- if and .Values.worker.enable .Values.worker.rbac.create }}
+{{- if has "node" .Values.worker.ownerRefs }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "node-feature-discovery.fullname" . }}-worker
+  labels:
+    {{- include "node-feature-discovery.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+{{- end }}
+{{- end }}
+
+{{- if and .Values.topologyUpdater.enable .Values.topologyUpdater.rbac.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "node-feature-discovery.fullname" . }}-topology-updater
+  labels:
+    {{- include "node-feature-discovery.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+    - ""
+  resources:
+    - nodes/configz
+  verbs:
+    - get
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - topology.node.k8s.io
+  resources:
+  - noderesourcetopologies
+  verbs:
+  - create
+  - get
+  - update
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+
+{{- if and .Values.gc.enable .Values.gc.rbac.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "node-feature-discovery.fullname" . }}-gc
+  labels:
+    {{- include "node-feature-discovery.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - topology.node.k8s.io
+  resources:
+  - noderesourcetopologies
+  verbs:
+  - delete
+  - list
+- apiGroups:
+  - nfd.k8s-sigs.io
+  resources:
+  - nodefeatures
+  verbs:
+  - delete
+  - list
+{{- end }}
