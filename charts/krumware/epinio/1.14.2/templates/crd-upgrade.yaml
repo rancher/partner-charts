@@ -1,0 +1,134 @@
+{{/*
+  CRD reconciliation hook.
+
+  Helm installs the files under `crds/` only on first install and never on
+  upgrade (https://helm.sh/docs/topics/charts/#limitations-on-crds). Because
+  this chart also seeds custom resources (AppChart, BuilderImage, Service),
+  the CRDs cannot be moved into `templates/`: Helm builds every rendered
+  object up front, so a seed CR of a not-yet-registered Kind fails REST
+  mapping on a fresh install.
+
+  To let `helm upgrade` pick up CRD changes, a pre-install/pre-upgrade hook
+  Job applies the same `crds/*.yaml` (single source of truth, embedded via
+  .Files.Glob) with kubectl and waits for them to be established. This runs
+  before the main manifest is applied, so schema changes to already-installed
+  CRDs (e.g. the new spec.origin.git.gitconfig field on `apps`) are reconciled
+  and reach existing clusters.
+
+  Caveat for a brand-new Kind (e.g. BuilderImage on a cluster that predates
+  it): this Job creates the CRD, but Helm REST-maps the *entire* main manifest
+  during upgrade preparation, before pre-upgrade hooks run. So a seed CR of a
+  not-yet-registered Kind that lives in the main manifest still fails at that
+  build step. Such a seed must itself be a post-install,post-upgrade hook so
+  it is applied after this Job has established the CRD. See default-builderimage.yaml.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "epinio-crd-upgrade-{{ .Release.Name }}"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "epinio.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-6"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "epinio-crd-upgrade-{{ .Release.Name }}"
+  labels:
+    {{- include "epinio.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-6"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - create
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "epinio-crd-upgrade-{{ .Release.Name }}"
+  labels:
+    {{- include "epinio.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-6"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+subjects:
+  - kind: ServiceAccount
+    name: "epinio-crd-upgrade-{{ .Release.Name }}"
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: "epinio-crd-upgrade-{{ .Release.Name }}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "epinio-crd-upgrade-{{ .Release.Name }}"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "epinio.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-6"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+{{ (.Files.Glob "crds/*.yaml").AsConfig | indent 2 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "epinio-crd-upgrade-{{ .Release.Name }}"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "epinio.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: "epinio-crd-upgrade-{{ .Release.Name }}"
+      labels:
+        {{- include "epinio.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: "epinio-crd-upgrade-{{ .Release.Name }}"
+      # The kubectl image is shell-less, so each step is a direct kubectl
+      # invocation: apply the CRDs, then wait for them to be established
+      # before the main manifest (and its seed CRs) is applied.
+      initContainers:
+        - name: apply
+          image: "{{ include "registry-url" . }}{{ .Values.image.kubectl.repository }}:{{ .Values.image.kubectl.tag }}"
+          command: ["kubectl", "apply", "-f", "/crds/"]
+          volumeMounts:
+            - name: crds
+              mountPath: /crds
+      containers:
+        - name: wait-established
+          image: "{{ include "registry-url" . }}{{ .Values.image.kubectl.repository }}:{{ .Values.image.kubectl.tag }}"
+          command: ["kubectl", "wait", "--for=condition=established", "--timeout=90s", "-f", "/crds/"]
+          volumeMounts:
+            - name: crds
+              mountPath: /crds
+      volumes:
+        - name: crds
+          configMap:
+            name: "epinio-crd-upgrade-{{ .Release.Name }}"
