@@ -1,0 +1,155 @@
+# =============================================================================
+# DB init — the proven 3-step flow (from azure-marketplace/manifests/db):
+#   init 1 "prep"    (postgres image, has psql): create compute_db + keycloak DBs
+#                     + vector/uuid-ossp/pgcrypto extensions in the app + compute DBs
+#   init 2 "migrate" (alchemi-operator): /manager migrate --db alchemiapp_db=URL
+#                                                          --db compute_db=URL
+#   main  "seed"     (postgres image): first admin + account from the FORM
+# initContainers run sequentially before main, giving the correct order:
+#   prep -> migrate -> seed. migrate!=seed. All identity comes from the form.
+# Aligned with on-prem v5+ and demo which both use alchemi-operator as the migrator.
+# =============================================================================
+{{- if .Values.seed.enabled }}
+{{- $ns := .Values.global.namespaces.app -}}
+{{- $operator := .Values.seed.migratorImage | default (printf "%s/alchemi-operator:%s" .Values.global.image.registry .Values.global.image.tag) -}}
+{{- $pg := .Values.postgres.image | default (printf "%s/platform/pgvector:pg17" .Values.global.image.registry) -}}
+{{- $host := include "alchemi.pgHost" . -}}
+{{- $port := include "alchemi.pgPort" . -}}
+{{- $appdb := include "alchemi.pgDatabase" . -}}
+{{- $computedb := include "alchemi.pgComputeDatabase" . -}}
+{{- $user := include "alchemi.pgUser" . -}}
+{{- $ext := eq .Values.postgres.mode "external" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # MAIN-resource Job (NOT a post-install hook). Rancher installs with `helm --wait`,
+  # which waits for ai/compute-api to be Ready BEFORE running post-install hooks — but
+  # those apps can't be Ready without this migrator, which as a hook ran only AFTER --wait.
+  # That deadlocked ("context deadline exceeded"). As a main Job it runs during the main
+  # phase: pgvector comes up -> this migrates -> apps get their schema and go Ready ->
+  # --wait succeeds -> the real hooks (openbao-init/routes/keycloak-realm) then run.
+  # It's all DB-only (waits for pgvector via pg_isready), so no hook ordering is needed.
+  # Version-suffixed name so `helm upgrade` makes a new Job (Jobs are immutable).
+  name: {{ .Release.Name }}-db-init-{{ .Chart.Version | replace "." "-" | replace "+" "-" }}
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: db-init }
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata: { labels: { app.kubernetes.io/name: alchemi-db-init } }
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      volumes:
+        - name: seed-sql
+          configMap: { name: alchemi-seed-sql }
+      # ---- env shared by every step: PG connection + the migrator URLs + seed identity ----
+      # (each step redeclares what it needs; kept here as the single source)
+      initContainers:
+        # ---- 1. prep: databases + extensions (needs psql) ----------------------
+        - name: prep
+          image: {{ $pg }}
+          command: ["/bin/sh","-c"]
+          env:
+            - { name: PGHOST, value: {{ $host | quote }} }
+            - { name: PGPORT, value: {{ $port | quote }} }
+            - { name: PGUSER, value: {{ $user | quote }} }
+            - { name: APP_DB, value: {{ $appdb | quote }} }
+            - { name: EXTRA_DBS, value: {{ .Values.postgres.extraDatabases | join " " | quote }} }
+            {{- include "alchemi.pgPasswordEnv" . | nindent 12 }}
+          args:
+            - |
+              set -e
+              echo "== wait for PostgreSQL ${PGHOST}:${PGPORT} =="
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; do sleep 3; done
+              PSQL="psql -h $PGHOST -p $PGPORT -U $PGUSER -v ON_ERROR_STOP=1"
+              {{- if $ext }}
+              # external Postgres: the customer pre-creates DBs + extensions (managed PG
+              # often blocks CREATE DATABASE / superuser extensions) — best-effort here.
+              GUARD="|| echo '  (skipped — external PG; ensure the customer pre-created this)'"
+              {{- else }}
+              GUARD=""
+              {{- end }}
+              echo "== create extra databases =="
+              for db in $EXTRA_DBS; do
+                $PSQL -d "$APP_DB" -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 \
+                  || eval "$PSQL -d \"$APP_DB\" -c 'CREATE DATABASE \"$db\"' ${GUARD}";
+              done
+              echo "== extensions (vector/uuid-ossp/pgcrypto) in app + compute DBs =="
+              for db in "$APP_DB" {{ $computedb }}; do
+                eval "$PSQL -d \"$db\" -c 'CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS pgcrypto;' ${GUARD}"
+              done
+        # ---- 2. migrate: alchemi-operator Go migrator (same engine as on-prem/demo) --------
+        # Uses /manager migrate with the same advisory-lock migration engine as the
+        # reconciler. DSNs are read from env vars (never argv) so they don't appear in ps.
+        # --db <name>=ENV_VAR_NAME: operator resolves the env var to get the full DSN.
+        # MAIN_DB_URL  = alchemiapp_db from alchemi-ai-secrets.APP_POSTGRES_URI
+        # COMPUTE_DB_URL = compute_db from alchemi-compute-api-secrets.DATABASE_URL
+        - name: migrate
+          image: {{ $operator }}
+          command: ["/manager"]
+          args:
+            - migrate
+            - --db
+            - alchemiapp_db=MAIN_DB_URL
+            - --db
+            - compute_db=COMPUTE_DB_URL
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          env:
+            - name: MAIN_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: alchemi-ai-secrets
+                  key: APP_POSTGRES_URI
+            - name: COMPUTE_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: alchemi-compute-api-secrets
+                  key: DATABASE_URL
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      # ---- 3. seed: first admin + account, from the FORM (needs psql) ----------
+      containers:
+        - name: seed
+          image: {{ $pg }}
+          command: ["/bin/sh","-c"]
+          env:
+            - { name: PGHOST, value: {{ $host | quote }} }
+            - { name: PGPORT, value: {{ $port | quote }} }
+            - { name: PGUSER, value: {{ $user | quote }} }
+            - { name: APP_DB, value: {{ $appdb | quote }} }
+            {{- include "alchemi.pgPasswordEnv" . | nindent 12 }}
+            - { name: ADMIN_EMAIL,     value: {{ required "admin.email is required" .Values.admin.email | quote }} }
+            - { name: ADMIN_NAME,      value: {{ include "alchemi.adminName" . | quote }} }
+            - { name: ACCOUNT_NAME,    value: {{ include "alchemi.accountName" . | quote }} }
+            - { name: CUSTOMER_DOMAIN, value: {{ required "global.domain is required" .Values.global.domain | quote }} }
+            - { name: CONTAINER_REGISTRY, value: {{ .Values.global.image.registry | quote }} }
+            # Digest-pinned AIOS "computer" image — seeded as the governed runtime-v2 AIOS
+            # image + account default (07-aios-sandbox-image.sql). Empty = skip that seed.
+            - { name: AIOS_SANDBOX_IMAGE_REF, value: {{ .Values.aios.sandbox.ref | default "" | quote }} }
+          volumeMounts:
+            - { name: seed-sql, mountPath: /seed, readOnly: true }
+          args:
+            - |
+              set -e
+              echo "== seed first admin + account + standard-trial defaults (from the form) =="
+              # glob-sorted so 01..10 apply in order (same set as on-prem/marketplace)
+              for f in $(ls /seed/*.sql | sort); do
+                echo "  applying $f"
+                sed -e "s|\${ADMIN_EMAIL}|${ADMIN_EMAIL}|g" \
+                    -e "s|\${ADMIN_NAME}|${ADMIN_NAME}|g" \
+                    -e "s|\${ACCOUNT_NAME}|${ACCOUNT_NAME}|g" \
+                    -e "s|\${CUSTOMER_DOMAIN}|${CUSTOMER_DOMAIN}|g" \
+                    -e "s|\${CONTAINER_REGISTRY}|${CONTAINER_REGISTRY}|g" \
+                    -e "s|\${AIOS_SANDBOX_IMAGE_REF}|${AIOS_SANDBOX_IMAGE_REF}|g" "$f" \
+                  | psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$APP_DB" -v ON_ERROR_STOP=1 -f -
+              done
+              echo "== DB init complete: first admin ${ADMIN_EMAIL} in account ${ACCOUNT_NAME} + trial defaults =="
+{{- end }}

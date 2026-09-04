@@ -1,0 +1,203 @@
+namespace: guardrails
+serviceAccountName: guardrails-keyvault-sa
+imagePullSecrets:
+  - name: acr-pull-secret
+nodeSelector:
+  agentpool: usernpv2
+
+registry: alchemiacr.azurecr.io
+
+# ---------------------------------------------------------------------------
+# ConfigMap — shared across all 6 guardrail services (identical keys).
+#
+# config.create = false when an external source (GitOps raw manifest, ArgoCD
+# Application, or ExternalSecrets) manages the per-service ConfigMaps outside
+# this chart. Set to true for on-prem deployments where the chart is the sole
+# source of truth.
+#
+# Keys present in on-prem v5.1.0 configmaps but omitted here (nonprod audit):
+#   GUARDRAILS_LOG_LEVEL     — Dockerfile CMD does not forward to uvicorn
+#   GUARDRAILS_PROCESS_COUNT — hardcoded to --workers 1 in CMD
+#   AZURE_OPENAI_ENDPOINT    — no guardrails code calls Azure OpenAI
+#   AZURE_DEPLOYMENT_NAME    — same; lives in alchemi-ai config instead
+# ---------------------------------------------------------------------------
+config:
+  create: true
+  data:
+    ENVIRONMENT: "production"
+    GUARDRAILS_RETURN_RAW_INPUT: "false"
+    GUARDRAILS_MAX_CUSTOM_PATTERNS: "25"
+    GUARDRAILS_MAX_CUSTOM_REGEX_LENGTH: "512"
+    GUARDRAILS_REGEX_TIMEOUT_SECONDS: "0.25"
+
+# ---------------------------------------------------------------------------
+# Secret — shared across all 6 guardrail services (identical keys).
+#
+# secret.create = false when ExternalSecrets (Azure Key Vault backend) manages
+# the per-service Secret objects — the standard cloud deployment path. Set to
+# true for on-prem and supply GUARDRAILS_INTERNAL_TOKEN at install time:
+#   helm install ... --set secret.data.GUARDRAILS_INTERNAL_TOKEN=<value>
+#
+# Keys present in on-prem v5.1.0 secrets but omitted here (nonprod audit):
+#   GUARDRAILS_API_KEY    — Guardrails Hub token; no runtime reads in code
+#   AZURE_OPENAI_API_KEY  — no guardrails code calls Azure OpenAI; consumed
+#                           by alchemi-ai-secrets instead
+# ---------------------------------------------------------------------------
+secret:
+  create: true
+  data:
+    # Service-to-service auth token. Must match GUARDRAILS_INTERNAL_TOKEN
+    # in alchemi-ai-secrets so alchemi-ai can sign outbound calls.
+    GUARDRAILS_INTERNAL_TOKEN: ""
+
+# ---------------------------------------------------------------------------
+# PodDisruptionBudgets — gate with pdb.enabled.
+# minAvailable: 1 on a single-replica deployment blocks node eviction entirely;
+# pair with autoscaling.minReplicas >= 2 or set minAvailable to "50%".
+# ---------------------------------------------------------------------------
+pdb:
+  enabled: false
+  minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# VerticalPodAutoscalers — gate with vpa.enabled.
+# Requires the VPA CRD (autoscaling.k8s.io/v1) in the cluster.
+# Do not combine with HPA on CPU/memory (autoscaling.enabled) — use one or
+# the other per service.
+# updateMode: "Auto" | "Off"  ("Off" records recommendations only)
+# ---------------------------------------------------------------------------
+vpa:
+  enabled: false
+  updateMode: "Auto"
+
+contentFilter:
+  enabled: true
+  image:
+    repository: alchemiacr.azurecr.io/guardrails-deterministic
+    tag: "1.0.0"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  probeInitialDelaySeconds:
+    liveness: 15
+    readiness: 10
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+secretDetection:
+  enabled: true
+  image:
+    repository: alchemiacr.azurecr.io/guardrails-deterministic
+    tag: "1.0.0"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  probeInitialDelaySeconds:
+    liveness: 15
+    readiness: 10
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+jailbreak:
+  enabled: true
+  image:
+    repository: alchemiacr.azurecr.io/guardrails-jailbreak
+    tag: "1.0.0"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  probeInitialDelaySeconds:
+    liveness: 60
+    readiness: 30
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+pii:
+  enabled: true
+  image:
+    repository: alchemiacr.azurecr.io/guardrails-presidio
+    tag: "1.0.0"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 500m
+      memory: 3Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  probeInitialDelaySeconds:
+    liveness: 60
+    readiness: 30
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 2
+    targetCPUUtilizationPercentage: 70
+
+topical:
+  enabled: true
+  image:
+    repository: alchemiacr.azurecr.io/guardrails-topical
+    tag: "1.0.0"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  probeInitialDelaySeconds:
+    liveness: 60
+    readiness: 10
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+toxic:
+  enabled: true
+  image:
+    repository: alchemiacr.azurecr.io/guardrails-toxic
+    tag: "1.0.0"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  probeInitialDelaySeconds:
+    liveness: 60
+    readiness: 30
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70

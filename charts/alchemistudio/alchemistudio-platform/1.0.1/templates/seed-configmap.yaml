@@ -1,0 +1,1200 @@
+# =============================================================================
+# Alchemi seed SQL — FULL parity with on-prem releases/v5.1.0/04-scripts/seed and
+# azure-marketplace/manifests/db/seed. The seed Job (seed-job.yaml) sed-substitutes
+# ${ADMIN_EMAIL}/${ADMIN_NAME}/${ACCOUNT_NAME}/${CUSTOMER_DOMAIN}/${CONTAINER_REGISTRY}
+# into these before psql applies them (glob-sorted). migrate != seed: the migrator
+# builds the schema; THESE create the first admin/org + the standard-trial defaults
+# (roles, meters, compute image, entitlements/seats, limits, default agent, credits,
+# group allocation). Idempotent. Generated from the on-prem seeds — keep in sync.
+# =============================================================================
+{{- if .Values.seed.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-seed-sql
+  namespace: {{ .Values.global.namespaces.app }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  01-users.sql: |
+    -- =============================================================================
+    -- Seed: Initial Admin User (On-Prem)
+    -- Creates the first user for the platform — one admin to bootstrap everything.
+    --
+    -- USAGE: Replace the placeholders before running:
+    --   __ADMIN_EMAIL__   →  e.g. admin@company.com
+    --   __ADMIN_NAME__    →  e.g. John Doe
+    --
+    -- This user gets ADMIN role in admin_users (account admin, not platform super admin).
+    -- Same UUID is used in both tables so FKs stay consistent.
+    -- All other users are created through the app after initial setup.
+    -- =============================================================================
+
+    BEGIN;
+
+    -- Generate a consistent UUID for the admin user
+    -- (or replace with a fixed UUID if you prefer)
+    DO $$
+    DECLARE
+        v_admin_id uuid := gen_random_uuid();
+        v_email    text := '${ADMIN_EMAIL}';
+        v_name     text := '${ADMIN_NAME}';
+    BEGIN
+        -- 1. Insert into users table.
+        -- Conflict on email (unique constraint) — re-runs update in-place and
+        -- capture the existing row's id so subsequent NOTICE shows the real UUID.
+        INSERT INTO users (id, email, name, is_active, email_verified, global_preferences)
+        VALUES (v_admin_id, v_email, v_name, true, true, '{}'::jsonb)
+        ON CONFLICT (email) DO UPDATE SET
+            name = EXCLUDED.name,
+            is_active = EXCLUDED.is_active,
+            email_verified = EXCLUDED.email_verified,
+            updated_at = now()
+        RETURNING id INTO v_admin_id;
+
+        -- 2. Insert into admin_users table (ADMIN role for account administration).
+        INSERT INTO admin_users (id, email, name, app_role, is_active, email_verified, global_preferences)
+        VALUES (v_admin_id, v_email, v_name, 'ADMIN', true, true, '{}'::jsonb)
+        ON CONFLICT (email) DO UPDATE SET
+            name = EXCLUDED.name,
+            app_role = 'ADMIN',
+            is_active = EXCLUDED.is_active,
+            email_verified = EXCLUDED.email_verified,
+            updated_at = now();
+
+        RAISE NOTICE 'Admin user created: % (%) with id %', v_name, v_email, v_admin_id;
+    END $$;
+
+    COMMIT;
+
+  02-account.sql: |
+    -- =============================================================================
+    -- Seed: Initial Account, Default Group & Membership (On-Prem)
+    -- Creates one account with a default group and assigns the admin user.
+    --
+    -- USAGE: Replace placeholders before running:
+    --   __ACCOUNT_NAME__   →  e.g. Acme Corp
+    --   __ACCOUNT_DOMAIN__ →  e.g. acme.com
+    --   __ADMIN_EMAIL__    →  same email used in 01-users.sql
+    --
+    -- This script references the admin user created in 01-users.sql.
+    -- All other users/groups are created through the app after setup.
+    -- =============================================================================
+
+    BEGIN;
+
+    DO $$
+    DECLARE
+        v_admin_id     uuid;
+        v_account_id   uuid;
+        v_group_id     uuid;
+        v_account_name text := '${ACCOUNT_NAME}';
+        v_domain       text := '${CUSTOMER_DOMAIN}';
+        v_admin_email  text := '${ADMIN_EMAIL}';
+    BEGIN
+        -- Look up admin user created in 01-users.sql
+        SELECT id INTO v_admin_id FROM users WHERE email = v_admin_email;
+        IF v_admin_id IS NULL THEN
+            RAISE EXCEPTION 'Admin user with email % not found. Run 01-users.sql first.', v_admin_email;
+        END IF;
+
+        -- Guard: refuse to proceed if this domain already has MORE THAN ONE account.
+        -- accounts.domain is NOT unique at the DB level, and an older non-idempotent
+        -- version of this script (pre-`fix(seed): make 02-account.sql idempotent`)
+        -- created a fresh random-UUID account on every run — so a re-run/retry after
+        -- an error left two "<domain>" accounts. The `LIMIT 1` lookup below (and in
+        -- 05/06 seeds) would then silently pick one and split the seed across both.
+        -- Fail loud here so the operator resolves to a single account first.
+        IF (SELECT count(*) FROM accounts WHERE domain = v_domain) > 1 THEN
+            RAISE EXCEPTION 'Found % accounts for domain % — duplicates exist. Resolve to a single account before re-seeding (see POST-INSTALL-CHECKLIST / duplicate-account note).',
+                (SELECT count(*) FROM accounts WHERE domain = v_domain), v_domain;
+        END IF;
+
+        -- 1. Upsert account — idempotent on domain (natural key for on-prem installs).
+        -- Reuse the existing account id if this domain was already seeded, so re-runs
+        -- do not create a second account row with a different UUID.
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            v_account_id := gen_random_uuid();
+        END IF;
+
+        INSERT INTO accounts (id, name, type, status, domain, subscription_plan, settings, billing_info, billing_email, created_by, updated_by)
+        VALUES (
+            v_account_id,
+            v_account_name,
+            'BUSINESS',
+            'ACTIVE',
+            v_domain,
+            'ENTERPRISE',
+            jsonb_build_object(
+                'features', jsonb_build_object('chat', true, 'marketplace', true, 'quick_app', true),
+                'onprem', true
+            ),
+            '{}'::jsonb,
+            v_admin_email,
+            v_admin_id,
+            v_admin_id
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            domain = EXCLUDED.domain,
+            updated_at = now();
+
+        -- 2. Upsert default group — idempotent on (account_id, is_default).
+        SELECT id INTO v_group_id FROM groups
+        WHERE account_id = v_account_id AND is_default = true LIMIT 1;
+        IF v_group_id IS NULL THEN
+            v_group_id := gen_random_uuid();
+        END IF;
+
+        INSERT INTO groups (id, account_id, name, description, is_default, owner_id, created_by, updated_by)
+        VALUES (
+            v_group_id,
+            v_account_id,
+            'Default',
+            'Default group for all users',
+            true,
+            v_admin_id,
+            v_admin_id,
+            v_admin_id
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            updated_at = now();
+
+        -- 3. Add admin as account member (ADMIN role, assigned to default group)
+        INSERT INTO account_memberships (account_id, user_id, app_role, is_active, group_id, invited_by)
+        VALUES (
+            v_account_id,
+            v_admin_id,
+            'ADMIN',
+            true,
+            v_group_id,
+            v_admin_id
+        )
+        ON CONFLICT (account_id, user_id) DO UPDATE SET
+            app_role = 'ADMIN',
+            group_id = EXCLUDED.group_id,
+            is_active = true,
+            updated_at = now();
+
+        RAISE NOTICE 'Account upserted: % (%) id=%', v_account_name, v_domain, v_account_id;
+        RAISE NOTICE 'Default group: id=%', v_group_id;
+        RAISE NOTICE 'Admin % assigned to account with ADMIN role in default group', v_admin_email;
+    END $$;
+
+    COMMIT;
+
+  03-roles-permissions.sql: |
+    -- =============================================
+    -- Seed: Roles, Permissions, Role_Permissions
+    -- Source: SaaS dev (demoapp_db) — copied as-is
+    -- account_id / admin user looked up dynamically
+    -- =============================================
+
+    BEGIN;
+
+    -- Permissions (27 system permissions)
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('d3b11031-dada-49c4-8b97-5229720620aa', 'can create workspace', NULL, false, 'CREATE_WORKSPACE', 'CREATE', '{}', 'true', NULL, NULL, '2024-09-11 10:22:25.403+00', '2024-09-11 10:22:25.403+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('f93a12e7-0631-4352-8f38-984b354d3386', 'can do chat', NULL, false, 'DO_CHAT', 'DO', '{}', 'true', NULL, NULL, '2024-09-11 10:23:30.06+00', '2024-09-11 10:23:30.06+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('dbabfbce-a386-4b0e-839a-f122c4bc80f6', 'can update workspace', NULL, false, 'UPDATE_WORKSPACE ', 'UPDATE', '{}', 'true', NULL, NULL, '2024-09-11 10:24:01.081+00', '2024-09-11 10:24:01.081+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('c1ec9d1c-73b1-47ba-8c5b-c32313c4e3e6', 'can read workspace', NULL, false, 'READ_WORKSPACE', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:24:25.074+00', '2024-09-11 10:24:25.074+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('d92cb243-1244-49d3-a939-2f8ba00616f5', 'can update account', NULL, false, 'UPDATE_ACCOUNT', 'UPDATE', '{}', 'true', NULL, NULL, '2024-09-11 10:24:56.958+00', '2024-09-11 10:24:56.958+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('41b05fff-45e1-4d9f-9d26-2ff4d12f1522', 'can read account', NULL, false, 'READ_ACCOUNT', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:25:14.172+00', '2024-09-11 10:25:14.172+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('4ccb90ad-6ee6-4314-a793-43a1d1178f94', 'can read_b-canvas_step', NULL, false, 'READ_B-CANVAS_STEP', 'READ_B', '{}', 'true', NULL, NULL, '2024-09-11 10:33:54.716+00', '2024-09-11 10:33:54.716+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('b0b78ad8-dace-4aae-8ba4-31b78c787b9e', 'can update_b-canvas_step', NULL, false, 'UPDATE_B-CANVAS_STEP', 'UPDATE_B', '{}', 'true', NULL, NULL, '2024-09-11 10:34:35.188+00', '2024-09-11 10:34:35.188+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('263238a6-4540-478e-b3c9-3f54773e8943', 'can create_b-canvas_step', NULL, false, 'CREATE_B-CANVAS_STEP', 'CREATE_B', '{}', 'true', NULL, NULL, '2024-09-11 10:35:12.602+00', '2024-09-11 10:35:12.602+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('b069701f-e00e-4467-a5a7-025f77285011', 'can read app settings', NULL, false, 'READ_APP_SETTINGS', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:35:46.7+00', '2024-09-11 10:35:46.7+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('834dce6a-0455-4d71-a1ab-5c08e1595319', 'can read users', NULL, false, 'READ_USERS', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:36:07.578+00', '2024-09-11 10:36:07.578+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('d3bb9585-505a-404a-a692-48d4c997d49d', 'can update users', NULL, false, 'UPDATE_USERS', 'UPDATE', '{}', 'true', NULL, NULL, '2024-09-11 10:36:27.095+00', '2024-09-11 10:36:27.095+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('c2a91c05-f0a5-4926-87c4-0b0067107198', 'can invite users', NULL, false, 'INVITE_USERS', 'INVITE', '{}', 'true', NULL, NULL, '2024-09-11 10:36:48.133+00', '2024-09-11 10:36:48.133+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('f4339539-c454-4f75-826f-9c461b95ae78', 'can read roles', NULL, false, 'READ_ROLES', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:38:02.015+00', '2024-09-11 10:38:02.015+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('8b2f7688-3eb6-4f37-8afc-3e51b927787d', 'can read workspace settings', NULL, false, 'READ_WORKSPACE_SETTINGS', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:38:23.808+00', '2024-09-11 10:38:23.808+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('0108b801-f099-403a-a038-9081b717169c', 'can read discussion thread', NULL, false, 'READ_DISCUSSION_THREAD', 'READ', '{}', 'true', NULL, NULL, '2024-09-11 10:40:22.817+00', '2024-09-11 10:40:22.817+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('5818880f-2fec-4715-8f60-6c163f79faa5', 'can create discussion thread', NULL, false, 'CREATE_DISCUSSION_THREAD', 'CREATE', '{}', 'true', NULL, NULL, '2024-09-11 10:41:05.042+00', '2024-09-11 10:41:05.042+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('0afac4cf-e6dc-4e79-9048-68847963c640', 'can update discussion thread', NULL, false, 'UPDATE_DISCUSSION_THREAD', 'UPDATE', '{}', 'true', NULL, NULL, '2024-09-11 10:41:25.509+00', '2024-09-11 10:41:25.509+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('c8f4157a-f2ef-4a29-ac55-b5cf4fe27b11', 'can delete discussion thread', NULL, false, 'DELETE_DISCUSSION_THREAD', 'DELETE', '{}', 'true', NULL, NULL, '2024-09-11 10:41:47.657+00', '2024-09-11 10:41:47.657+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('94355ec2-ddf7-4413-a520-ffa611850911', 'can test', NULL, false, 'READ_TEST', 'READ', '{}', 'true', '9693b2d3-9772-4e47-bd67-b599299b141e', '9693b2d3-9772-4e47-bd67-b599299b141e', '2025-09-10 15:14:15.305+00', '2025-09-10 15:14:15.311+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('c266375f-2385-4906-99d7-40d86197939e', 'can test', NULL, false, 'INVITE_TEST', 'INVITE', '{}', 'true', '9693b2d3-9772-4e47-bd67-b599299b141e', '9693b2d3-9772-4e47-bd67-b599299b141e', '2025-09-10 15:17:13.613+00', '2025-09-10 15:17:13.616+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('8d556e3e-303b-4cb4-9d23-7d51a4b94e74', 'App Settings', NULL, false, 'APP_SETTINGS', 'DO', '{}', 'true', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '2025-09-23 12:55:48.39+00', '2025-09-23 12:55:48.391+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('d3250ac6-70b1-44e8-804f-56c7ba796f30', 'Update Artifacts', NULL, false, 'ARTIFACTS', 'UPDATE', '{}', 'true', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '2025-09-23 12:58:07.551+00', '2025-09-23 12:58:07.551+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('b05b651b-24e2-4dd8-bece-77629c90739f', 'Read Artifacts', NULL, false, 'ARTIFACTS', 'READ', '{}', 'true', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '2025-09-23 12:58:32.818+00', '2025-09-23 12:58:32.819+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('760f3c9b-7fd2-4b45-8877-438eaa1d2449', 'Share Workspace', NULL, false, 'SHARE_WORKSPACE', 'DO', '{}', 'true', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '7ee56343-9d5e-4ab5-a714-8c097bcafe98', '2025-09-23 12:54:57.136+00', '2025-09-23 13:26:21.954+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('d828985c-4a67-4f69-ae74-c78426adb406', 'workspace settings', NULL, false, 'WORKSPACE_SETTINGS', 'DO', '{}', 'true', '9693b2d3-9772-4e47-bd67-b599299b141e', '9693b2d3-9772-4e47-bd67-b599299b141e', '2025-09-23 16:01:35.031+00', '2025-09-23 16:01:35.031+00') ON CONFLICT (id) DO NOTHING;
+    INSERT INTO permissions (id, name, description, is_system_permission, subject, action, fields, conditions, created_by, updated_by, created_at, updated_at) VALUES ('8b8df4c1-724e-4e27-a6d1-6f89e5120f90', 'Enterprise Cockpit', NULL, false, 'DO_COCKPIT', 'DO', '{}', 'true', '9693b2d3-9772-4e47-bd67-b599299b141e', '9693b2d3-9772-4e47-bd67-b599299b141e', '2026-01-30 06:56:18.747+00', '2026-01-30 06:56:18.759+00') ON CONFLICT (id) DO NOTHING;
+
+    -- Roles (4 system roles) — account_id / admin user resolved from DB at seed time
+    DO $$
+    DECLARE
+        v_admin_id   uuid;
+        v_account_id uuid;
+        v_admin_email text := '${ADMIN_EMAIL}';
+    BEGIN
+        SELECT id INTO v_admin_id FROM users WHERE email = v_admin_email;
+        IF v_admin_id IS NULL THEN
+            RAISE EXCEPTION 'Admin user with email % not found. Run 01-users.sql first.', v_admin_email;
+        END IF;
+
+        SELECT a.id INTO v_account_id
+        FROM accounts a
+        JOIN account_memberships am ON am.account_id = a.id AND am.user_id = v_admin_id
+        LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'No account found for admin user. Run 02-account.sql first.';
+        END IF;
+
+        INSERT INTO roles (id, account_id, name, description, type, is_default, is_deleted, created_by, updated_by, created_at, updated_at, provider)
+        VALUES
+            ('24fd0b49-cdef-4553-aab5-82c357e7cd06', v_account_id, 'OWNER',        NULL, 'WORKSPACE', false, false, v_admin_id, v_admin_id, '2024-09-04 12:47:29.877+00', '2024-09-04 12:47:29.877+00', 'PLATFORM'),
+            ('2944a063-faa2-4193-ba07-b30125c58ec2', v_account_id, 'COLLABORATOR', NULL, 'WORKSPACE', false, false, v_admin_id, v_admin_id, '2024-09-04 12:47:29.878+00', '2024-09-04 12:47:29.878+00', 'PLATFORM'),
+            ('3f5386d9-80e8-4895-8057-aa829019900c', v_account_id, 'USER',         NULL, 'SYSTEM',    false, false, v_admin_id, v_admin_id, '2024-09-04 12:47:29.879+00', '2024-09-04 12:47:29.879+00', 'PLATFORM'),
+            ('8a59f4f0-8171-464d-8b89-a5693b7f3bfa', v_account_id, 'ADMIN',        '',   'SYSTEM',    false, false, v_admin_id, v_admin_id, '2024-09-04 12:47:29.879+00', '2026-01-30 06:58:10.547+00', 'PLATFORM')
+        ON CONFLICT (id) DO UPDATE SET
+            account_id = EXCLUDED.account_id,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = now();
+
+        RAISE NOTICE 'Roles seeded for account %', v_account_id;
+    END $$;
+
+    -- Role-Permission mappings (12 mappings)
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('3f5386d9-80e8-4895-8057-aa829019900c', 'd3b11031-dada-49c4-8b97-5229720620aa') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('2944a063-faa2-4193-ba07-b30125c58ec2', 'f93a12e7-0631-4352-8f38-984b354d3386') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('24fd0b49-cdef-4553-aab5-82c357e7cd06', 'f93a12e7-0631-4352-8f38-984b354d3386') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('2944a063-faa2-4193-ba07-b30125c58ec2', 'd3250ac6-70b1-44e8-804f-56c7ba796f30') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('2944a063-faa2-4193-ba07-b30125c58ec2', 'b05b651b-24e2-4dd8-bece-77629c90739f') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('24fd0b49-cdef-4553-aab5-82c357e7cd06', 'd3250ac6-70b1-44e8-804f-56c7ba796f30') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('24fd0b49-cdef-4553-aab5-82c357e7cd06', 'b05b651b-24e2-4dd8-bece-77629c90739f') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('24fd0b49-cdef-4553-aab5-82c357e7cd06', '760f3c9b-7fd2-4b45-8877-438eaa1d2449') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('24fd0b49-cdef-4553-aab5-82c357e7cd06', 'd828985c-4a67-4f69-ae74-c78426adb406') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('8a59f4f0-8171-464d-8b89-a5693b7f3bfa', '8d556e3e-303b-4cb4-9d23-7d51a4b94e74') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('8a59f4f0-8171-464d-8b89-a5693b7f3bfa', 'd3b11031-dada-49c4-8b97-5229720620aa') ON CONFLICT (role_id, permission_id) DO NOTHING;
+    INSERT INTO role_permissions (role_id, permission_id) VALUES ('8a59f4f0-8171-464d-8b89-a5693b7f3bfa', '8b8df4c1-724e-4e27-a6d1-6f89e5120f90') ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+    COMMIT;
+
+  04-meters.sql: |
+    -- =============================================================================
+    -- Seed: Meters & Billable Metrics (On-Prem)
+    --
+    -- meters           — Platform-level meter definitions referenced by the
+    --                    allowances table (FK: allowances_meter_code_fkey).
+    --                    Must exist before any allowance can be saved via the UI.
+    -- billable_metrics — Pricing/aggregation config for each meter.
+    --
+    -- No placeholders needed — all rows are platform-level (not account-scoped).
+    -- All inserts are idempotent (ON CONFLICT (code) DO UPDATE).
+    -- =============================================================================
+
+    BEGIN;
+
+    -- =============================================================================
+    -- 1. METERS (9 meters across 5 product codes)
+    -- =============================================================================
+
+    -- COPILOT
+    INSERT INTO meters (code, name, unit, aggregation, field_name, type, product_code, reset_period, display_order, is_active, metadata)
+    VALUES
+        ('copilot_chat_credits', 'Chat Credits', 'credits', 'sum', 'amount', 'consumable', 'COPILOT', 'monthly', 1, true,
+         '{"description": "Usage credits for AI chat conversations", "icon": "message-circle", "default_included": 5000}'::jsonb),
+        ('copilot_seats', 'Seats', 'seats', 'unique_count', 'user_id', 'capacity', 'COPILOT', 'never', 2, true,
+         '{"description": "Active user seats for Copilot access", "icon": "users", "default_included": 1}'::jsonb)
+    ON CONFLICT (code) DO UPDATE SET
+        name            = EXCLUDED.name,
+        unit            = EXCLUDED.unit,
+        aggregation     = EXCLUDED.aggregation,
+        field_name      = EXCLUDED.field_name,
+        type            = EXCLUDED.type,
+        display_order   = EXCLUDED.display_order,
+        metadata        = EXCLUDED.metadata,
+        updated_at      = NOW();
+
+    -- CONSOLE
+    INSERT INTO meters (code, name, unit, aggregation, field_name, type, product_code, reset_period, display_order, is_active, metadata)
+    VALUES
+        ('console_api_calls', 'API Calls', 'api_calls', 'count', 'amount', 'consumable', 'CONSOLE', 'monthly', 3, true,
+         '{"description": "API call usage", "icon": "zap", "default_included": 100000}'::jsonb)
+    ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, unit = EXCLUDED.unit, aggregation = EXCLUDED.aggregation,
+        field_name = EXCLUDED.field_name, type = EXCLUDED.type, display_order = EXCLUDED.display_order,
+        metadata = EXCLUDED.metadata, updated_at = NOW();
+
+    -- BOX
+    INSERT INTO meters (code, name, unit, aggregation, field_name, type, product_code, reset_period, display_order, is_active, metadata)
+    VALUES
+        ('box_compute_minutes', 'Compute Minutes', 'minutes', 'sum', 'duration_minutes', 'consumable', 'BOX', 'monthly', 4, true,
+         '{"description": "Compute execution time for Box environments", "icon": "cpu", "default_included": 500}'::jsonb),
+        ('box_build_minutes', 'Build Minutes', 'minutes', 'sum', 'duration_minutes', 'consumable', 'BOX', 'monthly', 5, true,
+         '{"description": "Build pipeline execution time", "icon": "hammer", "default_included": 100}'::jsonb)
+    ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, unit = EXCLUDED.unit, aggregation = EXCLUDED.aggregation,
+        field_name = EXCLUDED.field_name, type = EXCLUDED.type, display_order = EXCLUDED.display_order,
+        metadata = EXCLUDED.metadata, updated_at = NOW();
+
+    -- COCKPIT
+    INSERT INTO meters (code, name, unit, aggregation, field_name, type, product_code, reset_period, display_order, is_active, metadata)
+    VALUES
+        ('cockpit_storage_gb', 'Storage', 'GB', 'max', 'storage_gb', 'capacity', 'COCKPIT', 'never', 6, true,
+         '{"description": "Workspace storage usage in gigabytes", "icon": "hard-drive", "default_included": 10}'::jsonb),
+        ('cockpit_workspaces', 'Workspaces', 'items', 'unique_count', 'workspace_id', 'capacity', 'COCKPIT', 'never', 7, true,
+         '{"description": "Number of active workspaces", "icon": "layout-grid", "default_included": 3}'::jsonb),
+        ('cockpit_analysis_runs', 'Analysis Runs', 'items', 'count', 'amount', 'consumable', 'COCKPIT', 'monthly', 8, true,
+         '{"description": "AI-powered business analysis executions", "icon": "bar-chart", "default_included": 10}'::jsonb)
+    ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, unit = EXCLUDED.unit, aggregation = EXCLUDED.aggregation,
+        field_name = EXCLUDED.field_name, type = EXCLUDED.type, display_order = EXCLUDED.display_order,
+        metadata = EXCLUDED.metadata, updated_at = NOW();
+
+    -- BUNDLE / MARKETPLACE
+    INSERT INTO meters (code, name, unit, aggregation, field_name, type, product_code, reset_period, display_order, is_active, metadata)
+    VALUES
+        ('marketplace_credits', 'Marketplace Credits', 'credits', 'sum', 'credits', 'consumable', 'BUNDLE', 'monthly', 9, true,
+         '{"description": "Credits for marketplace purchases and premium features", "icon": "shopping-bag", "default_included": 100}'::jsonb)
+    ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, unit = EXCLUDED.unit, aggregation = EXCLUDED.aggregation,
+        field_name = EXCLUDED.field_name, type = EXCLUDED.type, display_order = EXCLUDED.display_order,
+        metadata = EXCLUDED.metadata, updated_at = NOW();
+
+    -- =============================================================================
+    -- 2. BILLABLE METRICS (matching each meter above)
+    -- =============================================================================
+
+    INSERT INTO billable_metrics (
+        code, name, description, product_code, feature_code,
+        aggregation_type, field_name, unit, recurring,
+        filters, filter_costs, filter_field,
+        default_included, default_overage_rate, reset_period,
+        rollover_enabled, rollover_cap, is_active
+    ) VALUES (
+        'copilot_chat_credits', 'Copilot Chat Credits',
+        'Usage credits for AI chat conversations, cost varies by model tier',
+        'COPILOT', 'CHAT', 'sum', 'credits', 'credits', false,
+        '[{"key": "tier", "values": ["fast", "balanced", "expert"]}]'::jsonb,
+        '{"fast": 1, "balanced": 3, "expert": 10}'::jsonb, 'tier',
+        5000, 0.01, 'MONTHLY', false, 0, true
+    ) ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, description = EXCLUDED.description,
+        filter_costs = EXCLUDED.filter_costs, default_included = EXCLUDED.default_included,
+        updated_at = NOW();
+
+    INSERT INTO billable_metrics (
+        code, name, description, product_code, feature_code,
+        aggregation_type, field_name, unit, recurring,
+        default_included, default_overage_rate, reset_period,
+        rollover_enabled, rollover_cap, is_active
+    ) VALUES (
+        'copilot_seats', 'Copilot Seats', 'Active user seats for Copilot access',
+        'COPILOT', NULL, 'unique_count', 'user_id', 'seats', true,
+        1, 15.00, 'NEVER', false, 0, true
+    ) ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, description = EXCLUDED.description,
+        default_overage_rate = EXCLUDED.default_overage_rate, updated_at = NOW();
+
+    INSERT INTO billable_metrics (
+        code, name, description, product_code, feature_code,
+        aggregation_type, unit, recurring,
+        filters, filter_costs, filter_field,
+        default_included, default_overage_rate, reset_period,
+        rollover_enabled, rollover_cap, is_active
+    ) VALUES (
+        'console_api_calls', 'Console API Calls',
+        'API call usage, weighted by operation type',
+        'CONSOLE', 'API', 'count', 'api_calls', false,
+        '[{"key": "operation", "values": ["read", "write", "admin"]}]'::jsonb,
+        '{"read": 1, "write": 5, "admin": 10}'::jsonb, 'operation',
+        100000, 0.001, 'MONTHLY', false, 0, true
+    ) ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, description = EXCLUDED.description,
+        filter_costs = EXCLUDED.filter_costs, default_included = EXCLUDED.default_included,
+        updated_at = NOW();
+
+    INSERT INTO billable_metrics (
+        code, name, description, product_code, feature_code,
+        aggregation_type, field_name, unit, recurring,
+        default_included, default_overage_rate, reset_period,
+        rollover_enabled, rollover_cap, is_active
+    ) VALUES
+        ('box_compute_minutes', 'Box Compute Minutes',
+         'Compute execution time for Box environments',
+         'BOX', 'COMPUTE', 'sum', 'duration_minutes', 'minutes', false,
+         500, 0.02, 'MONTHLY', true, 1000, true),
+        ('box_build_minutes', 'Box Build Minutes', 'Build pipeline execution time',
+         'BOX', 'BUILD', 'sum', 'duration_minutes', 'minutes', false,
+         100, 0.05, 'MONTHLY', false, 0, true)
+    ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, description = EXCLUDED.description,
+        default_included = EXCLUDED.default_included, updated_at = NOW();
+
+    INSERT INTO billable_metrics (
+        code, name, description, product_code, feature_code,
+        aggregation_type, field_name, unit, recurring,
+        default_included, default_overage_rate, reset_period,
+        rollover_enabled, rollover_cap, is_active
+    ) VALUES
+        ('cockpit_storage_gb', 'Cockpit Storage',
+         'Workspace storage usage in gigabytes',
+         'COCKPIT', 'STORAGE', 'max', 'storage_gb', 'GB', true,
+         10, 0.10, 'NEVER', false, 0, true),
+        ('cockpit_workspaces', 'Cockpit Workspaces', 'Number of active workspaces',
+         'COCKPIT', 'WORKSPACE', 'unique_count', 'workspace_id', 'items', true,
+         3, 5.00, 'NEVER', false, 0, true),
+        ('cockpit_analysis_runs', 'Cockpit Analysis Runs',
+         'AI-powered business analysis executions',
+         'COCKPIT', 'ANALYSIS', 'count', 'amount', 'items', false,
+         10, 2.00, 'MONTHLY', true, 5, true)
+    ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, description = EXCLUDED.description,
+        default_included = EXCLUDED.default_included, updated_at = NOW();
+
+    INSERT INTO billable_metrics (
+        code, name, description, product_code, feature_code,
+        aggregation_type, field_name, unit, recurring,
+        default_included, default_overage_rate, reset_period,
+        rollover_enabled, rollover_cap, is_active
+    ) VALUES (
+        'marketplace_credits', 'Marketplace Credits',
+        'Credits for marketplace purchases and premium features',
+        'BUNDLE', 'MARKETPLACE', 'sum', 'credits', 'credits', false,
+        100, 1.00, 'MONTHLY', true, 500, true
+    ) ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name, description = EXCLUDED.description,
+        default_included = EXCLUDED.default_included, updated_at = NOW();
+
+    COMMIT;
+
+  05-compute-images.sql: |
+    -- =============================================================================
+    -- Seed: Compute Registry + Sandbox Images + Account Grants (On-Prem)
+    --
+    -- Registers the on-prem ACR and the CC Python Box sandbox image so the AI
+    -- agent has a pre-loaded Python environment with data/PDF libraries (reportlab,
+    -- pandas, matplotlib, etc.) available for code execution tasks.
+    --
+    -- Why needed:
+    --   The AI agent picks sandbox images from console_compute_images. Without this
+    --   seed the table contains only bare docker.io images (python:3.11-slim etc.)
+    --   which have no PDF/data libraries installed. CC Python Box is the correct
+    --   on-prem image; it lives in the customer ACR provisioned in phase 01.
+    --
+    -- USAGE: Replace placeholders before running:
+    --   ${CUSTOMER_DOMAIN}    →  e.g. acme.com          (same as 02-account.sql)
+    --   ${ADMIN_EMAIL}        →  e.g. admin@acme.com     (same as 01-users.sql)
+    --   ${CONTAINER_REGISTRY} →  e.g. acmecr.azurecr.io (from 01-infra outputs)
+    --
+    -- All inserts are idempotent.
+    -- =============================================================================
+
+    DO $$
+    DECLARE
+        v_account_id    uuid;
+        v_admin_id      uuid;
+        v_registry_id   uuid;
+        v_image_id      uuid;
+        v_domain        text := '${CUSTOMER_DOMAIN}';
+        v_admin_email   text := '${ADMIN_EMAIL}';
+        v_registry_url  text := '${CONTAINER_REGISTRY}';
+        v_image_ref     text := '${CONTAINER_REGISTRY}/cc-python-box:latest';
+        v_image_name    text := 'CC Python Box';
+        v_aios_ref      text := '${AIOS_SANDBOX_IMAGE_REF}';
+        v_aios_img      uuid;
+    BEGIN
+        -- -------------------------------------------------------------------------
+        -- 0. Look up prerequisites
+        -- -------------------------------------------------------------------------
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'Account with domain % not found. Run 02-account.sql first.', v_domain;
+        END IF;
+
+        SELECT id INTO v_admin_id FROM users WHERE email = v_admin_email LIMIT 1;
+        IF v_admin_id IS NULL THEN
+            RAISE EXCEPTION 'Admin user % not found. Run 01-users.sql first.', v_admin_email;
+        END IF;
+
+        -- -------------------------------------------------------------------------
+        -- 1. Registry — the customer ACR (credentials managed by compute-api secret,
+        --    not stored here; encrypted_password left NULL intentionally).
+        -- -------------------------------------------------------------------------
+        SELECT id INTO v_registry_id
+        FROM console_compute_registries
+        WHERE account_id = v_account_id AND registry_url = v_registry_url
+        LIMIT 1;
+
+        IF v_registry_id IS NULL THEN
+            v_registry_id := gen_random_uuid();
+        END IF;
+
+        INSERT INTO console_compute_registries (
+            id, account_id, name, registry_url, registry_type,
+            username, encrypted_password,
+            status, metadata, created_by, updated_by, created_at, updated_at
+        ) VALUES (
+            v_registry_id,
+            v_account_id,
+            'On-Prem ACR',
+            v_registry_url,
+            'ACR',
+            NULL,   -- username: compute-api uses its own ACR credentials from the secret
+            NULL,   -- encrypted_password: same — compute-api secret owns these
+            'active',
+            '{}'::jsonb,
+            v_admin_id,
+            v_admin_id,
+            NOW(),
+            NOW()
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            name         = EXCLUDED.name,
+            registry_url = EXCLUDED.registry_url,
+            updated_by   = EXCLUDED.updated_by,
+            updated_at   = NOW();
+
+        -- -------------------------------------------------------------------------
+        -- 2. Image — CC Python Box (pre-installed: reportlab, fpdf2, pandas,
+        --    matplotlib, openpyxl, pillow, requests, boto3, azure-storage-blob).
+        --    Agents pick this for data processing and PDF generation tasks.
+        -- -------------------------------------------------------------------------
+        SELECT id INTO v_image_id
+        FROM console_compute_images
+        WHERE account_id = v_account_id AND image_ref = v_image_ref
+        LIMIT 1;
+
+        IF v_image_id IS NULL THEN
+            v_image_id := gen_random_uuid();
+        END IF;
+
+        INSERT INTO console_compute_images (
+            id, account_id, name, description,
+            registry_id, image_path, image_ref, compute_image_id,
+            status, visibility,
+            suggested_cpu, suggested_memory,
+            default_ports, default_env_vars, default_volume_mounts, tags,
+            created_by, updated_by, created_at, updated_at
+        ) VALUES (
+            v_image_id,
+            v_account_id,
+            v_image_name,
+            'Python environment with data and PDF libraries pre-installed: reportlab, fpdf2, pandas, matplotlib, openpyxl, pillow, requests. Use for data analysis, PDF generation, and document processing tasks.',
+            v_registry_id,
+            'cc-python-box',
+            v_image_ref,
+            NULL,
+            'active',
+            'private',
+            '1000m',
+            '2Gi',
+            '[]'::jsonb,
+            '{}'::jsonb,
+            '[]'::jsonb,
+            '{"preinstalled": ["reportlab", "fpdf2", "pandas", "matplotlib", "pillow", "openpyxl", "requests"]}'::jsonb,
+            v_admin_id,
+            v_admin_id,
+            NOW(),
+            NOW()
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            name              = EXCLUDED.name,
+            description       = EXCLUDED.description,
+            image_ref         = EXCLUDED.image_ref,
+            registry_id       = EXCLUDED.registry_id,
+            status            = EXCLUDED.status,
+            suggested_cpu     = EXCLUDED.suggested_cpu,
+            suggested_memory  = EXCLUDED.suggested_memory,
+            tags              = EXCLUDED.tags,
+            updated_by        = EXCLUDED.updated_by,
+            updated_at        = NOW();
+
+        -- -------------------------------------------------------------------------
+        -- 3. Grant — account-level: every user in this account can use the image.
+        -- -------------------------------------------------------------------------
+        INSERT INTO console_compute_image_grants (
+            id, account_id, image_id, grantee_type, grantee_id, created_by, created_at, updated_at
+        )
+        SELECT
+            gen_random_uuid(),
+            v_account_id,
+            v_image_id,
+            'account',
+            v_account_id,
+            v_admin_id,
+            NOW(),
+            NOW()
+        WHERE NOT EXISTS (
+            SELECT 1 FROM console_compute_image_grants
+            WHERE account_id = v_account_id
+              AND image_id   = v_image_id
+              AND grantee_type = 'account'
+        );
+
+        RAISE NOTICE 'Registry: % (id=%)', v_registry_url, v_registry_id;
+        RAISE NOTICE 'Image: % → % (id=%)', v_image_name, v_image_ref, v_image_id;
+        RAISE NOTICE 'Grant: account-level for account %', v_account_id;
+
+        -- -------------------------------------------------------------------------
+        -- 4. AIOS "computer" image — the runtime-v2 sandbox the AIOS agent boots.
+        --    DISTINCT from CC Python Box (which is the THREADS code sandbox). The
+        --    AIOS computer path (runtime_image.validate_runtime_image) requires the
+        --    default image to be tags.type=aios + capabilities=runtime-v2 + a
+        --    DIGEST-pinned image_ref. We register it as a governed image, grant it,
+        --    and set it as the account DEFAULT (account_override_configs SANDBOX_IMAGE,
+        --    singular) so the computer starts with no manual cockpit selection.
+        --    Driven by aios.sandbox.ref (values.yaml) → ${AIOS_SANDBOX_IMAGE_REF};
+        --    the digest changes per product version, so bump that value each release.
+        --    Skipped when empty. Idempotent (keyed by name; ON CONFLICT updates digest).
+        -- -------------------------------------------------------------------------
+        IF v_aios_ref IS NOT NULL AND v_aios_ref <> '' THEN
+            SELECT id INTO v_aios_img
+            FROM console_compute_images
+            WHERE account_id = v_account_id AND name = 'aios-sandbox'
+            LIMIT 1;
+
+            IF v_aios_img IS NULL THEN
+                v_aios_img := gen_random_uuid();
+            END IF;
+
+            INSERT INTO console_compute_images (
+                id, account_id, name, description,
+                registry_id, image_path, image_ref, compute_image_id,
+                status, visibility, suggested_cpu, suggested_memory,
+                default_ports, default_env_vars, default_volume_mounts, tags,
+                created_by, updated_by, created_at, updated_at
+            ) VALUES (
+                v_aios_img, v_account_id, 'aios-sandbox',
+                'AIOS runtime-v2 sandbox — the executable "computer" the AIOS agent boots.',
+                v_registry_id, 'aios-sandbox', v_aios_ref, NULL,
+                'active', 'private', '1000m', '2Gi',
+                '[]'::jsonb, '{}'::jsonb, '[]'::jsonb,
+                '{"type": "aios", "capabilities": "runtime-v2"}'::jsonb,
+                v_admin_id, v_admin_id, NOW(), NOW()
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                image_ref   = EXCLUDED.image_ref,
+                tags        = EXCLUDED.tags,
+                registry_id = EXCLUDED.registry_id,
+                status      = EXCLUDED.status,
+                updated_by  = EXCLUDED.updated_by,
+                updated_at  = NOW();
+
+            INSERT INTO console_compute_image_grants (
+                id, account_id, image_id, grantee_type, grantee_id, created_by, created_at, updated_at
+            )
+            SELECT gen_random_uuid(), v_account_id, v_aios_img, 'account', v_account_id, v_admin_id, NOW(), NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM console_compute_image_grants
+                WHERE account_id = v_account_id AND image_id = v_aios_img AND grantee_type = 'account'
+            );
+
+            IF EXISTS (SELECT 1 FROM account_override_configs WHERE account_id = v_account_id AND entity_code = 'SANDBOX_IMAGE') THEN
+                UPDATE account_override_configs
+                SET value_config = jsonb_build_object('image_id', v_aios_img::text, 'image_ref', v_aios_ref, 'image_name', 'aios-sandbox'),
+                    updated_at   = NOW()
+                WHERE account_id = v_account_id AND entity_code = 'SANDBOX_IMAGE';
+            ELSE
+                INSERT INTO account_override_configs (
+                    id, account_id, product_code, feature_code, entity_code, category, action, scope_type,
+                    value_config, name, created_at, updated_at
+                ) VALUES (
+                    gen_random_uuid(), v_account_id, 'COPILOT', 'AIOS', 'SANDBOX_IMAGE', 'ENTITY', 'ALLOW', 'ACCOUNT',
+                    jsonb_build_object('image_id', v_aios_img::text, 'image_ref', v_aios_ref, 'image_name', 'aios-sandbox'),
+                    'Default AIOS Image', NOW(), NOW()
+                );
+            END IF;
+
+            RAISE NOTICE 'AIOS image: aios-sandbox -> % (id=%) + default set', v_aios_ref, v_aios_img;
+        ELSE
+            RAISE NOTICE 'AIOS image: skipped (aios.sandbox.ref empty)';
+        END IF;
+    END $$;
+
+  06-entitlements-quotas.sql: |
+    -- =============================================================================
+    -- Seed: Module entitlements + seat quotas (On-Prem)
+    -- =============================================================================
+    -- Turns the licensed modules ON for the account and sets the seat limit per
+    -- module, so the app's RUNTIME gating agrees with the operator's trial license.
+    --
+    --   Module on/off    -> account_entitlements   enabled=true, module-level row
+    --                       (feature_code + entity_code NULL). source='TRIAL'.
+    --   Seats per module -> account_quotas          unit='seat', included=<seats>,
+    --                       one row per product_code.
+    --
+    -- The operator's embedded trial (alchemi-operator, trial-grant.jwt) grants the
+    -- ENTITLEMENT and enforces the 30-day window; the apps read these two tables
+    -- (hasAccountModuleEntitlement + seat counts), so they must MATCH the license:
+    --   modules  = console + copilot + compute (box) ENABLED
+    --   seats    = console/copilot 5 each; compute (box) 1
+    -- NOTE: if the operator trial LICENSE (trial-grant.jwt) is enforced and excludes
+    -- compute, enabling it here alone may not be honored — the license must also grant BOX.
+    -- Every module MUST have a seat row (even 0) — a module with NO seat row renders
+    -- as "unlimited" in the app. Keep this in sync if the standard trial changes.
+    --
+    -- USAGE: envsubst placeholder — ${CUSTOMER_DOMAIN} (same as 02-account.sql).
+    -- Idempotent: WHERE NOT EXISTS (these tables have no unique constraint).
+    -- Order: run AFTER 02-account.sql (needs the account).
+    -- =============================================================================
+
+    DO $$
+    DECLARE
+        v_account_id uuid;
+        v_domain     text    := '${CUSTOMER_DOMAIN}';
+        v_seats      numeric := 5;   -- trial seat limit per module (matches the license)
+        r            RECORD;
+    BEGIN
+        -- Fail loud on duplicate accounts for the domain (accounts.domain is not
+        -- unique) — otherwise LIMIT 1 below would seed only one of the twins.
+        IF (SELECT count(*) FROM accounts WHERE domain = v_domain) > 1 THEN
+            RAISE EXCEPTION 'Found % accounts for domain % — resolve duplicates before seeding entitlements/quotas.',
+                (SELECT count(*) FROM accounts WHERE domain = v_domain), v_domain;
+        END IF;
+
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'Account with domain % not found. Run 02-account.sql first.', v_domain;
+        END IF;
+
+        -- -------------------------------------------------------------------------
+        -- 1. Module ON/OFF — module-level entitlement (feature_code + entity_code
+        --    NULL), source=TRIAL. console + copilot ENABLED (in the trial); box/
+        --    compute DISABLED (enabled=false) — represented explicitly so the trial's
+        --    scope is unambiguous and matches the seat quotas below.
+        -- -------------------------------------------------------------------------
+        FOR r IN
+            SELECT * FROM (VALUES
+                ('CONSOLE', true),
+                ('COPILOT', true),
+                ('BOX',     true)    -- compute ENABLED in the trial (1 seat, see quotas below)
+            ) AS t(product_code, enabled)
+        LOOP
+            INSERT INTO account_entitlements
+                (account_id, source, enabled, product_code, feature_code, entity_code)
+            SELECT v_account_id, 'TRIAL', r.enabled, r.product_code, NULL, NULL
+            WHERE NOT EXISTS (
+                SELECT 1 FROM account_entitlements
+                WHERE account_id = v_account_id
+                  AND product_code = r.product_code
+                  AND feature_code IS NULL
+                  AND entity_code IS NULL
+            );
+        END LOOP;
+
+        -- -------------------------------------------------------------------------
+        -- 2. Seats per module (unit='seat'). Seats are a concurrent limit (not a
+        --    resetting credit), so the period is long-lived; the trial window itself
+        --    is enforced by the license, not this quota.
+        --    console=5, copilot=5 (in the trial); box/compute=0 (NOT in the trial ->
+        --    disabled: the UI shows 0 instead of "unlimited", and seat assignment is
+        --    refused). A module with NO seat row renders as "unlimited", so every
+        --    module we want capped MUST have a row (including 0).
+        -- -------------------------------------------------------------------------
+        FOR r IN
+            SELECT * FROM (VALUES
+                ('CONSOLE', v_seats),
+                ('COPILOT', v_seats),
+                ('BOX',     1::numeric)   -- compute enabled with 1 seat
+            ) AS t(product_code, seats)
+        LOOP
+            INSERT INTO account_quotas
+                (account_id, product_code, period_start, period_end, is_active,
+                 created_at, updated_at, feature_code, unit, included)
+            SELECT v_account_id, r.product_code, now(), now() + interval '100 years', true,
+                   now(), now(), NULL, 'seat', r.seats
+            WHERE NOT EXISTS (
+                SELECT 1 FROM account_quotas
+                WHERE account_id = v_account_id
+                  AND product_code = r.product_code
+                  AND unit = 'seat'
+                  AND feature_code IS NULL
+            );
+        END LOOP;
+
+        RAISE NOTICE 'Entitlements + seat quotas seeded for account % (console+copilot enabled @ % seats; compute/box enabled @ 1 seat)',
+            v_account_id, v_seats;
+    END $$;
+
+  07-limits.sql: |
+    -- =============================================================================
+    -- Seed: Account usage / cost / compute LIMITS (On-Prem)
+    -- =============================================================================
+    -- Pre-populates the per-account limits that the Zenith "Account > Limits" tab
+    -- otherwise needs a superadmin to type in by hand. Mirrors EXACTLY what Zenith's
+    -- "Save policy" writes (alchemi-zenith src/lib/store.ts -> upsertQuota /
+    -- upsertConcurrentLimit), so the values load correctly in the UI AND are read by
+    -- the runtime enforcers.
+    --
+    --   Monthly limits    -> account_quotas             (included = cap, unit-based, calendar month)
+    --   Concurrent limits -> account_concurrent_limits  ("limit" int; PK account/product/feature)
+    --
+    -- Field -> row mapping (authoritative, from store.ts):
+    --   Copilot Monthly LLM Billed, USD        COPILOT/platform_llm_cost    unit=usd        -> account_quotas
+    --   Copilot Monthly Billed + Usage, USD    COPILOT/platform_total_cost  unit=usd        -> account_quotas
+    --   Console Monthly Gateway Requests       CONSOLE/gateway_requests     unit=request    -> account_quotas
+    --   Console Concurrent Gateway Requests    CONSOLE/gateway_requests + CONSOLE/requests  -> account_concurrent_limits (written to BOTH, as the app does)
+    --   Compute Monthly CPU (mCPU)             BOX/cpu_millicores           unit=mcpu_hour  -> account_quotas
+    --   Compute Monthly RAM (MiB)              BOX/memory_mib               unit=mib_hour   -> account_quotas
+    --   Compute Monthly Volume (GB)            BOX/volume_gb                unit=gb_month   -> account_quotas
+    --   Compute Concurrent CPU/RAM/Volume      BOX/cpu_millicores|memory_mib|volume_gb      -> account_concurrent_limits
+    --
+    -- ENFORCEMENT NOTES (verified against the app code):
+    --   * ENFORCED: Copilot USD caps (block next Copilot turn on exhaustion),
+    --     Console monthly (429) + concurrent (429, Redis), Compute CONCURRENT (429).
+    --   * NOT ENFORCED TODAY - Compute MONTHLY: compute-api reads feature_codes
+    --     cpu_minutes / memory_gib_hours / volume_gib_hours, but the UI (and this seed)
+    --     use cpu_millicores / memory_mib / volume_gb, and compute-api never writes
+    --     account_quotas.used for BOX. We still seed the UI-consistent rows so the tab
+    --     shows values; making them bite is a compute-api code change, not a seed change.
+    --   * A quota with included <= 0 is treated as "NO CAP" by the enforcers (skipped).
+    --     So use a real positive number to actually cap; 0 = unlimited.
+    --
+    -- USAGE: envsubst placeholder ${CUSTOMER_DOMAIN}. Run AFTER 02-account.sql.
+    -- Idempotent: INSERT ... WHERE NOT EXISTS / ON CONFLICT DO NOTHING (never clobbers
+    -- values a superadmin later changes in the UI).
+    -- =============================================================================
+
+    DO $$
+    DECLARE
+        v_account_id uuid;
+        v_domain     text := '${CUSTOMER_DOMAIN}';
+
+        -- ---- Standard trial policy. Generous CEILINGS (not guarantees); the cluster's
+        --      real capacity binds first. All tunable — lower per customer as needed.
+        --      NOTE on units: monthly compute is a RATE unit (mCPU-hours / MiB-hours /
+        --      GB-months), so the monthly numbers are intentionally MUCH larger than the
+        --      concurrent ceilings (concurrent value x ~730 h/month + headroom). Do not
+        --      "simplify" monthly compute to 1,000,000 — that would be smaller than the
+        --      concurrent ceiling and bind incorrectly. -----------------------------------
+        v_copilot_llm_usd        numeric := 1000000;     -- $/mo   Copilot LLM billed cap
+        v_copilot_total_usd      numeric := 1000000;     -- $/mo   Copilot billed + platform usage cap
+        v_console_month_req      numeric := 1000000;     -- req/mo Console gateway requests
+        v_console_concurrent_req integer := 1000;        -- in-flight Console gateway requests
+        v_box_month_cpu_mcpu     numeric := 100000000;   -- mCPU-hours/mo  (~100k mCPU * 730h + headroom)
+        v_box_month_mem_mib      numeric := 200000000;   -- MiB-hours/mo   (~200k MiB * 730h + headroom)
+        v_box_month_vol_gb       numeric := 10000;       -- GB-months/mo   (~= concurrent volume standing)
+        v_box_concurrent_cpu     integer := 100000;      -- mCPU at once   (= 100 vCPU)
+        v_box_concurrent_mem     integer := 200000;      -- MiB at once    (~195 GiB)
+        v_box_concurrent_vol     integer := 10000;       -- GB provisioned at once
+
+        r RECORD;
+    BEGIN
+        -- Fail loud on duplicate accounts for the domain (accounts.domain is not unique).
+        IF (SELECT count(*) FROM accounts WHERE domain = v_domain) > 1 THEN
+            RAISE EXCEPTION 'Found % accounts for domain % — resolve duplicates before seeding limits.',
+                (SELECT count(*) FROM accounts WHERE domain = v_domain), v_domain;
+        END IF;
+
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'Account with domain % not found. Run 02-account.sql first.', v_domain;
+        END IF;
+
+        -- -------------------------------------------------------------------------
+        -- 1. MONTHLY limits -> account_quotas (calendar month; matches store.ts upsertQuota).
+        --    account_quotas has no unique constraint on (account_id,product_code,feature_code),
+        --    so use INSERT ... WHERE NOT EXISTS for idempotency (never overwrites admin edits).
+        -- -------------------------------------------------------------------------
+        FOR r IN
+            SELECT * FROM (VALUES
+                ('COPILOT', 'platform_llm_cost',   'usd',       v_copilot_llm_usd),
+                ('COPILOT', 'platform_total_cost', 'usd',       v_copilot_total_usd),
+                ('CONSOLE', 'gateway_requests',    'request',   v_console_month_req),
+                ('BOX',     'cpu_millicores',      'mcpu_hour', v_box_month_cpu_mcpu),
+                ('BOX',     'memory_mib',          'mib_hour',  v_box_month_mem_mib),
+                ('BOX',     'volume_gb',           'gb_month',  v_box_month_vol_gb)
+            ) AS t(product_code, feature_code, unit, included)
+        LOOP
+            INSERT INTO account_quotas
+                (account_id, product_code, feature_code, unit, included, used,
+                 period_start, period_end, reset_policy, is_active, created_at, updated_at)
+            SELECT v_account_id, r.product_code, r.feature_code, r.unit, r.included, 0,
+                   date_trunc('month', now()), date_trunc('month', now()) + interval '1 month',
+                   'CALENDAR_MONTH', true, now(), now()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM account_quotas
+                WHERE account_id = v_account_id
+                  AND product_code = r.product_code
+                  AND feature_code IS NOT DISTINCT FROM r.feature_code
+            );
+        END LOOP;
+
+        -- -------------------------------------------------------------------------
+        -- 2. CONCURRENT limits -> account_concurrent_limits (matches store.ts
+        --    upsertConcurrentLimit). CONSOLE concurrent is written to BOTH
+        --    'gateway_requests' AND 'requests' exactly like the app (the enforcer reads
+        --    'gateway_requests' with a fallback to 'requests').
+        -- -------------------------------------------------------------------------
+        FOR r IN
+            SELECT * FROM (VALUES
+                ('CONSOLE', 'gateway_requests', v_console_concurrent_req),
+                ('CONSOLE', 'requests',         v_console_concurrent_req),
+                ('BOX',     'cpu_millicores',   v_box_concurrent_cpu),
+                ('BOX',     'memory_mib',       v_box_concurrent_mem),
+                ('BOX',     'volume_gb',        v_box_concurrent_vol)
+            ) AS t(product_code, feature_code, lim)
+        LOOP
+            INSERT INTO account_concurrent_limits
+                (account_id, product_code, feature_code, "limit", created_at, updated_at)
+            VALUES (v_account_id, r.product_code, r.feature_code, r.lim, now(), now())
+            ON CONFLICT (account_id, product_code, feature_code) DO NOTHING;
+        END LOOP;
+
+        RAISE NOTICE 'Limits seeded for account %: copilot USD=% (llm)/% (total); console month=%/concurrent=%; box month cpu=%/mem=%/vol=%; box concurrent cpu=%/mem=%/vol=%',
+            v_account_id, v_copilot_llm_usd, v_copilot_total_usd, v_console_month_req, v_console_concurrent_req,
+            v_box_month_cpu_mcpu, v_box_month_mem_mib, v_box_month_vol_gb,
+            v_box_concurrent_cpu, v_box_concurrent_mem, v_box_concurrent_vol;
+    END $$;
+
+  08-default-agent.sql: |
+    -- =============================================================================
+    -- Seed: Default Copilot Agent (On-Prem)
+    -- =============================================================================
+    -- Creates ONE account-scoped default Copilot agent so the FIRST user has a ready
+    -- agent the moment they log in. Without a default agent the Copilot composer has
+    -- nothing selected and the user cannot start a chat. Mirrors what the app's
+    -- create_agent_def writes (alchemi-ai apps/ai/gen_ui_backend/unapp/utils/agent_db_store.py).
+    --
+    -- HOW "DEFAULT" WORKS (verified in the app code):
+    --   * Scope is by PROVIDER, not availability: provider='ACCOUNT' + account_id
+    --     => visible only to that account's users (availability stays ['platform'];
+    --     it is a catalog tag and is ignored for scoping).
+    --   * is_default=true => the def is auto-merged into every user's agent list
+    --     (read-only, no per-user row is created). For a brand-new user with no agents
+    --     of their own it becomes agents[0] and is auto-selected as the landing agent.
+    --   * Nothing else auto-provisions agents (workspace provision() seeds none;
+    --     account onboarding seeds only roles), so this one row is necessary AND
+    --     sufficient to give every new user a working agent.
+    --   * ~5 min per-account cache in the AI backend: a newly-seeded default can take
+    --     up to ~5 minutes to appear.
+    --   * No uniqueness is enforced on is_default; keep to ONE account default or the
+    --     picker shows several (each badged "Default").
+    --   * No model column on agents_def — the agent uses the account/platform default
+    --     model (config_default_models), so nothing to pin here.
+    --
+    -- USAGE: envsubst placeholder ${CUSTOMER_DOMAIN}. Run AFTER 02-account.sql.
+    -- Idempotent: only inserts when the account has no ACCOUNT-level default agent yet
+    -- (never duplicates on re-run; never clobbers an admin-created default agent).
+    -- =============================================================================
+
+    DO $$
+    DECLARE
+        v_account_id uuid;
+        v_domain     text := '${CUSTOMER_DOMAIN}';
+
+        -- ---- Tune the default agent's identity here ----
+        v_name        text := 'Assistant';
+        v_description text := 'General-purpose AI assistant';
+        -- NOTE: plain single-quoted literal (NOT $tag$ dollar-quoting): db-seed.sh pipes
+        -- this file through envsubst, which would eat a $tag$ delimiter as a shell var.
+        -- Keep the text free of single quotes/apostrophes (or double them '' ) and of $.
+        v_prompt      text := 'You are a helpful, knowledgeable AI assistant. Give clear, accurate, and concise answers. Ask for clarification when a request is ambiguous, work through complex problems step by step, and be honest when you are unsure or do not have enough information to answer.';
+    BEGIN
+        -- Fail loud on duplicate accounts for the domain (accounts.domain is not unique).
+        IF (SELECT count(*) FROM accounts WHERE domain = v_domain) > 1 THEN
+            RAISE EXCEPTION 'Found % accounts for domain % — resolve duplicates before seeding the default agent.',
+                (SELECT count(*) FROM accounts WHERE domain = v_domain), v_domain;
+        END IF;
+
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'Account with domain % not found. Run 02-account.sql first.', v_domain;
+        END IF;
+
+        -- One account-level default agent. Column defaults handle agent_id (uuid_generate_v4),
+        -- categories, tags, builtin_tools, links (empty 3-bucket JSON), shared_with,
+        -- access_group_ids, is_singleton, is_non_conversational, availability (['platform']),
+        -- created_at/updated_at.
+        INSERT INTO agents_def
+            (name, description, prompt, is_default, status, provider, account_id)
+        SELECT v_name, v_description, v_prompt, true, 'active', 'ACCOUNT', v_account_id
+        WHERE NOT EXISTS (
+            SELECT 1 FROM agents_def
+            WHERE account_id = v_account_id
+              AND provider = 'ACCOUNT'
+              AND is_default = true
+        );
+
+        RAISE NOTICE 'Default agent ensured for account %: "%" (provider=ACCOUNT, is_default=true, status=active)',
+            v_account_id, v_name;
+    END $$;
+
+  09-credits.sql: |
+    -- =============================================================================
+    -- Seed: Copilot Credits & Allocations — account-level settings (On-Prem)
+    -- =============================================================================
+    -- Pre-populates the account-level controls on the Copilot "Credits & Allocations"
+    -- > Settings tab so the superadmin does not have to configure them by hand.
+    -- Two storage backends (verified in the app code):
+    --   1. accounts.settings (JSONB): credit_factor, initial_signup_credits,
+    --      credit_reset_frequency (display mirror of the cadence), credit_rate_limits.
+    --   2. account_quotas (the wallet balance row): unit='credits',
+    --      product_code='COPILOT', feature_code NULL — included = credits per cadence,
+    --      reset_policy = cadence, used = live counter (seed 0).
+    --
+    -- HOW IT WORKS / ENFORCEMENT (real):
+    --   The AI backend converts each turn's USD cost x credit_factor into credits and
+    --   deducts them from the unit='credits' account_quotas row; on exhaustion it blocks
+    --   the turn ("Copilot credit quota exhausted"). Group/user allowances ride the same
+    --   'copilot_chat_credits' meter.
+    --
+    -- CRITICAL: the runtime ONLY reads unit='credits' (a stale web clone used 'usd' —
+    --   do NOT use that; the runtime would never decrement it).
+    -- NOTE: credit_factor default differs by layer (web shows 0=disabled; the AI runtime
+    --   treats a MISSING factor as 1000). We set it explicitly to remove the ambiguity.
+    --
+    -- Coherence with 07-limits.sql: that seeds the unit='usd' COPILOT ceilings
+    -- (platform_llm_cost/platform_total_cost). This credits budget is a PARALLEL gate;
+    -- the tighter of (USD cap) and (credits budget x nothing) binds. 300000 credits at
+    -- factor 1000 = $300 of Copilot spend / cadence.
+    --
+    -- USAGE: envsubst placeholder ${CUSTOMER_DOMAIN}. Run AFTER 02-account.sql.
+    -- Idempotent. accounts.settings keys are filled only if absent (seed_defaults ||
+    -- settings => existing values win, never reverts an admin UI change). The wallet
+    -- row is AUTHORITATIVE (upsert to the trial value): the runtime pre-creates a
+    -- default credits row, so insert-if-absent would never apply the trial amount;
+    -- this is an install-time default, applied before any admin edit. `used` is
+    -- preserved on an existing row (only set to 0 on first insert).
+    -- =============================================================================
+
+    DO $$
+    DECLARE
+        v_account_id uuid;
+        v_domain     text := '${CUSTOMER_DOMAIN}';
+
+        -- ---- Tune here ----
+        v_credit_factor       numeric := 1000;     -- internal credit units per $1 of cost
+        v_signup_credits      numeric := 3000;     -- credits auto-granted to each new user (from Default group)
+        v_credits_per_cadence numeric := 300000;   -- account credit limit per cadence (= $300 at factor 1000)
+        -- cadence is CALENDAR_MONTH (the app's default); change reset_policy + the
+        -- credit_reset_frequency mirror together if you use a different cadence.
+
+        v_defaults jsonb;
+    BEGIN
+        IF (SELECT count(*) FROM accounts WHERE domain = v_domain) > 1 THEN
+            RAISE EXCEPTION 'Found % accounts for domain % — resolve duplicates before seeding credits.',
+                (SELECT count(*) FROM accounts WHERE domain = v_domain), v_domain;
+        END IF;
+
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'Account with domain % not found. Run 02-account.sql first.', v_domain;
+        END IF;
+
+        -- 1. Merge credit settings into accounts.settings WITHOUT clobbering existing keys.
+        --    `defaults || settings` => any key already present in settings wins, so this
+        --    only fills gaps (safe to re-run; never reverts an admin's UI change).
+        v_defaults := jsonb_build_object(
+            'credit_factor',          v_credit_factor,
+            'initial_signup_credits', v_signup_credits,
+            'credit_reset_frequency', jsonb_build_object('unit', 'month', 'value', 1),
+            'credit_rate_limits',     '[]'::jsonb
+        );
+        UPDATE accounts
+           SET settings = v_defaults || COALESCE(settings, '{}'::jsonb),
+               updated_at = now()
+         WHERE id = v_account_id;
+
+        -- 2. The wallet balance row: account_quotas unit='credits' (COPILOT, feature_code NULL).
+        --    included = credits per cadence; reset_policy = cadence. AUTHORITATIVE upsert
+        --    (not insert-if-absent): the AI runtime pre-creates a DEFAULT credits row
+        --    (~100000) on account/copilot init, so an insert-if-absent seed would never
+        --    apply the trial value. This runs at INSTALL (before any admin edit), so
+        --    setting the trial default here is correct. `used` is a live counter — only
+        --    initialised to 0 on first insert; an existing row's `used` is left intact.
+        UPDATE account_quotas
+           SET included    = v_credits_per_cadence,
+               reset_policy = 'CALENDAR_MONTH',
+               is_active   = true,
+               updated_at  = now()
+         WHERE account_id = v_account_id
+           AND product_code = 'COPILOT'
+           AND feature_code IS NULL
+           AND unit = 'credits';
+
+        IF NOT FOUND THEN
+            INSERT INTO account_quotas
+                (account_id, product_code, feature_code, unit, included, used,
+                 period_start, period_end, reset_policy, is_active, created_at, updated_at)
+            VALUES (v_account_id, 'COPILOT', NULL, 'credits', v_credits_per_cadence, 0,
+                    date_trunc('month', now()), date_trunc('month', now()) + interval '1 month',
+                    'CALENDAR_MONTH', true, now(), now());
+        END IF;
+
+        RAISE NOTICE 'Credits seeded for account %: credit_factor=%, signup_credits=%, credits_per_cadence=% (unit=credits, CALENDAR_MONTH)',
+            v_account_id, v_credit_factor, v_signup_credits, v_credits_per_cadence;
+    END $$;
+
+  10-group-allocation.sql: |
+    -- =============================================================================
+    -- Seed: Default group credit allocation (On-Prem)
+    -- =============================================================================
+    -- Gives the account's DEFAULT group a Copilot credit budget so the
+    -- "Initial Signup Credits" grant (seeded in 09-credits.sql) actually works.
+    --
+    -- WHY THIS IS NEEDED:
+    --   At onboarding the app grants initial_signup_credits to a new user ONLY IF the
+    --   Default group has enough remaining allocation for the current cadence; otherwise
+    --   the new user gets 0. 09-credits.sql seeds the SETTING (3000/user) but not the
+    --   group budget it is drawn from — this file seeds that budget.
+    --
+    -- STORAGE: allowances table (the Allocations tab). One GROUP-scoped row:
+    --   account_id, meter_code='copilot_chat_credits', scope_type='GROUP',
+    --   scope_id=<Default group id>, monthly_limit=<budget>, used (live, seed 0),
+    --   current_period_start/end (calendar month).
+    --
+    -- SCOPE: account-derivable — the Default group is created deterministically by
+    --   02-account.sql (groups.is_default=true), so this is seedable (unlike arbitrary
+    --   per-user allocations). AUTHORITATIVE upsert on monthly_limit (the app may
+    --   pre-create a 0-budget group allowance), preserving the live `used`.
+    --
+    -- USAGE: envsubst placeholder ${CUSTOMER_DOMAIN}. Run AFTER 02-account.sql
+    --   (needs the Default group) and alongside 09-credits.sql.
+    -- =============================================================================
+
+    DO $$
+    DECLARE
+        v_account_id uuid;
+        v_group_id   uuid;
+        v_domain     text := '${CUSTOMER_DOMAIN}';
+
+        -- ---- Tune here: total credits the Default group can allocate per cadence ----
+        -- 9000 = 3 new users x 3000 signup credits (see initial_signup_credits in 09).
+        v_group_budget numeric := 9000;
+    BEGIN
+        IF (SELECT count(*) FROM accounts WHERE domain = v_domain) > 1 THEN
+            RAISE EXCEPTION 'Found % accounts for domain % — resolve duplicates before seeding group allocation.',
+                (SELECT count(*) FROM accounts WHERE domain = v_domain), v_domain;
+        END IF;
+
+        SELECT id INTO v_account_id FROM accounts WHERE domain = v_domain LIMIT 1;
+        IF v_account_id IS NULL THEN
+            RAISE EXCEPTION 'Account with domain % not found. Run 02-account.sql first.', v_domain;
+        END IF;
+
+        SELECT id INTO v_group_id FROM groups
+         WHERE account_id = v_account_id AND is_default = true LIMIT 1;
+        IF v_group_id IS NULL THEN
+            RAISE EXCEPTION 'Default group not found for account %. Run 02-account.sql first.', v_account_id;
+        END IF;
+
+        -- Authoritative upsert of the Default group's copilot credit budget.
+        UPDATE allowances
+           SET monthly_limit = v_group_budget,
+               updated_at    = now()
+         WHERE account_id = v_account_id
+           AND scope_type = 'GROUP'
+           AND scope_id   = v_group_id
+           AND meter_code = 'copilot_chat_credits';
+
+        IF NOT FOUND THEN
+            INSERT INTO allowances
+                (account_id, meter_code, scope_type, scope_id,
+                 monthly_limit, extra_limit, used,
+                 current_period_start, current_period_end, created_at, updated_at)
+            VALUES (v_account_id, 'copilot_chat_credits', 'GROUP', v_group_id,
+                    v_group_budget, 0, 0,
+                    date_trunc('month', now()), date_trunc('month', now()) + interval '1 month',
+                    now(), now());
+        END IF;
+
+        RAISE NOTICE 'Default group credit allocation seeded for account % (group %): monthly_limit=% credits',
+            v_account_id, v_group_id, v_group_budget;
+    END $$;
+
+{{- end }}

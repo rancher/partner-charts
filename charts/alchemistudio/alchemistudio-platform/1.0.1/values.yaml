@@ -1,0 +1,437 @@
+# =============================================================================
+# alchemistudio-platform — umbrella values. ONE domain drives the routing/auth wiring.
+# The form (questions.yaml) surfaces the important knobs; everything else has a
+# sensible default. Subchart values live under each subchart's key (e.g. `web:`).
+# =============================================================================
+global:
+  # ---- THE single input: your domain. Subdomains are derived from it. --------
+  domain: ""                       # e.g. acme.com   (REQUIRED)
+  subdomains:
+    app: app                       # app.<domain>    -> alchemi-web
+    auth: auth                     # auth.<domain>   -> keycloak
+    ops: ops                       # ops.<domain>    -> openobserve  (Azure form + SUSE convention)
+    zenith: zenith                 # zenith.<domain> -> zenith (opt-in)
+  # ---- Uniform release version (retag+IfNotPresent model) -------------------
+  image:
+    registry: alchemiacr.azurecr.io
+    tag: "1.1.0"               # = releaseVersion; applied to every app subchart
+    pullPolicy: IfNotPresent
+    pullSecret: alchemi-registry   # docker-registry secret for the customer's Harbor
+  # Registry credentials. When username is set, the chart CREATES the pullSecret above
+  # (a kubernetes.io/dockerconfigjson secret) from these, in every app namespace.
+  # Server = global.image.registry (default ACR).
+  #
+  # TRIAL model (Phase 1): a SHARED, pull-only, revocable ACR token is baked here as
+  # the default so the trial installs with no cred input. Kept EMPTY in source (never
+  # commit a live secret); the scoped trial token is injected at publish/package time
+  # (helm package -f trial-values.yaml, or --set). Safe to expose because usage is
+  # license-gated by Zenith, not by image secrecy. See 06-marketplace-trial-delivery-decisions.md.
+  # PRODUCTION: customer sets their own registry + creds (via support@alchemistudio.ai).
+  imageCredentials:
+    username: "alchemi-trial-pull"                   # trial: shared ACR pull-token user (injected at publish)
+    password: "5VkjdrERB5WbfJ1TSGPk254kUToGUAbagVyhhcIsUpppRBD0kApsJQQJ99CHACGhslBEqg7NAAABAZCRSIWg"                   # trial: shared ACR pull-token (injected at publish)
+  # ---- Namespaces (match the routes + endpoints ConfigMap) ------------------
+  namespaces:
+    app: alchemi
+    data: alchemi-data
+    auth: auth
+    observability: observability
+    sandbox: albox           # dedicated sandbox/AIOS workload namespace (matches dev+demo)
+  storageClass: longhorn           # PVCs for bundled pgvector/redis (RKE2 default via Longhorn)
+  # ---- Sizing tier — REPLICAS only (no HPA, no CPU/mem preset changes) -------
+  # Lives under global so the app subcharts can read it (subcharts can't see the
+  # umbrella's top-level values, only global.*). Two tiers:
+  #   basic    = 1 replica of every service — minimal footprint, small clusters.
+  #   standard = 2 replicas of the load-bearing user-facing services (web + ai);
+  #              everything else stays 1. Recommended when guardrails is enabled.
+  # Per-pod CPU/memory are fixed by each subchart and DO NOT change with tier.
+  tier: basic                      # basic | standard
+
+# ---- TLS (wired into APISIX as the SSL object; SNIs derived from the domain) -
+tls:
+  enabled: true
+  # DEFAULT byo = Bring Your Own Certificate: supply certPem + keyPem (the form requires them),
+  # or pre-create secretName. This is the standard production path — trusted TLS, works on any
+  # cluster/DNS, login works immediately. acme = automatic Let's Encrypt (HTTP-01) via cert-manager.
+  # (selfsigned generation still exists below as a CLI-only escape hatch, but is NOT offered in the form.)
+  mode: byo                        # byo | acme   (selfsigned = CLI-only, not in the form)
+  secretName: apisix-ssl-secret    # byo: the tls secret (created below if certPem/keyPem given)
+  certPem: ""                      # byo: wildcard cert PEM (pass via --set-file tls.certPem=tls.crt)
+  keyPem: ""                       # byo: private key PEM  (--set-file tls.keyPem=tls.key)
+  # acme = automated Let's Encrypt via cert-manager, HTTP-01 challenge (DNS-provider-agnostic:
+  # only an A-record + reachable port 80 are needed). Point DNS at the gateway BEFORE install.
+  acme:
+    email: ""                      # LE account email for renewal notices (defaults to admin.email if blank)
+    staging: false                 # true = LE STAGING CA (untrusted, no rate limits) to validate the flow first
+
+# ---- Admin (Azure form: adminEmail) — Keycloak admin + seed first-user + alerts
+admin:
+  email: ""                        # REQUIRED — MUST equal the Keycloak login email (seed <-> login)
+  name: ""                         # optional — first-user display name (default: email local-part, like Azure)
+  orgName: ""                      # optional — organization/account name (default: domain first label, like Azure)
+  # Optional initial password for the first user. BLANK = auto-generate (recommended;
+  # retrieve post-install from the FIRST_USER_PASSWORD secret — see NOTES). If set, it is
+  # used as-is. EITHER WAY it is applied as a TEMPORARY password (Keycloak forces a reset
+  # on first login), so it is single-use. NOTE: a value set here is stored in the Helm
+  # release values — prefer leaving it blank and using the generated one.
+  initialPassword: ""
+
+
+# ---- License (OPTIONAL) -----------------------------------------------------
+# No JWT -> FIXED-SEATS mode (platform runs with a seat cap). A JWT unlocks the
+# licensed plan. So an install never blocks on the license.
+license:
+  jwt: ""                          # optional — blank = fixed-seats
+
+# ---- Email (Azure form: emailMode/smtp*) — no ACS on SUSE, so smtp | none ----
+smtp:
+  mode: none                       # none | smtp
+  host: ""
+  port: 587
+  user: ""
+  password: ""
+  from: ""                         # defaults to noreply@<domain> if blank
+
+# ---- Branding — favicon/app icon + Keycloak login theme --------------------
+# All branding.* vars are wired into the keycloak-config ConfigMap at install so
+# the splitv1 theme picks them up without any post-install manual step.
+# leftHtml blank = chart uses the built-in Style 2 GIF panel (module-cycle.gif,
+# bundled in the KC image). Override to supply fully custom panel HTML.
+# {{RESOURCES}} in leftHtml is a KC FreeMarker token — it resolves at runtime to
+# the theme's /resources/ URL; it is NOT a Helm expression.
+branding:
+  logoBase64: ""                   # optional square PNG/JPG, base64 (favicon/app icon)
+  theme: splitv1                   # KC login theme name (must exist in the KC image)
+  name: "AlchemiStudio"
+  logoUrl: "https://alchemistudio.ai/logo.png"
+  primary: "#1e3a8a"
+  leftBg: "#f2f1ec"
+  rightBg: "#ffffff"
+  layoutReverse: "true"            # "true" = form left, brand panel right
+  welcomeTitle: "Sign in to AlchemiStudio"
+  welcomeSubtitle: "Enter your work email. We'll take you to your organization's workspace."
+  leftHtml: ""                     # blank = use the GIF panel from _helpers.tpl
+
+# ---- Gateway (APISIX — bundled, or the customer's own) ----------------------
+gateway:
+  mode: bundled                    # bundled (install APISIX+etcd) | external (customer's gateway)
+  serviceType: auto                # auto (LoadBalancer) | ClusterIP | NodePort
+  adminKey: edd1c9f034335f136f87ad84b625c8f1       # APISIX admin API key (routes job uses it)
+  viewerKey: 4054f7cf07e344346cd3f287985e76a2
+  exposeZenith: false
+  internalLB: false                # true => azure-load-balancer-internal annotation
+  image: ""                        # default: apache/apisix:3.9.1-debian (matches on-prem)
+  etcdImage: ""                    # default: <registry>/platform/etcd:v3.5.17
+  storage: 8Gi
+
+# ---- Data-tier: bundle ours, or point at the customer's ---------------------
+postgres:
+  mode: bundled                    # bundled (pgvector) | external
+  database: alchemiapp_db          # main app DB (users/accounts/seed) — matches on-prem/marketplace
+  computeDatabase: compute_db      # compute-api DB (migrated separately)
+  aiDatabase: alchemi_ai_db        # alchemi-ai's own DB (LangGraph store / console)
+  adminUser: alchemiadmin          # bundled superuser (seed + migrate run as this)
+  image: ""                        # default: <registry>/platform/pgvector:pg17 (has vector/uuid-ossp/pgcrypto)
+  storage: 20Gi
+  extraDatabases: [compute_db, keycloak, alchemi_ai_db]   # created alongside the main app DB (db-init)
+  # external: the customer's own Postgres. They must pre-create the DBs + the
+  # vector/uuid-ossp/pgcrypto extensions (managed PG often blocks CREATE DATABASE);
+  # db-init's prep step is best-effort in this mode.
+  external:
+    host: ""
+    port: 5432
+    database: alchemiapp_db
+    computeDatabase: compute_db
+    user: alchemiadmin
+    password: ""                   # the external superuser/owner password (or set passwordSecret)
+    passwordSecret: ""             # OR an existing secret name with key POSTGRES_PASSWORD
+    sslMode: require                 # managed PG (Azure/RDS) needs SSL; set to disable only for a plaintext in-VNet PG
+
+# ---- First-user seed (Azure: db-seed) — migrate != seed --------------------
+seed:
+  enabled: true                    # run the migrator + first-user/account seed post-install
+  migratorImage: ""                # default: <registry>/alchemi-operator:<tag>; override to pin a specific migrator image
+redis:
+  mode: bundled                    # bundled | external
+  image: ""                        # default: <registry>/platform/redis:7 (mirror). AppCo redis is the provenance-preferred swap.
+  storage: 8Gi
+  external: { host: "", port: 6379, tls: false }
+objectStore:
+  # bundled = SeaweedFS standalone S3 API (port 8333). App backend must use S3
+  # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_ENDPOINT_URL). Generated
+  # credentials are persisted in seaweedfs-s3-config Secret (lookup/merge stable).
+  # external = Azure Blob via AZURE_STORAGE_CONNECTION_STRING (azure-storage-blob SDK).
+  mode: bundled                    # bundled (in-cluster SeaweedFS S3) | external (Azure Blob).
+                                   # Default bundled so a self-contained trial needs no external
+                                   # object store; flip to external only with your own storage creds.
+  external:
+    # Provide EITHER a full connection string OR accountName+accountKey+blobEndpoint.
+    connectionString: ""           # full Azure-format conn string (wins if set)
+    accountName: ""
+    accountKey: ""
+    blobEndpoint: ""               # e.g. https://mystorage.blob.core.windows.net
+  bundled:
+    image: ""                      # default: alchemiacr.azurecr.io/platform/seaweedfs:3.75
+    storage: 20Gi
+    bucket: alchemi-objects        # S3 bucket (workspaces = key prefixes); app reads S3_BUCKET
+    region: us-east-1              # region label — SeaweedFS ignores it, but the S3 SDK requires one
+observability:
+  mode: bundled                    # bundled (OpenObserve) | external
+  otelEndpoint: ""                 # OTLP collector base URL for app tracing; EMPTY = tracing off
+                                   # (bundled tier has no otel-collector). e.g. http://otel-collector.observability.svc:4318
+  image: ""                        # default: <registry>/platform/openobserve:v0.91.1
+  persist: false                   # true = PVC (default emptyDir; the ops route degrades gracefully)
+  storage: 10Gi
+
+# ---- Secrets backend: OpenBao (open-source Vault fork) ----------------------
+# Stores operator-provided secrets (LLM keys, SMTP) in a k8s-native Vault.
+# Init/unseal/configure runs automatically as a post-install Job (Python, no bao CLI).
+# Auto-unseal: 1 share / 1 threshold — key saved to alchemi-openbao-keys Secret.
+openbao:
+  enabled: true
+  namespace: openbao              # k8s namespace (added to namespaces.yaml)
+  image: ""                       # default: alchemiacr.azurecr.io/platform/openbao:2.1.0
+  initImage: ""                   # default: alchemiacr.azurecr.io/platform/azure-cli:2.60.0 (has python3)
+  storage: 8Gi
+
+# ---- External Secrets Operator — syncs OpenBao KV → k8s Secrets ----------
+eso:
+  enabled: true                   # set false to disable ESO subchart + ClusterSecretStore
+
+# ---- LLM provider keys (→ OpenBao at post-install; not stored in chart after) ---
+# When openbao.enabled=false these become a plain k8s Secret (less secure).
+llm:
+  anthropicApiKey: ""
+  openaiApiKey: ""
+  azureOpenaiApiKey: ""
+  azureOpenaiEndpoint: ""
+  azureOpenaiApiVersion: "2024-02-01"
+  perplexityApiKey: ""
+  xaiApiKey: ""
+
+# ---- Component on/off (each maps to a Chart.yaml dependency condition) -------
+keycloak:   { enabled: true }
+web:        { enabled: true }
+ai:         { enabled: true }
+worker:     { enabled: true }
+zenith:     { enabled: true }
+guardrails: { enabled: false }     # OFF by default for the trial — the AI-safety tier is 6 heavy ML
+                                   # images (~2.2 CPU / 6.6Gi) that slow the FIRST install past Rancher's
+                                   # 10-min UI timeout. Opt-in later: --set guardrails.enabled=true (CLI)
+                                   # or the "Enable AI guardrails" toggle in the install form.
+workflow:
+  enabled: true                  # durable workflow runtime (api + runner + scheduler)
+  image:
+    tag: ""                      # override global.image.tag; workflow has its own cadence
+    ref: ""                      # full image ref override (e.g. digest-pinned)
+
+# ---- Compute-API sandbox settings ------------------------------------------
+# workflowCode.imageRef: the digest-pinned image for Workflow Code execution pods.
+# Must match the output of workflow-code-sandbox-build-push.yml. Blank = feature off.
+# clamav.enabled: ClamAV antivirus scanner (needed for web + AIOS file upload scanning).
+computeApi:
+  enabled: true                # the ONLY computeApi block — a duplicate `computeApi: {enabled: true}`
+                               # above silently dropped `enabled` (YAML last-key-wins), disabling the
+                               # compute-api endpoints ConfigMap. Merged here.
+  workflowCode:
+    # Digest-pinned Workflow Code execution image (short-lived Kata pod per Console
+    # workflow Code node) → WORKFLOW_CODE_IMAGE_REF (compute-api env). Blank = feature off.
+    # From azure-marketplace/images/images.yaml (alchemi-workflow-code-sandbox). BUMP PER RELEASE.
+    imageRef: "alchemiacr.azurecr.io/alchemi-workflow-code-sandbox@sha256:ef2463fe52bec5edddd4f6c418d0783559e119c3f88b6d964efae99b671f988a"
+clamav:
+  enabled: false               # requires ~3Gi RAM + 5Gi PVC; off by default
+  image: ""                    # default: <registry>/alchemi-clamav:<digest> — see templates/clamav.yaml
+nginxRouter:
+  image: ""                    # default: <registry>/nginx:1.25-alpine
+
+# ---- AIOS workers + data plane + sandbox image pins -------------------------
+# Three workers (learning / files / maintenance) + shared RWX PVC + alchemi-image-pins
+# ConfigMap. ON by default (core feature) — requires a ReadWriteMany StorageClass.
+# Longhorn RWX: enable via a custom StorageClass with accessModes:ReadWriteMany
+# (e.g. longhorn-rwx). Set aios.dataPlane.storageClass to your RWX SC name.
+# AIOS workers share alchemi-ai-config + alchemi-ai-secrets (no separate config).
+# aios.workers.tag is INDEPENDENT of global.image.tag — AIOS has a slower cadence.
+aios:
+  enabled: true              # ON by default — AIOS is a CORE feature (Files UI + the agent
+                             # "computer"/sandbox). It's light (one alchemi-aios image × 3 small
+                             # workers), unlike the guardrails tier. The shared data-plane PVC is
+                             # created regardless (aios-data-plane-pvc.yaml) so web/ai always mount
+                             # it; this flag toggles only the always-on worker tier + bridge.
+  # cc-python-box = the code-execution sandbox the AIOS copilot runs (ai SANDBOX_IMAGE_REF).
+  # A version tag (NOT :latest) makes imagePullPolicy IfNotPresent -> pull once/node + cache.
+  # Distinct from aios.sandbox below (the aios-sandbox app image, pinned via image-pins).
+  codeSandboxTag: "1.0.0"
+  workers:
+    image: ""                  # default: <registry>/alchemi-aios:<workers.tag>
+    tag: "1.1.0"         # retag separately; bump when AIOS rebuilds
+  sandbox:
+    image: ""                  # default: <registry>/aios-sandbox:<sandbox.tag>
+    tag: "1.1.0"         # pinned in alchemi-image-pins ConfigMap (compute-api reads it)
+    # ref MUST be a DIGEST-pinned ref for the AIOS "computer" (runtime-v2) to start:
+    # runtime_image.validate_runtime_image rejects tag-only refs ("must use an immutable
+    # digest"). This same ref is (a) written into alchemi-image-pins and (b) seeded as the
+    # governed AIOS image + account default (seed-configmap.yaml, via AIOS_SANDBOX_IMAGE_REF).
+    # BUMP THIS PER RELEASE — the digest changes every product version. tag@sha256 form is fine.
+    ref: "alchemiacr.azurecr.io/aios-sandbox:1.1.0@sha256:63ff82510751b3c9351ab229799850d976ed6f956354a17392232f36cdda15c5"
+  dataPlane:
+    storageClass: "longhorn"   # MUST support ReadWriteMany; set to your RWX SC
+    # 20Gi trial default (was 256Gi — a production size that, ×3 Longhorn replicas,
+    # demanded ~768GB and left the volume "faulted"/unschedulable on modest clusters,
+    # hanging the whole install). AIOS file storage grows with use — increase for prod.
+    storage: "20Gi"
+
+# ---- Subchart wiring — MUST match the APISIX routes + global.namespaces --------
+# The app subcharts set their own `namespace` + service name (via fullname). The
+# routes Job points at fixed DNS (alchemi-web.alchemi.svc:3000, keycloak.auth.svc:8080,
+# alchemi-zenith.alchemi.svc:3000), so pin fullnameOverride + namespace to match.
+# Also clear the AKS `nodeSelector` (agentpool=... won't match RKE2) and point
+# imagePullSecrets at our secret — VALIDATED live on the RKE2 test cluster.
+# NOTE: values.yaml can't template — these are STATIC and must track global.namespaces
+# (app=alchemi, auth=auth). Per-subchart image.tag must also be set to the release
+# version at install (the app charts default to an old tag); the test used 1.0.22-rc3.
+# ---- SUSE/RKE2 node pools -------------------------------------------------------
+# apppool  = aif-wk-1, aif-wk-2, aif-cp-1  (label: agentpool=apppool)
+# katapool = aif-kata-1                      (label: agentpool=katapool, kata=true)
+#                                             taint:  pool=kata:NoSchedule
+# App workloads target apppool. Kata workloads are routed via RuntimeClass (no manual
+# nodeSelector needed — Kubernetes injects it from the RuntimeClass.scheduling block).
+# On AKS the pool names differ (e.g. usernpv2, katapool) — override nodeSelector per env.
+# ---------------------------------------------------------------------------
+alchemi-web:
+  fullnameOverride: alchemi-web
+  namespace: alchemi
+  nodeSelector: { agentpool: apppool }
+  imagePullSecrets: [{ name: alchemi-registry }]
+  image: { tag: "1.1.0", pullPolicy: IfNotPresent }    # MUST match the migrator/releaseVersion — subcharts do NOT inherit global.image.tag; their baked default (1.0.19) is a schema-behind build
+  config: { create: false, existingConfigMap: alchemi-web-config }
+  secret: { create: false, existingSecret: alchemi-web-secrets }
+  # Mount the AIOS shared data plane at /mnt/aios-data — the web app serves the
+  # Files UI off this RWX share (patched subchart; see PATCHED-SUBCHARTS.md).
+  aiosDataPlane: { enabled: true, claimName: aios-data-plane, mountPath: /mnt/aios-data }
+# ai/compute-api/worker/zenith: config/secret are now RENDERED BY THE UMBRELLA
+# (templates/app-config.yaml + the per-app Secrets in secrets.yaml), so each subchart
+# is create:false and wired to the umbrella-owned objects via its own hook —
+# ai/worker: existingConfigMap/existingSecret · zenith: envFrom · compute-api: extraEnvFrom.
+alchemi-ai:
+  fullnameOverride: alchemi-ai
+  namespace: alchemi
+  nodeSelector: { agentpool: apppool }
+  imagePullSecrets: [{ name: alchemi-registry }]
+  image: { tag: "1.1.0", pullPolicy: IfNotPresent }    # match migrator/releaseVersion (subcharts don't inherit global.image.tag)
+  config: { create: false, existingConfigMap: alchemi-ai-config }
+  secret: { create: false, existingSecret: alchemi-ai-secrets }
+  # Mount the AIOS shared data plane at /mnt/aios-data — ai reads/writes agent
+  # ~/Files here (STORAGE_FS_ROOT, AIOS_STORAGE_PROVIDER=fs). Patched subchart.
+  aiosDataPlane: { enabled: true, claimName: aios-data-plane, mountPath: /mnt/aios-data }
+  # alchemi-provider-secrets holds LLM API keys: either ESO-synced (openbao.enabled=true)
+  # or a plain k8s Secret rendered by secrets.yaml (openbao.enabled=false).
+  extraEnvFrom:
+    - secretRef: { name: alchemi-provider-secrets }
+alchemi-compute-api:
+  fullnameOverride: alchemi-compute-api
+  namespace: alchemi
+  nodeSelector: { agentpool: apppool }
+  imagePullSecrets: [{ name: alchemi-registry }]
+  image: { tag: "1.1.0", pullPolicy: IfNotPresent }    # subchart default 1.0.0 is not in ACR; rc9 exists
+  # compute-api always creates its own <fullname>-config from flat .Values.config;
+  # the umbrella layers domain-derived overrides + the secret via extraEnvFrom.
+  secret: { create: false }
+  extraEnvFrom:
+    - configMapRef: { name: alchemi-compute-api-endpoints }
+    - secretRef: { name: alchemi-compute-api-secrets }
+alchemi-worker:
+  fullnameOverride: alchemi-worker
+  namespace: alchemi
+  nodeSelector: { agentpool: apppool }
+  imagePullSecrets: [{ name: alchemi-registry }]
+  image: { tag: "1.1.0", pullPolicy: IfNotPresent }    # match migrator/releaseVersion (subcharts don't inherit global.image.tag)
+  config: { create: false, existingConfigMap: alchemi-worker-config }
+  secret: { create: false, existingSecret: alchemi-worker-secrets }
+  extraEnvFrom:
+    - secretRef: { name: alchemi-provider-secrets }
+alchemi-zenith:
+  fullnameOverride: alchemi-zenith
+  namespace: alchemi
+  nodeSelector: { agentpool: apppool }
+  imagePullSecrets: [{ name: alchemi-registry }]
+  image: { tag: "1.1.0", pullPolicy: IfNotPresent }    # match migrator/releaseVersion (subcharts don't inherit global.image.tag)
+  config: { create: false }
+  secret: { create: false }
+  envFrom:
+    - configMapRef: { name: alchemi-zenith-config }
+    - secretRef: { name: alchemi-zenith-secrets }
+# keycloak: service is hardcoded "keycloak" (port 8080). dbUrlEnabled:false stops the
+# chart hardcoding ?sslmode=require (our bundled pgvector has no SSL) — the KC_DB_URL
+# with sslmode=disable comes from the keycloak-config ConfigMap instead.
+# keycloak: SA + keycloak-config/keycloak-secrets are RENDERED BY THE UMBRELLA
+# (keycloak-support.yaml + secrets.yaml); realm/clients/first-user by the
+# keycloak-realm-job. dbUrlEnabled:false stops the subchart hardcoding ?sslmode=require.
+alchemi-keycloak:
+  namespace: auth
+  nodeSelector: { agentpool: apppool }
+  dbUrlEnabled: false
+  imagePullSecrets: [{ name: alchemi-registry }]
+  image:
+    tag: "26.6.3-alchemi.30"
+    pullPolicy: IfNotPresent   # version tag -> pull once/node + cache (no per-start ACR check)
+  serviceAccountName: keycloak
+  envFrom:
+    - configMapRef: { name: keycloak-config }
+    - secretRef: { name: keycloak-secrets }
+# Guardrails: 6 AI-safety microservices deployed INTO the app namespace (alchemi) so
+# the shared alchemi-registry pull secret + namespace already exist. Product-aligned
+# to 1.1.0 (matches azure-marketplace/images/images.yaml). SUSE/RKE2 overrides:
+#   serviceAccountName: default        — the AKS guardrails-keyvault-sa (workload identity) is absent
+#   nodeSelector: {agentpool: apppool} — matches every app tier; the SUSE install labels the
+#                                        worker nodes agentpool=apppool (subchart default usernpv2
+#                                        is the wrong AKS pool). Keeps guardrails off the kata pool.
+#   secret.create: false               — the umbrella owns guardrails-<svc>-secrets so the token is
+#                                        the single shared INTERNAL_TOKEN (see templates/secrets.yaml)
+alchemi-guardrails:
+  namespace: alchemi
+  serviceAccountName: default
+  nodeSelector: { agentpool: apppool }
+  imagePullSecrets:
+    - name: alchemi-registry
+  secret:
+    create: false
+  config:
+    create: true
+  contentFilter:   { image: { tag: "1.1.0", pullPolicy: IfNotPresent } }
+  secretDetection: { image: { tag: "1.1.0", pullPolicy: IfNotPresent } }
+  jailbreak:       { image: { tag: "1.1.0", pullPolicy: IfNotPresent } }
+  pii:             { image: { tag: "1.1.0", pullPolicy: IfNotPresent } }
+  topical:         { image: { tag: "1.1.0", pullPolicy: IfNotPresent } }
+  toxic:           { image: { tag: "1.1.0", pullPolicy: IfNotPresent } }
+
+# ---- Kata Containers — VM-level pod isolation (requires install-kata.sh on workers) ----
+kata:
+  enabled: true               # aif-kata-1 provisioned + validated 2026-08-26
+  # Dedicated kata pool: aif-kata-1 (Standard_D4s_v5, 4vCPU/16GB)
+  # Taint:  pool=kata:NoSchedule — only pods with the toleration land here
+  # Label:  kata=true            — nodeSelector target
+  #
+  # Run add-kata-node.sh to provision the VM, join the cluster, install kata,
+  # apply the taint/labels, and enable this to true afterward.
+  taintKey: pool              # taint key applied to the kata node
+  taintValue: kata            # taint value
+  # To run any workload in kata, add to the pod spec:
+  #   runtimeClassName: kata
+  #   nodeSelector: {kata: "true"}
+  #   tolerations:
+  #   - {key: pool, operator: Equal, value: kata, effect: NoSchedule}
+
+# ---- external-secrets subchart — controls the ESO install ------------------
+external-secrets:
+  installCRDs: false             # CRDs are vendored in crds/ (installed BEFORE templates
+                                 # so the ClusterSecretStore/ExternalSecret validate). Do
+                                 # NOT re-enable — the subchart templates them into the same
+                                 # apply pass, which fails "no matches for kind" at build time.
+  webhook:
+    create: false                # skip the validating webhook on small clusters
+  certController:
+    create: false                # skip cert rotation controller (not needed when webhook off)
+  imagePullSecrets: [{ name: alchemi-registry }]   # ESO operator image is in ACR -> needs the pull secret
+  image:
+    repository: alchemiacr.azurecr.io/platform/external-secrets
+    tag: "v0.10.3"

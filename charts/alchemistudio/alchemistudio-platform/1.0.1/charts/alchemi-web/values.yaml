@@ -1,0 +1,395 @@
+replicaCount: 1
+
+image:
+  repository: alchemiacr.azurecr.io/alchemi-web
+  tag: "1.0.19"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3000
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+probes:
+  liveness:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+nodeSelector:
+  agentpool: apppool
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: alchemi-web
+          topologyKey: kubernetes.io/hostname
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+env: []
+
+envFrom:
+  - configMapRef:
+      name: alchemi-web-config
+  - secretRef:
+      name: alchemi-web-secrets
+
+namespace: alchemi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryAverageValue: 820Mi
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+vpa:
+  enabled: false
+  updateMode: "Off"
+  minAllowed:
+    cpu: 100m
+    memory: 256Mi
+  maxAllowed:
+    cpu: 2000m
+    memory: 4Gi
+
+# ---------------------------------------------------------------------------
+# ConfigMap — non-secret environment variables
+# ---------------------------------------------------------------------------
+# config.create: render a ConfigMap from config.data and mount it via envFrom.
+# config.existingConfigMap: skip creation and reference this name instead.
+# ---------------------------------------------------------------------------
+config:
+  create: true
+  existingConfigMap: ""
+  data:
+    # --- Observability (OTEL) ---
+    OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    OTEL_SERVICE_NAME: "alchemi-web"
+
+    # --- Environment ---
+    ENVIRONMENT: "production"
+    NODE_ENV: "production"
+    NEXT_TELEMETRY_DISABLED: "1"
+    PORT: "3000"
+
+    # --- Public URLs ---
+    NEXT_PUBLIC_API_URL: ""
+    NEXT_PUBLIC_BASE_URL: ""
+    NEXTAUTH_URL: ""
+    AUTH_TRUST_HOST: "true"
+    BASE_URL: ""
+
+    # --- Internal Service URLs ---
+    AI_API_URL: "http://alchemi-ai:8000"
+    ALCHEMI_AI_BRIDGE_URL: "http://alchemi-ai:8000"
+    WORKFLOW_AI_BRIDGE_BASE_URL: "http://alchemi-ai:8000"
+    ALCHEMI_COMPUTE_API_URL: "http://alchemi-compute-api:8000"
+    COMPUTE_API_URL: "http://alchemi-compute-api:8000"
+
+    # --- AI Models (Frontend) ---
+    NEXT_PUBLIC_PLANNING_MODEL: "senior-coder"
+    NEXT_PUBLIC_IMPLEMENT_MODEL: "senior-coder"
+    NEXT_PUBLIC_INIT_MODEL: "claude-sonnet-4-20250514"
+
+    # --- Auth Provider ---
+    # AUTH_PROVIDER=KEYCLOAK uses KEYCLOAK_* below; ZITADEL uses ZITADEL_* (legacy).
+    AUTH_PROVIDER: "KEYCLOAK"
+
+    # --- Keycloak Auth ---
+    KEYCLOAK_ISSUER: ""
+    KEYCLOAK_REALM: ""
+    KEYCLOAK_CLIENT_ID: ""
+    KEYCLOAK_ADMIN_CLIENT_ID: ""
+    KEYCLOAK_ADMIN_REALM: ""
+    KEYCLOAK_SPI_AUTH_USERNAME: ""
+
+    # --- Zitadel Auth (legacy — retained for one-line rollback) ---
+    NEXT_PUBLIC_ZITADEL_ISSUER: ""
+    ZITADEL_ISSUER: ""
+    ZITADEL_MANAGEMENT_API_URL: ""
+    REDIRECT_SIGNUP_URI: ""
+    REDIRECT_FORGOT_PASSWORD_URI: ""
+
+    # --- PostgreSQL ---
+    DB_HOST: ""
+    DB_PORT: "5432"
+    DB_NAME: ""
+    DB_SSL: "true"
+    DB_USER: ""
+    POSTGRES_POOL_MIN: "0"
+    POSTGRES_POOL_MAX: "5"
+    POSTGRES_POOL_IDLE: "10000"
+    POSTGRES_POOL_ACQUIRE: "30000"
+    POSTGRES_POOL_EVICT: "1000"
+
+    # --- Redis ---
+    REDIS_HOST: ""
+    REDIS_PORT: ""
+    REDIS_TLS: "true"
+    REDIS_TLS_REJECT_UNAUTHORIZED: "false"
+    REDIS_USERNAME: "default"
+    REDIS_DB: "0"
+    REDIS_CLUSTER: "false"
+
+    # --- Azure OpenAI ---
+    AZURE_OPENAI_API_VERSION: "2025-02-01-preview"
+    OPENAI_API_VERSION: "2025-02-01-preview"
+
+    # --- Model Configuration ---
+    MINI_MODEL: "gpt-4o-mini"
+    DEEP_MODEL: "gpt-4o"
+    REASONING_MODEL: "o3-mini"
+    FAST_MODEL: "llama-3.1-70b-versatile"
+
+    # --- LangChain ---
+    LANGCHAIN_TRACING_V2: ""
+    LANGCHAIN_PROJECT: ""
+
+    # --- Feature Flags ---
+    ENABLE_SEARCH_SELECTION: "true"
+    ENABLE_AUTONOMOUS_WORKER: "1"
+    AUTONOMOUS_POLL_SECONDS: "60"
+
+    # --- File Upload Storage ---
+    FILE_UPLOAD_STORAGE_ACCOUNT: ""
+    FILE_UPLOAD_STORAGE_CONTAINER: "alchemi-images"
+
+    # --- Console Storage ---
+    AZURE_CONSOLE_STORAGE_ACCOUNT_NAME: ""
+    AZURE_CONSOLE_STORAGE_CONTAINER_NAME: "console-uploads"
+
+    # --- Sandbox/Proxy ---
+    PROXY_URL: ""
+
+    # --- Support ---
+    SUPPORT_ADMIN_EMAILS: ""
+    SUPPORT_TICKET_ASSIGN_URL: ""
+
+    # --- Razorpay ---
+    RAZORPAY_API_URL: "https://api.razorpay.com"
+
+    # --- PostHog ---
+    POSTHOG_HOST: "https://us.i.posthog.com"
+
+    # --- OpenObserve ---
+    OPENOBSERVE_ENABLED: "true"
+    OPENOBSERVE_ENV: ""
+    OPENOBSERVE_URL: ""
+    OPENOBSERVE_USER: ""
+    OPENOBSERVE_ORG: "default"
+    OPENOBSERVE_TIMEOUT: "10.0"
+
+    # --- Guardrails ---
+    GUARDRAILS_TIMEOUT: "10000"
+
+    # --- Default User Profile ---
+    DEFAULT_USER_PROFILE_ADMIN_ID: ""
+
+    # --- Feature Flags: Cockpit ---
+    COCKPIT_ENABLE_AGENT_CREATION: "true"
+    COCKPIT_ENABLE_AGENT_MARKETPLACE: "true"
+    COCKPIT_ENABLE_OPENAPI_MCP_MARKETPLACE: "true"
+    COCKPIT_ENABLE_USERS: "true"
+    COCKPIT_ENABLE_GROUPS_TEAMS: "true"
+    COCKPIT_ENABLE_GUARDRAILS: "true"
+    COCKPIT_ENABLE_AUDIT_LOGS: "true"
+    COCKPIT_ENABLE_INTEGRATIONS_OPENAPI: "true"
+    COCKPIT_ENABLE_INTEGRATIONS_MCP: "true"
+    COCKPIT_ENABLE_BUDGETS: "true"
+    COCKPIT_ENABLE_COST_TRACKING: "true"
+    COCKPIT_ENABLE_ACCOUNT_WALLET: "true"
+    COCKPIT_ENABLE_CONNECTIONS: "true"
+    COCKPIT_ENABLE_WORKFLOWS: "true"
+    COCKPIT_ENABLE_CATALOGS: "false"
+    COCKPIT_ENABLE_ACCESS_POLICIES: "true"
+    COCKPIT_ENABLE_SUPPORT_TICKETS: "true"
+    COCKPIT_ENABLE_NOTIFICATION_TEMPLATES: "true"
+    COCKPIT_ENABLE_COPILOT_CONTROL: "true"
+    COCKPIT_ENABLE_CONSOLE_GATEWAY: "false"
+    COCKPIT_ENABLE_COMPUTE: "true"
+
+    # --- Feature Flags: Copilot ---
+    COPILOT_ENABLE_MARKETPLACE: "true"
+    COPILOT_ENABLE_INTEGRATIONS: "true"
+    COPILOT_ENABLE_AGENT_CREATION: "true"
+    COPILOT_ENABLE_AGENT_EDIT: "true"
+    COPILOT_ENABLE_PREVIOUS_CONVERSATIONS: "true"
+    COPILOT_ENABLE_WORKSPACES: "true"
+    COPILOT_ENABLE_WORKSPACE_MEMBERS: "true"
+    COPILOT_ENABLE_WORKSPACE_SHARING: "true"
+    COPILOT_ENABLE_KNOWLEDGE: "true"
+    COPILOT_ENABLE_AUTONOMOUS_SCHEDULING: "true"
+    COPILOT_ENABLE_CHAT: "true"
+    COPILOT_ENABLE_ARTIFACTS: "true"
+    COPILOT_ENABLE_NEW_THREAD: "true"
+    COPILOT_ENABLE_CONTEXT_MANAGEMENT: "true"
+    COPILOT_ENABLE_BRANCHING: "true"
+    COPILOT_ENABLE_PUBLISHING: "true"
+    COPILOT_ENABLE_PUBLISH: "true"
+    COPILOT_ENABLE_NOTIFICATIONS: "true"
+    # Set "false" to hide AIOS (AI-first virtual computer). Backend gating is
+    # separate (AIOS_ENABLE_HERMES_RUNTIME + AIOS_ENABLE_BROWSER on ai-config).
+    COPILOT_ENABLE_AIOS: "false"
+
+    # --- Feature Flags: Console ---
+    CONSOLE_ENABLE_OVERVIEW: "true"
+    CONSOLE_ENABLE_DIRECTORY_GROUPS: "true"
+    CONSOLE_ENABLE_DIRECTORY_USERS: "true"
+    CONSOLE_ENABLE_DIRECTORY_ACCESS_GROUPS: "true"
+    CONSOLE_ENABLE_GATEWAY_MODELS: "true"
+    CONSOLE_ENABLE_GATEWAY_VIRTUAL_KEYS: "true"
+    CONSOLE_ENABLE_GATEWAY_MCP_SERVERS: "true"
+    CONSOLE_ENABLE_GATEWAY_POLICIES: "true"
+    CONSOLE_ENABLE_GATEWAY_GUARDRAILS: "true"
+    CONSOLE_ENABLE_OPERATIONS_BUDGETS: "true"
+    CONSOLE_ENABLE_OPERATIONS_USAGE: "true"
+    CONSOLE_ENABLE_OPERATIONS_SPEND: "true"
+    CONSOLE_ENABLE_OPERATIONS_LOGS: "true"
+    CONSOLE_ENABLE_ASSETS_PROMPTS: "true"
+    CONSOLE_ENABLE_ASSETS_CACHING: "true"
+    CONSOLE_ENABLE_ASSETS_TAGS: "true"
+    CONSOLE_ENABLE_ASSETS_VECTOR_STORES: "true"
+    CONSOLE_ENABLE_DATA_FILES: "true"
+    # Disabled: Cortex graph store is not deployed on-prem v5. Enable when Cortex lands.
+    CONSOLE_ENABLE_DATA_GRAPH_STORE: "false"
+    CONSOLE_WORKFLOW_REDESIGN: "true"
+
+# ---------------------------------------------------------------------------
+# Secret — sensitive environment variables
+# ---------------------------------------------------------------------------
+# secret.create: render a Secret from secret.data and mount it via envFrom.
+# secret.existingSecret: skip creation and reference this name instead
+#   (use with External Secrets Operator in nonprod/prod).
+# All keys default to "" — set real values per-environment via --set or
+# a values override file; never commit real secrets here.
+# ---------------------------------------------------------------------------
+secret:
+  create: true
+  existingSecret: ""
+  data:
+    # --- Database ---
+    DB_PASSWORD: ""
+    DB_USER: ""
+    DATABASE_URL: ""
+    POSTGRES_URL: ""
+    POSTGRES_URI: ""
+    APP_POSTGRES_URI: ""
+
+    # --- Redis ---
+    REDIS_PASSWORD: ""
+    REDIS_URL: ""
+
+    # --- NextAuth ---
+    NEXTAUTH_SECRET: ""
+
+    # --- Keycloak ---
+    KEYCLOAK_CLIENT_SECRET: ""
+    KEYCLOAK_ADMIN_CLIENT_SECRET: ""
+    KEYCLOAK_SPI_AUTH_PASSWORD_HASH: ""
+
+    # --- Zitadel (legacy) ---
+    NEXT_PUBLIC_ZITADEL_CLIENT_ID: ""
+    NEXT_PUBLIC_ZITADEL_CLIENT_SECRET: ""
+    ZITADEL_CLIENT_ID: ""
+    ZITADEL_CLIENT_SECRET: ""
+    ZITADEL_PAT: ""
+    ZITADEL_WEBHOOK_SECRET: ""
+
+    # --- Azure Storage (file upload) ---
+    AZURE_STORAGE_ACCOUNT: ""
+    AZURE_STORAGE_KEY: ""
+    AZURE_STORAGE_CONNECTION_STRING: ""
+    AZURE_STORAGE_ACCOUNT_NAME: ""
+    AZURE_STORAGE_ACCOUNT_KEY: ""
+    FILE_UPLOAD_STORAGE_SAS_TOKEN: ""
+
+    # --- Azure Storage (console uploads) ---
+    AZURE_CONSOLE_STORAGE_ACCOUNT_KEY: ""
+    AZURE_CONSOLE_STORAGE_CONNECTION_STRING: ""
+
+    # --- Payments ---
+    RAZORPAY_KEY_ID: ""
+    RAZORPAY_KEY_SECRET: ""
+
+    # --- PostHog ---
+    POSTHOG_API_KEY: ""
+    POSTHOG_KEY: ""
+
+    # --- OpenObserve ---
+    OPENOBSERVE_PASSWORD: ""
+
+    # --- Encryption / Token Security ---
+    ALCHEMI_ENCRYPTION_KEY: ""
+    JWT_SECRET: ""
+    SESSION_SECRET: ""
+
+    # --- Internal Service Auth ---
+    ALCHEMI_AI_INTERNAL_TOKEN: ""
+    ALCHEMI_COMPUTE_INTERNAL_TOKEN: ""
+    COMPUTE_INTERNAL_TOKEN: ""
+    ACCESS_TOKEN_PEPPER: ""
+    HEALTH_CHECK_TOKEN: ""
+
+    # --- Integrations ---
+    COMPOSIO_API_KEY: ""
+    LANGCHAIN_API_KEY: ""
+    LANGSMITH_API_KEY: ""
+
+    # --- Event Notifications (Azure Event Grid — optional) ---
+    EVENT_NOTIFICATION_ENDPOINT: ""
+    EVENT_NOTIFICATION_TOPIC_KEY: ""
+
+# AIOS shared data plane mount (umbrella sets enabled=true). See templates/deployment.yaml.
+aiosDataPlane:
+  enabled: false
+  claimName: aios-data-plane
+  mountPath: /mnt/aios-data

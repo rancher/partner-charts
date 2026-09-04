@@ -1,0 +1,166 @@
+# =============================================================================
+# nginx-router — sandbox subdomain reverse proxy
+#
+# APISIX routes *.sandbox.<domain> traffic to this nginx with the original
+# X-Forwarded-Host header intact. nginx extracts the sandbox ID from the
+# subdomain and proxies to the per-sandbox Kubernetes Service:
+#   svc-albox-app-<id>.<sandbox-ns>.svc.cluster.local
+#
+# Pattern matching (from dev/demo):
+#   Runtime sandbox: <numericTimestamp>-app-<id>-sandbox.<domain>
+#   Published app:   <slug>-sandbox.<domain>   -> alchemi-web (SSR)
+#
+# The nginx.conf is domain-specific (embedded via ConfigMap).
+# Deployment is gated by computeApi.enabled — no compute-api = no sandboxes.
+# =============================================================================
+{{- if .Values.computeApi.enabled }}
+{{- $ns        := .Values.global.namespaces.app -}}
+{{- $sandboxns := .Values.global.namespaces.sandbox -}}
+{{- $domain    := required "global.domain is required" .Values.global.domain -}}
+{{- $appns     := $ns -}}
+{{- $nginxImg  := .Values.nginxRouter.image | default (printf "%s/nginx:1.25-alpine" .Values.global.image.registry) -}}
+# ---- nginx config with templated domain + sandbox namespace -----------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-nginx-router-config
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app: nginx-router }
+data:
+  nginx.conf: |
+    worker_processes auto;
+    error_log /dev/stderr warn;
+    pid /tmp/nginx.pid;
+    events { worker_connections 1024; }
+    http {
+      log_format main '$remote_addr - $request - $http_x_forwarded_host - $status';
+      access_log /dev/stdout main;
+
+      # Required when proxy_pass uses a variable — nginx won't resolve $backend at
+      # request time without an explicit resolver. RKE2 CoreDNS ClusterIP.
+      resolver 10.43.0.10 valid=30s ipv6=off;
+
+      # Map X-Forwarded-Host to a sandbox_id extracted from the runtime subdomain.
+      # Runtime pattern: <numericTs>-app-<sandbox_id>-sandbox.<domain>
+      # Published app:   <slug>-sandbox.<domain>  (no numeric prefix) -> empty id
+      map $http_x_forwarded_host $sandbox_id {
+        ~^(?:[0-9]+-app-)?(?<id>[a-z0-9][a-z0-9-]*)-sandbox\.{{ $domain | replace "." "\\." }}$ $id;
+        default "";
+      }
+
+      # Is this a runtime sandbox (has a numeric timestamp prefix)?
+      map $http_x_forwarded_host $is_runtime {
+        ~^[0-9]+-app-[a-z0-9][a-z0-9-]*-sandbox\.{{ $domain | replace "." "\\." }}$ "1";
+        default "0";
+      }
+
+      server {
+        listen 8080;
+        server_name _;
+
+        # --- Proxy all sandbox + web traffic -----------------------------------
+        location / {
+          # proxy_set_header is NOT allowed inside nginx if blocks — set unconditionally.
+          proxy_set_header Host $http_x_forwarded_host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+          proxy_connect_timeout 10s;
+          proxy_send_timeout    60s;
+          proxy_read_timeout    60s;
+
+          # Select upstream via variable so nginx resolves at request time via resolver above.
+          # if is only used to set the $backend variable — proxy_pass is after the if block.
+          set $backend "alchemi-web.{{ $appns }}.svc.cluster.local:3000";
+          if ($is_runtime = "1") {
+            set $backend "svc-albox-app-$sandbox_id.{{ $sandboxns }}.svc.cluster.local";
+          }
+          proxy_pass http://$backend;
+        }
+
+        # --- Health endpoint for readiness probe ------------------------------
+        location /healthz {
+          return 200 "ok\n";
+          add_header Content-Type text/plain;
+        }
+      }
+    }
+---
+# ---- Deployment --------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-nginx-router
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: nginx-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: nginx-router }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: nginx-router
+        app.kubernetes.io/name: nginx-router
+    spec:
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      nodeSelector: { agentpool: apppool }
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: nginx
+          image: {{ $nginxImg }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits:   { cpu: 500m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 101        # nginx uid in the alpine image
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true }
+            - { name: tmp,    mountPath: /tmp }
+            - { name: cache,  mountPath: /var/cache/nginx }
+            - { name: run,    mountPath: /var/run }
+      volumes:
+        - name: config
+          configMap: { name: alchemi-nginx-router-config }
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+---
+# ---- Service -----------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-nginx-router
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app: nginx-router }
+spec:
+  selector: { app: nginx-router }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+{{- end }}

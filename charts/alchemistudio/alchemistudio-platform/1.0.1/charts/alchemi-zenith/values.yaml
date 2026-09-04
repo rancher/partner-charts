@@ -1,0 +1,197 @@
+replicaCount: 1
+
+image:
+  repository: alchemiacr.azurecr.io/alchemi-zenith
+  tag: "1.0.19"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3000
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+# Zenith uses tcpSocket probes (no public /health endpoint)
+probes:
+  liveness:
+    tcpSocket:
+      port: 3000
+    initialDelaySeconds: 45
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    tcpSocket:
+      port: 3000
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+nodeSelector:
+  agentpool: apppool
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: alchemi-zenith
+          topologyKey: kubernetes.io/hostname
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+env: []
+
+# Extra envFrom entries appended unconditionally to the container's envFrom list.
+# When config.create / secret.create are true the chart adds those refs
+# automatically — no need to duplicate them here.
+envFrom: []
+
+namespace: alchemi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+  targetMemoryAverageValue: 768Mi
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+vpa:
+  enabled: false
+  updateMode: "Off"
+  minAllowed:
+    cpu: 50m
+    memory: 128Mi
+  maxAllowed:
+    cpu: 2000m
+    memory: 2Gi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ConfigMap — set create: true to let the chart own the ConfigMap.
+# When false (default), wire env via envFrom or an ExternalSecret-managed CM.
+# Source of truth for key names: onprem-releases v5.1.0 alchemi-zenith_configmap.yaml
+# + cluster-deployments-nonprod apps/alchemi-{dev,demo}/zenith/zenith-config.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+config:
+  create: false
+  data:
+    # Environment
+    NODE_ENV: ""
+    NEXT_TELEMETRY_DISABLED: "1"
+    ENVIRONMENT: ""
+
+    # Public URLs
+    # NEXT_PUBLIC_API_URL / BASE_URL used by on-prem deployments.
+    NEXT_PUBLIC_API_URL: ""
+    BASE_URL: ""
+    NEXTAUTH_URL: ""
+    # AUTH_TRUST_HOST: NextAuth v4 reverse-proxy fix — derives callback URL
+    # from x-forwarded-host so APISIX-proxied requests resolve correctly.
+    AUTH_TRUST_HOST: "true"
+
+    # Auth provider selector
+    # KEYCLOAK → org provisioning via Keycloak Admin REST API (v5 default)
+    # ZITADEL  → legacy Zitadel Management API (one-line rollback)
+    AUTH_PROVIDER: "KEYCLOAK"
+
+    # Keycloak — Admin REST API (active when AUTH_PROVIDER=KEYCLOAK)
+    KEYCLOAK_ISSUER: ""
+    KEYCLOAK_REALM: ""
+    KEYCLOAK_ADMIN_CLIENT_ID: ""
+    # Realm that owns alchemi-admin-svc; usually equals KEYCLOAK_REALM.
+    KEYCLOAK_ADMIN_REALM: ""
+
+    # Zitadel — legacy invite flow (AUTH_PROVIDER=ZITADEL rollback path)
+    ZITADEL_ISSUER: ""
+    ZITADEL_MANAGEMENT_API_URL: ""
+    ZITADEL_DEFAULT_ORG_ID: ""
+
+    # Invite relay — registration links routed via alchemi-web /api/invite/activate
+    ALCHEMI_WEB_BASE_URL: ""
+
+    # Internal service URLs (cluster-local, service-to-service)
+    AI_API_URL: "http://alchemi-ai:8000"
+    DB_TOOLS_API_URL: "http://alchemi-migrator-api:8200"
+
+    # Feature flags
+    ENABLE_SETUP_CONTROL: "true"
+
+    # PostgreSQL
+    DB_HOST: ""
+    DB_PORT: "5432"
+    DB_NAME: ""
+    DB_SSL: "true"
+    DB_USER: ""
+
+    # Redis — BullMQ email queue
+    # REDIS_CLUSTER must stay "false"; BullMQ requires non-cluster Redis.
+    REDIS_HOST: ""
+    REDIS_PORT: ""
+    REDIS_TLS: "true"
+    REDIS_USERNAME: "default"
+    REDIS_DB: "0"
+    REDIS_CLUSTER: "false"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Secret — set create: true to let the chart own the Secret.
+# All values default to ""; supply real values via --set, a Helm secrets
+# manager (Vault, SOPS), or an ExternalSecret pointing at Key Vault.
+# Source of truth for key names: onprem-releases v5.1.0 alchemi-zenith_secrets.yaml
+# + cluster-deployments-nonprod apps/alchemi-{dev,demo}/zenith/zenith-external-secret.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+secret:
+  create: false
+  data:
+    # NextAuth
+    NEXTAUTH_SECRET: ""
+    # Superadmin credentials
+    SUPERADMIN_USERNAME: ""
+    SUPERADMIN_PASSWORD_HASH: ""
+    # Database
+    DB_PASSWORD: ""
+    ALCHEMI_APP_DATABASE_URL: ""
+    # Encryption
+    ALCHEMI_ENCRYPTION_KEY: ""
+    # Keycloak admin service-account (active when AUTH_PROVIDER=KEYCLOAK)
+    KEYCLOAK_ADMIN_CLIENT_SECRET: ""
+    # Zitadel PAT (legacy rollback)
+    ZITADEL_PAT: ""
+    # Redis
+    REDIS_PASSWORD: ""
+    # Internal service auth — must match alchemi-ai-secrets
+    ALCHEMI_AI_INTERNAL_TOKEN: ""
+    # Internal service auth — must match alchemi-migrator-api-secrets
+    ALCHEMI_DB_TOOLS_INTERNAL_TOKEN: ""

@@ -1,0 +1,95 @@
+# =============================================================================
+# Alchemi Workflow Runtime — Deployment + ServiceAccount + Service
+# Single pod: api + runner + scheduler (node scripts/supervisor.mjs start).
+# Config/secrets rendered by app-config.yaml + secrets.yaml respectively.
+# Gated by workflow.enabled (default: true).
+# =============================================================================
+{{- if .Values.workflow.enabled }}
+{{- $ns  := .Values.global.namespaces.app -}}
+{{- $tag := .Values.workflow.image.tag | default .Values.global.image.tag -}}
+{{- $img := .Values.workflow.image.ref | default (printf "%s/alchemi-workflow:%s" .Values.global.image.registry $tag) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alchemi-workflow
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-workflow
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-workflow
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-workflow
+    app.kubernetes.io/component: runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alchemi-workflow
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: alchemi-workflow
+        app.kubernetes.io/name: alchemi-workflow
+    spec:
+      serviceAccountName: alchemi-workflow
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      nodeSelector: { agentpool: apppool }
+      containers:
+        - name: alchemi-workflow
+          image: {{ $img }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef: { name: alchemi-workflow-config }
+            - secretRef: { name: alchemi-workflow-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-workflow
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/name: alchemi-workflow
+spec:
+  type: ClusterIP
+  selector:
+    app: alchemi-workflow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+{{- end }}

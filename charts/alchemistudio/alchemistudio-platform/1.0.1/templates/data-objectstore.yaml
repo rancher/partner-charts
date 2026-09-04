@@ -1,0 +1,146 @@
+# =============================================================================
+# SeaweedFS bundled object store — S3-compatible API on port 8333.
+#
+# SeaweedFS does NOT have an Azure Blob API (no -azblob flag exists in the binary).
+# It exposes S3. The AI app must use S3 env vars when objectStore.mode=bundled:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL, AWS_DEFAULT_REGION
+# These are set in secrets.yaml from generated SEAWEEDFS_ACCESS_KEY/SECRET_KEY.
+# The identity.json (S3 credentials config) is mounted from the seaweedfs-s3-config Secret.
+#
+# Only rendered when objectStore.mode=bundled. For production, set mode=external
+# and point at Azure Blob (AZURE_STORAGE_CONNECTION_STRING) or any S3 store.
+# =============================================================================
+{{- if eq .Values.objectStore.mode "bundled" }}
+{{- $datans := .Values.global.namespaces.data -}}
+{{- $seaweedImage := .Values.objectStore.bundled.image | default "alchemiacr.azurecr.io/platform/seaweedfs:3.75" -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seaweedfs-filer-config
+  namespace: {{ $datans }}
+  labels:
+    app: seaweedfs
+    app.kubernetes.io/part-of: alchemistudio-platform
+data:
+  filer.toml: |
+    [leveldb2]
+      enabled = true
+      dir = "/data/filer"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seaweedfs
+  namespace: {{ $datans }}
+  labels:
+    app: seaweedfs
+    app.kubernetes.io/part-of: alchemistudio-platform
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seaweedfs
+  template:
+    metadata:
+      labels:
+        app: seaweedfs
+    spec:
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: seaweedfs
+          image: {{ $seaweedImage | quote }}
+          command:
+            - weed
+            - server
+            - -dir=/data
+            - -master.port=9333
+            - -volume.port=8080
+            - -volume.max=100
+            - -filer
+            - -filer.port=8888
+            - -s3
+            - -s3.port=8333
+            - -s3.allowEmptyFolder=false
+            - -s3.config=/s3config/identity.json
+          ports:
+            - name: master
+              containerPort: 9333
+            - name: volume
+              containerPort: 8080
+            - name: filer
+              containerPort: 8888
+            - name: s3
+              containerPort: 8333
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: filer-config
+              mountPath: /etc/seaweedfs
+            - name: s3-config
+              mountPath: /s3config
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /cluster/status
+              port: 9333
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /cluster/status
+              port: 9333
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: filer-config
+          configMap:
+            name: seaweedfs-filer-config
+        - name: s3-config
+          secret:
+            secretName: seaweedfs-s3-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass | default "longhorn" }}
+        resources:
+          requests:
+            storage: {{ .Values.objectStore.bundled.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs
+  namespace: {{ $datans }}
+  labels:
+    app: seaweedfs
+    app.kubernetes.io/part-of: alchemistudio-platform
+spec:
+  selector:
+    app: seaweedfs
+  ports:
+    - name: master
+      port: 9333
+      targetPort: 9333
+    - name: volume
+      port: 8080
+      targetPort: 8080
+    - name: filer
+      port: 8888
+      targetPort: 8888
+    - name: s3
+      port: 8333
+      targetPort: 8333
+{{- end }}

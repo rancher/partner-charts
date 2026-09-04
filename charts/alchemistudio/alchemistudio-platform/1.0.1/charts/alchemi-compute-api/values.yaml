@@ -1,0 +1,165 @@
+replicaCount: 1
+
+image:
+  repository: alchemiacr.azurecr.io/alchemi-compute-api
+  tag: "1.0.0"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: acr-pull-secret
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+serviceAccount:
+  # -- Create the ServiceAccount, Role, RoleBinding, ClusterRole, and ClusterRoleBinding.
+  # Set false to use a pre-existing service account and skip all RBAC creation.
+  create: true
+  # -- Name of the ServiceAccount. Defaults to the chart fullname when create is true.
+  name: alchemi-compute-api
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: 75m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    httpGet:
+      path: /healthz
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /readyz
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+nodeSelector:
+  agentpool: apppool
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: alchemi-compute-api
+          topologyKey: kubernetes.io/hostname
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Extra envFrom entries appended after the chart-managed ConfigMap and Secret refs.
+# Use this for ExternalSecret-managed secrets in cloud deployments, e.g.:
+#   extraEnvFrom:
+#     - secretRef:
+#         name: alchemi-compute-api-secrets   # created by ExternalSecret
+extraEnvFrom: []
+
+namespace: alchemi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+vpa:
+  enabled: false
+  updateMode: "Off"
+  minAllowed:
+    cpu: 25m
+    memory: 128Mi
+  maxAllowed:
+    cpu: 2000m
+    memory: 1Gi
+
+# -- Non-sensitive configuration rendered into a ConfigMap and always mounted via envFrom.
+# All keys are actual env var names used by the application.
+config:
+  # Observability
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.openobserve.svc.cluster.local:4318"
+  OTEL_SERVICE_NAME: "alchemi-compute-api"
+  # Application identity
+  APP_NAME: "Alchemi Compute"
+  APP_VERSION: "1.0.0"
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "info"
+  DEBUG: "false"
+  # Kubernetes
+  KUBERNETES_IN_CLUSTER: "true"
+  KUBERNETES_NAMESPACE: "alchemi"
+  KUBERNETES_CONFIG_FILE: ""
+  # Kata Containers runtime
+  KATA_RUNTIME_CLASS: "kata-vm-isolation"
+  KATA_NODE_POOL: "katapool"
+  SANDBOX_NODE_POOL_LABEL: "agentpool"
+  # Container registry for sandbox images
+  ACR_REGISTRY: "alchemiacr.azurecr.io"
+  # Domain — override per environment
+  APP_DOMAIN: ""
+  SUBDOMAIN_SUFFIX: ""
+  SANDBOX_DOMAIN_SUFFIX: ""
+  # CORS — set to a JSON array string, e.g. '["https://app.example.com"]'
+  CORS_ORIGINS: "[]"
+  # Database connection pool
+  DATABASE_POOL_SIZE: "20"
+  DB_POOL_SIZE: "20"
+  DATABASE_MAX_OVERFLOW: "10"
+  # Token / auth settings
+  ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+  ALCHEMI_INTERNAL_REQUIRE_SIGNATURE: "true"
+  ALCHEMI_INTERNAL_SIGNATURE_TTL_SECONDS: "300"
+  ENABLE_LEGACY_AUTH: "false"
+  ALCHEMI_ALLOW_PRIVATE_OUTBOUND: "false"
+  # Default resource limits applied to each sandbox pod
+  DEFAULT_CPU_REQUEST: "100m"
+  DEFAULT_CPU_LIMIT: "1"
+  DEFAULT_MEMORY_REQUEST: "256Mi"
+  DEFAULT_MEMORY_LIMIT: "1Gi"
+  # Sandbox TTL
+  DEFAULT_SANDBOX_TTL_SECONDS: "3600"
+  SANDBOX_TTL_SECONDS: "3600"
+  MAX_SANDBOX_TTL_SECONDS: "86400"
+
+# -- Sensitive configuration rendered into a Kubernetes Secret and mounted via envFrom.
+# Set create: false for cloud deployments that supply secrets via ExternalSecret instead;
+# add the external secret name to extraEnvFrom in that case.
+secret:
+  create: true
+  data:
+    # postgresql+asyncpg:// connection string for the compute-api database
+    DATABASE_URL: ""
+    # Application secret key used for JWT signing
+    SECRET_KEY: ""
+    # Shared HMAC token that alchemi-ai sends as x-alchemi-internal-token.
+    # Must match COMPUTE_INTERNAL_TOKEN in alchemi-ai config.
+    ALCHEMI_INTERNAL_TOKEN: ""
+    # ACR credentials used by compute-api to create sandbox image-pull secrets
+    ACR_USERNAME: ""
+    ACR_PASSWORD: ""

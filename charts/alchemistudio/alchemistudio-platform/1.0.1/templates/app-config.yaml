@@ -1,0 +1,403 @@
+# =============================================================================
+# Per-app ConfigMaps — the NON-secret env each app subchart needs, rendered from
+# global.domain + the bundled data-tier DNS (Helm can't template values.yaml, but
+# it CAN template this). Names match each subchart's `<fullname>-config`; the
+# subcharts are set `config.create: false` and wired to these via their own hook
+# (ai: existingConfigMap · worker: unconditional ref · zenith/compute: envFrom).
+# Secrets (passwords/URLs/tokens) live in secrets.yaml, not here.
+# =============================================================================
+{{- $appns := .Values.global.namespaces.app -}}
+{{- $pgHost := include "alchemi.pgHost" . -}}
+{{- $pgPort := include "alchemi.pgPort" . -}}
+{{- $redisHost := include "alchemi.redisHost" . -}}
+{{- $redisPort := include "alchemi.redisPort" . -}}
+{{- $redisTls := include "alchemi.redisTls" . -}}
+{{- /* OTEL endpoint: the bundled observability tier is OpenObserve only (NO
+       otel-collector), so this defaults EMPTY -> the apps' alchemi_health.tracing
+       treats "no endpoint" as tracing-disabled (a clean no-op, no DNS spam).
+       Set observability.otelEndpoint to a real collector to turn tracing on. */}}
+{{- $otel := .Values.observability.otelEndpoint | default "" -}}
+{{- if .Values.web.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-web-config
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  AUTH_PROVIDER: "KEYCLOAK"
+  AUTH_TRUST_HOST: "true"
+  BASE_URL: {{ include "alchemi.appUrl" . | quote }}
+  NEXT_PUBLIC_BASE_URL: {{ include "alchemi.appUrl" . | quote }}
+  NEXTAUTH_URL: {{ include "alchemi.nextauthUrl" . | quote }}
+  KEYCLOAK_ISSUER: {{ include "alchemi.authUrl" . | quote }}
+  KEYCLOAK_REALM: "alchemi"
+  KEYCLOAK_CLIENT_ID: "alchemi-web"
+  KEYCLOAK_ADMIN_CLIENT_ID: "alchemi-admin-svc"
+  KEYCLOAK_ADMIN_REALM: "alchemi"
+  DB_HOST: {{ $pgHost | quote }}
+  DB_PORT: {{ $pgPort | quote }}
+  DB_NAME: {{ include "alchemi.pgDatabase" . | quote }}
+  DB_SSL: "false"
+  DB_USER: {{ include "alchemi.pgUser" . | quote }}
+  REDIS_HOST: {{ $redisHost | quote }}
+  REDIS_PORT: {{ $redisPort | quote }}
+  REDIS_TLS: {{ $redisTls | quote }}
+  # ---- OpenObserve — web READS audit logs from OO for the cockpit Audit Logs page.
+  #      OPENOBSERVE_ENABLED gates capture; URL must include /api/default; password
+  #      comes from alchemi-web-secrets. Must match the ai (writer) config. ----
+  OPENOBSERVE_ENABLED: "true"
+  OPENOBSERVE_URL: {{ printf "http://openobserve.%s.svc.cluster.local:5080/api/default" .Values.global.namespaces.observability | quote }}
+  OPENOBSERVE_USER: {{ required "admin.email is required" .Values.admin.email | quote }}
+  OPENOBSERVE_ORG: "default"
+  OPENOBSERVE_ENV: "suse"
+  OPENOBSERVE_TIMEOUT: "10.0"
+  # ---- backend service URLs (web fetches these server-side; without them the app
+  #      falls back to localhost -> ECONNREFUSED on credits/allowances, models, copilot) ----
+  AI_API_URL: {{ printf "http://alchemi-ai.%s.svc.cluster.local:8000" $appns | quote }}
+  ALCHEMI_AI_BRIDGE_URL: {{ printf "http://alchemi-ai.%s.svc.cluster.local:8000" $appns | quote }}
+  COMPUTE_API_URL: {{ printf "http://alchemi-compute-api.%s.svc.cluster.local:8000" $appns | quote }}
+  ALCHEMI_COMPUTE_API_URL: {{ printf "http://alchemi-compute-api.%s.svc.cluster.local:8000" $appns | quote }}
+  COPILOT_ENABLE_AIOS: "true"
+  ENABLE_AUTONOMOUS_WORKER: "1"
+  AUTONOMOUS_POLL_SECONDS: "60"
+  ENABLE_SEARCH_SELECTION: "true"
+  GUARDRAILS_TIMEOUT: "10000"
+  # ---- workflow runtime (web -> workflow + ai bridge; blank = workflow UI errors) ----
+  WORKFLOW_RUNTIME_URL: {{ printf "http://alchemi-workflow.%s.svc.cluster.local:8080" $appns | quote }}
+  WORKFLOW_AI_BRIDGE_BASE_URL: {{ printf "http://alchemi-ai.%s.svc.cluster.local:8000" $appns | quote }}
+  WORKFLOW_RUNTIME_TIMEOUT_MS: "10000"
+  # ---- standard runtime ----
+  ENVIRONMENT: "suse"
+  NODE_ENV: "production"
+  PORT: "3000"
+  REDIS_CLUSTER: "false"
+  REDIS_USERNAME: "default"
+  REDIS_DB: "0"
+  KEYCLOAK_SPI_AUTH_USERNAME: "alchemi-spi"
+  # ---- malware scan: no clamav in the bundle -> disabled (set to "required" + deploy clamav to enable) ----
+  FILE_MALWARE_SCAN_MODE: "disabled"
+  # ---- object storage (thread/knowledge/media). bundled = SeaweedFS s3; external = Azure Blob. ----
+  STORAGE_BACKEND: "opendal"
+  AIOS_STORAGE_PROVIDER: "fs"
+  STORAGE_FS_ROOT: "/mnt/aios-data"
+  {{- if eq .Values.objectStore.mode "bundled" }}
+  STORAGE_PROVIDER: "s3"
+  STORAGE_AUTH_MODE: "static"
+  S3_BUCKET: {{ .Values.objectStore.bundled.bucket | default "alchemi-objects" | quote }}
+  S3_ENDPOINT: {{ printf "http://seaweedfs.%s.svc:8333" .Values.global.namespaces.data | quote }}
+  AWS_REGION: {{ .Values.objectStore.bundled.region | default "us-east-1" | quote }}
+  {{- else }}
+  STORAGE_PROVIDER: "azblob"
+  STORAGE_AUTH_MODE: "auto"
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.ai.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-ai-config
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  SERVICE_NAME: "alchemi-ai"
+  ENVIRONMENT: "production"
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ $otel | quote }}
+  OTEL_SERVICE_NAME: "alchemi-ai"
+  FRONTEND_URL: {{ include "alchemi.appUrl" . | quote }}
+  FRONTEND_ORIGIN: {{ include "alchemi.appUrl" . | quote }}
+  APP_LOG_LEVEL: "INFO"
+  # ---- backend URLs: AIBOX_API_URL is the Copilot model-access check -> compute-api.
+  #      Without it chat fails "Copilot model access check unavailable: ConnectError". ----
+  AIBOX_API_URL: {{ printf "http://alchemi-compute-api.%s.svc.cluster.local:8000" $appns | quote }}
+  AIBOX_USE_ALCHEMI_INTERNAL_AUTH: "true"
+  ALCHEMI_WEB_BASE_URL: {{ printf "http://alchemi-web.%s.svc.cluster.local:3000" $appns | quote }}
+  # ---- AIOS runtime + sandbox (Kata pods for code/agents) ----
+  AIOS_ENABLE_BROWSER: "true"
+  AIOS_ENABLE_HERMES_RUNTIME: "true"
+  AIOS_ENABLE_TIER2: "true"
+  AIOS_STORAGE_PROVIDER: "fs"
+  STORAGE_FS_ROOT: "/mnt/aios-data"
+  # Pinned version tag (NOT :latest) -> imagePullPolicy IfNotPresent -> pulled once
+  # per node then cached, no per-launch ACR manifest check. Treat the tag as immutable.
+  SANDBOX_IMAGE_REF: {{ printf "%s/cc-python-box:%s" .Values.global.image.registry (.Values.aios.codeSandboxTag | default "1.0.0") | quote }}
+  SANDBOX_CPU_LIMIT_MCPU: "1000"
+  SANDBOX_CPU_REQUEST_MCPU: "100"
+  SANDBOX_MEMORY_LIMIT: "1Gi"
+  SANDBOX_MEMORY_REQUEST: "256Mi"
+  ENABLE_LONG_RUNNING_RESEARCH_POLLING: "false"
+  ENABLE_OUTPUT_MDX: "false"
+  # ---- OpenObserve — ai WRITES audit + app logs to OO (drained via the audit outbox).
+  #      Without OPENOBSERVE_ENABLED=true the server logs "Audit logging disabled" and
+  #      audit_logs/cockpit stay empty. Must match the web (reader) config. ----
+  OPENOBSERVE_ENABLED: "true"
+  OPENOBSERVE_URL: {{ printf "http://openobserve.%s.svc.cluster.local:5080/api/default" .Values.global.namespaces.observability | quote }}
+  OPENOBSERVE_USER: {{ required "admin.email is required" .Values.admin.email | quote }}
+  OPENOBSERVE_ORG: "default"
+  OPENOBSERVE_ENV: "suse"
+  OPENOBSERVE_TIMEOUT: "10.0"
+  AUDIT_LOG_CONTENT_MODE: "full"
+  DB_HOST: {{ $pgHost | quote }}
+  DB_PORT: {{ $pgPort | quote }}
+  DB_NAME: {{ include "alchemi.pgAiDatabase" . | quote }}
+  DB_SSL: "false"
+  REDIS_HOST: {{ $redisHost | quote }}
+  REDIS_PORT: {{ $redisPort | quote }}
+  REDIS_TLS: {{ $redisTls | quote }}
+  REDIS_USERNAME: "default"
+  REDIS_DB: "0"
+  REDIS_CLUSTER: "false"
+  REDIS_TLS_SKIP_VERIFY: "false"
+  # ---- Object storage (OpenDAL data-plane; Thread/Knowledge/media) ----
+  # bundled = SeaweedFS via the s3 provider; external = Azure Blob via azblob.
+  # STORAGE_PROVIDER default in-image is azblob, so bundled MUST override to s3.
+  STORAGE_BACKEND: "opendal"
+  {{- if eq .Values.objectStore.mode "bundled" }}
+  STORAGE_PROVIDER: "s3"
+  STORAGE_AUTH_MODE: "static"
+  S3_BUCKET: {{ .Values.objectStore.bundled.bucket | default "alchemi-objects" | quote }}
+  S3_ENDPOINT: {{ printf "http://seaweedfs.%s.svc:8333" .Values.global.namespaces.data | quote }}
+  AWS_REGION: {{ .Values.objectStore.bundled.region | default "us-east-1" | quote }}
+  {{- else }}
+  STORAGE_PROVIDER: "azblob"
+  STORAGE_AUTH_MODE: "auto"
+  {{- end }}
+  LANGSMITH_TRACING: "false"
+  ALCHEMI_ALLOW_PRIVATE_OUTBOUND: "false"
+  # Numeric env vars the app int()/float()s at import — subchart ships these EMPTY
+  # (int("") crash). Authoritative code defaults; PG_KEEPALIVES_ENABLED is int (1/0).
+  MAX_CHAT_TOKEN_COUNT: "128000"
+  OUTPUT_TOKEN_LIMIT: "30000"
+  SAFETY_HEADROOM: "16000"
+  SUMMARIZATION_THRESHOLD_PCT: "0.85"
+  MINIMUM_CONVERSATION_TOKEN_PCT_BUDGET_FOR_SUMMARIZATION: "0.2"
+  MAX_CONTEXT_LENGTH: "10"
+  MAX_SANDBOXES: "3"
+  MAX_CREDIT_REQUESTS_PER_MONTH: "10"
+  CREDITS_FACTOR: "1000"
+  AGENT_CONTEXT_LIMIT: "20"
+  ARTIFACTS_CONTEXT_LIMIT: "20"
+  THREADS_CONTEXT_LIMIT: "20"
+  ALCHEMI_AI_INTERNAL_SIGNATURE_TTL_SECONDS: "300"
+  # Guardrails — ai calls the 6 safety services (deployed in the app namespace by the
+  # alchemi-guardrails subchart). Service names match the subchart; auth via
+  # GUARDRAILS_INTERNAL_TOKEN (alchemi-ai-secrets). Toggle the whole feature with
+  # guardrails.enabled (which also gates the subchart + the token secrets).
+  GUARDRAILS_ENABLED: {{ .Values.guardrails.enabled | ternary "\"true\"" "\"false\"" }}
+  GUARDRAILS_PII_URL: "http://guardrails-pii.{{ .Values.global.namespaces.app }}.svc.cluster.local:8000/pii"
+  GUARDRAILS_TOXIC_URL: "http://guardrails-toxic.{{ .Values.global.namespaces.app }}.svc.cluster.local:8000/toxic"
+  GUARDRAILS_JAILBREAK_URL: "http://guardrails-jailbreak.{{ .Values.global.namespaces.app }}.svc.cluster.local:8000/jailbreak"
+  GUARDRAILS_SECRET_DETECTION_URL: "http://guardrails-secret-detection.{{ .Values.global.namespaces.app }}.svc.cluster.local:8000/secret_detection"
+  GUARDRAILS_CONTENT_FILTER_URL: "http://guardrails-content-filter.{{ .Values.global.namespaces.app }}.svc.cluster.local:8000/content_filter"
+  GUARDRAILS_TOPICAL_URL: "http://guardrails-topical.{{ .Values.global.namespaces.app }}.svc.cluster.local:8000/topical"
+  GUARDRAILS_TIMEOUT: "10000"
+  LONG_RUNNING_TASK_TIMEOUT: "1800"
+  SANDBOX_TTL_SECONDS: "1200"
+  SANDBOX_EXTEND_SECONDS: "1200"
+  CONSOLE_LLM_REQUEST_TIMEOUT: "570"
+  PG_AI_POOL_MIN_SIZE: "1"
+  PG_AI_POOL_MAX_SIZE: "10"
+  PG_AI_POOL_MAX_IDLE: "300"
+  PG_AI_POOL_TIMEOUT: "30.0"
+  PG_CONNECT_TIMEOUT: "10"
+  PG_STATEMENT_TIMEOUT: "300000"
+  PG_MAX_RETRY_ATTEMPTS: "3"
+  PG_KEEPALIVES_ENABLED: "1"
+  PG_KEEPALIVES_IDLE: "30"
+  PG_KEEPALIVES_INTERVAL: "10"
+  PG_KEEPALIVES_COUNT: "5"
+---
+{{- end }}
+{{- if .Values.computeApi.enabled }}
+# compute-api's subchart ALWAYS creates `alchemi-compute-api-config` from its flat
+# .Values.config, so this domain-derived overlay uses a DIFFERENT name and is layered
+# via the subchart's `extraEnvFrom` (appended after -> wins on APP_DOMAIN/CORS).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-compute-api-endpoints
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  # ---- Kubernetes namespaces ------------------------------------------------
+  # KUBERNETES_NAMESPACE: the namespace compute-api is deployed in (reads its own SA).
+  # SANDBOX_NAMESPACE: where compute-api CREATES sandbox/AIOS workloads (dedicated albox,
+  #   matching dev+demo). nginx-router resolves svc-albox-app-<id> from this namespace.
+  #   Leaving this unset = sandboxes land in the app ns and nginx-router 502s.
+  KUBERNETES_IN_CLUSTER: "true"
+  KUBERNETES_NAMESPACE: {{ $appns | quote }}
+  SANDBOX_NAMESPACE: {{ .Values.global.namespaces.sandbox | quote }}
+  # ---- Domain / routing -----------------------------------------------------
+  APP_DOMAIN: {{ required "global.domain is required" .Values.global.domain | quote }}
+  SUBDOMAIN_SUFFIX: "sandbox"
+  CORS_ORIGINS: {{ printf "[\"%s\"]" (include "alchemi.appUrl" .) | quote }}
+  # ---- Kata / node pools (must match kata-runtimeclass.yaml + node labels) --
+  KATA_RUNTIME_CLASS: "kata"
+  KATA_NODE_POOL: "katapool"
+  SANDBOX_NODE_POOL_LABEL: "agentpool"
+  # ---- Registry (compute-api uses this to build image refs for sandbox pods) -
+  ACR_REGISTRY: {{ .Values.global.image.registry | quote }}
+  # ---- AIOS data plane ------------------------------------------------------
+  AIOS_DATA_PLANE_CLAIM_NAME: "aios-data-plane"
+  AIOS_ASSET_MOUNTS: "[]"
+  AIOS_DISK_MIGRATION_TIMEOUT_SECONDS: "3600"
+  AIOS_DISK_SHRINK_HEADROOM_MB: "512"
+  # ---- Workflow Code sandbox (short-lived Kata pod per Code execution) -------
+  # imageRef MUST be pinned to the @sha256 digest; blank = feature off.
+  WORKFLOW_CODE_IMAGE_REF: {{ .Values.computeApi.workflowCode.imageRef | default "" | quote }}
+  WORKFLOW_CODE_CPU_LIMIT: "500m"
+  WORKFLOW_CODE_CPU_REQUEST: "50m"
+  WORKFLOW_CODE_MEMORY_LIMIT: "128Mi"
+  WORKFLOW_CODE_MEMORY_REQUEST: "32Mi"
+  WORKFLOW_CODE_EPHEMERAL_STORAGE_LIMIT: "32Mi"
+  WORKFLOW_CODE_EPHEMERAL_STORAGE_REQUEST: "16Mi"
+  WORKFLOW_CODE_TMP_SIZE_LIMIT: "16Mi"
+  WORKFLOW_CODE_TTL_SECONDS: "900"
+  WORKFLOW_CODE_MAX_INPUT_BYTES: "1048576"
+  WORKFLOW_CODE_MAX_OUTPUT_BYTES: "1048576"
+  WORKFLOW_CODE_CREATE_RATE_LIMIT: "600"
+  WORKFLOW_CODE_EXEC_RATE_LIMIT: "600"
+  # ---- Default sandbox resource limits / TTLs --------------------------------
+  DEFAULT_CPU_LIMIT: "1"
+  DEFAULT_MEMORY_LIMIT: "1Gi"
+  DEFAULT_CPU_REQUEST: "100m"
+  DEFAULT_MEMORY_REQUEST: "256Mi"
+  DEFAULT_SANDBOX_TTL_SECONDS: "3600"
+  MAX_SANDBOX_TTL_SECONDS: "86400"
+  # ---- Security / auth -------------------------------------------------------
+  ALCHEMI_INTERNAL_REQUIRE_SIGNATURE: "true"
+  ALCHEMI_INTERNAL_SIGNATURE_TTL_SECONDS: "300"
+  ENABLE_LEGACY_AUTH: "false"
+  ALCHEMI_ALLOW_PRIVATE_OUTBOUND: "false"
+  # ---- Observability ---------------------------------------------------------
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ $otel | quote }}
+  OTEL_SERVICE_NAME: "alchemi-compute-api"
+---
+{{- end }}
+{{- if .Values.worker.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-worker-config
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  REDIS_HOST: {{ $redisHost | quote }}
+  REDIS_PORT: {{ $redisPort | quote }}
+  REDIS_TLS: {{ $redisTls | quote }}
+  REDIS_CLUSTER: "false"
+  POSTGRES_HOST: {{ $pgHost | quote }}
+  POSTGRES_PORT: {{ $pgPort | quote }}
+  POSTGRES_USER: {{ include "alchemi.pgUser" . | quote }}
+  POSTGRES_DATABASE: {{ include "alchemi.pgDatabase" . | quote }}
+  PGSSLMODE: {{ include "alchemi.pgSslMode" . | quote }}
+  QUEUE_PREFIX: {{ .Values.global.domain | splitList "." | first | quote }}
+  NEXT_PUBLIC_APP_URL: {{ include "alchemi.appUrl" . | quote }}
+  EMAIL_PROVIDER: {{ .Values.smtp.mode | quote }}
+  SMTP_HOST: {{ .Values.smtp.host | quote }}
+  SMTP_PORT: {{ .Values.smtp.port | quote }}
+  SMTP_FROM: {{ .Values.smtp.from | default (printf "noreply@%s" .Values.global.domain) | quote }}
+  OPENOBSERVE_ENABLED: "true"
+  OPENOBSERVE_URL: {{ printf "http://openobserve.%s.svc.cluster.local:5080/api/default" .Values.global.namespaces.observability | quote }}
+  OPENOBSERVE_USER: {{ .Values.admin.email | quote }}
+  OPENOBSERVE_ORG: "default"
+  OPENOBSERVE_ENV: "suse"
+  OPENOBSERVE_TIMEOUT: "10.0"
+  WORKER_CONCURRENCY: "5"
+  SCHEDULER_WORKER_CONCURRENCY: "5"
+  EMAIL_WORKER_CONCURRENCY: "1"
+  EMAIL_RATE_LIMIT_MAX: "5"
+  EMAIL_RATE_LIMIT_DURATION_MS: "1000"
+  CREDIT_BUDGET_RESET_CRON: "55 23 * * *"
+  SUPPORT_EMAIL: {{ .Values.smtp.from | default (printf "support@%s" .Values.global.domain) | quote }}
+---
+{{- end }}
+{{- if .Values.workflow.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-workflow-config
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  WORKFLOW_RUNTIME_PORT: "8080"
+  WORKFLOW_RUNTIME_SIGNATURE_MAX_SKEW_MS: "30000"
+  WORKFLOW_RUNTIME_MAX_BODY_BYTES: "1048576"
+  WORKFLOW_RUNTIME_ACCEPT_STARTS: "true"
+  WORKFLOW_RUNTIME_DEFAULT_KIND: "legacy_external"
+  WORKFLOW_RUNTIME_NONCE_BACKEND: "redis"
+  WORKFLOW_RUNTIME_SCHEDULE_POLL_MS: "5000"
+  WORKFLOW_RUNTIME_DISPATCH_POLL_MS: "1000"
+  WORKFLOW_RUNTIME_DISPATCH_BATCH_SIZE: "25"
+  WORKFLOW_RUNTIME_DISPATCH_STALE_MS: "60000"
+  WORKFLOW_RUN_CREDITS: "1"
+  WORKFLOW_STEP_CREDITS: "1"
+  COMPUTE_API_URL: {{ printf "http://alchemi-compute-api.%s.svc.cluster.local:8000" $appns | quote }}
+  WORKFLOW_CODE_PROVISION_TIMEOUT_MS: "120000"
+  WORKFLOW_CODE_POLL_INTERVAL_MS: "1000"
+  WORKFLOW_CODE_COMPUTE_REQUEST_TIMEOUT_MS: "30000"
+  WORKFLOW_CODE_TIMEOUT_MS: "10000"
+  WORKFLOW_CODE_MEMORY_MIB: "64"
+  WORKFLOW_CODE_OUTPUT_BYTES: "1048576"
+  AI_API_URL: {{ printf "http://alchemi-ai.%s.svc.cluster.local:8000" $appns | quote }}
+  WORKFLOW_AI_STEP_TIMEOUT_MS: "120000"
+  WORKFLOW_AI_AGENT_TIMEOUT_MS: "300000"
+  WORKFLOW_WEB_URL: {{ printf "http://alchemi-web.%s.svc.cluster.local:3000" $appns | quote }}
+  WORKFLOW_WAIT_RESUME_POLL_MS: "60000"
+  WORKFLOW_WAIT_RESUME_TIMEOUT_MS: "15000"
+  POSTGRES_HOST: {{ $pgHost | quote }}
+  POSTGRES_PORT: {{ $pgPort | quote }}
+  POSTGRES_USER: {{ include "alchemi.pgUser" . | quote }}
+  POSTGRES_DATABASE: {{ include "alchemi.pgDatabase" . | quote }}
+  PGSSLMODE: {{ include "alchemi.pgSslMode" . | quote }}
+  REDIS_HOST: {{ $redisHost | quote }}
+  REDIS_PORT: {{ $redisPort | quote }}
+  REDIS_TLS: {{ $redisTls | quote }}
+  REDIS_CLUSTER: "false"
+  REDIS_USERNAME: "default"
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ $otel | quote }}
+  OTEL_SERVICE_NAME: "alchemi-workflow"
+  OPENOBSERVE_ENV: "suse"
+---
+{{- end }}
+{{- if .Values.zenith.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-zenith-config
+  namespace: {{ $appns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  NODE_ENV: "production"
+  ENVIRONMENT: "production"
+  NEXT_PUBLIC_API_URL: {{ printf "https://%s" (include "alchemi.zenithHost" .) | quote }}
+  BASE_URL: {{ printf "https://%s" (include "alchemi.zenithHost" .) | quote }}
+  NEXTAUTH_URL: {{ printf "https://%s" (include "alchemi.zenithHost" .) | quote }}
+  AUTH_TRUST_HOST: "true"
+  AUTH_PROVIDER: "KEYCLOAK"
+  KEYCLOAK_ISSUER: {{ include "alchemi.authUrl" . | quote }}
+  KEYCLOAK_REALM: "alchemi"
+  KEYCLOAK_ADMIN_CLIENT_ID: "alchemi-admin-svc"
+  KEYCLOAK_ADMIN_REALM: "alchemi"
+  ALCHEMI_WEB_BASE_URL: {{ include "alchemi.appUrl" . | quote }}
+  AI_API_URL: "http://alchemi-ai.{{ $appns }}.svc.cluster.local:8000"
+  DB_TOOLS_API_URL: "http://alchemi-migrator-api.{{ $appns }}.svc.cluster.local:8200"
+  ENABLE_SETUP_CONTROL: "true"
+  DB_HOST: {{ $pgHost | quote }}
+  DB_PORT: {{ $pgPort | quote }}
+  DB_NAME: {{ include "alchemi.pgDatabase" . | quote }}
+  DB_SSL: "false"
+  DB_USER: {{ include "alchemi.pgUser" . | quote }}
+  REDIS_HOST: {{ $redisHost | quote }}
+  REDIS_PORT: {{ $redisPort | quote }}
+  REDIS_TLS: {{ $redisTls | quote }}
+  REDIS_USERNAME: "default"
+  REDIS_DB: "0"
+  REDIS_CLUSTER: "false"
+---
+{{- end }}
