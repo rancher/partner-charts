@@ -1,0 +1,180 @@
+# JFrog Container Registry Helm Chart
+
+> [!NOTE]
+> See the [JFrog Helm Charts README](https://github.com/jfrog/charts#container-image-migration-notice) for important notices including the container image migration.
+
+JFrog Container Registry is a free Artifactory edition with Docker and Helm repositories support.
+
+**Heads up: Our Helm Chart docs are moving to our main documentation site. For Artifactory installers, see [Installing Artifactory](https://www.jfrog.com/confluence/display/JFROG/Installing+Artifactory).**
+
+## Prerequisites Details
+
+* Kubernetes 1.19+
+
+## Chart Details
+This chart will do the following:
+
+* Deploy JFrog Container Registry
+* Deploy an optional Nginx server
+* Deploy an optional PostgreSQL Database
+* Optionally expose Artifactory with Ingress [Ingress documentation](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+
+## Installing the Chart
+
+### Add JFrog Helm repository
+
+Before installing JFrog helm charts, you need to add the [JFrog helm repository](https://charts.jfrog.io) to your helm client.
+
+```bash
+helm repo add jfrog https://charts.jfrog.io
+helm repo update
+```
+
+### Install Chart
+To install the chart with the release name `jfrog-container-registry`:
+```bash
+helm upgrade --install jfrog-container-registry jfrog/artifactory-jcr \
+    --namespace artifactory-jcr --create-namespace \
+    --set artifactory.postgresql.auth.password=<postgres_password> \
+    --set artifactory.nginx.generateSelfSignedCert=true
+```
+
+The `artifactory.nginx.generateSelfSignedCert=true` above is a dev/test opt-in
+so the example succeeds out-of-the-box. For production, replace it with
+`artifactory.nginx.tlsSecretName=<your-secret>` — see [Nginx TLS Certificate](#nginx-tls-certificate).
+
+### Nginx TLS Certificate
+
+Starting with `artifactory` sub-chart version 107.161.x, the chart no longer auto-generates the nginx TLS certificate by default. You must decide how nginx serves HTTPS. All nginx values in this wrapper chart are namespaced under `artifactory.nginx.*`.
+
+**Fresh install** — with `artifactory.nginx.https.enabled=true` (the default), the install fails unless one of the following is set:
+
+| Option | Values flag | When to use |
+|---|---|---|
+| Supply your own certificate (recommended) | `--set artifactory.nginx.tlsSecretName=<name>` | Production; you create a `kubernetes.io/tls` Secret out-of-band |
+| Chart-generated self-signed certificate | `--set artifactory.nginx.generateSelfSignedCert=true` | Dev / test only — the private key is chart-generated and not issued by a trusted CA |
+| Disable HTTPS entirely | `--set artifactory.nginx.https.enabled=false` | HTTP-only installs; TLS termination happens elsewhere or is not required |
+
+To generate your own `tls.crt` / `tls.key` for the recommended option, see the JFrog documentation:
+[Establish TLS in Artifactory and the JFrog Platform › Generate Certificates](https://docs.jfrog.com/installation/docs/establish-tls-in-artifactory-and-jfrog-platform#generate-certs).
+
+Supplying your own certificate:
+
+```bash
+kubectl create secret tls artifactory-nginx-tls \
+    --cert=./tls.crt --key=./tls.key -n artifactory-jcr
+helm upgrade --install jfrog-container-registry jfrog/artifactory-jcr \
+    --namespace artifactory-jcr --create-namespace \
+    --set artifactory.postgresql.auth.password=<postgres_password> \
+    --set artifactory.nginx.tlsSecretName=artifactory-nginx-tls
+```
+
+**Upgrade from earlier chart versions** — if the prior release auto-generated the Secret `<release>-artifactory-nginx-certificate`, the chart discovers it via `helm lookup`, reuses its `tls.crt`/`tls.key` byte-for-byte, and annotates it with `helm.sh/resource-policy: keep`. HTTPS continues to work with no operator action, and the certificate data is not modified.
+
+The reused certificate is still self-signed by the previous chart and is not suitable for production. Replace it with your own certificate on your next upgrade:
+
+```bash
+kubectl create secret tls artifactory-nginx-tls \
+    --cert=./tls.crt --key=./tls.key -n artifactory-jcr
+helm upgrade jfrog-container-registry jfrog/artifactory-jcr \
+    --reuse-values --set artifactory.nginx.tlsSecretName=artifactory-nginx-tls
+```
+
+Once nginx is running on your certificate, the previously auto-generated Secret is retained (`helm.sh/resource-policy: keep`) and can be removed manually:
+
+```bash
+kubectl delete secret <release>-artifactory-nginx-certificate -n artifactory-jcr
+```
+
+If a custom certificate is supplied on the first upgrade to sub-chart version 107.161.x, the legacy auto-generated Secret is deleted by Helm during that upgrade. If you plan to migrate to a custom certificate, no additional cleanup is required.
+
+### Accessing JFrog Container Registry
+**NOTE:** If using artifactory or nginx service type `LoadBalancer`, it might take a few minutes for JFrog Container Registry's public IP to become available.
+
+### Updating JFrog Container Registry
+Once you have a new chart version, you can upgrade your deployment with
+```bash
+helm upgrade jfrog-container-registry jfrog/artifactory-jcr --namespace artifactory-jcr --create-namespace
+```
+
+### Special Upgrade Notes
+#### Artifactory upgrade from 6.x to 7.x (App Version)
+Arifactory 6.x to 7.x upgrade requires a one time migration process. This is done automatically on pod startup if needed.
+It's possible to configure the migration timeout with the following configuration in extreme cases. The provided default should be more than enough for completion of the migration.
+```yaml
+artifactory:
+  artifactory:
+    # Migration support from 6.x to 7.x
+    migration:
+      enabled: true
+      timeoutSeconds: 3600
+```
+* Note: If you are upgrading from 1.x to 3.x and above chart versions, please delete the existing statefulset of postgresql before upgrading the chart due to breaking changes in postgresql subchart.
+```bash
+kubectl delete statefulsets <OLD_RELEASE_NAME>-postgresql
+```
+* For more details about artifactory chart upgrades refer [here](https://github.com/jfrog/charts/blob/master/stable/artifactory/UPGRADE_NOTES.md)
+
+### Deleting JFrog Container Registry
+
+```bash                                                                                                                                                                 
+helm delete jfrog-container-registry --namespace artifactory-jcr                                                                                                                       
+```  
+
+This will delete your JFrog Container Registry deployment.<br>
+**NOTE:** You might have left behind persistent volumes. You should explicitly delete them with
+```bash
+kubectl delete pvc ...
+kubectl delete pv ...
+```
+
+## Database
+The JFrog Container Registry chart comes with PostgreSQL deployed by default.<br>
+For details on the PostgreSQL configuration or customising the database, Look at the options described in the [Artifactory helm chart](https://github.com/jfrog/charts/tree/master/stable/artifactory).
+
+### Ingress and TLS
+To get Helm to create an ingress object with a hostname, add these two lines to your Helm command:
+```bash
+helm upgrade --install jfrog-container-registry \
+  --set artifactory.nginx.enabled=false \
+  --set artifactory.ingress.enabled=true \
+  --set artifactory.ingress.hosts[0]="artifactory.company.com" \
+  --set artifactory.artifactory.service.type=NodePort \
+  jfrog/artifactory-jcr --namespace artifactory-jcr --create-namespace
+```
+
+To manually configure TLS, first create/retrieve a key & certificate pair for the address(es) you wish to protect. Then create a TLS secret in the namespace:
+
+```bash
+kubectl create secret tls artifactory-tls --cert=path/to/tls.cert --key=path/to/tls.key
+```
+
+Include the secret's name, along with the desired hostnames, in the Artifactory Ingress TLS section of your custom `values.yaml` file:
+
+```yaml
+artifactory:
+  artifactory:
+    ingress:
+      ## If true, Artifactory Ingress will be created
+      ##
+      enabled: true
+
+      ## Artifactory Ingress hostnames
+      ## Must be provided if Ingress is enabled
+      ##
+      hosts:
+        - jfrog-container-registry.domain.com
+      annotations:
+        kubernetes.io/tls-acme: "true"
+      ## Artifactory Ingress TLS configuration
+      ## Secrets must be manually created in the namespace
+      ##
+      tls:
+        - secretName: artifactory-tls
+          hosts:
+            - jfrog-container-registry.domain.com
+```
+
+## Useful links
+https://www.jfrog.com
+https://www.jfrog.com/confluence/
