@@ -1,0 +1,93 @@
+{{ if or (and (index .Values.global "gateway-api" "enabled") (index .Values "gateway-api" "routes" "adminUiEnabled")) (index .Values.global "admin-ui" "ingress" "adminUiEnabled") -}}
+********************************************************************************
+***              SECURITY WARNING: ADMIN-UI EXPOSED                          ***
+********************************************************************************
+The flag `adminUiEnabled` is set to TRUE.
+
+This publicly exposes the Admin UI at "/admin"
+
+RECOMMENDATION:
+1. For production, ensure this endpoint is restricted via SecurityGroups, NetworkPolicies,
+   IP whitelisting, or an OAuth2 proxy. This endpoint is normally not internet-facing.
+2. This can be left public in demo or internal development environments only.
+
+********************************************************************************
+{{- end }}
+
+{{- with .Values.global.gatewayApi }}
+{{ if .enabled }}
+********************************************************************************
+***              WARNING: GATEWAY API CONFIGURATION                          ***
+********************************************************************************
+
+The legacy flag `global.gatewayApi.enabled` is set to TRUE. Any configuration
+previously managed by `gatewayApi` will be ignored. See the following sections
+for migration.
+
+RECOMMENDATION:
+
+1. Use `global.gateway-api.enabled` flag.
+2. Use `gateway-api` instead of `gatewayApi` to configure the Gateway API.
+
+ATTRIBUTE CHANGES:
+
+| Legacy                            | New                                   |
+| --------------------------------- | ------------------------------------- |
+| `global.gatewayApi.enabled`       | `global.gateway-api.enabled`          |
+| `gatewayApi.gatewayClassName`     | `gateway-api.gateway.className`       |
+| `gatewayApi.name`                 | `gateway-api.gateway.name`            |
+| `gatewayApi.httpPort`             | `gateway-api.gateway.httpPort`        |
+| `gatewayApi.httpsPort`            | `gateway-api.gateway.httpsPort`       |
+| `gatewayApi.tlsSecretName`        | `gateway-api.gateway.tlsSecretName`   |
+| `gatewayApi.gatewayLabels`        | `gateway-api.gateway.labels`          |
+| `gatewayApi.gatewayAnnotations`   | `gateway-api.gateway.annotations`     |
+| `gatewayApi.routeLabels`          | `gateway-api.routes.labels`           |
+| `gatewayApi.routeAnnotations`     | `gateway-api.routes.annotations`      |
+
+********************************************************************************
+{{- end }}
+{{- end }}
+
+{{- if index .Values "global" "gateway-api" "enabled" }}
+{{- $routes := index .Values "gateway-api" "routes" }}
+{{- $adminUiIngress := index .Values.global "admin-ui" "ingress" }}
+{{- $authIngress := index .Values.global "auth-server" "ingress" }}
+{{- $casaIngress := .Values.global.casa.ingress }}
+{{- $configApiIngress := index .Values.global "config-api" "ingress" }}
+{{- $fido2Ingress := .Values.global.fido2.ingress }}
+{{- $scimIngress := .Values.global.scim.ingress }}
+{{- $legacy := dict "adminUiEnabled" $adminUiIngress.adminUiEnabled "authServerEnabled" $authIngress.authServerEnabled "openidConfigEnabled" $authIngress.openidConfigEnabled "deviceCodeEnabled" $authIngress.deviceCodeEnabled "firebaseMessagingEnabled" $authIngress.firebaseMessagingEnabled "uma2ConfigEnabled" $authIngress.uma2ConfigEnabled "webfingerEnabled" $authIngress.webfingerEnabled "authzenConfigEnabled" $authIngress.authzenConfigEnabled "authServerProtectedToken" $authIngress.authServerProtectedToken "authServerProtectedRegister" $authIngress.authServerProtectedRegister "lockConfigEnabled" $authIngress.lockConfigEnabled "lockAuditEnabled" $authIngress.lockAuditEnabled "casaEnabled" $casaIngress.casaEnabled "configApiEnabled" $configApiIngress.configApiEnabled "fido2Enabled" $fido2Ingress.fido2Enabled "fido2ConfigEnabled" $fido2Ingress.fido2ConfigEnabled "fido2WebauthnEnabled" $fido2Ingress.fido2WebauthnEnabled "scimEnabled" $scimIngress.scimEnabled "scimConfigEnabled" $scimIngress.scimConfigEnabled }}
+{{- $stale := list }}
+{{- range $flag, $legacyValue := $legacy }}
+{{- if and $legacyValue (not (index $routes $flag)) }}
+{{- $stale = append $stale $flag }}
+{{- end }}
+{{- end }}
+{{- if $stale }}
+********************************************************************************
+***       DEPRECATION: INGRESS FLAGS STILL DRIVING GATEWAY API ROUTES        ***
+********************************************************************************
+
+The following Gateway API routes are enabled ONLY by the deprecated
+`global.<service>.ingress.*` flags, because their `gateway-api.routes.*`
+counterpart is set to false:
+{{ range $stale }}
+  - {{ . }}
+{{- end }}
+
+These routes still render today via a compatibility fallback, but that fallback
+will be REMOVED in a future release and the routes would then disappear.
+
+RECOMMENDATION: set the flags listed above under `gateway-api.routes`, e.g.
+
+  gateway-api:
+    routes:
+      {{ first $stale }}: true
+
+NOTE: `global.<service>.ingress.*` continues to control the nginx Ingress and
+Istio VirtualService resources. Only its effect on Gateway API HTTPRoutes is
+deprecated.
+
+********************************************************************************
+{{- end }}
+{{- end }}
