@@ -1,0 +1,949 @@
+suite: test global value inheritance
+templates:
+  - templates/deployment.yaml
+  - templates/agent-configmap.yaml
+  - templates/configmap.yaml
+  - templates/serviceaccount.yaml
+release:
+  name: test-release
+  namespace: test-namespace
+tests:
+  # =============================================================================
+  # Cluster Name Tests
+  # =============================================================================
+  - it: should use global.cluster when cluster not set locally
+    set:
+      global:
+        cluster: global-cluster
+        licenseKey: test-key
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/configmap.yaml
+        matchRegex:
+          path: data["config.yaml"]
+          pattern: "clusterName: global-cluster"
+
+  - it: should use local cluster when both global and local are set
+    set:
+      global:
+        cluster: global-cluster
+        licenseKey: test-key
+      cluster: local-cluster
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/configmap.yaml
+        matchRegex:
+          path: data["config.yaml"]
+          pattern: "clusterName: local-cluster"
+
+  # =============================================================================
+  # License Key Tests
+  # =============================================================================
+  - it: should use global.licenseKey when licenseKey not set locally
+    set:
+      cluster: test-cluster
+      global:
+        licenseKey: global-license-key
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
+          value: test-release-nri-kube-events-license
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.key
+          value: licenseKey
+
+  - it: should use local licenseKey when both global and local are set
+    set:
+      cluster: test-cluster
+      global:
+        licenseKey: global-license-key
+      licenseKey: local-license-key
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
+          value: test-release-nri-kube-events-license
+
+  # =============================================================================
+  # Custom Secret Tests
+  # =============================================================================
+  - it: should use global.customSecretName when set
+    set:
+      cluster: test-cluster
+      global:
+        customSecretName: global-secret
+        customSecretLicenseKey: global-key
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
+          value: global-secret
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.key
+          value: global-key
+
+  - it: should use local customSecretName when both global and local are set
+    set:
+      cluster: test-cluster
+      global:
+        customSecretName: global-secret
+        customSecretLicenseKey: global-key
+      customSecretName: local-secret
+      customSecretLicenseKey: local-key
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
+          value: local-secret
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.key
+          value: local-key
+
+  # =============================================================================
+  # Labels Tests
+  # =============================================================================
+  - it: should inherit global.labels
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        labels:
+          team: platform
+          env: production
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: metadata.labels.team
+          value: platform
+      - template: templates/deployment.yaml
+        equal:
+          path: metadata.labels.env
+          value: production
+
+  - it: should merge local labels with global.labels
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        labels:
+          team: platform
+      labels:
+        app: events
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: metadata.labels.team
+          value: platform
+      - template: templates/deployment.yaml
+        equal:
+          path: metadata.labels.app
+          value: events
+
+  # =============================================================================
+  # PodLabels Tests
+  # =============================================================================
+  - it: should inherit global.podLabels
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        podLabels:
+          pod-label: global-value
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.metadata.labels.pod-label
+          value: global-value
+
+  - it: should merge local podLabels with global.podLabels
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        podLabels:
+          global-pod-label: global-value
+      podLabels:
+        local-pod-label: local-value
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.metadata.labels.global-pod-label
+          value: global-value
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.metadata.labels.local-pod-label
+          value: local-value
+
+  # =============================================================================
+  # NodeSelector Tests
+  # =============================================================================
+  - it: should inherit global.nodeSelector
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        nodeSelector:
+          node.kubernetes.io/purpose: monitoring
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            node.kubernetes.io/purpose: monitoring
+
+  # Tests that local nodeSelector completely REPLACES global (not key-by-key merge)
+  # Global has: environment=production, team=platform
+  # Local has: environment=staging, app=events
+  # Expected: Only local keys present (environment=staging, app=events), global-only key 'team' is absent
+  - it: should use local nodeSelector when both global and local are set (override not merge)
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        nodeSelector:
+          environment: production
+          team: platform
+      nodeSelector:
+        environment: staging
+        app: events
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            environment: staging
+            app: events
+      # Verify global-only 'team' key is NOT present (proves replacement, not merge)
+      - template: templates/deployment.yaml
+        isNull:
+          path: spec.template.spec.nodeSelector.team
+
+  # =============================================================================
+  # Tolerations Tests
+  # =============================================================================
+  - it: should inherit global.tolerations
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        tolerations:
+          - key: monitoring-taint
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.tolerations[0].key
+          value: monitoring-taint
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.tolerations[0].operator
+          value: Equal
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.tolerations[0].value
+          value: "true"
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.tolerations[0].effect
+          value: NoSchedule
+
+  - it: should use local tolerations when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        tolerations:
+          - key: global-taint
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+      tolerations:
+        - key: local-taint
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.tolerations[0].key
+          value: local-taint
+
+  # =============================================================================
+  # Affinity Tests
+  # =============================================================================
+  - it: should inherit global.affinity
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: node-role.kubernetes.io/monitoring
+                      operator: In
+                      values:
+                        - "true"
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: node-role.kubernetes.io/monitoring
+
+  - it: should use local affinity when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: global-key
+                      operator: In
+                      values:
+                        - "true"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: local-key
+                    operator: In
+                    values:
+                      - "true"
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: local-key
+
+  # =============================================================================
+  # PriorityClassName Tests
+  # =============================================================================
+  - it: should inherit global.priorityClassName
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        priorityClassName: high-priority
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+
+  - it: should use local priorityClassName when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        priorityClassName: global-priority
+      priorityClassName: local-priority
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.priorityClassName
+          value: local-priority
+
+  # =============================================================================
+  # HostNetwork Tests
+  # =============================================================================
+  - it: should inherit global.hostNetwork
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        hostNetwork: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+
+  - it: should use local hostNetwork when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        hostNetwork: true
+      hostNetwork: false
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+
+  - it: should default hostNetwork to false when not set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+
+  # =============================================================================
+  # DnsConfig Tests
+  # =============================================================================
+  - it: should inherit global.dnsConfig
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        dnsConfig:
+          options:
+            - name: ndots
+              value: "1"
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: ndots
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.dnsConfig.options[0].value
+          value: "1"
+
+  - it: should use local dnsConfig when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        dnsConfig:
+          options:
+            - name: ndots
+              value: "1"
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.dnsConfig.options[0].value
+          value: "2"
+
+  # =============================================================================
+  # PodSecurityContext Tests
+  # =============================================================================
+  - it: should inherit global.podSecurityContext
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        podSecurityContext:
+          runAsUser: 2000
+          runAsGroup: 2000
+          fsGroup: 2000
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 2000
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+
+  - it: should use local podSecurityContext when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        podSecurityContext:
+          runAsUser: 1000
+      podSecurityContext:
+        runAsUser: 3000
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 3000
+
+  - it: should use default podSecurityContext when neither global nor local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  # =============================================================================
+  # ContainerSecurityContext Tests
+  # =============================================================================
+  - it: should inherit global.containerSecurityContext
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: should use local containerSecurityContext when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        containerSecurityContext:
+          privileged: true
+      containerSecurityContext:
+        privileged: false
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: false
+
+  # =============================================================================
+  # Images.pullSecrets Tests
+  # =============================================================================
+  - it: should inherit global.images.pullSecrets
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          pullSecrets:
+            - name: global-pull-secret
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: global-pull-secret
+
+  - it: should merge local images.pullSecrets with global.images.pullSecrets
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          pullSecrets:
+            - name: global-pull-secret
+      images:
+        pullSecrets:
+          - name: local-pull-secret
+    asserts:
+      - template: templates/deployment.yaml
+        contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: global-pull-secret
+      - template: templates/deployment.yaml
+        contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: local-pull-secret
+
+  # =============================================================================
+  # Images.registry Tests
+  # =============================================================================
+  - it: should inherit global.images.registry for integration image
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          registry: my-registry.io
+    asserts:
+      - template: templates/deployment.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^my-registry\.io/newrelic/nri-kube-events
+
+  - it: should inherit global.images.registry for agent image
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          registry: my-registry.io
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        matchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: ^my-registry\.io/newrelic/k8s-events-forwarder
+
+  - it: should use local images.integration.registry when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          registry: global-registry.io
+      images:
+        integration:
+          registry: local-registry.io
+    asserts:
+      - template: templates/deployment.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^local-registry\.io/newrelic/nri-kube-events
+
+  # =============================================================================
+  # Images.pullPolicy Tests
+  # Tests verify pull policy precedence order (highest to lowest):
+  # 1. Local setting (images.integration.pullPolicy / images.agent.pullPolicy)
+  # 2. Global setting (global.images.pullPolicy)
+  # 3. Default (IfNotPresent)
+  # =============================================================================
+  - it: should use default pullPolicy when neither global nor local set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: IfNotPresent
+
+  - it: should inherit global.images.pullPolicy when local not set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      images:
+        integration:
+          pullPolicy: null
+        agent:
+          pullPolicy: null
+      global:
+        images:
+          pullPolicy: Always
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  - it: should use local images.integration.pullPolicy when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          pullPolicy: Always
+      images:
+        integration:
+          pullPolicy: Never
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Never
+
+  - it: should use local images.agent.pullPolicy when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        images:
+          pullPolicy: Always
+      images:
+        agent:
+          pullPolicy: Never
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Never
+
+  # Backwards compatibility tests - old path takes precedence
+  - it: should use old path (image.kubeEvents.pullPolicy) over new path (images.integration.pullPolicy)
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      image:
+        kubeEvents:
+          pullPolicy: Always
+      images:
+        integration:
+          pullPolicy: Never
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should use old path (image.kubeEvents.pullPolicy) over global.images.pullPolicy
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      image:
+        kubeEvents:
+          pullPolicy: Always
+      global:
+        images:
+          pullPolicy: Never
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should use old path (image.infraAgent.pullPolicy) over new path (images.agent.pullPolicy)
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      image:
+        infraAgent:
+          pullPolicy: Always
+      images:
+        agent:
+          pullPolicy: Never
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  - it: should use old path (image.infraAgent.pullPolicy) over global.images.pullPolicy
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      image:
+        infraAgent:
+          pullPolicy: Always
+      global:
+        images:
+          pullPolicy: Never
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  # =============================================================================
+  # ServiceAccount Tests
+  # =============================================================================
+  - it: should inherit global.serviceAccount.create
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        serviceAccount:
+          create: false
+    asserts:
+      - template: templates/serviceaccount.yaml
+        hasDocuments:
+          count: 0
+
+  - it: should inherit global.serviceAccount.annotations
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        serviceAccount:
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-role
+    asserts:
+      - template: templates/serviceaccount.yaml
+        equal:
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
+          value: arn:aws:iam::123456789012:role/my-role
+
+  - it: should merge local serviceAccount.annotations with global
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        serviceAccount:
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-role
+      serviceAccount:
+        annotations:
+          custom-annotation: custom-value
+    asserts:
+      - template: templates/serviceaccount.yaml
+        equal:
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
+          value: arn:aws:iam::123456789012:role/my-role
+      - template: templates/serviceaccount.yaml
+        equal:
+          path: metadata.annotations["custom-annotation"]
+          value: custom-value
+
+  # =============================================================================
+  # Agent Config Tests (proxy, nrStaging, fedramp, verboseLog, customAttributes)
+  # =============================================================================
+  - it: should inherit global.proxy in agent config
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        proxy: http://proxy.example.com:3128
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: 'proxy: "http://proxy.example.com:3128"'
+
+  - it: should use local proxy when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        proxy: http://global-proxy.example.com:3128
+      proxy: http://local-proxy.example.com:3128
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: 'proxy: "http://local-proxy.example.com:3128"'
+
+  - it: should inherit global.nrStaging in agent config
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        nrStaging: true
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: "staging: true"
+
+  - it: should inherit global.fedramp.enabled in agent config
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      fedramp: null
+      global:
+        fedramp:
+          enabled: true
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: "fedramp: true"
+
+  - it: should use local fedramp.enabled when set (overrides global)
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      fedramp:
+        enabled: true
+      global:
+        fedramp:
+          enabled: false
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: "fedramp: true"
+
+  - it: should inherit global.verboseLog in agent config
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        verboseLog: true
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: "log:\n  level: trace"
+
+  - it: should inherit global.customAttributes in agent config
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        customAttributes:
+          environment: production
+          team: platform
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: "custom_attributes:\n  environment: production\n  team: platform"
+
+  - it: should use local customAttributes when both global and local are set
+    set:
+      cluster: test-cluster
+      licenseKey: test-key
+      global:
+        customAttributes:
+          global-attr: global-value
+      customAttributes:
+        local-attr: local-value
+      sinks:
+        newRelicInfra: true
+    asserts:
+      - template: templates/agent-configmap.yaml
+        matchRegex:
+          path: data["newrelic-infra.yml"]
+          pattern: "local-attr: local-value"

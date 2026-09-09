@@ -1,0 +1,519 @@
+suite: global value inheritance
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+  - templates/secret.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  # ========== PERSONAL API KEY / SECRET TESTS ==========
+  - it: personalAPIKey is stored in secret with correct value
+    set: &base
+      personalAPIKey: test-api-key
+      config:
+        accountID: "12345"
+      cluster: test-cluster
+    asserts:
+      - equal:
+          path: stringData.personalAPIKey
+          value: test-api-key
+        template: templates/secret.yaml
+
+  - it: customSecretName suppresses secret creation
+    set:
+      config:
+        accountID: "12345"
+      cluster: test-cluster
+      customSecretName: my-existing-secret
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/secret.yaml
+
+  # ========== CLUSTER & API KEY TESTS ==========
+  - it: cluster from global when local not set
+    set:
+      personalAPIKey: test-api-key
+      config:
+        accountID: "12345"
+      global:
+        cluster: global-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLUSTER_NAME")].value
+          value: global-cluster
+        template: templates/deployment.yaml
+
+  - it: cluster from local overrides global
+    set:
+      <<: *base
+      cluster: local-cluster
+      global:
+        cluster: global-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLUSTER_NAME")].value
+          value: local-cluster
+        template: templates/deployment.yaml
+
+  # ========== IMAGE INHERITANCE TESTS ==========
+  - it: uses default image when no registry override
+    set:
+      <<: *base
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "newrelic/newrelic-k8s-metrics-adapter"
+        template: templates/deployment.yaml
+
+  - it: uses global.images.registry for adapter image
+    set:
+      <<: *base
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^harbor.corp.net/newrelic/"
+        template: templates/deployment.yaml
+
+  - it: local image registry overrides global registry
+    set:
+      <<: *base
+      image:
+        registry: local-registry.io
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^local-registry.io/"
+        template: templates/deployment.yaml
+
+  - it: sets imagePullSecrets from global
+    set:
+      <<: *base
+      global:
+        images:
+          pullSecrets:
+            - name: global-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: global-secret
+        template: templates/deployment.yaml
+
+  - it: merges global and local imagePullSecrets (global then local)
+    set:
+      <<: *base
+      image:
+        pullSecrets:
+          - name: local-secret
+      global:
+        images:
+          pullSecrets:
+            - name: global-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: global-secret
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.imagePullSecrets[1].name
+          value: local-secret
+        template: templates/deployment.yaml
+
+  # ========== PROXY TESTS ==========
+  - it: sets proxy from global
+    set:
+      <<: *base
+      global:
+        proxy: http://proxy.corp.net:3128
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="HTTPS_PROXY")].value
+          value: "http://proxy.corp.net:3128"
+        template: templates/deployment.yaml
+
+  - it: local proxy overrides global
+    set:
+      <<: *base
+      proxy: http://local-proxy.io:8080
+      global:
+        proxy: http://global-proxy.corp.net:3128
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="HTTPS_PROXY")].value
+          value: "http://local-proxy.io:8080"
+        template: templates/deployment.yaml
+
+  # ========== NODE SCHEDULING TESTS ==========
+  - it: sets nodeSelector from global
+    set:
+      <<: *base
+      global:
+        nodeSelector:
+          node.role/monitoring: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            node.role/monitoring: "true"
+        template: templates/deployment.yaml
+
+  - it: local nodeSelector overrides global
+    set:
+      <<: *base
+      nodeSelector:
+        local-node: "true"
+      global:
+        nodeSelector:
+          global-node: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            local-node: "true"
+        template: templates/deployment.yaml
+
+  - it: sets tolerations from global
+    set:
+      <<: *base
+      global:
+        tolerations:
+          - key: monitoring-taint
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: monitoring-taint
+        template: templates/deployment.yaml
+
+  - it: local tolerations override global
+    set:
+      <<: *base
+      tolerations:
+        - key: local-taint
+          operator: Exists
+      global:
+        tolerations:
+          - key: global-taint
+            operator: Equal
+            value: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: local-taint
+        template: templates/deployment.yaml
+
+  - it: sets affinity from global
+    set:
+      <<: *base
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: node.role/monitoring
+                      operator: In
+                      values: ["true"]
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: node.role/monitoring
+        template: templates/deployment.yaml
+
+  - it: local affinity overrides global
+    set:
+      <<: *base
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: local-affinity
+                    operator: In
+                    values: ["true"]
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: global-affinity
+                      operator: In
+                      values: ["true"]
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: local-affinity
+        template: templates/deployment.yaml
+
+  # ========== PRIORITY & RESOURCE CONSTRAINTS ==========
+  - it: sets priorityClassName from global
+    set:
+      <<: *base
+      global:
+        priorityClassName: high-priority
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+        template: templates/deployment.yaml
+
+  - it: local priorityClassName overrides global
+    set:
+      <<: *base
+      priorityClassName: local-priority
+      global:
+        priorityClassName: global-priority
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: local-priority
+        template: templates/deployment.yaml
+
+  # ========== DNS & NETWORK TESTS ==========
+  - it: sets dnsConfig from global
+    set:
+      <<: *base
+      global:
+        dnsConfig:
+          options:
+            - name: ndots
+              value: "1"
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: ndots
+        template: templates/deployment.yaml
+
+  - it: local dnsConfig overrides global
+    set:
+      <<: *base
+      dnsConfig:
+        options:
+          - name: local-ndots
+            value: "2"
+      global:
+        dnsConfig:
+          options:
+            - name: global-ndots
+              value: "1"
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: local-ndots
+        template: templates/deployment.yaml
+
+  - it: default hostNetwork is false
+    set:
+      <<: *base
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+        template: templates/deployment.yaml
+
+  - it: sets hostNetwork from global when true
+    set:
+      <<: *base
+      global:
+        hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+        template: templates/deployment.yaml
+
+  - it: local hostNetwork overrides global
+    set:
+      <<: *base
+      hostNetwork: false
+      global:
+        hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+        template: templates/deployment.yaml
+
+  # ========== SECURITY CONTEXT TESTS ==========
+  - it: sets podSecurityContext from global
+    set:
+      <<: *base
+      global:
+        podSecurityContext:
+          runAsUser: 2000
+          runAsGroup: 3000
+          fsGroup: 4000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 4000
+        template: templates/deployment.yaml
+
+  - it: local podSecurityContext overrides global
+    set:
+      <<: *base
+      podSecurityContext:
+        runAsUser: 5000
+      global:
+        podSecurityContext:
+          runAsUser: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 5000
+        template: templates/deployment.yaml
+
+  - it: sets containerSecurityContext from global
+    set:
+      <<: *base
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/deployment.yaml
+
+  - it: local containerSecurityContext overrides global
+    set:
+      <<: *base
+      containerSecurityContext:
+        allowPrivilegeEscalation: true
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: true
+        template: templates/deployment.yaml
+
+  # ========== SERVICE ACCOUNT TESTS (CRITICAL FOR IAM ROLES) ==========
+  - it: uses service account name from global
+    set:
+      <<: *base
+      serviceAccount:
+        create: false
+      global:
+        serviceAccount:
+          name: global-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: global-sa
+        template: templates/deployment.yaml
+
+  - it: local service account name overrides global
+    set:
+      <<: *base
+      serviceAccount:
+        create: false
+        name: local-sa
+      global:
+        serviceAccount:
+          name: global-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: local-sa
+        template: templates/deployment.yaml
+
+  # ========== LABELS TESTS ==========
+  - it: applies labels from global
+    set:
+      <<: *base
+      global:
+        labels:
+          global-label: "true"
+    asserts:
+      - equal:
+          path: metadata.labels["global-label"]
+          value: "true"
+        template: templates/deployment.yaml
+
+  - it: applies podLabels from global
+    set:
+      <<: *base
+      global:
+        podLabels:
+          global-pod-label: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["global-pod-label"]
+          value: "true"
+        template: templates/deployment.yaml
+
+  # ========== VERBOSE LOG TESTS ==========
+  - it: default verboseLog is false (--v=1)
+    set:
+      <<: *base
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --v=1
+        template: templates/deployment.yaml
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --v=10
+        template: templates/deployment.yaml
+
+  - it: enables verbose logging from global.verboseLog
+    set:
+      <<: *base
+      global:
+        verboseLog: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --v=10
+        template: templates/deployment.yaml
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --v=1
+        template: templates/deployment.yaml
+
+  - it: local verboseLog=true overrides global=false
+    set:
+      <<: *base
+      verboseLog: true
+      global:
+        verboseLog: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --v=10
+        template: templates/deployment.yaml
+
+  - it: local verboseLog=false overrides global=true
+    set:
+      <<: *base
+      verboseLog: false
+      global:
+        verboseLog: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --v=1
+        template: templates/deployment.yaml
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --v=10
+        template: templates/deployment.yaml

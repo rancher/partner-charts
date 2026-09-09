@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+  name: {{ include "nriKubernetes.kubelet.fullname.integrations" . }}
+data:
+  # This ConfigMap holds config files for integrations. They should have the following format:
+  #redis-config.yml: |
+  #  # Run auto discovery to find pods with label "app=redis"
+  #  discovery:
+  #    command:
+  #      # Run discovery for Kubernetes. Use the following optional arguments:
+  #      # --namespaces: Comma separated list of namespaces to discover pods on
+  #      # --tls: Use secure (TLS) connection
+  #      # --port: Port used to connect to the kubelet. Default is 10255
+  #      exec: /var/db/newrelic-infra/nri-discovery-kubernetes --port PORT --tls
+  #      match:
+  #        label.app: redis
+  #  integrations:
+  #    - name: nri-redis
+  #      env:
+  #        # using the discovered IP as the hostname address
+  #        HOSTNAME: ${discovery.ip}
+  #        PORT: 6379
+  #        KEYS: '{"0":["<KEY_1>"],"1":["<KEY_2>"]}'
+  #        REMOTE_MONITORING: true
+  #      labels:
+  #        env: production
+  {{- if .Values.integrations -}}
+  {{- range $k, $v := .Values.integrations -}}
+  {{- $k | trimSuffix ".yaml" | trimSuffix ".yml" | nindent 2 -}}.yaml: |-
+  {{- $v | toYaml | nindent 4 -}}
+  {{- end }}
+  {{- end }}
+
+  {{- /* This template will add and template the integrations in the old .Values.integrations_config */}}
+  {{- include "newrelic.compatibility.integrations" . | nindent 2 }}
+
+  {{- /* This template will add Pixie Health check to the integrations */}}
+  {{- if .Values.selfMonitoring.pixie.enabled }}
+  pixie-health-check.yaml: |
+    ---
+    # This Flex config performs periodic checks of the Pixie
+    # /healthz and /statusz endpoints exposed by the Pixie Cloud Connector.
+    # A status for each endpoint is sent to New Relic in a pixieHealthCheck event.
+    #
+    # If Pixie is not installed in the cluster, no events will be generated.
+    # This can also be disabled with enablePixieHealthCheck: false in the values.yaml file.
+    discovery:
+      command:
+        exec: /var/db/newrelic-infra/nri-discovery-kubernetes --tls --port 10250
+        match:
+          label.name: vizier-cloud-connector
+    integrations:
+      - name: nri-flex
+        interval: 60s
+        config:
+          name: pixie-health-check
+          apis:
+            - event_type: pixieHealth
+              commands:
+                - run: curl --insecure -s https://${discovery.ip}:50800/healthz | xargs | awk '{print "cloud_connector_health:"$1}'
+                  split_by: ":"
+              merge: pixieHealthCheck
+            - event_type: pixieStatus
+              commands:
+                - run: curl --insecure -s https://${discovery.ip}:50800/statusz | awk '{if($1 == ""){ print "cloud_connector_status:OK" } else { print "cloud_connector_status:"$1 }}'
+                  split_by: ":"
+              merge: pixieHealthCheck
+  {{- end }}

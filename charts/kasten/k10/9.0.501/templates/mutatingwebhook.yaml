@@ -1,0 +1,78 @@
+{{- if or .Values.injectGenericVolumeBackupSidecar.enabled .Values.injectKanisterSidecar.enabled -}}
+# alternate names of the services. This renders to: [ component-svc.namespace, component-svc.namespace.svc ]
+{{- $altNames := list ( printf "%s-svc.%s" "controllermanager" .Release.Namespace ) ( printf "%s-svc.%s.svc" "controllermanager" .Release.Namespace ) }}
+# generate ca cert with 365 days of validity
+{{- $ca := genCA ( printf "%s-svc-ca" "controllermanager" ) 365 }}
+# generate cert with CN="component-svc", SAN=$altNames and with 365 days of validity
+{{- $cert := genSignedCert ( printf "%s-svc" "controllermanager" ) nil $altNames 365 $ca }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: controllermanager-certs
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+{{/*
+This resource uses the Helm-generated CA/Cert. In case of installation to OpenShift,
+it should be moved to Helm hook to avoid an upgrade loop in the OpenShift operator.
+*/}}
+{{- if .Values.scc.create }}
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+{{- end }}
+data:
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+{{/*
+This resource uses the Helm-generated CA/Cert. In case of installation to OpenShift,
+it should be moved to Helm hook to avoid an upgrade loop in the OpenShift operator.
+*/}}
+{{- if .Values.scc.create }}
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+{{- end }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-sidecar-injector
+webhooks:
+- name: k10-sidecar-injector.kasten.io
+  admissionReviewVersions: ["v1", "v1beta1"]
+  failurePolicy: Ignore
+  sideEffects: None
+  clientConfig:
+    service:
+      name: controllermanager-svc
+      namespace: {{ .Release.Namespace }}
+      path: "/k10/mutate"
+      port: 443
+    caBundle: {{ b64enc $ca.Cert }}
+  rules:
+    - operations: ["CREATE", "UPDATE"]
+      apiGroups: ["*"]
+      apiVersions: ["v1"]
+      resources: ["deployments", "statefulsets", "deploymentconfigs"]
+{{- if .Values.injectGenericVolumeBackupSidecar.enabled }}
+  {{- if .Values.injectGenericVolumeBackupSidecar.namespaceSelector }}
+  namespaceSelector:
+  {{- toYaml .Values.injectGenericVolumeBackupSidecar.namespaceSelector | nindent 4 }}
+  {{- end }}
+  {{- if .Values.injectGenericVolumeBackupSidecar.objectSelector }}
+  objectSelector:
+  {{- toYaml .Values.injectGenericVolumeBackupSidecar.objectSelector | nindent 4 }}
+  {{- end }}
+{{- else if .Values.injectKanisterSidecar.enabled }}
+  {{- if .Values.injectKanisterSidecar.namespaceSelector }}
+  namespaceSelector:
+  {{- toYaml .Values.injectKanisterSidecar.namespaceSelector | nindent 4 }}
+  {{- end }}
+  {{- if .Values.injectKanisterSidecar.objectSelector }}
+  objectSelector:
+  {{- toYaml .Values.injectKanisterSidecar.objectSelector | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

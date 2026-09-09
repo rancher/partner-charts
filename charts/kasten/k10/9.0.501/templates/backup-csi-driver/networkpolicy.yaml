@@ -1,0 +1,58 @@
+{{- if and .Values.features.csiDriverIntegration .Values.networkPolicy.create }}
+{{/*
+The default-deny policy selects every pod in the release namespace, so it covers
+the driver too. The allow rules paired with it all match on "release", a label
+the driver's pods do not carry — carrying it would also opt them into unrelated
+rules such as the OpenShift console exemption, which opens every port. The driver
+gets its own rules instead, keyed off its own labels.
+
+Without these, the controller cannot reach the node plugin and no snapshot ever
+completes; the failure surfaces as VolumeSnapshots stuck not-ready rather than as
+anything pointing at the network.
+*/}}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ include "backup-csi-driver.fullname" . }}-allow-snapshot-grpc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backup-csi-driver.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "backup-csi-driver.selectorLabels" . | nindent 6 }}
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "backup-csi-driver.controllerSelectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ include "backup-csi-driver.snapshotPort" . }}
+---
+{{/*
+Scraping reaches the pods directly on the metrics port, both via the metrics
+Service and via the prometheus.io/scrape annotations on the pods themselves.
+Both driver components are selected; the scraper is trusted by release, matching
+how K10 scopes its own in-namespace traffic.
+*/}}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ include "backup-csi-driver.fullname" . }}-allow-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backup-csi-driver.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "backup-csi-driver.name" . }}
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              release: {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: {{ include "backup-csi-driver.metricsPort" . }}
+{{- end }}

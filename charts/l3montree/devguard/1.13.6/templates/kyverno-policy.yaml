@@ -1,0 +1,139 @@
+{{- if .Values.kyvernoPolicy.enabled }}
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: verify-image-signatures
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
+    "helm.sh/hook-weight": "-5"
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Software Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Verifies that all container images in this namespace are signed with the
+      expected cosign keys before they are admitted.
+spec:
+  validationFailureAction: {{ .Values.kyvernoPolicy.validationFailureAction }}
+  background: false
+  rules:
+    - name: verify-devguard-images
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/l3montree-dev/devguard:*"
+            - "ghcr.io/l3montree-dev/devguard-web:*"
+          mutateDigest: false
+          verifyDigest: false
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEicBpp8o3W6m993d4Z49WKtwsAOrp
+                      DBobQ3+l2FTWqPqYpnjVtV3w9si91eR3ygYGP7mDoM01sdAmc2TvbOVygA==
+                      -----END PUBLIC KEY-----
+                    rekor:
+                      ignoreTlog: true
+          attestations:
+            - predicateType: https://slsa.dev/provenance/v1
+              attestors:
+                - entries:
+                    - keys:
+                        publicKeys: |-
+                          -----BEGIN PUBLIC KEY-----
+                          MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEicBpp8o3W6m993d4Z49WKtwsAOrp
+                          DBobQ3+l2FTWqPqYpnjVtV3w9si91eR3ygYGP7mDoM01sdAmc2TvbOVygA==
+                          -----END PUBLIC KEY-----
+                        rekor:
+                          ignoreTlog: true
+              conditions:
+                - all:
+                    - key: "{{ `{{ predicate.runDetails.builder.id }}` }}"
+                      operator: Equals
+                      value: "devguard.org"
+                    - key: "{{ `{{ predicate.buildDefinition.externalParameters.remotes }}` }}"
+                      operator: AnyIn
+                      value:
+                        - "https://github.com/l3montree-dev/devguard"
+                        - "https://github.com/l3montree-dev/devguard-web"
+                    # personal email addresses from maintainers - those are
+                    # hardcoded because we don't want to allow any other maintainers to sign the images
+                    # numeric GitHub user IDs in noreply emails are permanent even if username changes
+                    - key: "{{ `{{ predicate.buildDefinition.externalParameters.authoremail }}` }}"
+                      operator: AnyIn
+                      value:
+                        - "bastin.tim@gmail.com"
+                        - "38261809+timbastin@users.noreply.github.com"
+                        - "66557440+seb-kw@users.noreply.github.com"
+                        - "sebastian.kawelke@l3montree.com"
+    - name: verify-devguard-postgresql-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/l3montree-dev/devguard/postgresql:*"
+          mutateDigest: false
+          verifyDigest: false
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEicBpp8o3W6m993d4Z49WKtwsAOrp
+                      DBobQ3+l2FTWqPqYpnjVtV3w9si91eR3ygYGP7mDoM01sdAmc2TvbOVygA==
+                      -----END PUBLIC KEY-----
+                    rekor:
+                      ignoreTlog: true
+    - name: verify-kratos-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "index.docker.io/oryd/kratos*"
+            - "oryd/kratos*"
+          mutateDigest: false
+          verifyDigest: false
+          attestors:
+            - entries:
+                - keys:
+                    # Source: https://raw.githubusercontent.com/ory/xgoreleaser/master/cosign.pub
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqE7EXHa8LTyCCEl6uI3hnKxetuTg
+                      XkoOJ4EUUeQfdJp+7n5uojArbs8KwnZNZp4T4jXdcH6R5mQfPMXemfLrEg==
+                      -----END PUBLIC KEY-----
+                    rekor:
+                      ignoreTlog: true
+    - name: verify-otel-collector-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "index.docker.io/otel/opentelemetry-collector-contrib*"
+            - "otel/opentelemetry-collector-contrib*"
+          mutateDigest: false
+          verifyDigest: false
+          attestors:
+            - entries:
+                - keyless:
+                    # Signed via GitHub Actions OIDC (Sigstore keyless)
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/open-telemetry/opentelemetry-collector-releases/.github/workflows/base-release.yaml@refs/tags/*"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+{{- end }}
