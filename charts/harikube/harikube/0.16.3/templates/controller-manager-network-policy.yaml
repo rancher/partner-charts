@@ -1,0 +1,28 @@
+{{- if .Values.controllerManager.create -}}
+{{- if .Values.controllerManager.networkPolicy.create -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-controller-manager-netpol
+  namespace: {{ .Release.Namespace }}
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          harikube.info/{{ .Release.Namespace }}-controllermanager: enabled
+    ports:
+    - port: {{ .Values.controllerManager.service.https.port }}
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      {{- include "harikube.labels" . | nindent 6 }}
+      {{- with .Values.controllerManager.podLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+  policyTypes:
+  - Ingress
+{{- end }}
+{{- end }}

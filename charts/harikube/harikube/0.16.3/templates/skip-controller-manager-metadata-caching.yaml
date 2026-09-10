@@ -1,0 +1,85 @@
+{{- if .Values.mutatingAdmissionPolicy.create -}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: "skip-controller-manager-metadata-caching"
+spec:
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["*"]
+      apiVersions: ["*"]
+      operations:  ["CREATE"]
+      resources:   ["*"]
+    excludeResourceRules:
+    - apiGroups:
+      - ""
+      - "apps"
+      - "batch"
+      - "storage.k8s.io"
+      - "coordination.k8s.io"
+      - "autoscaling"
+      - "policy"
+      - "rbac.authorization.k8s.io"
+      - "networking.k8s.io"
+      - "certificates.k8s.io"
+      - "admissionregistration.k8s.io"
+      - "apiextensions.k8s.io"
+      - "scheduling.k8s.io"
+      - "node.k8s.io"
+      - "discovery.k8s.io"
+      - "flowcontrol.apiserver.k8s.io"
+      - "events.k8s.io"
+      - "authentication.k8s.io"
+      - "authorization.k8s.io"
+      apiVersions: ["*"]
+      operations:  ["CREATE"]
+      resources:   ["*"]
+  matchConditions:
+  - name: exclude-system-namespaces
+    expression: >
+      !has(object.metadata.namespace) ||
+      !(object.metadata.namespace in ['kube-system','kube-public','kube-node-lease'])
+  - name: label-does-not-exist
+    expression: >
+        !has(object.metadata.labels) ||
+        !('skip-controller-manager-metadata-caching' in object.metadata.labels)
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
+  mutations:
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: >
+        has(object.metadata.labels)
+        ? [
+            JSONPatch{
+              op: "add",
+              path: "/metadata/labels/skip-controller-manager-metadata-caching",
+              value: ""
+            }
+          ]
+        : [
+            JSONPatch{
+              op: "add",
+              path: "/metadata/labels",
+              value: {}
+            },
+            JSONPatch{
+              op: "add",
+              path: "/metadata/labels/skip-controller-manager-metadata-caching",
+              value: ""
+            }
+          ]
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: "skip-controller-manager-metadata-caching"
+spec:
+  policyName: "skip-controller-manager-metadata-caching"
+  matchResources:
+    resourceRules:
+    - apiGroups:   ["*"]
+      apiVersions: ["*"]
+      operations:  ["CREATE"]
+      resources:   ["*"]
+{{- end }}
