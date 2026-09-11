@@ -1,0 +1,202 @@
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- if .Values.createTLSCerts -}}
+{{- $s := (lookup "v1" "Secret" .Release.Namespace "speedscale-certs") -}}
+{{- if $s -}}
+{{- $crt = index $s.data "tls.crt" | b64dec -}}
+{{- $key = index $s.data "tls.key" | b64dec -}}
+{{ else }}
+{{- $cert := genCA "Speedscale" 3650 -}}
+{{- $crt = $cert.Cert -}}
+{{- $key = $cert.Key -}}
+{{- end -}}
+{{- end -}}
+---
+{{- if .Values.createJKS }}
+{{- $jks := .Values.jks | default dict }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: speedscale-jks-program
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "4"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+binaryData:
+  TruststoreProvisioner.class: yv66vgAAADcCGgoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClWCgAIAAkHAAoMAAsABgEAFVRydXN0c3RvcmVQcm92aXNpb25lcgEACXByb3Zpc2lvbgkADQAOBwAPDAAQABEBABBqYXZhL2xhbmcvU3lzdGVtAQADb3V0AQAVTGphdmEvaW8vUHJpbnRTdHJlYW07CAATAQAeSmF2YSB0cnVzdHN0b3JlIFNlY3JldCB1cGRhdGVkCgAVABYHABcMABgAGQEAE2phdmEvaW8vUHJpbnRTdHJlYW0BAAdwcmludGxuAQAVKExqYXZhL2xhbmcvU3RyaW5nOylWCAAbAQAjaHR0cDovLzEyNy4wLjAuMToxNTAwMC9xdWl0cXVpdHF1aXQKAB0AHgcAHwwAIAAhAQAMamF2YS9uZXQvVVJJAQAGY3JlYXRlAQAiKExqYXZhL2xhbmcvU3RyaW5nOylMamF2YS9uZXQvVVJJOwoAHQAjDAAkACUBAAV0b1VSTAEAECgpTGphdmEvbmV0L1VSTDsKACcAKAcAKQwAKgArAQAMamF2YS9uZXQvVVJMAQAOb3BlbkNvbm5lY3Rpb24BABooKUxqYXZhL25ldC9VUkxDb25uZWN0aW9uOwcALQEAGmphdmEvbmV0L0h0dHBVUkxDb25uZWN0aW9uCAAvAQAEUE9TVAoALAAxDAAyABkBABBzZXRSZXF1ZXN0TWV0aG9kCgAsADQMADUANgEAEXNldENvbm5lY3RUaW1lb3V0AQAEKEkpVgoALAA4DAA5ADYBAA5zZXRSZWFkVGltZW91dAoALAA7DAA8AD0BAA9nZXRSZXNwb25zZUNvZGUBAAMoKUkKACwAPwwAQAAGAQAKZGlzY29ubmVjdAcAQgEAE2phdmEvbGFuZy9FeGNlcHRpb24JAA0ARAwARQARAQADZXJyCgBBAEcMAEgASQEACmdldE1lc3NhZ2UBABQoKUxqYXZhL2xhbmcvU3RyaW5nOxIAAABLDABMAE0BABdtYWtlQ29uY2F0V2l0aENvbnN0YW50cwEAJihMamF2YS9sYW5nL1N0cmluZzspTGphdmEvbGFuZy9TdHJpbmc7CgANAE8MAFAANgEABGV4aXQIAFIBAA9UUlVTVFNUT1JFX1BBVEgKAA0AVAwAVQBNAQAGZ2V0ZW52CgBXAFgHAFkMAFoAWwEAEGphdmEvbGFuZy9TdHJpbmcBAAdpc0VtcHR5AQADKClaCABdAQAJamF2YS5ob21lCgANAF8MAGAATQEAC2dldFByb3BlcnR5CABiAQADbGliCABkAQAIc2VjdXJpdHkIAGYBAAdjYWNlcnRzCwBoAGkHAGoMAGsAbAEAEmphdmEvbmlvL2ZpbGUvUGF0aAEAAm9mAQA7KExqYXZhL2xhbmcvU3RyaW5nO1tMamF2YS9sYW5nL1N0cmluZzspTGphdmEvbmlvL2ZpbGUvUGF0aDsLAGgAbgwAbwBJAQAIdG9TdHJpbmcLAGgAcQwAcgBzAQAGdG9GaWxlAQAQKClMamF2YS9pby9GaWxlOwkACAB1DAB2AHcBAAhQQVNTV09SRAEAAltDCgB5AHoHAHsMAHwAfQEAFmphdmEvc2VjdXJpdHkvS2V5U3RvcmUBAAtnZXRJbnN0YW5jZQEAKihMamF2YS9pby9GaWxlO1tDKUxqYXZhL3NlY3VyaXR5L0tleVN0b3JlOwgAfwEAA0pLUwoAeQCBDAB8AIIBACwoTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL3NlY3VyaXR5L0tleVN0b3JlOwoAeQCEDACFAIYBAARsb2FkAQAaKExqYXZhL2lvL0lucHV0U3RyZWFtO1tDKVYKAHkAiAwAiQCKAQAHYWxpYXNlcwEAGSgpTGphdmEvdXRpbC9FbnVtZXJhdGlvbjsLAIwAjQcAjgwAjwBbAQAVamF2YS91dGlsL0VudW1lcmF0aW9uAQAPaGFzTW9yZUVsZW1lbnRzCwCMAJEMAJIAkwEAC25leHRFbGVtZW50AQAUKClMamF2YS9sYW5nL09iamVjdDsKAHkAlQwAlgCXAQASaXNDZXJ0aWZpY2F0ZUVudHJ5AQAVKExqYXZhL2xhbmcvU3RyaW5nOylaCgB5AJkMAJoAmwEADmdldENlcnRpZmljYXRlAQA0KExqYXZhL2xhbmcvU3RyaW5nOylMamF2YS9zZWN1cml0eS9jZXJ0L0NlcnRpZmljYXRlOwoAeQCdDACeAJ8BABNzZXRDZXJ0aWZpY2F0ZUVudHJ5AQA1KExqYXZhL2xhbmcvU3RyaW5nO0xqYXZhL3NlY3VyaXR5L2NlcnQvQ2VydGlmaWNhdGU7KVYSAAEAoQwATACiAQAnKElMamF2YS9sYW5nL1N0cmluZzspTGphdmEvbGFuZy9TdHJpbmc7CACkAQAFWC41MDkKAKYApwcAqAwAfACpAQAlamF2YS9zZWN1cml0eS9jZXJ0L0NlcnRpZmljYXRlRmFjdG9yeQEAOyhMamF2YS9sYW5nL1N0cmluZzspTGphdmEvc2VjdXJpdHkvY2VydC9DZXJ0aWZpY2F0ZUZhY3Rvcnk7CACrAQAbL2V0Yy9zc2wvc3BlZWRzY2FsZS90bHMuY3J0BwCtAQAYamF2YS9uaW8vZmlsZS9PcGVuT3B0aW9uCgCvALAHALEMALIAswEAE2phdmEvbmlvL2ZpbGUvRmlsZXMBAA5uZXdJbnB1dFN0cmVhbQEARihMamF2YS9uaW8vZmlsZS9QYXRoO1tMamF2YS9uaW8vZmlsZS9PcGVuT3B0aW9uOylMamF2YS9pby9JbnB1dFN0cmVhbTsKAKYAtQwAtgC3AQATZ2VuZXJhdGVDZXJ0aWZpY2F0ZQEANyhMamF2YS9pby9JbnB1dFN0cmVhbTspTGphdmEvc2VjdXJpdHkvY2VydC9DZXJ0aWZpY2F0ZTsIALkBAApzcGVlZHNjYWxlCgC7ALwHAL0MAL4ABgEAE2phdmEvaW8vSW5wdXRTdHJlYW0BAAVjbG9zZQcAwAEAE2phdmEvbGFuZy9UaHJvd2FibGUKAL8AwgwAwwDEAQANYWRkU3VwcHJlc3NlZAEAGChMamF2YS9sYW5nL1Rocm93YWJsZTspVgcAxgEAHWphdmEvaW8vQnl0ZUFycmF5T3V0cHV0U3RyZWFtCgDFAAMKAHkAyQwAygDLAQAFc3RvcmUBABsoTGphdmEvaW8vT3V0cHV0U3RyZWFtO1tDKVYKAMUAzQwAzgDPAQALdG9CeXRlQXJyYXkBAAQoKVtCAwANu6AHANIBAB9qYXZhL2xhbmcvSWxsZWdhbFN0YXRlRXhjZXB0aW9uCADUAQAsVHJ1c3RzdG9yZSBleGNlZWRzIHRoZSBzdXBwb3J0ZWQgU2VjcmV0IHNpemUKANEA1gwABQAZCQAIANgMANkA2gEAD1NFUlZJQ0VfQUNDT1VOVAEAFExqYXZhL25pby9maWxlL1BhdGg7CADcAQAGY2EuY3J0CwBoAN4MAN8A4AEAB3Jlc29sdmUBACgoTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL25pby9maWxlL1BhdGg7CgCmAOIMAOMA5AEAFGdlbmVyYXRlQ2VydGlmaWNhdGVzAQAtKExqYXZhL2lvL0lucHV0U3RyZWFtOylMamF2YS91dGlsL0NvbGxlY3Rpb247CwDmAOcHAOgMAOkA6gEAFGphdmEvdXRpbC9Db2xsZWN0aW9uAQAIaXRlcmF0b3IBABYoKUxqYXZhL3V0aWwvSXRlcmF0b3I7CwDsAO0HAO4MAO8AWwEAEmphdmEvdXRpbC9JdGVyYXRvcgEAB2hhc05leHQLAOwA8QwA8gCTAQAEbmV4dAcA9AEAHmphdmEvc2VjdXJpdHkvY2VydC9DZXJ0aWZpY2F0ZRIAAgD2DABMAPcBABUoSSlMamF2YS9sYW5nL1N0cmluZzsKAPkA+gcA+wwA/ABJAQAhamF2YXgvbmV0L3NzbC9UcnVzdE1hbmFnZXJGYWN0b3J5AQATZ2V0RGVmYXVsdEFsZ29yaXRobQoA+QD+DAB8AP8BADcoTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZheC9uZXQvc3NsL1RydXN0TWFuYWdlckZhY3Rvcnk7CgD5AQEMAQIBAwEABGluaXQBABsoTGphdmEvc2VjdXJpdHkvS2V5U3RvcmU7KVYIAQUBAANUTFMKAQcBCAcBCQwAfAEKAQAYamF2YXgvbmV0L3NzbC9TU0xDb250ZXh0AQAuKExqYXZhL2xhbmcvU3RyaW5nOylMamF2YXgvbmV0L3NzbC9TU0xDb250ZXh0OwoA+QEMDAENAQ4BABBnZXRUcnVzdE1hbmFnZXJzAQAfKClbTGphdmF4L25ldC9zc2wvVHJ1c3RNYW5hZ2VyOwoBBwEQDAECAREBAFcoW0xqYXZheC9uZXQvc3NsL0tleU1hbmFnZXI7W0xqYXZheC9uZXQvc3NsL1RydXN0TWFuYWdlcjtMamF2YS9zZWN1cml0eS9TZWN1cmVSYW5kb207KVYKARMBFAcBFQwBFgEXAQAYamF2YS9uZXQvaHR0cC9IdHRwQ2xpZW50AQAKbmV3QnVpbGRlcgEAJCgpTGphdmEvbmV0L2h0dHAvSHR0cENsaWVudCRCdWlsZGVyOwsBGQEaBwEbDAEcAR0BACBqYXZhL25ldC9odHRwL0h0dHBDbGllbnQkQnVpbGRlcgEACnNzbENvbnRleHQBAD4oTGphdmF4L25ldC9zc2wvU1NMQ29udGV4dDspTGphdmEvbmV0L2h0dHAvSHR0cENsaWVudCRCdWlsZGVyOwUAAAAAAAAACgoBIQEiBwEjDAEkASUBABJqYXZhL3RpbWUvRHVyYXRpb24BAAlvZlNlY29uZHMBABcoSilMamF2YS90aW1lL0R1cmF0aW9uOwsBGQEnDAEoASkBAA5jb25uZWN0VGltZW91dAEAOChMamF2YS90aW1lL0R1cmF0aW9uOylMamF2YS9uZXQvaHR0cC9IdHRwQ2xpZW50JEJ1aWxkZXI7CQErASwHAS0MAS4BLwEAIGphdmEvbmV0L2h0dHAvSHR0cENsaWVudCRWZXJzaW9uAQAISFRUUF8xXzEBACJMamF2YS9uZXQvaHR0cC9IdHRwQ2xpZW50JFZlcnNpb247CwEZATEMATIBMwEAB3ZlcnNpb24BAEYoTGphdmEvbmV0L2h0dHAvSHR0cENsaWVudCRWZXJzaW9uOylMamF2YS9uZXQvaHR0cC9IdHRwQ2xpZW50JEJ1aWxkZXI7CwEZATUMATYBNwEABWJ1aWxkAQAcKClMamF2YS9uZXQvaHR0cC9IdHRwQ2xpZW50OwgBOQEACW5hbWVzcGFjZQoArwE7DAE8AT0BAApyZWFkU3RyaW5nAQAoKExqYXZhL25pby9maWxlL1BhdGg7KUxqYXZhL2xhbmcvU3RyaW5nOwoAVwE/DAFAAEkBAAR0cmltCAFCAQAdW2EtejAtOV0oWy1hLXowLTldKlthLXowLTldKT8KAFcBRAwBRQCXAQAHbWF0Y2hlcwcBRwEAImphdmEvbGFuZy9JbGxlZ2FsQXJndW1lbnRFeGNlcHRpb24IAUkBACFJbnZhbGlkIHNlcnZpY2UtYWNjb3VudCBuYW1lc3BhY2UKAUYA1ggBTAEAF0tVQkVSTkVURVNfU0VSVklDRV9IT1NUCAFOAQAdS1VCRVJORVRFU19TRVJWSUNFX1BPUlRfSFRUUFMIAVABACNLVUJFUk5FVEVTX1NFUlZJQ0VfSE9TVCBpcyByZXF1aXJlZAgBUgEAAzQ0MwgBVAEAAToKAFcBVgwBVwFYAQAIY29udGFpbnMBABsoTGphdmEvbGFuZy9DaGFyU2VxdWVuY2U7KVoSAAMASxIABAFbDABMAVwBAEooTGphdmEvbGFuZy9TdHJpbmc7TGphdmEvbGFuZy9TdHJpbmc7TGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL2xhbmcvU3RyaW5nOwoAVwFeDAFfAWABAAd2YWx1ZU9mAQAmKExqYXZhL2xhbmcvT2JqZWN0OylMamF2YS9sYW5nL1N0cmluZzsSAAUASwgBYwEABXRva2VuCgFlAWYHAWcMAWgBaQEAEGphdmEvdXRpbC9CYXNlNjQBAApnZXRFbmNvZGVyAQAcKClMamF2YS91dGlsL0Jhc2U2NCRFbmNvZGVyOwoBawFsBwFtDAFuAW8BABhqYXZhL3V0aWwvQmFzZTY0JEVuY29kZXIBAA5lbmNvZGVUb1N0cmluZwEAFihbQilMamF2YS9sYW5nL1N0cmluZzsSAAYASxIABwBLCgANAXMMAXQBdQEACG5hbm9UaW1lAQADKClKCQAIAXcMAXgBeQEAElJFVFJZX0JVREdFVF9OQU5PUwEAAUoFAAAAAAAAA+gIAX0BAAVQQVRDSAgBfwEAHGFwcGxpY2F0aW9uL21lcmdlLXBhdGNoK2pzb24SAAgASwoACAGCDAGDAYQBAAdyZXF1ZXN0AQBzKExqYXZhL25ldC9odHRwL0h0dHBDbGllbnQ7TGphdmEvbGFuZy9TdHJpbmc7TGphdmEvbmV0L1VSSTtMamF2YS9sYW5nL1N0cmluZztMamF2YS9sYW5nL1N0cmluZztMamF2YS9sYW5nL1N0cmluZzspSQgBhgEAEGFwcGxpY2F0aW9uL2pzb24IAYgBAAZERUxFVEUHAYoBABNqYXZhL2lvL0lPRXhjZXB0aW9uEgAJAPYSAAoA9goBjgGPBwGQDAGRAZIBABBqYXZhL2xhbmcvVGhyZWFkAQAFc2xlZXABAAQoSilWBQAAAAAAAAACBQAAAAAAAD6ACgGYAZkHAZoMAZsBnAEADmphdmEvbGFuZy9NYXRoAQADbWluAQAFKEpKKUoKAZ4BnwcBoAwBoQGiAQAoamF2YS9uZXQvaHR0cC9IdHRwUmVxdWVzdCRCb2R5UHVibGlzaGVycwEABm5vQm9keQEAKygpTGphdmEvbmV0L2h0dHAvSHR0cFJlcXVlc3QkQm9keVB1Ymxpc2hlcjsKAZ4BpAwBpQGmAQAIb2ZTdHJpbmcBAD0oTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL25ldC9odHRwL0h0dHBSZXF1ZXN0JEJvZHlQdWJsaXNoZXI7CgGoAakHAaoMARYBqwEAGWphdmEvbmV0L2h0dHAvSHR0cFJlcXVlc3QBADMoTGphdmEvbmV0L1VSSTspTGphdmEvbmV0L2h0dHAvSHR0cFJlcXVlc3QkQnVpbGRlcjsFAAAAAAAAAA8LAa8BsAcBsQwBsgGzAQAhamF2YS9uZXQvaHR0cC9IdHRwUmVxdWVzdCRCdWlsZGVyAQAHdGltZW91dAEAOShMamF2YS90aW1lL0R1cmF0aW9uOylMamF2YS9uZXQvaHR0cC9IdHRwUmVxdWVzdCRCdWlsZGVyOwgBtQEADUF1dGhvcml6YXRpb24SAAsASwsBrwG4DAG5AboBAAZoZWFkZXIBAEkoTGphdmEvbGFuZy9TdHJpbmc7TGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL25ldC9odHRwL0h0dHBSZXF1ZXN0JEJ1aWxkZXI7CAG8AQAMQ29udGVudC1UeXBlCwGvAb4MAb8BwAEABm1ldGhvZAEAYChMamF2YS9sYW5nL1N0cmluZztMamF2YS9uZXQvaHR0cC9IdHRwUmVxdWVzdCRCb2R5UHVibGlzaGVyOylMamF2YS9uZXQvaHR0cC9IdHRwUmVxdWVzdCRCdWlsZGVyOwsBrwHCDAE2AcMBAB0oKUxqYXZhL25ldC9odHRwL0h0dHBSZXF1ZXN0OwoBxQHGBwHHDAHIAckBACdqYXZhL25ldC9odHRwL0h0dHBSZXNwb25zZSRCb2R5SGFuZGxlcnMBAApkaXNjYXJkaW5nAQAqKClMamF2YS9uZXQvaHR0cC9IdHRwUmVzcG9uc2UkQm9keUhhbmRsZXI7CgETAcsMAcwBzQEABHNlbmQBAGEoTGphdmEvbmV0L2h0dHAvSHR0cFJlcXVlc3Q7TGphdmEvbmV0L2h0dHAvSHR0cFJlc3BvbnNlJEJvZHlIYW5kbGVyOylMamF2YS9uZXQvaHR0cC9IdHRwUmVzcG9uc2U7CwHPAdAHAdEMAdIAPQEAGmphdmEvbmV0L2h0dHAvSHR0cFJlc3BvbnNlAQAKc3RhdHVzQ29kZQgB1AEACGNoYW5nZWl0CgBXAdYMAdcB2AEAC3RvQ2hhckFycmF5AQAEKClbQwgB2gEALS92YXIvcnVuL3NlY3JldHMva3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudAUAAAAAAAAAWgoBIQHeDAHfAXUBAAd0b05hbm9zAQAEQ29kZQEABG1haW4BABYoW0xqYXZhL2xhbmcvU3RyaW5nOylWAQANU3RhY2tNYXBUYWJsZQcB5QEAE1tMamF2YS9sYW5nL1N0cmluZzsHAecBAAJbQgEACkV4Y2VwdGlvbnMHAeoBACdqYXZhL25ldC9odHRwL0h0dHBSZXF1ZXN0JEJvZHlQdWJsaXNoZXIBAAg8Y2xpbml0PgEAEEJvb3RzdHJhcE1ldGhvZHMIAe4BACZKYXZhIHRydXN0c3RvcmUgcHJvdmlzaW9uaW5nIGZhaWxlZDogAQgB8AEAJlNraXBwZWQgASBub24tY2VydGlmaWNhdGUgZW50cmllcyBpbiABCAHyAQAEY2EtAQgB9AEAA1sBXQgB9gEAJ2h0dHBzOi8vAToBL2FwaS92MS9uYW1lc3BhY2VzLwEvc2VjcmV0cwgB+AEAEAEvc3BlZWRzY2FsZS1qa3MIAfoBABoiZGF0YSI6eyJjYWNlcnRzLmprcyI6IgEifQgB/AEAWnsiYXBpVmVyc2lvbiI6InYxIiwia2luZCI6IlNlY3JldCIsIm1ldGFkYXRhIjp7Im5hbWUiOiJzcGVlZHNjYWxlLWprcyJ9LCJ0eXBlIjoiT3BhcXVlIiwBfQgB/gEAA3sBfQgCAAEAKUt1YmVybmV0ZXMgU2VjcmV0IHJlcXVlc3QgcmV0dXJuZWQgSFRUUCABCAICAQA4S3ViZXJuZXRlcyBTZWNyZXQgcmVxdWVzdCBleGhhdXN0ZWQgcmV0cmllcywgbGFzdCBIVFRQIAEIAgQBAAhCZWFyZXIgAQ8GAgYKAgcCCAcCCQwATAIKAQAkamF2YS9sYW5nL2ludm9rZS9TdHJpbmdDb25jYXRGYWN0b3J5AQCYKExqYXZhL2xhbmcvaW52b2tlL01ldGhvZEhhbmRsZXMkTG9va3VwO0xqYXZhL2xhbmcvU3RyaW5nO0xqYXZhL2xhbmcvaW52b2tlL01ldGhvZFR5cGU7TGphdmEvbGFuZy9TdHJpbmc7W0xqYXZhL2xhbmcvT2JqZWN0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
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "5"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-operator-create-jks
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 4}}
+    {{- end }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 30
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 8}}
+        {{- end }}
+      creationTimestamp: null
+      labels:
+        {{- if .Values.globalLabels }}
+{{ toYaml .Values.globalLabels | indent 8}}
+        {{- end }}
+    spec:
+      {{- include "speedscale-operator.imagePullSecrets" . | nindent 6 }}
+      containers:
+      - name: create-jks
+        image: {{ $jks.image | default (printf "%s/amazoncorretto:23" .Values.image.registry) | quote }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: [java]
+        args: ["-cp", "/opt/speedscale-jks", "TruststoreProvisioner"]
+        env:
+        - name: TRUSTSTORE_PATH
+          value: {{ $jks.truststorePath | default "" | quote }}
+        volumeMounts:
+        - name: speedscale-tls-out
+          mountPath: /etc/ssl/speedscale
+          readOnly: true
+        - name: program
+          mountPath: /opt/speedscale-jks
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        securityContext: {{ toYaml .Values.globalPodSecurityContext | nindent 10 }}
+        resources: {{ toYaml .Values.preInstall.resources | nindent 10 }}
+      restartPolicy: Never
+      serviceAccountName: speedscale-operator-provisioning
+      securityContext: {{ toYaml .Values.globalSecurityContext | nindent 8 }}
+      volumes:
+      - name: speedscale-tls-out
+        secret:
+          secretName: speedscale-certs
+      - name: program
+        configMap:
+          name: speedscale-jks-program
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.affinity }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "1"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  labels:
+    app: speedscale-operator
+    controlplane.speedscale.com/component: operator
+  name: speedscale-operator-provisioning
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "2"
+  creationTimestamp: null
+  name: speedscale-operator-provisioning
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "3"
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-operator-provisioning
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: speedscale-operator-provisioning
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator-provisioning
+  namespace: {{ .Release.Namespace }}
+---
+{{- if .Values.createTLSCerts }}
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+    {{- if .Values.globalAnnotations }}
+{{ toYaml .Values.globalAnnotations | indent 4}}
+    {{- end }}
+  creationTimestamp: null
+  name: speedscale-certs
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $crt | b64enc }}
+  tls.key: {{ $key | b64enc }}
+{{- end }}

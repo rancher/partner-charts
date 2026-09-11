@@ -1,0 +1,31 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- /*
+Nil-checks (not truthiness) so an explicit minAvailable: 0 renders. A PDB
+accepts exactly one of minAvailable/maxUnavailable, so refuse both-set and
+neither-set at render time instead of failing at the API server.
+*/}}
+{{- $minSet := not (kindIs "invalid" .Values.podDisruptionBudget.minAvailable) }}
+{{- $maxSet := not (kindIs "invalid" .Values.podDisruptionBudget.maxUnavailable) }}
+{{- if and $minSet $maxSet }}
+{{- fail "podDisruptionBudget: minAvailable and maxUnavailable are mutually exclusive - set only one (unset the minAvailable default with --set podDisruptionBudget.minAvailable=null when using maxUnavailable)" }}
+{{- end }}
+{{- if and (not $minSet) (not $maxSet) }}
+{{- fail "podDisruptionBudget: set one of minAvailable or maxUnavailable" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "libredb-studio.fullname" . }}
+  labels:
+    {{- include "libredb-studio.labels" . | nindent 4 }}
+spec:
+  {{- if $minSet }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if $maxSet }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "libredb-studio.selectorLabels" . | nindent 6 }}
+{{- end }}
