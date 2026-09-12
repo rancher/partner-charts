@@ -1,0 +1,59 @@
+# =============================================================================
+# Keycloak support objects — the ConfigMap + ServiceAccount the keycloak subchart
+# needs but doesn't create. Rendered from global.domain + the bundled Postgres so
+# `helm install` no longer needs a human to `kubectl create` these. KC_DB_URL uses
+# sslmode from pgSslMode (bundled pgvector has no SSL); dbUrlEnabled:false in values
+# stops the subchart hardcoding ?sslmode=require. Secret (keycloak-secrets) is in
+# secrets.yaml (needs the generated passwords). Realm/clients/user: keycloak-realm-job.yaml.
+# =============================================================================
+{{- if .Values.keycloak.enabled }}
+{{- $authns := .Values.global.namespaces.auth }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak
+  namespace: {{ $authns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+{{- if .Values.global.image.pullSecret }}
+imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: {{ $authns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  KC_DB: "postgres"
+  KC_DB_SCHEMA: "public"
+  KC_DB_URL_HOST: {{ include "alchemi.pgHost" . | quote }}
+  KC_DB_URL_PORT: {{ include "alchemi.pgPort" . | quote }}
+  KC_DB_URL_DATABASE: "keycloak"
+  KC_DB_URL: "jdbc:postgresql://{{ include "alchemi.pgHost" . }}:{{ include "alchemi.pgPort" . }}/keycloak?sslmode={{ include "alchemi.pgSslMode" . }}"
+  KC_DB_USERNAME: {{ include "alchemi.pgUser" . | quote }}
+  KC_HOSTNAME: {{ include "alchemi.authUrl" . | quote }}
+  KC_HOSTNAME_STRICT: "false"
+  KC_HOSTNAME_STRICT_HTTPS: "true"
+  KC_HTTP_ENABLED: "true"
+  KC_HEALTH_ENABLED: "true"
+  KC_METRICS_ENABLED: "true"
+  KC_PROXY_HEADERS: "xforwarded"
+  # MUST equal the image build's feature set or Keycloak rebuilds each start and
+  # the readiness probe kills it (fixed live this session).
+  KC_FEATURES: "token-exchange,admin-fine-grained-authz,organization"
+  KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+  # ---- splitv1 login theme branding (Style 2 GIF panel, matches nonprod) ------
+  # All vars read from branding.* in values. leftHtml defaults to the Style 2 GIF
+  # panel via the alchemi.kcBrandLeftHtml helper in _helpers.tpl.
+  ALCHEMI_BRAND_NAME: {{ .Values.branding.name | quote }}
+  ALCHEMI_BRAND_LOGO_URL: {{ .Values.branding.logoUrl | quote }}
+  ALCHEMI_BRAND_PRIMARY: {{ .Values.branding.primary | quote }}
+  ALCHEMI_BRAND_LEFT_BG: {{ .Values.branding.leftBg | quote }}
+  ALCHEMI_BRAND_RIGHT_BG: {{ .Values.branding.rightBg | quote }}
+  ALCHEMI_BRAND_LAYOUT_REVERSE: {{ .Values.branding.layoutReverse | quote }}
+  ALCHEMI_BRAND_WELCOME_TITLE: {{ .Values.branding.welcomeTitle | quote }}
+  ALCHEMI_BRAND_WELCOME_SUBTITLE: {{ .Values.branding.welcomeSubtitle | quote }}
+  ALCHEMI_BRAND_LEFT_HTML: {{ include "alchemi.kcBrandLeftHtml" . | quote }}
+{{- end }}

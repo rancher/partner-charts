@@ -1,0 +1,50 @@
+{{- $root := . }}
+{{- $services := list "contentFilter" "secretDetection" "jailbreak" "pii" "topical" "toxic" }}
+{{- $nameMap := dict "contentFilter" "guardrails-content-filter" "secretDetection" "guardrails-secret-detection" "jailbreak" "guardrails-jailbreak" "pii" "guardrails-pii" "topical" "guardrails-topical" "toxic" "guardrails-toxic" }}
+{{/*
+  VerticalPodAutoscalers tune CPU/memory requests for each service based on
+  observed usage. Requires the VPA CRD (autoscaling.k8s.io/v1) to be installed
+  in the cluster before enabling.
+
+  vpa.updateMode options:
+    "Auto"   — VPA evicts pods and restarts them with updated resource requests
+               (default; safe alongside KEDA/HPA in AKS with VPA admission webhook)
+    "Off"    — VPA records recommendations but does not apply them; useful for
+               sizing validation without live disruption
+
+  Not compatible with HPA on CPU/memory metrics. Enable either autoscaling.enabled
+  (HPA) or vpa.enabled per service, not both.
+*/}}
+{{- if $root.Values.vpa.enabled }}
+{{- range $services }}
+{{- $svcKey := . }}
+{{- $svcCfg := index $root.Values $svcKey }}
+{{- $svcName := index $nameMap $svcKey }}
+{{- if $svcCfg.enabled }}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $svcName }}
+    app.kubernetes.io/component: content-safety
+    helm.sh/chart: {{ include "alchemi-guardrails.chart" $root }}
+    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $svcName }}
+  updatePolicy:
+    updateMode: {{ $root.Values.vpa.updateMode | quote }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ $svcName }}
+        controlledResources:
+          - cpu
+          - memory
+{{- end }}
+{{- end }}
+{{- end }}

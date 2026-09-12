@@ -1,0 +1,70 @@
+{{- if and .Values.selfHostedModel.enabled .Values.selfHostedModel.embedding.enabled }}
+{{- $e := .Values.selfHostedModel.embedding }}
+{{- $ns := .Values.global.namespaces.app }}
+# =============================================================================
+# Bundled embedding server — HuggingFace Text Embeddings Inference (TEI), CPU.
+# Serves an OpenAI-compatible /v1/embeddings so Alchemi's fn:knowledge_embedding
+# (RAG) works WITHOUT a GPU (no contention with vLLM) and WITHOUT a cloud key.
+# The 11-self-hosted-model.sql seed points config_providers[suse_embed] at the
+# Service below. Runs on CPU worker nodes; pulls the model from HF at startup.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alchemi-embeddings
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/component: embeddings
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: alchemi-embeddings }
+  template:
+    metadata:
+      labels:
+        app: alchemi-embeddings
+        app.kubernetes.io/part-of: alchemistudio-platform
+    spec:
+      containers:
+        - name: tei
+          image: {{ $e.image | quote }}
+          args:
+            - "--model-id"
+            - {{ $e.model | quote }}
+            - "--port"
+            - "80"
+            - "--auto-truncate"
+          ports:
+            - { name: http, containerPort: 80 }
+          env:
+            # TEI caches the model under /data; HF_HOME kept in-pod (emptyDir).
+            - { name: HF_HOME, value: /data }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          readinessProbe:
+            httpGet: { path: /health, port: 80 }
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 60          # model download on first start
+          livenessProbe:
+            httpGet: { path: /health, port: 80 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml $e.resources | nindent 12 }}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-embeddings
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  selector: { app: alchemi-embeddings }
+  ports:
+    - { name: http, port: 80, targetPort: 80 }
+{{- end }}
