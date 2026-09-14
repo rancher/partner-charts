@@ -1,0 +1,36 @@
+{{- if .Values.controllerManager.create -}}
+{{- if .Values.controllerManager.monitoring.create -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-controller-manager-sm
+  namespace: {{ .Release.Namespace }}
+spec:
+  endpoints:
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    path: /metrics
+    port: metrics
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          key: ca.crt
+          name: harikube-controller-manager-crt
+      cert:
+        secret:
+          key: tls.crt
+          name: harikube-controller-manager-crt
+      insecureSkipVerify: false
+      keySecret:
+        key: tls.key
+        name: harikube-controller-manager-crt
+      serverName: harikube-controller-manager-svc.{{ .Release.Namespace }}.svc
+  selector:
+    matchLabels:
+    {{- with .Values.controllerManager.podLabels }}
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- end }}
