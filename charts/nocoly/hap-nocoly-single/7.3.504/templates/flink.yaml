@@ -1,0 +1,38 @@
+{{- if .Values.flink.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: flink, labels: { app: flink } }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: flink } }
+  template:
+    metadata: { labels: { app: flink } }
+    spec:
+      containers:
+        - name: flink
+          image: "{{ .Values.images.registry }}/{{ .Values.images.flink }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["/bin/bash"]
+          args: ["/run.sh"]
+          env:
+            - name: ENV_FLINK_S3_ENDPOINT
+              value: {{ .Values.flink.s3Endpoint | quote }}
+          volumeMounts:
+            - { name: shared-data, mountPath: /data }
+          resources:
+            requests:
+              cpu: {{ .Values.resources.flink.cpu | quote }}
+              memory: {{ .Values.resources.flink.memory | quote }}
+      volumes:
+        - name: shared-data
+          persistentVolumeClaim: { claimName: hap-shared-data }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: flink }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: flink }
+{{- end }}
