@@ -2,8 +2,15 @@
 set -e
 
 CI_BINARY="partner-charts-ci"
-CI_BINARY_URL_BASE="https://github.com/rancher/partner-charts-ci/releases/latest/download"
+# Pinned to specific version for security. Update deliberately after reviewing release notes.
+# Latest available: https://github.com/rancher/partner-charts-ci/releases
+CI_VERSION="v0.6.4"
+CI_BINARY_URL_BASE="https://github.com/rancher/partner-charts-ci/releases/download/${CI_VERSION}"
 CI_GIT_REPO="https://github.com/rancher/partner-charts-ci.git"
+
+# SHA256 checksums from https://github.com/rancher/partner-charts-ci/releases/download/${CI_VERSION}/partner-charts-ci_${CI_VERSION#v}_checksums.txt
+CI_CHECKSUM_LINUX_AMD64="3061aa603238af79015fb30c0b67975a757280b4a0f01a5fc22991ad3e4438de"
+CI_CHECKSUM_DARWIN="02c75153691594e6a1719eaed59715edc23dc0e1b6210bc4a443b9e7689c01be"
 
 mkdir -p bin
 
@@ -13,13 +20,15 @@ if [[ -f bin/${CI_BINARY} ]]; then
 fi
 
 OS=$(uname -s)
-ARCH=$(uname -p)
+ARCH=$(uname -m)
 
 
 if [[ ${OS} == "Linux" ]] && [[ ${ARCH} == "x86_64" ]]; then
     BINARY_NAME=partner-charts-ci-linux-amd64
+    EXPECTED_CHECKSUM=${CI_CHECKSUM_LINUX_AMD64}
 elif [[ ${OS} == "Darwin" ]]; then
     BINARY_NAME=partner-charts-ci-darwin-universal
+    EXPECTED_CHECKSUM=${CI_CHECKSUM_DARWIN}
 else
     #Fall back to local build
     git clone --depth 1 -b main ${CI_GIT_REPO} src
@@ -32,6 +41,11 @@ fi
 
 if [[ ! -z ${BINARY_NAME} ]]; then
     curl -s -L -o bin/${CI_BINARY} ${CI_BINARY_URL_BASE}/${BINARY_NAME}
+    echo "${EXPECTED_CHECKSUM}  bin/${CI_BINARY}" | sha256sum -c - || {
+        echo "ERROR: Checksum verification failed for ${BINARY_NAME}" >&2
+        rm -f bin/${CI_BINARY}
+        exit 1
+    }
 fi
 
 chmod +x bin/${CI_BINARY}
