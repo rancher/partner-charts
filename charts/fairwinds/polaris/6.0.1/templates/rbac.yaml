@@ -1,0 +1,67 @@
+{{- if .Values.rbac.enabled -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "polaris.fullname" . }}-view
+  labels:
+    {{- include "polaris.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "polaris.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "polaris.fullname" . }}
+  labels:
+    {{- include "polaris.labels" . | nindent 4 }}
+rules:
+  # required by controller-runtime code doing a cluster wide lookup
+  # when it seems namespace would suffice
+  - apiGroups:
+      - ''
+    resources:
+      - 'nodes'
+    verbs:
+      - 'get'
+      - 'list'
+  - apiGroups:
+      - 'monitoring.coreos.com'
+    resources:
+      - 'prometheuses'
+      - 'alertmanagers'
+    verbs:
+      - 'get'
+      - 'list'
+  - apiGroups:
+      - 'rbac.authorization.k8s.io'
+    resources:
+      - 'clusterroles'
+      - 'clusterrolebindings'
+      - 'roles'
+      - 'rolebindings'
+    verbs:
+      - 'get'
+      - 'list'
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "polaris.fullname" . }}
+  labels:
+    {{- include "polaris.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "polaris.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "polaris.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
