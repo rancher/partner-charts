@@ -1,0 +1,42 @@
+{{- if .Values.operator.create -}}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-operator-svc
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: {{ .Values.operator.service.webhook.type }}
+  ports:
+  - port: 443
+    targetPort: {{ .Values.operator.service.webhook.port }}
+    protocol: TCP
+    name: webhook
+  selector:
+    {{- with .Values.operator.podLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{ if .Values.operator.monitoring.create }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+  name: harikube-operator-metrics-svc
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: {{ .Values.operator.service.metrics.type }}
+  ports:
+  - port: {{ .Values.operator.service.metrics.port }}
+    targetPort: {{ .Values.operator.service.metrics.port }}
+    protocol: TCP
+    name: metrics
+  selector:
+    {{- with .Values.operator.podLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{ end }}
+{{- end }}
