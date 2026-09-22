@@ -1,0 +1,51 @@
+{{- if .Values.rbac.create }}
+
+{{- $nonClusterAdminServiceAccounts := (include "get.nonClusterAdminServiceAccounts" .) }}
+{{- if ne $nonClusterAdminServiceAccounts "" }}
+{{- $main := . }}
+---
+# admin for all k8s resources in the release namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: kasten-admin
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: kasten-admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  {{- range $serviceAccountName := ($nonClusterAdminServiceAccounts | splitList " ") }}
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName }}
+    namespace: {{ $main.Release.Namespace }}
+  {{- end }}
+{{- end }}
+
+{{- $defaultNamespaceAccessServiceAccounts := (include "get.DefaultNamespaceAccessServiceAccounts" .) }}
+{{- if ne $defaultNamespaceAccessServiceAccounts "" }}
+---
+# access for default namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  name: kasten-default
+  namespace: default
+roleRef:
+  kind: Role
+  name: kasten-default
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  {{- $main := . }}
+  {{- range $serviceAccountName := ($defaultNamespaceAccessServiceAccounts | splitList " ") }}
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName }}
+    namespace: {{ $main.Release.Namespace }}
+  {{- end }}
+{{- end }}
+
+{{- end }}

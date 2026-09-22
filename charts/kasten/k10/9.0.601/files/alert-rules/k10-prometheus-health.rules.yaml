@@ -1,0 +1,29 @@
+groups:
+  - name: k10-prometheus-health
+    rules:
+      - alert: K10PrometheusTSDBUtilizationHigh
+        expr: |
+          (
+            prometheus_tsdb_storage_blocks_bytes
+            / clamp_min(prometheus_tsdb_retention_limit_bytes, 1)
+          ) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: K10 Prometheus TSDB utilization above 85% of retentionSize limit
+          description: >-
+            TSDB block storage is at {{ $value | humanizePercentage }} of the configured retentionSize limit.
+            Size-based retention will start dropping old data soon.
+            Consider increasing prometheus.server.persistentVolume.size.
+      - alert: K10PrometheusSizeRetentionActive
+        expr: increase(prometheus_tsdb_size_retentions_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Prometheus is actively dropping data due to retentionSize limit
+          description: >-
+            Size-based retention events detected in the last hour.
+            The retention time window may be shorter than configured.
+            Consider increasing prometheus.server.persistentVolume.size.
