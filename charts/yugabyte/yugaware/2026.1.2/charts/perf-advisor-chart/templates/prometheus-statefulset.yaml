@@ -1,0 +1,100 @@
+{{- if and (not .Values.prometheus.external.url) (not .Values.yugaware.enabled) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-prometheus
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-prometheus
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  serviceName: {{ .Release.Name }}-prometheus
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-prometheus
+  template:
+    metadata:
+      annotations:
+        checksum/promCerts: {{ include (print $.Template.BasePath "/prometheus-certs.yaml") . | sha256sum }}
+        checksum/promConfig: {{ include (print $.Template.BasePath "/prometheus-configmap.yaml") . | sha256sum }}
+      labels:
+        app: {{ .Release.Name }}-prometheus
+        chart: {{ include "perf-advisor-chart.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 8 }}
+{{- end }}
+    spec:
+      {{- with include "perf-advisor-chart.podPlacement" (dict "root" .) | trim }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 0
+        fsGroup: 0
+      containers:
+        - name: prometheus
+          # Uses helper template to construct image name with registry override support.
+          # If image.commonRegistry or image.prometheus.registry is set, it will override
+          # the registry. Otherwise, uses prometheus.image from values.
+          image: {{ include "perf-advisor-chart.prometheusImage" . }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/prometheus_config/prometheus.yml
+          {{- if (.Values.tls.enabled) }}
+            - --web.config.file=/prometheus_config/web.yml
+          {{- end }}
+            - --web.enable-admin-api
+            - --web.enable-lifecycle
+            - --web.enable-remote-write-receiver
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retentionTime }}
+          ports:
+            - containerPort: {{ .Values.prometheus.port }}
+          volumeMounts:
+            - mountPath: /prometheus
+              name: prometheusdb
+            - mountPath: /prometheus_config
+              name: prometheus-config
+          {{- if (.Values.tls.enabled) }}
+          {{- if .Values.tls.certManager.enabled }}
+            - name: {{ .Release.Name }}-perf-advisor-prom-tls-cert
+              mountPath: /prometheus_certs
+              readOnly: true
+          {{- else }}
+            - name: {{ .Release.Name }}-perf-advisor-prom-tls-pem
+              mountPath: /prometheus_certs
+              readOnly: true
+          {{- end }}
+          {{- end }}
+
+      volumes:
+        - name: prometheusdb
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-prometheus-pv-claim
+
+        - name: prometheus-config
+          configMap:
+            name: {{ .Release.Name }}-prometheus-config
+            items:
+                - key: prometheus.yml
+                  path: prometheus.yml
+        {{- if (.Values.tls.enabled) }}
+                - key: web.yml
+                  path: web.yml
+        {{- if .Values.tls.certManager.enabled }}
+        - name: {{ .Release.Name }}-perf-advisor-prom-tls-cert
+          secret:
+            secretName: {{ .Release.Name }}-perf-advisor-prom-tls-cert
+        {{- else }}
+        - name: {{ .Release.Name }}-perf-advisor-prom-tls-pem
+          secret:
+            secretName: {{ .Release.Name }}-perf-advisor-prom-tls-pem
+        {{- end }}
+        {{- end }}
+{{- end }}

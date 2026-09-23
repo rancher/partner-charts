@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quintush/helm-unittest/master/schema/helm-testsuite.json
+suite: node-agent pre-upgrade Job quotes postgres host
+# lookup() is empty under helm-unittest, so $postgresIp stays the "localhost"
+# fallback. That is the same template path used for a real podIP, including IPv6.
+templates:
+- node_agent_installed_preupgrade_hook.yaml
+release:
+  upgrade: true
+tests:
+- it: quotes POSTGRES_HOST and db.default.host on upgrade
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_HOST")].value
+      value: localhost
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.host="localhost"\s*$'
+    documentIndex: 1

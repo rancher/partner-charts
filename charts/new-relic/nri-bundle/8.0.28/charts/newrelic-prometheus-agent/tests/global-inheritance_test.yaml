@@ -1,0 +1,686 @@
+suite: global value inheritance
+templates:
+  - templates/statefulset.yaml
+  - templates/configmap.yaml
+  - templates/secret.yaml
+  - templates/serviceaccount.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  # ========== CLUSTER & LICENSE TESTS ==========
+  - it: cluster from global when local not set
+    set:
+      licenseKey: us-whatever
+      global:
+        cluster: global-cluster
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "cluster_name: global-cluster"
+        template: templates/configmap.yaml
+
+  - it: cluster from local overrides global
+    set:
+      cluster: local-cluster
+      licenseKey: us-whatever
+      global:
+        cluster: global-cluster
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "cluster_name: local-cluster"
+        template: templates/configmap.yaml
+
+  # ========== IMAGE INHERITANCE TESTS ==========
+  - it: uses default images when no registry override
+    set: &base
+      licenseKey: us-whatever
+      cluster: test-cluster
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: "newrelic/newrelic-prometheus-configurator"
+        template: templates/statefulset.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "quay.io/prometheus/prometheus"
+        template: templates/statefulset.yaml
+
+  - it: uses global.images.registry for both images
+    set:
+      <<: *base
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: "^harbor.corp.net/newrelic/"
+        template: templates/statefulset.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^harbor.corp.net/newrelic/"
+        template: templates/statefulset.yaml
+
+  - it: local image registries override global registry
+    set:
+      <<: *base
+      images:
+        configurator:
+          registry: local-registry.io
+        prometheus:
+          registry: prom-registry.io
+      global:
+        images:
+          registry: harbor.corp.net/newrelic
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: "^local-registry.io/"
+        template: templates/statefulset.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^prom-registry.io/"
+        template: templates/statefulset.yaml
+
+  - it: sets imagePullSecrets from global
+    set:
+      <<: *base
+      global:
+        images:
+          pullSecrets:
+            - name: global-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: global-secret
+        template: templates/statefulset.yaml
+
+  - it: merges global and local imagePullSecrets (global then local)
+    set:
+      <<: *base
+      images:
+        pullSecrets:
+          - name: local-secret
+      global:
+        images:
+          pullSecrets:
+            - name: global-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: global-secret
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.imagePullSecrets[1].name
+          value: local-secret
+        template: templates/statefulset.yaml
+
+  # ========== NODE SCHEDULING TESTS ==========
+  - it: sets nodeSelector from global
+    set:
+      <<: *base
+      global:
+        nodeSelector:
+          node.role/monitoring: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            node.role/monitoring: "true"
+        template: templates/statefulset.yaml
+
+  - it: local nodeSelector overrides global
+    set:
+      <<: *base
+      nodeSelector:
+        local-node: "true"
+      global:
+        nodeSelector:
+          global-node: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            local-node: "true"
+        template: templates/statefulset.yaml
+
+  - it: sets tolerations from global
+    set:
+      <<: *base
+      global:
+        tolerations:
+          - key: monitoring-taint
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: monitoring-taint
+        template: templates/statefulset.yaml
+
+  - it: local tolerations override global
+    set:
+      <<: *base
+      tolerations:
+        - key: local-taint
+          operator: Exists
+      global:
+        tolerations:
+          - key: global-taint
+            operator: Equal
+            value: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: local-taint
+        template: templates/statefulset.yaml
+
+  - it: sets affinity from global
+    set:
+      <<: *base
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: node.role/monitoring
+                      operator: In
+                      values: ["true"]
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: node.role/monitoring
+        template: templates/statefulset.yaml
+
+  - it: local affinity overrides global
+    set:
+      <<: *base
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: local-affinity
+                    operator: In
+                    values: ["true"]
+      global:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: global-affinity
+                      operator: In
+                      values: ["true"]
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: local-affinity
+        template: templates/statefulset.yaml
+
+  # ========== PRIORITY & RESOURCE CONSTRAINTS ==========
+  - it: sets priorityClassName from global
+    set:
+      <<: *base
+      global:
+        priorityClassName: high-priority
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+        template: templates/statefulset.yaml
+
+  - it: local priorityClassName overrides global
+    set:
+      <<: *base
+      priorityClassName: local-priority
+      global:
+        priorityClassName: global-priority
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: local-priority
+        template: templates/statefulset.yaml
+
+  # ========== DNS & NETWORK TESTS ==========
+  - it: sets dnsConfig from global
+    set:
+      <<: *base
+      global:
+        dnsConfig:
+          options:
+            - name: ndots
+              value: "1"
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: ndots
+        template: templates/statefulset.yaml
+
+  - it: local dnsConfig overrides global
+    set:
+      <<: *base
+      dnsConfig:
+        options:
+          - name: local-ndots
+            value: "2"
+      global:
+        dnsConfig:
+          options:
+            - name: global-ndots
+              value: "1"
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: local-ndots
+        template: templates/statefulset.yaml
+
+  - it: default hostNetwork is false
+    set:
+      <<: *base
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+        template: templates/statefulset.yaml
+
+  - it: sets hostNetwork from global when true
+    set:
+      <<: *base
+      global:
+        hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirstWithHostNet
+        template: templates/statefulset.yaml
+
+  - it: local hostNetwork overrides global
+    set:
+      <<: *base
+      hostNetwork: false
+      global:
+        hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+        template: templates/statefulset.yaml
+
+  # ========== SECURITY CONTEXT TESTS ==========
+  - it: sets podSecurityContext from global
+    set:
+      <<: *base
+      global:
+        podSecurityContext:
+          runAsUser: 2000
+          runAsGroup: 3000
+          fsGroup: 4000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2000
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 4000
+        template: templates/statefulset.yaml
+
+  - it: local podSecurityContext overrides global
+    set:
+      <<: *base
+      podSecurityContext:
+        runAsUser: 5000
+      global:
+        podSecurityContext:
+          runAsUser: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 5000
+        template: templates/statefulset.yaml
+
+  - it: sets containerSecurityContext from global
+    set:
+      <<: *base
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        template: templates/statefulset.yaml
+
+  - it: local containerSecurityContext overrides global
+    set:
+      <<: *base
+      containerSecurityContext:
+        allowPrivilegeEscalation: true
+      global:
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: true
+        template: templates/statefulset.yaml
+
+  # ========== SERVICE ACCOUNT TESTS ==========
+  - it: uses service account name from global
+    set:
+      <<: *base
+      serviceAccount:
+        create: false
+      global:
+        serviceAccount:
+          name: global-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: global-sa
+        template: templates/statefulset.yaml
+
+  - it: local service account name overrides global
+    set:
+      <<: *base
+      serviceAccount:
+        create: false
+        name: local-sa
+      global:
+        serviceAccount:
+          name: global-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: local-sa
+        template: templates/statefulset.yaml
+
+  # ========== LABELS TESTS ==========
+  - it: applies labels from global
+    set:
+      <<: *base
+      global:
+        labels:
+          global-label: "true"
+    asserts:
+      - equal:
+          path: metadata.labels["global-label"]
+          value: "true"
+        template: templates/statefulset.yaml
+
+  - it: applies podLabels from global
+    set:
+      <<: *base
+      global:
+        podLabels:
+          global-pod-label: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["global-pod-label"]
+          value: "true"
+        template: templates/statefulset.yaml
+
+  # ========== CUSTOM ATTRIBUTES & CONFIG TESTS ==========
+  - it: applies customAttributes from global to configmap
+    set:
+      <<: *base
+      global:
+        customAttributes:
+          environment: production
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "environment: production"
+        template: templates/configmap.yaml
+
+  - it: local customAttributes override global
+    set:
+      <<: *base
+      customAttributes:
+        environment: staging
+      global:
+        customAttributes:
+          environment: production
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "environment: staging"
+        template: templates/configmap.yaml
+
+  # ========== STAGING & DEBUG TESTS ==========
+  - it: enables nrStaging from global
+    set:
+      <<: *base
+      global:
+        nrStaging: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "staging: true"
+        template: templates/configmap.yaml
+
+  - it: local nrStaging overrides global
+    set:
+      <<: *base
+      nrStaging: false
+      global:
+        nrStaging: true
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "staging: true"
+        template: templates/configmap.yaml
+
+  - it: enables verbose logging from global.verboseLog
+    set:
+      <<: *base
+      global:
+        verboseLog: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--verbose=true"
+        template: templates/statefulset.yaml
+
+  - it: local verboseLog=false disables verbose even with global=true
+    set:
+      <<: *base
+      verboseLog: false
+      global:
+        verboseLog: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--verbose=true"
+        template: templates/statefulset.yaml
+
+  # ========== PROXY TESTS ==========
+  - it: uses global.proxy when local not set and proxyFromSecret disabled
+    set:
+      <<: *base
+      global:
+        proxy: http://global-proxy.example.com:3128
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].env[3].name
+          value: NR_PROM_PROXY_URL
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[3].value
+          value: http://global-proxy.example.com:3128
+        template: templates/statefulset.yaml
+
+  - it: proxyFromSecret takes precedence over global.proxy
+    set:
+      <<: *base
+      config:
+        proxyFromSecret:
+          enabled: true
+          name: my-proxy-secret
+          key: proxy-url
+      global:
+        proxy: http://global-proxy.example.com:3128
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].env[3].name
+          value: NR_PROM_PROXY_URL
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[3].valueFrom.secretKeyRef.name
+          value: my-proxy-secret
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[3].valueFrom.secretKeyRef.key
+          value: proxy-url
+        template: templates/statefulset.yaml
+
+  # ========== LICENSE KEY TESTS ==========
+  - it: uses global.licenseKey when local not set
+    set:
+      cluster: test-cluster
+      global:
+        licenseKey: global-license-key
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].env[1].name
+          value: NR_PROM_LICENSE_KEY
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[1].valueFrom.secretKeyRef.name
+          value: my-release-newrelic-prometheus-agent-license
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[1].valueFrom.secretKeyRef.key
+          value: licenseKey
+        template: templates/statefulset.yaml
+
+  - it: local licenseKey overrides global
+    set:
+      cluster: test-cluster
+      licenseKey: local-license-key
+      global:
+        licenseKey: global-license-key
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].env[1].name
+          value: NR_PROM_LICENSE_KEY
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[1].valueFrom.secretKeyRef.name
+          value: my-release-newrelic-prometheus-agent-license
+        template: templates/statefulset.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].env[1].valueFrom.secretKeyRef.key
+          value: licenseKey
+        template: templates/statefulset.yaml
+
+  # ========== CUSTOM SECRET TESTS ==========
+  - it: uses global.customSecretName when local not set
+    set:
+      cluster: test-cluster
+      global:
+        customSecretName: global-secret
+        customSecretLicenseKey: global-key
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: NR_PROM_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: global-secret
+                key: global-key
+        template: templates/statefulset.yaml
+
+  - it: local customSecretName overrides global
+    set:
+      cluster: test-cluster
+      global:
+        customSecretName: global-secret
+        customSecretLicenseKey: global-key
+      customSecretName: local-secret
+      customSecretLicenseKey: local-key
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: NR_PROM_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: local-secret
+                key: local-key
+        template: templates/statefulset.yaml
+
+  # ========== SERVICE ACCOUNT TESTS ==========
+  - it: creates service account from global.serviceAccount.create
+    set:
+      <<: *base
+      global:
+        serviceAccount:
+          create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/serviceaccount.yaml
+
+  - it: local serviceAccount.create overrides global
+    set:
+      <<: *base
+      global:
+        serviceAccount:
+          create: true
+      serviceAccount:
+        create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/serviceaccount.yaml
+
+  - it: applies global.serviceAccount.annotations when local not set
+    set:
+      <<: *base
+      global:
+        serviceAccount:
+          annotations:
+            global-annotation: global-value
+    asserts:
+      - equal:
+          path: metadata.annotations.global-annotation
+          value: global-value
+        template: templates/serviceaccount.yaml
+
+  - it: merges global and local serviceAccount.annotations
+    set:
+      <<: *base
+      global:
+        serviceAccount:
+          annotations:
+            global-annotation: global-value
+      serviceAccount:
+        annotations:
+          local-annotation: local-value
+    asserts:
+      - equal:
+          path: metadata.annotations.local-annotation
+          value: local-value
+        template: templates/serviceaccount.yaml
+      - equal:
+          path: metadata.annotations.global-annotation
+          value: global-value
+        template: templates/serviceaccount.yaml

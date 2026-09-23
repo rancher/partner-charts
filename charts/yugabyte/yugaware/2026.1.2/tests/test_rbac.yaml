@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quintush/helm-unittest/master/schema/helm-testsuite.json
+suite: rbac operator + namespaced validation
+templates:
+- templates/rbac.yaml
+tests:
+- it: fails when operator is enabled globally with namespaced RBAC
+  set:
+    yugaware:
+      kubernetesOperatorEnabled: true
+      kubernetesOperatorNamespace: ""
+    rbac:
+      create: true
+      namespaced: true
+  asserts:
+  - failedTemplate:
+      errorMessage: "Cannot use the operator globally with namespaced RBAC"
+
+- it: succeeds when operator is enabled globally with cluster-wide RBAC
+  set:
+    yugaware:
+      kubernetesOperatorEnabled: true
+      kubernetesOperatorNamespace: ""
+    rbac:
+      create: true
+      namespaced: false
+  asserts:
+  - hasDocuments:
+      count: 3
+  - notFailedTemplate: {}
+
+- it: succeeds when operator is scoped to a namespace with namespaced RBAC
+  release:
+    namespace: yb-platform
+  set:
+    yugaware:
+      kubernetesOperatorEnabled: true
+      kubernetesOperatorNamespace: yb-platform
+    rbac:
+      create: true
+      namespaced: true
+  asserts:
+  - notFailedTemplate: {}
+
+- it: succeeds when operator is disabled even with namespaced RBAC
+  set:
+    yugaware:
+      kubernetesOperatorEnabled: false
+    rbac:
+      create: true
+      namespaced: true
+  asserts:
+  - notFailedTemplate: {}

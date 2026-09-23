@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-properties
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-perf-advisor
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+data:
+  override.properties: |
+    spring.datasource.username={{ include "perf-advisor-chart.postgresUser" . }}
+    spring.datasource.url=jdbc:postgresql://{{ include "perf-advisor-chart.postgresHost" . }}:{{ include "perf-advisor-chart.postgresPort" . }}/{{ include "perf-advisor-chart.postgresDbName" . }}
+    pa.prometheus.url={{ include "perf-advisor-chart.prometheusUrl" . }}
+    yb.cloud.enabled={{ .Values.perfAdvisor.cloud.enabled }}
+    yb.cloud.api.url={{ .Values.perfAdvisor.cloud.api.url }}
+  {{- if .Values.perfAdvisor.cloud.apiserverAuthSecret }}
+    yb.cloud.auth.email=${APISERVER_AUTH_EMAIL}
+    yb.cloud.auth.password=${APISERVER_AUTH_PASSWORD}
+  {{- end }}
+  {{- if and .Values.perfAdvisor.cloud.enabled .Values.perfAdvisor.cloud.teleport.enabled }}
+    pa.security.teleport.enabled=true
+    pa.security.teleport.jwks.url={{ .Values.perfAdvisor.cloud.teleport.jwksUrl }}
+    pa.security.teleport.expected.audience={{ .Values.perfAdvisor.cloud.teleport.expectedAudience }}
+  {{- if .Values.perfAdvisor.cloud.teleport.expectedIssuer }}
+    pa.security.teleport.expected.issuer={{ .Values.perfAdvisor.cloud.teleport.expectedIssuer }}
+  {{- end }}
+    pa.security.teleport.required.roles={{ .Values.perfAdvisor.cloud.teleport.requiredRoles }}
+  {{- end }}
+    pa.security.cors.origin={{ include "allowedCorsOrigins" . }}
+    pa.collector.name={{ .Values.perfAdvisor.collector.name }}
+    pa.api.url={{ include "perf-advisor-chart.apiUrl" . }}
+    db-scheduler.threads={{ .Values.perfAdvisor.taskRunner.threads }}
+  {{- if .Values.perfAdvisor.collector.topology }}
+    pa.topology.file=/opt/yugabyte/perf-advisor/conf/collectors.yml
+  {{- end }}
+  {{- if or .Values.perfAdvisor.metrics.export.topology .Values.yugaware.enabled }}
+    pa.metrics.export.topology=/opt/yugabyte/perf-advisor/conf/metrics-export.yml
+  {{- else }}
+    pa.metrics.export.topology=
+  {{- end }}
+
+  {{- if .Values.tls.enabled }}
+    server.ssl.enabled = true
+    server.ssl.key-store-type = PKCS12
+    server.ssl.key-store = /opt/yugabyte/perf-advisor/certs/tls.p12
+  {{- if .Values.tls.perfAdvisor.sslProtocols }}
+    server.ssl.enabled-protocols={{ .Values.tls.perfAdvisor.sslProtocols }}
+  {{- end }}
+    pa.web.hsts.enabled={{ .Values.tls.perfAdvisor.hsts }}
+  {{- end }}
+
+    pa.callhome.enabled={{ .Values.perfAdvisor.callhome.enabled }}
+    pa.callhome.environment={{ .Values.perfAdvisor.callhome.environment }}
+  {{- if .Values.yugaware.enabled }}
+    pa.deployment.type=yugaware-helm
+  {{- else }}
+    pa.deployment.type=k8s
+  {{- end }}
+
+    # All three paths below live on the perf-advisor-data PVC mounted at
+    # /opt/yugabyte/perf-advisor/data (see deployment.yaml). The subdirectory layout is part of
+    # the chart contract - do not change it without a data-migration story, otherwise on-disk
+    # state (collected metrics, support bundles) will be silently orphaned across upgrades.
+    pa.data.path=/opt/yugabyte/perf-advisor/data
+    pa.metrics.export.jsonl.directory=/opt/yugabyte/perf-advisor/data/collected/metrics
+    pa.support-bundle.path=/opt/yugabyte/perf-advisor/data/support-bundle

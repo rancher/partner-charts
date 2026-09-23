@@ -1,0 +1,97 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- /*
+  Renders nothing. Helm resolves values before templates render, so the perf-advisor
+  sub-chart cannot read this chart's database settings - they have to be repeated under
+  perf-advisor-chart.postgres.external. This checks the two copies agree, so a database
+  change made in one place but not the other fails at render time instead of leaving Perf
+  Advisor pointed at the wrong server.
+
+  Only host, port and user are compared. dbname is deliberately excluded: Perf Advisor keeps
+  its own database ("ts") on the same server, separate from the one YugabyteDB Anywhere uses.
+  The password is not compared either - it never needs repeating, because Perf Advisor reads
+  postgres_password from the {{ .Release.Name }}-yugaware-global-config secret this chart
+  already populates with whichever credentials are in use.
+*/}}
+{{- /*
+  Walked with index/default rather than `dig`, which cannot descend into the
+  chartutil.Values that sub-chart sections are typed as.
+*/}}
+{{- $paRoot := (index .Values "perf-advisor-chart") | default dict }}
+{{- if (($paRoot.yugaware) | default dict).enabled }}
+{{- $pa := (($paRoot.postgres) | default dict).external | default dict }}
+{{- $paProm := (($paRoot.prometheus) | default dict).external | default dict }}
+{{- $fix := "Set them to match, or disable Perf Advisor with perf-advisor-chart.yugaware.enabled=false." }}
+
+{{- if .Values.postgres.external.host }}
+  {{- /* External database: the sub-chart has to be given the same coordinates. */}}
+  {{- if ne (toString ($pa.host | default "")) (toString .Values.postgres.external.host) }}
+    {{- fail (printf "\n\nperf-advisor-chart.postgres.external.host is %q but postgres.external.host is %q.\nPerf Advisor must connect to the same database server as YugabyteDB Anywhere.\n%s\n" ($pa.host | default "") .Values.postgres.external.host $fix) }}
+  {{- end }}
+  {{- if ne (toString ($pa.port | default "")) (toString .Values.postgres.external.port) }}
+    {{- fail (printf "\n\nperf-advisor-chart.postgres.external.port is %q but postgres.external.port is %q.\n%s\n" (toString ($pa.port | default "")) (toString .Values.postgres.external.port) $fix) }}
+  {{- end }}
+  {{- if ne (toString ($pa.user | default "")) (toString .Values.postgres.external.user) }}
+    {{- fail (printf "\n\nperf-advisor-chart.postgres.external.user is %q but postgres.external.user is %q.\n%s\n" ($pa.user | default "") .Values.postgres.external.user $fix) }}
+  {{- end }}
+
+{{- else }}
+  {{- /*
+    In-pod database. The sub-chart reaches it through the {{ .Release.Name }}-postgres
+    Service, so host/port stay empty on the sub-chart, but the username still has to match
+    whichever database is running in the pod.
+  */}}
+  {{- if $pa.host }}
+    {{- fail (printf "\n\nperf-advisor-chart.postgres.external.host is set to %q but postgres.external.host is empty, so YugabyteDB Anywhere is using the database in its own pod.\nLeave the sub-chart host empty to reach it through the %s-postgres Service.\n" $pa.host .Release.Name) }}
+  {{- end }}
+  {{- $dbUser := .Values.useYugabyteDB | ternary .Values.yugabytedb.user .Values.postgres.user }}
+  {{- $dbValue := .Values.useYugabyteDB | ternary "yugabytedb.user" "postgres.user" }}
+  {{- if ne (toString ($pa.user | default "")) (toString $dbUser) }}
+    {{- fail (printf "\n\nperf-advisor-chart.postgres.external.user is %q but %s is %q.\nPerf Advisor connects to the same database as YugabyteDB Anywhere and must use the same account.\n%s\n" ($pa.user | default "") $dbValue $dbUser $fix) }}
+  {{- end }}
+  {{- if not .Values.postgres.service.enabled }}
+    {{- fail (printf "\n\nPerf Advisor is enabled but postgres.service.enabled is false.\nIt reaches the database through the %s-postgres Service, which that value creates.\n%s\n" .Release.Name $fix) }}
+  {{- end }}
+{{- end }}
+
+{{- if not .Values.prometheus.enabled }}
+  {{- if not ($paProm.url | default "") }}
+    {{- fail (printf "\n\nPerf Advisor is enabled but prometheus.enabled is false and perf-advisor-chart.prometheus.external.url is empty.\nSet that URL to an external Prometheus, or disable Perf Advisor with perf-advisor-chart.yugaware.enabled=false.\n") }}
+  {{- end }}
+{{- else if not .Values.yugaware.service.enabled }}
+  {{- if not ($paProm.url | default "") }}
+    {{- fail (printf "\n\nPerf Advisor is enabled but yugaware.service.enabled is false.\nIt queries Prometheus at http://%s-yugaware-ui:9090, which that value creates.\n%s\n" .Release.Name $fix) }}
+  {{- end }}
+{{- end }}
+{{- if not .Values.yugaware.service.enabled }}
+  {{- fail (printf "\n\nPerf Advisor is enabled, requires yugaware.service.enabled to be true") }}
+{{- end }}
+
+{{- /*
+  Node placement is repeated for the same reason the database settings are: this chart's
+  nodeSelector, tolerations and zoneAffinity reach the YugabyteDB Anywhere pod only, and the
+  sub-chart takes its own under perf-advisor-chart - the same three keys in the same form, so
+  a zoneAffinity there is a list of zone names and the sub-chart expands it exactly as this
+  chart does. perfAdvisor.spec still counts, for a placement that needs something those three
+  cannot express.
+
+  Setting placement here and leaving the sub-chart's empty is the one case worth failing on: it
+  is silent, and on a tainted node pool it leaves Perf Advisor unschedulable rather than merely
+  misplaced. Anything non-empty passes - scheduling Perf Advisor somewhere else on purpose is a
+  legitimate choice, it just has to be stated.
+*/}}
+{{- $paPlaced := list }}
+{{- range $key := (list "nodeSelector" "tolerations" "zoneAffinity") }}
+  {{- if index $paRoot $key }}{{- $paPlaced = append $paPlaced $key }}{{- end }}
+{{- end }}
+{{- if (($paRoot.perfAdvisor) | default dict).spec }}{{- $paPlaced = append $paPlaced "perfAdvisor.spec" }}{{- end }}
+{{- if not $paPlaced }}
+  {{- $placed := list }}
+  {{- if .Values.nodeSelector }}{{- $placed = append $placed "nodeSelector" }}{{- end }}
+  {{- if .Values.tolerations }}{{- $placed = append $placed "tolerations" }}{{- end }}
+  {{- if .Values.zoneAffinity }}{{- $placed = append $placed "zoneAffinity" }}{{- end }}
+  {{- if $placed }}
+    {{- fail (printf "\n\n%s set for YugabyteDB Anywhere, but no placement is set under perf-advisor-chart.\nThat places the Perf Advisor pod; this chart cannot pass its own placement down, because Helm resolves values before templates render.\nMirror it with perf-advisor-chart.nodeSelector, perf-advisor-chart.tolerations and perf-advisor-chart.zoneAffinity - the same values in the same form as above - set them to the placement you do want, or disable Perf Advisor with perf-advisor-chart.yugaware.enabled=false.\n" (join ", " $placed)) }}
+  {{- end }}
+{{- end }}
+{{- end }}

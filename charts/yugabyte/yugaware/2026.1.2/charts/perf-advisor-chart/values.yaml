@@ -1,0 +1,391 @@
+namespace: yb-perf-advisor
+
+# Sub-chart mode. Set enabled to true when this chart is deployed as a sub-chart of the
+# yugaware helm chart. In this mode the chart does not deploy its own postgres and
+# prometheus - it connects to the ones provided by yugaware (or to explicitly configured
+# external ones, see postgres.external and prometheus.external), and runs with the
+# spring profiles "api,task-runner,collector".
+# Unless overridden, the following yugaware-provided resources are used:
+#   postgres:           {{ .Release.Name }}-postgres:5432
+#   postgres password:  secret {{ .Release.Name }}-yugaware-global-config, key postgres_password
+#   prometheus:         http://{{ .Release.Name }}-yugaware-ui:9090
+# All resources are created in the release namespace ('namespace' above is ignored).
+# The perf-advisor Service is always ClusterIP: YugabyteDB Anywhere reaches it in-cluster and
+# reverse-proxies the UI behind its own login, so perfAdvisor.service.type is not settable here -
+# anything other than ClusterIP fails the render rather than being quietly dropped.
+yugaware:
+  enabled: false
+
+# Common labels to apply to all objects deployed by this chart
+# This provides an escape hatch for adding custom labels globally
+# Example:
+#   commonLabels:
+#     environment: production
+#     team: platform
+commonLabels: {}
+
+# Pod placement. These three apply to every workload the chart deploys - the perf-advisor
+# Deployment and, when they are not suppressed by postgres.external.host / prometheus.external.url,
+# the bundled postgres and prometheus StatefulSets - so a placed release stays together.
+#
+# They are deliberately the same three names, in the same shape, as the yugaware chart's top-level
+# values. In sub-chart mode that chart's placement applies to the YugabyteDB Anywhere pod only -
+# Helm resolves values before templates render, so a parent chart cannot pass placement down - and
+# Perf Advisor has to be told separately. Keeping the shape identical means that is a copy rather
+# than a translation:
+#
+#   perf-advisor-chart:
+#     nodeSelector: <same as the yugaware chart's>
+#     tolerations: <same>
+#     zoneAffinity: <same>
+#
+# See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+# eg.
+# nodeSelector:
+#   topology.kubernetes.io/region: us-west1
+nodeSelector: {}
+
+# Affinity to a particular zone for the pods. This is a plain list of zone names, not a
+# nodeAffinity structure - the chart builds the nodeAffinity around it, matching each name against
+# both failure-domain.beta.kubernetes.io/zone and topology.kubernetes.io/zone so the deprecated and
+# current label spellings are both covered. Same form as the yugaware chart's zoneAffinity.
+# See https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+# eg.
+# zoneAffinity:
+#   - us-west1-a
+#   - us-west1-b
+zoneAffinity: []
+
+# The tolerations that the pods should have.
+# See https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+# eg.
+# tolerations:
+#   - key: dedicated
+#     operator: Exists
+#     effect: NoSchedule
+tolerations: []
+
+# Image configuration with registry override support
+# Setting commonRegistry overrides the registry for all images
+# Per-component registry overrides can be set individually
+image:
+  # Common registry override for all images (e.g., "registry.example.com" or "registry.example.com:5000")
+  commonRegistry: ""
+  perfAdvisor:
+    # Registry override for perf-advisor image (overrides commonRegistry if set)
+    registry: ""
+    # Image name (default: quay.io/yugabyte/yb-troubleshoot-platform)
+    name: ""
+    # Image tag (default: from perfAdvisor.version)
+    tag: ""
+  postgres:
+    # Registry override for postgres image (overrides commonRegistry if set)
+    registry: ""
+    # Image name (default: postgres)
+    name: ""
+    # Image tag (default: 15)
+    tag: ""
+  prometheus:
+    # Registry override for prometheus image (overrides commonRegistry if set)
+    registry: ""
+    # Image name (default: prom/prometheus)
+    name: ""
+    # Image tag (default: v3.5.0)
+    tag: ""
+
+tls:
+  enabled: false
+  perfAdvisor:
+    hostname: "localhost"
+    keystore:
+      # Password protecting the generated tls.p12 keystore. If left empty, a random
+      # password is generated and preserved across upgrades.
+      password: ""
+    ## Expects base64 encoded certificate, key, and CA certificate.
+    ## Populate these for non-self-signed certificates.
+    ## All three values should be base64 encoded.
+    ## These will be used to create tls.p12 file.
+    ## Note: The validity of the provided certificates is not verified.
+    certificate: ""
+    key: ""
+    ca_certificate: ""
+    sslProtocols: ""
+    hsts: false
+  prometheus:
+    hostname: "localhost"
+    ## Expects base64 encoded certificate, key, and CA certificate.
+    ## Populate these for non-self-signed certificates.
+    ## All three values should be base64 encoded.
+    ## These will be used to create tls.p12 file.
+    ## Note: The validity of the provided certificates is not verified.
+    certificate: ""
+    key: ""
+    ca_certificate: ""
+    minVersion: ""
+    maxVersion: ""
+  ## cert-manager values
+  ## If cert-manager is enabled:
+  ## If genSelfsigned: true:
+  ##   Create a self-signed issuer/clusterIssuer
+  ##   Generate a rootCA using the above issuer.
+  ##   Generate a tls certificate with secret name as: {{ .Release.Name }}-perf-advisor-tls-cert
+  ##   Generate a tls certificate with secret name as: {{ .Release.Name }}-perf-advisor-prom-tls-cert
+  ## Else if genSelfsigned: false:
+  ##   Expect a clusterIssuer/issuer to be provided by user
+  ##   Generate a tls cert based on above issuer with secret name as: {{ .Release.Name }}-perf-advisor-tls-cert
+  ##   Generate a tls cert based on above issuer with secret name as: {{ .Release.Name }}-perf-advisor-prom-tls-cert
+  certManager:
+    enabled: false
+    genSelfsigned: true
+    useClusterIssuer: false
+    clusterIssuer: cluster-ca
+    issuer: perf-advisor-ca
+    ## Configuration for the TLS certificate requested from Issuer/ClusterIssuer
+    configuration:
+      duration: 8760h # 90d
+      renewBefore: 240h # 15d
+      algorithm: RSA # ECDSA or RSA
+      # Can be 2048, 4096 or 8192 for RSA
+      # Or 256, 384 or 521 for ECDSA
+      keySize: 2048
+
+postgres:
+  image: postgres:15
+  external:
+    host: ""
+    port: 5432
+    pass: ""
+    dbname: ts
+    user: postgres
+    # Reference an existing kubernetes secret holding the postgres password instead of
+    # providing it via `pass`. Takes precedence over `pass` when `secret.name` is set.
+    secret:
+      name: ""
+      key: "POSTGRES_PASSWORD"
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+  pvc:
+    # Empty means "let Kubernetes use the cluster default StorageClass". Explicitly setting
+    # storageClassName: "" in a PVC spec instead disables dynamic provisioning entirely, so the
+    # template only renders the field when this value is non-empty. Override with e.g.
+    # "yb-standard" to pin to a specific class.
+    storageClassName: ""
+    storage: "16Gi"
+  env:
+    postgresPassword: "Password"
+  ports:
+    containerPort: 5432
+
+prometheus:
+  external:
+    url: ""
+  port: 9090
+  scrapeInterval: 60s
+  scrapeTimeout: 60s
+  retentionTime: 15d
+  image: prom/prometheus:v3.5.0
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+  pvc:
+    # See postgres.pvc.storageClassName - empty defers to the cluster default StorageClass.
+    storageClassName: ""
+    storage: "16Gi"
+  targets:
+    collectors: #['collector1:port', 'collector2:port']
+    taskRunners: #['task-runner1:port', 'task-runner2:port']
+    apis: #['api1:port', 'api2:port']
+
+perfAdvisor:
+  initialRamPercentage: 25
+  maxRamPercentage: 90
+  replicas: 1
+  protocol: TCP
+  # Persistent volume backing /opt/yugabyte/perf-advisor/data (pa.data.path). Only provisioned
+  # when `profiles` (or the yugaware sub-chart mode) includes "collector", since the deployments
+  # with collector write durable state (collected metric files, support bundles, etc.).
+  # api/task-runner/anomaly-detector deployments get an emptyDir for the same mount instead - it
+  # only needs to be writable and exec-safe for snappy-java's native lib extraction.
+  # The mount path itself is fixed - subpaths under it are the contract with the app, so exposing
+  # the mount path as a value would break existing collected data on upgrade with no upside.
+  # Note: ReadWriteOnce, so when the PVC is used the deployment switches to `strategy: Recreate`
+  # (fine because collector-profile deployments are already capped at replicas=1).
+  pvc:
+    # See postgres.pvc.storageClassName - empty defers to the cluster default StorageClass.
+    storageClassName: ""
+    storage: "100Gi"
+  # We use port 80/443 by default for regular deployments and 8080 for YBM deployment, unless it's
+  # set explicitly.
+  port:
+  cors:
+    # Comma separated list of allowed origins
+    origin: ""
+  api:
+    url: ""
+    # API token used for authentication. If left empty, a random token is generated and
+    # preserved across upgrades.
+    token: ""
+  cloud:
+    # When true:
+    #   - the collector's perf-advisor-data volume is backed by emptyDir instead of a PVC
+    #     (see perf-advisor-chart.persistDataVolume) - avoids depending on a StorageClass being
+    #     provisioned in the target cluster (e.g. YBA envs where "yb-standard" is absent);
+    #   - the JSONL raw metric file exporter is disabled at the backend level via
+    #     cloud-defaults.properties (pa.metrics.export.jsonl.directory=), so nothing durable is
+    #     written to that emptyDir - metrics leave the pod via remote-write / OTLP shards.
+    enabled: false
+    api:
+      url: https://cloud.yugabyte.com
+    apiserverAuthSecret: ""
+    teleport:
+      enabled: false
+      jwksUrl: ""
+      expectedAudience: ""
+      expectedIssuer: ""
+      requiredRoles: "perfadvisor_user,perfadvisor_admin,super_admin"
+  profiles: "api,task-runner,collector,anomaly-detector"
+  callhome:
+    enabled: true
+    environment: dev
+  serviceMonitor:
+    enabled: false
+    annotations: {}
+  podDisruptionBudget:
+    # See https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+    # Note: When "collector" is in profiles, replicas is forced to 1 and maxUnavailable is set to 1 (allows disruptions/evictions).
+    # When "collector" is NOT in profiles, multiple replicas are supported and this configured maxUnavailable value is used.
+    maxUnavailable: 1
+  collector:
+    name: ""
+    topology:
+      # For YBA env:
+      # collectors:
+      #   - name: collector1
+      #     apiUrl: https://10.9.15.177
+      #     apiToken: collector1-token
+      #     cloud: aws
+      #     region: us-west-1
+      #     az: us-west-1a
+      #     default: true
+      #
+      # For YBM env:
+      # collectors:
+      #   - name: collector1
+      #     apiUrl: https://10.9.15.177
+      #     apiToken: collector1-token
+      #     ybaUrls:
+      #       - https://10.9.15.253
+      #       - https://10.9.17.10
+  metrics:
+    export:
+      topology:
+        # For local prometheus deployment. Replace release name, namespace and prometheus port.
+        # labels:
+        #   collector_id: local
+        # shards:
+        #   - id: 0
+        #     default: true
+        #     type: remotewrite
+        #     replicas:
+        #       - endpoint: "http://{{ .Release.Name }}-prometheus.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.prometheus.port }}/api/v1/write"
+        #         auth:
+        #         type: none
+
+        # For YBM env:
+        # labels:
+        #   some_label_1: value1
+        #   some_label_2: value2
+        # shards:
+        #   - id: 0
+        #     default: false
+        #     type: remotewrite
+        #     replicas:
+        #       - endpoint: http://hostname1:9090/api/v1/write
+        #         auth:
+        #           type: basic
+        #           username: user1
+        #           password: qwerty123
+        #       - endpoint: http://hostname2:9090/api/v1/write
+        #         auth:
+        #           type: basic
+        #           username: user1
+        #           password: qwerty123
+        #   - id: 1
+        #     default: true
+        #     type: remotewrite
+        #     replicas:
+        #       - endpoint: http://hostname3:9090/api/v1/write
+        #         auth:
+        #           type: none
+        #       - endpoint: http://hostname4:9090/api/v1/write
+        #         auth:
+        #           type: none
+
+  taskRunner:
+    threads: 30
+  pod:
+    annotations: {}
+    labels: {}
+    terminationGracePeriodSeconds: 30
+    probes: # HTTP healthcheck probes configuration
+      enabled: false # add or not livenessProbe and startupProbe to the container
+      startupTimeSec:
+        min: 20 # minimum expected time for perf-advisor to start
+        max: 600 # maximum expected time for perf-advisor to start, k8s will restart pod on timeout
+      livenessProbe:
+        periodSeconds: 30 # query period for liveness probe
+        failureThreshold: 10 # number of failed checks to restart pod
+
+  image: quay.io/yugabyte/yb-troubleshoot-platform
+  version: 1.5.1-b1
+  sidecars:
+    # - name: sidecar1
+    #   image: ...
+  resources:
+    limits:
+      cpu: "2"
+      memory: 4Gi
+    requests:
+      cpu: "2"
+      memory: 4Gi
+  # Merged into the perf-advisor pod spec verbatim, for pod-level fields the chart has no value of
+  # its own for.
+  #
+  # Node placement is no longer one of them: use the top-level nodeSelector, zoneAffinity and
+  # tolerations instead. Those also reach the bundled postgres and prometheus, which this does not,
+  # and they match the yugaware chart's shape so a sub-chart mirror is a copy. Setting placement
+  # here still works and still wins - it is spliced after the placement block - but it is on its
+  # own and nothing checks it.
+  #
+  # Keys the chart already writes for itself (serviceAccountName, imagePullSecrets, initContainers,
+  # containers, volumes) must not be set here. Nothing complains: the pod spec simply carries the
+  # key twice and the later copy silently wins, which is this block for the ones written above it
+  # and the chart's own for the ones written below.
+  spec:
+    # name: value
+    # name2: value2
+  annotations:
+    # name: value
+    # name2: value2
+  service:
+    # Service type for the perf-advisor service. Empty means LoadBalancer.
+    #
+    # Not settable in yugaware sub-chart mode: the Service is always ClusterIP there, and anything
+    # else here fails the render rather than being silently discarded. See the yugaware block at
+    # the top of this file.
+    type: ""
+    # extra service annotations
+    annotations:
+    # name: value
+    # name2: value2
+# Override the APIVersion used by policy group for PodDisruptionBudget resources. The chart selects the correct
+# APIVersion based on the target Kubernetes cluster. You don't need to modify this unless you are using helm template command
+# i.e. GKE app's deployer image against a Kubernetes cluster >= 1.21. pdbPolicyVersionOverride: "v1beta1"
+pdbPolicyVersionOverride: ""
+# optional customer service account to attach to the pods
+serviceAccountName: perfadvisorserviceaccount
+# optional images pull secret name, only 1 is supported
+imagePullSecretName: perfadvisorsecret

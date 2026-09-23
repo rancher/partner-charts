@@ -1,0 +1,58 @@
+{{- if and (not .Values.postgres.external.host) (not .Values.yugaware.enabled) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}-postgres
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-postgres
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-postgres
+        chart: {{ include "perf-advisor-chart.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 8 }}
+{{- end }}
+    spec:
+      {{- with include "perf-advisor-chart.podPlacement" (dict "root" .) | trim }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: postgres
+          # Uses helper template to construct image name with registry override support.
+          # If image.commonRegistry or image.postgres.registry is set, it will override
+          # the registry. Otherwise, uses postgres.image from values.
+          image: {{ include "perf-advisor-chart.postgresImage" . }}
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: {{ .Values.postgres.ports.containerPort }}
+
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-postgres-config
+            - secretRef:
+                name: {{ .Release.Name }}-postgres-password
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgredb
+              subPath: postgres_data_14
+      volumes:
+        - name: postgredb
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-postgres-pv-claim
+{{- end }}

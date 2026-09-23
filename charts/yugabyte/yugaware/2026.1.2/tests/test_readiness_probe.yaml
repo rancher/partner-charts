@@ -1,0 +1,77 @@
+suite: Readiness probe verification
+templates:
+- statefulset.yaml
+- configs.yaml
+tests:
+- it: Readiness probe should be disabled by default
+  template: statefulset.yaml
+  asserts:
+  - notExists:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe
+
+- it: Readiness probe should be present when enabled
+  template: statefulset.yaml
+  set:
+    yugaware.pod.probes.enabled: true
+    yugaware.pod.probes.readinessProbe.enabled: true
+  asserts:
+  - exists:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.httpGet.path
+      value: /api/app_version
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.httpGet.port
+      value: yugaware
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.initialDelaySeconds
+      value: 30
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.periodSeconds
+      value: 10
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.timeoutSeconds
+      value: 5
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.successThreshold
+      value: 1
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.failureThreshold
+      value: 3
+
+- it: Readiness probe should respect custom values when enabled
+  template: statefulset.yaml
+  set:
+    yugaware.pod.probes.enabled: true
+    yugaware.pod.probes.readinessProbe.enabled: true
+    yugaware.pod.probes.readinessProbe.httpGet.path: /custom/health
+    yugaware.pod.probes.readinessProbe.httpGet.port: 8080
+    yugaware.pod.probes.readinessProbe.initialDelaySeconds: 60
+    yugaware.pod.probes.readinessProbe.periodSeconds: 15
+    yugaware.pod.probes.readinessProbe.timeoutSeconds: 10
+    yugaware.pod.probes.readinessProbe.successThreshold: 2
+    yugaware.pod.probes.readinessProbe.failureThreshold: 5
+  asserts:
+  - exists:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.httpGet.path
+      value: /custom/health
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.httpGet.port
+      value: 8080
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.initialDelaySeconds
+      value: 60
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.periodSeconds
+      value: 15
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.timeoutSeconds
+      value: 10
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.successThreshold
+      value: 2
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "yugaware")].readinessProbe.failureThreshold
+      value: 5

@@ -1,0 +1,32 @@
+{{- if .Values.perfAdvisor.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-service-monitor
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  {{- if .Values.perfAdvisor.serviceMonitor.annotations }}
+  annotations:
+{{ toYaml .Values.perfAdvisor.serviceMonitor.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-perf-advisor
+    app.kubernetes.io/component: perf-advisor
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  endpoints:
+    - port: http
+      # Scrape Performance Advisor metrics from Spring Boot actuator
+      path: /actuator/prometheus
+    - port: http
+      # Scrape Performance Advisor universe metrics
+      path: /api/universe/metrics
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-perf-advisor
+{{- end }}

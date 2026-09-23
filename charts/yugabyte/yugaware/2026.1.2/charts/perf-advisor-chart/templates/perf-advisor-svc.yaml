@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-service
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-perf-advisor
+    app.kubernetes.io/component: perf-advisor
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+{{- if .Values.perfAdvisor.service.annotations }}
+  annotations: {{ .Values.perfAdvisor.service.annotations | toYaml | nindent 4 }}
+{{- end }}
+spec:
+  # Sub-chart mode keeps this cluster-internal whatever perfAdvisor.service.type says. There the
+  # only client is YugabyteDB Anywhere, which reaches it as {{ .Release.Name }}-perf-advisor-service
+  # and reverse-proxies the Perf Advisor UI behind its own authentication.
+  #
+  # Reaching the Service directly does not bypass PA_API_TOKEN for most of the API: TokenAuthFilter
+  # 401s an unauthenticated request under /api/. What stays reachable is what the filters exempt -
+  # the static UI and /actuator/*, which are not under /api/ at all, and four paths UserAuthFilter
+  # (@Order(1)) waves through by stamping AUTH_TYPE_ATTR=NONE, which makes TokenAuthFilter chain
+  # rather than 401: /api/login, /api/universe/metrics, /api/app_version and /api/app_config.
+  # /api/login is the local-user password endpoint, so an exposed Service is somewhere to try
+  # credentials against, outside the YugabyteDB Anywhere login entirely.
+  #
+  # perfAdvisor.service.type is refused rather than ignored in sub-chart mode, so an operator who
+  # set it is told instead of quietly losing an external address on the next upgrade. The chart has
+  # no deprecation mechanism (REVIEW.md section 2), which is why this is an explicit failure.
+  {{- if .Values.yugaware.enabled }}
+  {{- if and .Values.perfAdvisor.service.type (ne .Values.perfAdvisor.service.type "ClusterIP") }}
+  {{- fail (printf "\n\nperfAdvisor.service.type is %q, but in yugaware sub-chart mode the Perf Advisor Service is always ClusterIP.\nYugabyteDB Anywhere reaches it in-cluster and reverse-proxies the UI behind its own login, so an\nexternal address would expose the paths its auth filters exempt - /api/login among them.\nRemove the value, or set it to ClusterIP.\n" .Values.perfAdvisor.service.type) }}
+  {{- end }}
+  {{- end }}
+  type: {{ if .Values.yugaware.enabled }}ClusterIP{{ else }}{{ .Values.perfAdvisor.service.type | default "LoadBalancer" }}{{ end }}
+  selector:
+    app: {{ .Release.Name }}-perf-advisor
+  ports:
+    - protocol: {{ .Values.perfAdvisor.protocol }}
+      name: http
+      port: {{ include "getServicePort" . }}
+      targetPort: 8080

@@ -1,0 +1,153 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- $root := . }}
+{{- $tls := $root.Values.tls }}
+{{- if and $tls.enabled $tls.certManager.enabled }}
+{{- if $tls.certManager.genSelfsigned }}
+{{- if $tls.certManager.useClusterIssuer }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ $root.Release.Name }}-perf-advisor-cluster-issuer
+  labels:
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  selfSigned: {}
+{{- else }} # useClusterIssuer=false
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $root.Release.Name }}-perf-advisor-issuer
+  namespace: {{ include "perf-advisor-chart.namespace" $root }}
+  labels:
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  selfSigned: {}
+---
+{{- end }} # useClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $root.Release.Name }}-perf-advisor-ui-root-ca
+  namespace: {{ include "perf-advisor-chart.namespace" $root }}
+spec:
+  isCA: true
+  commonName: Perf Advisor self signed CA
+  secretName: {{ .Release.Name }}-perf-advisor-root-ca
+  secretTemplate:
+    labels:
+      app: "{{ template "perf-advisor-chart.name" . }}"
+      chart: "{{ template "perf-advisor-chart.chart" . }}"
+      release: {{ .Release.Name | quote }}
+      heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 6 }}
+{{- end }}
+  duration: {{ $tls.certManager.configuration.duration | quote }}
+  renewBefore: {{ $tls.certManager.configuration.renewBefore | quote }}
+  privateKey:
+    algorithm: {{ $tls.certManager.configuration.algorithm | quote }}
+    encoding: PKCS8
+    size: {{ $tls.certManager.configuration.keySize }}
+    rotationPolicy: Always
+  issuerRef:
+    {{- if $tls.certManager.useClusterIssuer }}
+    name: {{ $root.Release.Name }}-perf-advisor-cluster-issuer
+    kind: ClusterIssuer
+    {{- else }}
+    name: {{ $root.Release.Name }}-perf-advisor-issuer
+    kind: Issuer
+    {{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $root.Release.Name }}-perf-advisor-ca-issuer
+  namespace: {{ include "perf-advisor-chart.namespace" $root }}
+  labels:
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  ca:
+    secretName: {{ .Release.Name }}-perf-advisor-root-ca
+---
+{{- end }} # genSelfsigned
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $root.Release.Name }}-perf-advisor-ui-tls
+  namespace: {{ include "perf-advisor-chart.namespace" $root }}
+spec:
+  isCA: false
+  commonName: {{ $tls.perfAdvisor.hostname }}
+  secretName: {{ .Release.Name }}-perf-advisor-tls-cert
+  secretTemplate:
+    labels:
+      app: "{{ template "perf-advisor-chart.name" . }}"
+      chart: "{{ template "perf-advisor-chart.chart" . }}"
+      release: {{ .Release.Name | quote }}
+      heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 6 }}
+{{- end }}
+  duration: {{ $tls.certManager.configuration.duration | quote }}
+  renewBefore: {{ $tls.certManager.configuration.renewBefore | quote }}
+  privateKey:
+    algorithm: {{ $tls.certManager.configuration.algorithm | quote }}
+    encoding: PKCS8
+    size: {{ $tls.certManager.configuration.keySize }}
+    rotationPolicy: Always
+  issuerRef:
+    name: {{ $tls.certManager.genSelfsigned | ternary (printf "%s%s" $root.Release.Name "-perf-advisor-ca-issuer") ($tls.certManager.useClusterIssuer | ternary $tls.certManager.clusterIssuer $tls.certManager.issuer) }}
+    {{- if $tls.certManager.useClusterIssuer }}
+    kind: ClusterIssuer
+    {{- else }}
+    kind: Issuer
+    {{- end }}
+{{- /* The prometheus certificate is only needed when this chart deploys its own prometheus. */}}
+{{- if and (not $root.Values.prometheus.external.url) (not $root.Values.yugaware.enabled) }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $root.Release.Name }}-perf-advisor-prom-tls
+  namespace: {{ include "perf-advisor-chart.namespace" $root }}
+spec:
+  isCA: false
+  commonName: {{ $tls.prometheus.hostname }}
+  secretName: {{ .Release.Name }}-perf-advisor-prom-tls-cert
+  secretTemplate:
+    labels:
+      app: "{{ template "perf-advisor-chart.name" . }}"
+      chart: "{{ template "perf-advisor-chart.chart" . }}"
+      release: {{ .Release.Name | quote }}
+      heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 6 }}
+{{- end }}
+  duration: {{ $tls.certManager.configuration.duration | quote }}
+  renewBefore: {{ $tls.certManager.configuration.renewBefore | quote }}
+  privateKey:
+    algorithm: {{ $tls.certManager.configuration.algorithm | quote }}
+    encoding: PKCS8
+    size: {{ $tls.certManager.configuration.keySize }}
+    rotationPolicy: Always
+  issuerRef:
+    name: {{ $tls.certManager.genSelfsigned | ternary (printf "%s%s" $root.Release.Name "-perf-advisor-ca-issuer") ($tls.certManager.useClusterIssuer | ternary $tls.certManager.clusterIssuer $tls.certManager.issuer) }}
+    {{- if $tls.certManager.useClusterIssuer }}
+    kind: ClusterIssuer
+    {{- else }}
+    kind: Issuer
+    {{- end }}
+---
+{{- end }}
+{{- end }}

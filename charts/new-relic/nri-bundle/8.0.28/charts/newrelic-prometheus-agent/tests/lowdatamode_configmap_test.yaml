@@ -1,0 +1,138 @@
+suite: test configmap with LowDataMode
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: config with lowDataMode true
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      lowDataMode: true
+      metric_type_override:
+        enabled: false
+      config:
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: drop
+                regex: kube_.+|container_.+|machine_.+|cadvisor_.+
+                source_labels:
+                - __name__
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: config with lowDataMode and nrStaging true
+    set:
+      licenseKey: license-key-test
+      cluster: cluster-test
+      lowDataMode: true
+      nrStaging: true
+      metric_type_override:
+        enabled: false
+      config:
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: drop
+                regex: kube_.+|container_.+|machine_.+|cadvisor_.+
+                source_labels:
+                - __name__
+              staging: true
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: config with lowDataMode true from global config
+    set:
+      global:
+        lowDataMode: true
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: false
+      config:
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: drop
+                regex: kube_.+|container_.+|machine_.+|cadvisor_.+
+                source_labels:
+                - __name__
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s
+
+  - it: existing relabel configs are appended to low data mode and metric_type_override relabel configs.
+    set:
+      lowDataMode: true
+      licenseKey: license-key-test
+      cluster: cluster-test
+      metric_type_override:
+        enabled: true
+      config:
+        newrelic_remote_write:
+          extra_write_relabel_configs:
+            - action: drop
+              regex: my_custom_metric_relabel_config
+              source_labels:
+              - __name__
+        # Set empty to make this test simple
+        static_targets:
+        kubernetes:
+    asserts:
+      - equal:
+          path: data["config.yaml"]
+          value: |-
+            # Configuration for newrelic-prometheus-configurator
+            newrelic_remote_write:
+              extra_write_relabel_configs:
+              - action: drop
+                regex: kube_.+|container_.+|machine_.+|cadvisor_.+
+                source_labels:
+                - __name__
+              - action: replace
+                regex: timeseries_write_(.*)
+                replacement: counter
+                separator: ;
+                source_labels:
+                - __name__
+                target_label: newrelic_metric_type
+              - action: replace
+                regex: sql_byte(.*)
+                replacement: counter
+                separator: ;
+                source_labels:
+                - __name__
+                target_label: newrelic_metric_type
+              - action: drop
+                regex: my_custom_metric_relabel_config
+                source_labels:
+                - __name__
+            common:
+              external_labels:
+                cluster_name: cluster-test
+              scrape_interval: 30s

@@ -1,0 +1,40 @@
+# The sub-chart's own default is sized for a standalone Perf Advisor with a node to itself. Here
+# it shares one with YugabyteDB Anywhere, so this chart lowers the requests through its values -
+# and the scheduler fits pods on requests, so getting it wrong costs real node capacity.
+#
+# The deployment template checksums the sibling ConfigMaps and Secrets it mounts, so they have to
+# be rendered alongside it.
+suite: Perf Advisor sub-chart resources
+templates:
+- charts/perf-advisor-chart/templates/deployment.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-certs.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-collector-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-metrics-export-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-properties.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-secret.yaml
+- charts/perf-advisor-chart/templates/postgres-secret.yaml
+tests:
+- it: reserves little, but keeps the standalone burst ceiling
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "perf-advisor")].resources.requests.cpu
+      value: 100m
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "perf-advisor")].resources.requests.memory
+      value: 512Mi
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "perf-advisor")].resources.limits.cpu
+      value: "2"
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "perf-advisor")].resources.limits.memory
+      value: 4Gi
+
+- it: an operator override still wins
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  set:
+    perf-advisor-chart.perfAdvisor.resources.requests.cpu: 500m
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "perf-advisor")].resources.requests.cpu
+      value: 500m

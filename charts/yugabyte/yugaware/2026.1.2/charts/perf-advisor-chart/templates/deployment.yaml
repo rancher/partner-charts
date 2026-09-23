@@ -1,0 +1,288 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-main
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-perf-advisor
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  {{- if include "perf-advisor-chart.hasCollector" . }}
+  replicas: 1 # having more than 1 collector replicas isn't supported
+  # Recreate for two overlapping reasons:
+  #   1. Self-hosted collectors mount the ReadWriteOnce PVC (see perf-advisor-pvc.yaml), and a
+  #      RollingUpdate surge pod would deadlock on multi-attach.
+  #   2. Cloud collectors use emptyDir instead (see perf-advisor-chart.persistDataVolume) so #1
+  #      does not apply, but we still want single-writer semantics: a surge pod would briefly
+  #      double-scrape every target during rollout.
+  # Recreate costs no availability either way because replicas is already pinned at 1 above.
+  # Non-collector deployments retain the default RollingUpdate so their emptyDir-backed pods can
+  # scale horizontally.
+  strategy:
+    type: Recreate
+  {{- else }}
+  replicas: {{ .Values.perfAdvisor.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-perf-advisor
+  template:
+    metadata:
+      annotations:
+        checksum/perfAdvisorCerts: {{ include (print $.Template.BasePath "/perf-advisor-certs.yaml") . | sha256sum }}
+        checksum/perfAdvisorConfig: {{ include (print $.Template.BasePath "/perf-advisor-properties.yaml") . | sha256sum }}
+        {{- if .Values.perfAdvisor.collector.topology }}
+        checksum/collectorTopology: {{ include (print $.Template.BasePath "/perf-advisor-collector-topology.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if or .Values.perfAdvisor.metrics.export.topology .Values.yugaware.enabled }}
+        checksum/metricsExportTopology: {{ include (print $.Template.BasePath "/perf-advisor-metrics-export-topology.yaml") . | sha256sum }}
+        {{- end }}
+        checksum/perfAdvisorSecret: {{ include (print $.Template.BasePath "/perf-advisor-secret.yaml") . | sha256sum }}
+        checksum/postgresSecret: {{ include (print $.Template.BasePath "/postgres-secret.yaml") . | sha256sum }}
+      {{- if .Values.perfAdvisor.annotations }}
+      {{ toYaml .Values.perfAdvisor.annotations | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ .Release.Name }}-perf-advisor
+        chart: {{ include "perf-advisor-chart.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 8 }}
+{{- end }}
+    spec:
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- if .Values.imagePullSecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecretName }}
+      {{- end }}
+      {{- with include "perf-advisor-chart.podPlacement" (dict "root" . "override" .Values.perfAdvisor.spec) | trim }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- if .Values.perfAdvisor.spec }}
+      {{- toYaml .Values.perfAdvisor.spec | nindent 6 }}
+      {{- end }}
+      {{- if or (not .Values.postgres.external.host) (.Values.yugaware.enabled) (.Values.tls.enabled)}}
+      initContainers:
+      {{- if .Values.yugaware.enabled }}
+        # Waits for postgres to come up and creates the perf-advisor database if it
+        # does not exist yet (the postgres provided by yugaware only creates the
+        # yugaware database).
+        - name: db-init
+          image: {{ include "perf-advisor-chart.postgresImage" . }}
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "perf-advisor-chart.postgresSecretName" . }}
+                  key: {{ include "perf-advisor-chart.postgresSecretKey" . }}
+            - name: DB_HOST
+              value: "{{ include "perf-advisor-chart.postgresHost" . }}"
+            - name: DB_PORT
+              value: "{{ include "perf-advisor-chart.postgresPort" . }}"
+            - name: DB_USER
+              value: "{{ include "perf-advisor-chart.postgresUser" . }}"
+            - name: DB_NAME
+              value: "{{ include "perf-advisor-chart.postgresDbName" . }}"
+          command:
+            - 'sh'
+            - '-c'
+            - |
+              until pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER; do
+                echo "Waiting for PostgreSQL..."
+                sleep 5
+              done
+              psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -tc \
+                "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || \
+                psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "CREATE DATABASE \"$DB_NAME\""
+              echo "Database '$DB_NAME' is ready"
+      {{- else if (not .Values.postgres.external.host) }}
+        - name: waiter
+          image: busybox
+          command: ['sh', '-c', 'until nc -z -v -w30 $DB_HOST $DB_PORT; do echo "Waiting for PostgreSQL..."; sleep 5; done; echo "PostgreSQL is up"']
+          env:
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_HOST
+              value: "{{ include "perf-advisor-chart.postgresHost" . }}"
+      {{- end }}
+      {{- if (.Values.tls.enabled) }}
+        - name: keystore-generator
+          # Uses helper template to construct image name with registry override support.
+          # If image.commonRegistry or image.perfAdvisor.registry is set, it will override
+          # the registry. Otherwise, uses perfAdvisor.image and perfAdvisor.version from values.
+          image: {{ include "perf-advisor-chart.perfAdvisorImage" . }}
+          imagePullPolicy: Always
+          env:
+            - name: KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-perf-advisor-secret
+                  key: KEYSTORE_PASSWORD
+          volumeMounts:
+            - name: export-certs
+              mountPath: /export_certs
+            - name: perf-advisor-certs
+              mountPath: /opt/yugabyte/perf-advisor/certs
+          {{- if .Values.tls.certManager.enabled }}
+            - name: {{ .Release.Name }}-perf-advisor-tls-cert
+              mountPath: /opt/yugabyte/perf-advisor/pem-certs/
+              readOnly: true
+          {{- else }}
+            - name: {{ .Release.Name }}-perf-advisor-tls-pem
+              mountPath: /opt/yugabyte/perf-advisor/pem-certs/
+              readOnly: true
+          {{- end }}
+          command:
+            - "/bin/bash"
+            - "/export_certs/export-certs.sh"
+      {{- end }}
+      {{- end }}
+      containers:
+        {{- if .Values.perfAdvisor.sidecars }}
+        {{- toYaml .Values.perfAdvisor.sidecars | nindent 8 }}
+        {{- end }}
+        - name: perf-advisor
+          # Uses helper template to construct image name with registry override support.
+          # If image.commonRegistry or image.perfAdvisor.registry is set, it will override
+          # the registry. Otherwise, uses perfAdvisor.image and perfAdvisor.version from values.
+          image: {{ include "perf-advisor-chart.perfAdvisorImage" . }}
+          imagePullPolicy: Always
+          args:
+            - --spring.config.additional-location=/opt/yugabyte/perf-advisor/conf/override.properties
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "perf-advisor-chart.postgresSecretName" . }}
+                  key: {{ include "perf-advisor-chart.postgresSecretKey" . }}
+            - name: PA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-perf-advisor-secret
+                  key: PA_API_TOKEN
+            - name: JAVA_OPTS
+              value: "-XX:InitialRAMPercentage={{ .Values.perfAdvisor.initialRamPercentage }} -XX:MaxRAMPercentage={{ .Values.perfAdvisor.maxRamPercentage }}"
+          {{- if (.Values.tls.enabled) }}
+            - name: PA_WEB_TLS_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-perf-advisor-secret
+                  key: KEYSTORE_PASSWORD
+          {{- end }}
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ include "perf-advisor-chart.springProfiles" . }}
+            {{- if .Values.perfAdvisor.cloud.apiserverAuthSecret }}
+            - name: APISERVER_AUTH_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.perfAdvisor.cloud.apiserverAuthSecret }}
+                  key: email
+            - name: APISERVER_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.perfAdvisor.cloud.apiserverAuthSecret }}
+                  key: password
+            {{- end }}
+          ports:
+            - containerPort: 8080
+          {{- if .Values.perfAdvisor.pod.probes.enabled }}
+          startupProbe:
+            failureThreshold: {{ div .Values.perfAdvisor.pod.probes.startupTimeSec.max (div .Values.perfAdvisor.pod.probes.startupTimeSec.min 2) }}
+            initialDelaySeconds: {{ .Values.perfAdvisor.pod.probes.startupTimeSec.min }}
+            periodSeconds: {{ div .Values.perfAdvisor.pod.probes.startupTimeSec.min 2 }}
+            timeoutSeconds: {{ div .Values.perfAdvisor.pod.probes.startupTimeSec.min 4 }}
+            httpGet:
+                path: /actuator/health
+                port: 8080
+          livenessProbe:
+            failureThreshold: {{ .Values.perfAdvisor.pod.probes.livenessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.perfAdvisor.pod.probes.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ div .Values.perfAdvisor.pod.probes.livenessProbe.periodSeconds 2 }}
+            httpGet:
+                path: /actuator/health
+                port: 8080
+          {{- end }}
+          {{- if .Values.perfAdvisor.resources }}
+          resources: {{ toYaml .Values.perfAdvisor.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: perf-advisor-config
+              mountPath: /opt/yugabyte/perf-advisor/conf
+            # Fixed mount path - pa.data.path and its per-feature subdirs (collected metrics,
+            # support bundles, snappy scratch) are hardcoded to /opt/yugabyte/perf-advisor/data in
+            # perf-advisor-properties.yaml, so changing it here would silently orphan the volume.
+            - name: perf-advisor-data
+              mountPath: /opt/yugabyte/perf-advisor/data
+          {{- if (.Values.tls.enabled) }}
+            - name: perf-advisor-certs
+              mountPath: /opt/yugabyte/perf-advisor/certs
+              readOnly: true
+          {{- end }}
+
+      volumes:
+        - name: perf-advisor-config
+          projected:
+            sources:
+              - configMap:
+                  name: {{ .Release.Name }}-perf-advisor-properties
+                  items:
+                      - key: override.properties
+                        path: override.properties
+            {{- if .Values.perfAdvisor.collector.topology }}
+              - configMap:
+                  name: {{ .Release.Name }}-perf-advisor-collector-topology
+                  items:
+                    - key: collectors.yml
+                      path: collectors.yml
+            {{- end }}
+            {{- if or .Values.perfAdvisor.metrics.export.topology .Values.yugaware.enabled }}
+              - configMap:
+                  name: {{ .Release.Name }}-perf-advisor-metrics-export-topology
+                  items:
+                    - key: metrics-export.yml
+                      path: metrics-export.yml
+            {{- end }}
+        - name: perf-advisor-certs
+          emptyDir: {}
+        # Backs pa.data.path. Storage backing is decided by perf-advisor-chart.persistDataVolume:
+        #   - self-hosted collector (hasCollector && !cloud.enabled) -> PVC, so collected JSONL
+        #     metric files and pending support bundles survive rollouts.
+        #   - cloud collector (cloud.enabled=true) -> emptyDir. The JSONL exporter is disabled in
+        #     cloud mode via cloud-defaults.properties (pa.metrics.export.jsonl.directory=), so
+        #     nothing durable is written; metrics flow over remote-write / OTLP instead. Also
+        #     avoids depending on a specific StorageClass being available in the cluster.
+        #   - api/task-runner/anomaly-detector-only -> emptyDir. Only need scratch space for
+        #     snappy-java's native lib; also avoids the ReadWriteOnce PVC lock that would force
+        #     these otherwise-horizontally-scaled pods onto Recreate.
+        - name: perf-advisor-data
+        {{- if include "perf-advisor-chart.persistDataVolume" . }}
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-perf-advisor-pv-claim
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        {{- if (.Values.tls.enabled) }}
+        - name: export-certs
+          configMap:
+            name: {{ .Release.Name }}-perf-advisor-export-certs
+            items:
+              - key: export-certs.sh
+                path: export-certs.sh
+        {{- if .Values.tls.certManager.enabled }}
+        - name: {{ .Release.Name }}-perf-advisor-tls-cert
+          secret:
+            secretName: {{ .Release.Name }}-perf-advisor-tls-cert
+        {{- else }}
+        - name: {{ .Release.Name }}-perf-advisor-tls-pem
+          secret:
+            secretName: {{ .Release.Name }}-perf-advisor-tls-pem
+        {{- end }}
+        {{- end }}

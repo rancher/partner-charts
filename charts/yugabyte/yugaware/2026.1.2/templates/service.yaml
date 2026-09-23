@@ -1,0 +1,115 @@
+# Copyright (c) YugaByte, Inc.
+
+{{- if .Values.yugaware.service.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-yugaware-ui
+  {{- if .Values.yugaware.service.annotations }}
+  annotations:
+{{ toYaml .Values.yugaware.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+{{- if .Values.commonLabels }}
+{{ include "yugaware.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+{{- if eq .Release.Service "Tiller" }}
+  clusterIP:
+{{- else }}
+{{- if .Values.yugaware.service.clusterIP }}
+  clusterIP: .Values.yugaware.service.clusterIP
+{{- end }}
+{{- end }}
+  ports:
+{{- if .Values.tls.enabled }}
+  - name: ui-tls
+    port: 443
+    targetPort: 9443
+{{- end }}
+  - name: ui
+    port: 80
+    targetPort: 9000
+  - name: metrics
+    port: 9090
+  selector:
+    app: {{ .Release.Name }}-yugaware
+  type: "{{ .Values.yugaware.service.type }}"
+  {{- if and (eq .Values.yugaware.service.type "LoadBalancer") (.Values.yugaware.service.ip) }}
+  loadBalancerIP: "{{ .Values.yugaware.service.ip }}"
+  {{- end }}
+  {{- if .Values.yugaware.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+  {{- toYaml .Values.yugaware.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if .Values.yugaware.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-yugaware
+  {{- if .Values.yugaware.serviceMonitor.annotations }}
+  annotations:
+{{ toYaml .Values.yugaware.serviceMonitor.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+{{- if .Values.commonLabels }}
+{{ include "yugaware.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  endpoints:
+    - port: ui # Scrape the Platform itself instead of bundled Prometheus
+      path: api/v1/prometheus_metrics
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-yugaware
+{{- end }}
+{{- if and .Values.postgres.service.enabled (not .Values.postgres.external.host) }}
+{{- /*
+  Publishes the in-pod database so other pods in the namespace can reach it. The
+  perf-advisor sub-chart connects here by default, which is why it is on by default.
+
+  Only rendered for the in-pod database. With postgres.external.host set there is no
+  database container in this pod to select, and the sub-chart is pointed straight at the
+  external server through perf-advisor-chart.postgres.external instead - see values.yaml.
+*/}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  {{- if .Values.postgres.service.annotations }}
+  annotations:
+{{ toYaml .Values.postgres.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .Release.Name }}-yugaware
+    chart: {{ template "yugaware.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+{{- if .Values.commonLabels }}
+{{ include "yugaware.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  ports:
+  - name: postgres
+    port: 5432
+    {{- /* YugabyteDB serves YSQL on its own port, so keep 5432 stable for clients. */}}
+    targetPort: {{ .Values.useYugabyteDB | ternary (.Values.yugabytedb.config.ysqlPort | default 5433) 5432 }}
+  selector:
+    app: {{ .Release.Name }}-yugaware
+  type: {{ .Values.postgres.service.type }}
+  {{- if and (eq .Values.postgres.service.type "LoadBalancer") (.Values.postgres.service.ip) }}
+  loadBalancerIP: "{{ .Values.postgres.service.ip }}"
+  {{- end }}
+{{- end }}
