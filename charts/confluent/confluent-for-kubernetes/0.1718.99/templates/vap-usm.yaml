@@ -1,0 +1,75 @@
+{{- if and .Values.vapPolicies.enabled (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
+# USM Agent URL/TLS mismatch check:
+# Denies CREATE/UPDATE of Kafka, KRaftController, or Connect CRs when
+# usmAgentClient.url uses https:// but the tls block is not configured.
+# Without TLS config, Kafka tries HTTPS to a non-TLS USM Agent and the
+# telemetry connection fails silently — no error at apply time or in CR status.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cfk-usm-url-tls-mismatch-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["platform.confluent.io"]
+        apiVersions: ["v1beta1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["kafkas", "kraftcontrollers", "connects"]
+  validations:
+    # Deny if usmAgentClient URL uses https:// but no tls block is configured.
+    # This causes a silent connection failure — Kafka tries HTTPS to a non-TLS agent.
+    - expression: >
+        !has(object.spec.dependencies) ||
+        !has(object.spec.dependencies.usmAgentClient) ||
+        !object.spec.dependencies.usmAgentClient.url.startsWith('https://') ||
+        (has(object.spec.dependencies.usmAgentClient.tls) &&
+         has(object.spec.dependencies.usmAgentClient.tls.enabled) &&
+         object.spec.dependencies.usmAgentClient.tls.enabled == true)
+      messageExpression: >
+        'usmAgentClient URL "' + object.spec.dependencies.usmAgentClient.url
+        + '" uses https:// but no tls block is configured. '
+        + 'Either use http:// in the URL or add a tls block with enabled: true '
+        + 'and the appropriate secretRef. Without TLS config, Kafka will fail '
+        + 'to connect to the USM Agent over HTTPS.'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cfk-usm-url-tls-mismatch-binding-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+spec:
+  policyName: cfk-usm-url-tls-mismatch-{{ .Release.Namespace }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        {{- if .Values.namespaced }}
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            {{- if empty .Values.namespaceList }}
+            - {{ .Release.Namespace }}
+            {{- else }}
+            {{- range $i, $v := .Values.namespaceList }}
+            - {{ trim $v }}
+            {{- end }}
+            {{- end }}
+        {{- else }}
+        - key: kubernetes.io/metadata.name
+          operator: Exists
+        {{- end }}
+{{- end }}

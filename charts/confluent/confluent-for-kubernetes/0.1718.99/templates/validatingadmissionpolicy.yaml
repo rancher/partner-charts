@@ -1,0 +1,112 @@
+{{- if and .Values.vapPolicies.enabled (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cfk-kraft-migration-cr-lock-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["platform.confluent.io"]
+        apiVersions: ["v1beta1"]
+        operations: ["UPDATE", "DELETE"]
+        resources: ["kafkas", "kraftcontrollers", "zookeepers"]
+  variables:
+    # For DELETE, object may be DeleteOptions — always use oldObject.
+    # For UPDATE, use object (the incoming mutation).
+    - name: obj
+      expression: "request.operation == 'DELETE' ? oldObject : object"
+    - name: ann
+      expression: "has(variables.obj.metadata.annotations) ? variables.obj.metadata.annotations : {}"
+    - name: oldAnn
+      expression: "has(oldObject.metadata) && has(oldObject.metadata.annotations) ? oldObject.metadata.annotations : {}"
+    # Check lock on BOTH new and old object. Prevents users from removing the lock
+    # annotation to bypass the policy. The operator SA is the only one who can remove the lock.
+    - name: isLocked
+      expression: >
+        ('platform.confluent.io/kraft-migration-cr-lock' in variables.ann &&
+        variables.ann['platform.confluent.io/kraft-migration-cr-lock'] == 'true')
+    - name: wasLocked
+      expression: >
+        'platform.confluent.io/kraft-migration-cr-lock' in variables.oldAnn &&
+        variables.oldAnn['platform.confluent.io/kraft-migration-cr-lock'] == 'true'
+    - name: isOperatorSA
+      expression: >
+        request.userInfo.username == 'system:serviceaccount:{{ .Release.Namespace }}:{{ template "confluent-operator.service-account" . }}'
+    # Bypass annotation — per-CR emergency escape hatch
+    - name: hasBypass
+      expression: >
+        'platform.confluent.io/allow-request-during-kraft-migration' in variables.ann &&
+        variables.ann['platform.confluent.io/allow-request-during-kraft-migration'] == 'true'
+    - name: hadBypass
+      expression: >
+        'platform.confluent.io/allow-request-during-kraft-migration' in variables.oldAnn &&
+        variables.oldAnn['platform.confluent.io/allow-request-during-kraft-migration'] == 'true'
+    # Old webhook label bypass — backward compat for upgrades mid-migration.
+    # Without this, users who had the old label bypass would be silently denied after upgrade.
+    - name: objLabels
+      expression: "has(variables.obj.metadata.labels) ? variables.obj.metadata.labels : {}"
+    - name: oldLabels
+      expression: "has(oldObject.metadata) && has(oldObject.metadata.labels) ? oldObject.metadata.labels : {}"
+    - name: hasLabelBypass
+      expression: >
+        ('confluent-operator.webhooks.platform.confluent.io/allow-request-during-kraft-migration' in variables.objLabels &&
+        variables.objLabels['confluent-operator.webhooks.platform.confluent.io/allow-request-during-kraft-migration'] == 'true') ||
+        ('confluent-operator.webhooks.platform.confluent.io/allow-request-during-kraft-migration' in variables.oldLabels &&
+        variables.oldLabels['confluent-operator.webhooks.platform.confluent.io/allow-request-during-kraft-migration'] == 'true')
+  validations:
+    - expression: >
+        !(variables.isLocked || variables.wasLocked) ||
+        (variables.wasLocked && !variables.isLocked
+          ? variables.isOperatorSA
+          : variables.isOperatorSA || variables.hasBypass || variables.hadBypass || variables.hasLabelBypass)
+      messageExpression: >
+        'This ' + variables.obj.kind + ' CR "' + variables.obj.metadata.name
+        + '" is locked during KRaft migration. '
+        + 'Only the CFK operator service account can modify it. '
+        + 'Current user: ' + request.userInfo.username + '. '
+        + 'For emergency changes, add bypass: kubectl annotate '
+        + variables.obj.kind.lowerAscii() + ' ' + variables.obj.metadata.name
+        + ' -n ' + variables.obj.metadata.namespace
+        + ' platform.confluent.io/allow-request-during-kraft-migration=true'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cfk-kraft-migration-cr-lock-binding-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+spec:
+  policyName: cfk-kraft-migration-cr-lock-{{ .Release.Namespace }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        {{- if .Values.namespaced }}
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            {{- if empty .Values.namespaceList }}
+            - {{ .Release.Namespace }}
+            {{- else }}
+            {{- range $i, $v := .Values.namespaceList }}
+            - {{ trim $v }}
+            {{- end }}
+            {{- end }}
+        {{- else }}
+        - key: kubernetes.io/metadata.name
+          operator: Exists
+        {{- end }}
+{{- end }}
