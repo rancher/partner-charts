@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: app, labels: { app: app } }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: app } }
+  template:
+    metadata:
+      labels: { app: app }
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ .Values.hap.apiToken | default "auto-generated" | sha256sum }}
+    spec:
+      containers:
+        - name: app
+          image: "{{ .Values.images.registry }}/{{ .Values.images.app }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          envFrom:
+            - configMapRef: { name: hap-env }
+            - secretRef: { name: hap-secret }
+          ports:
+            - containerPort: 8880
+          volumeMounts:
+            - { name: shared-data, mountPath: /data }
+            - { name: hap-data, mountPath: /data/hap/data }
+          resources:
+            requests:
+              cpu: {{ .Values.resources.app.cpu | quote }}
+              memory: {{ .Values.resources.app.memory | quote }}
+      volumes:
+        - name: shared-data
+          persistentVolumeClaim: { claimName: hap-shared-data }
+        - name: hap-data
+          persistentVolumeClaim: { claimName: hap-data }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: app }
+spec:
+  type: NodePort
+  selector: { app: app }
+  ports:
+    - name: http
+      port: 8880
+      targetPort: 8880
+      nodePort: {{ .Values.hap.nodePort }}

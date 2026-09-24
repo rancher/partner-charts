@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: sc, labels: { app: sc } }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: sc } }
+  template:
+    metadata:
+      labels: { app: sc }
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ .Values.hap.apiToken | default "auto-generated" | sha256sum }}
+    spec:
+      containers:
+        - name: sc
+          image: "{{ .Values.images.registry }}/{{ .Values.images.sc }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          envFrom:
+            - configMapRef: { name: hap-env }
+            - secretRef: { name: hap-secret }
+          volumeMounts:
+            - { name: shared-data, mountPath: /data }
+          resources:
+            requests:
+              cpu: {{ .Values.resources.sc.cpu | quote }}
+              memory: {{ .Values.resources.sc.memory | quote }}
+      volumes:
+        - name: shared-data
+          persistentVolumeClaim: { claimName: hap-shared-data }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: sc }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: sc }
