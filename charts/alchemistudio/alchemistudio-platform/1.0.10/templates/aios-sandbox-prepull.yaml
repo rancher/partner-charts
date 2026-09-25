@@ -1,0 +1,64 @@
+# =============================================================================
+# AIOS sandbox image pre-pull / keep-warm (kata pool only).
+#
+# WHY: the first AIOS app-create on a node pulls the ~950MB aios-sandbox image,
+# which took ~3 min over the kata node's disk — the user sees the sandbox stuck
+# "starting". This DaemonSet pulls that image at install time and HOLDS it (a
+# sleeping container) so kubelet image-GC can't evict it on a disk-tight kata node.
+#
+# It runs with the DEFAULT runtime (NOT kata) on purpose: it only needs the image
+# to land in the node's shared containerd image store, which the real kata sandbox
+# pods read from. It targets the kata pool via the SAME nodeSelector + toleration
+# the kata sandbox pods use (kata=true / taintKey=taintValue:NoSchedule), so on a
+# cluster with no kata node it simply schedules nowhere (0 desired) — harmless.
+#
+# Gated by kata.enabled AND aios.enabled AND aios.sandbox.prepull.enabled.
+# =============================================================================
+{{- if and .Values.kata.enabled .Values.aios.enabled .Values.aios.sandbox.prepull.enabled .Values.aios.sandbox.ref }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ .Release.Name }}-aios-sandbox-prepull
+  namespace: {{ .Values.global.namespaces.sandbox }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/component: sandbox-prepull
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: aios-sandbox-prepull }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: aios-sandbox-prepull }
+    spec:
+      # Land ONLY on the kata pool — that's where the sandbox pods run.
+      nodeSelector:
+        kata: "true"
+      tolerations:
+        - key: {{ .Values.kata.taintKey | default "pool" | quote }}
+          operator: Equal
+          value: {{ .Values.kata.taintValue | default "kata" | quote }}
+          effect: NoSchedule
+      # Default runtime (runc), NOT kata — we only warm the shared containerd store.
+      terminationGracePeriodSeconds: 5
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        # Primary: hold the AIOS "computer" sandbox image warm.
+        - name: hold-aios-sandbox
+          image: {{ .Values.aios.sandbox.ref | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "trap 'exit 0' TERM INT; echo aios-sandbox image warm on $(hostname); while true; do sleep 3600 & wait $!; done"]
+          resources:
+            requests: { cpu: "10m", memory: "16Mi" }
+            limits:   { cpu: "50m", memory: "64Mi" }
+        {{- range $i, $img := .Values.aios.sandbox.prepull.extraImages }}
+        - name: hold-extra-{{ $i }}
+          image: {{ $img | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "trap 'exit 0' TERM INT; echo extra sandbox image warm on $(hostname); while true; do sleep 3600 & wait $!; done"]
+          resources:
+            requests: { cpu: "10m", memory: "16Mi" }
+            limits:   { cpu: "50m", memory: "64Mi" }
+        {{- end }}
+{{- end }}

@@ -1,0 +1,86 @@
+{{- if .Values.serviceAccount.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "alchemi-compute-api.fullname" . }}-role
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "alchemi-compute-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+rules:
+  # Pod management for sandboxes
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "get", "list", "watch", "patch"]
+
+  # Pod exec for command execution
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+
+  # Pod port-forward — compute-api port-forwards into sandbox pods to reach
+  # the in-sandbox browser session.
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create", "get"]
+
+  # Pod logs for streaming logs
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+
+  # Pod status for health checks
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get"]
+
+  # Service management for sandbox networking
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "delete", "get", "list", "watch", "patch"]
+
+  # Endpoints for service discovery
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+  # PVC management for persistent volumes
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["create", "delete", "get", "list", "watch", "patch"]
+
+  # Events for debugging and status
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # ConfigMaps for sandbox configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "watch", "patch"]
+
+  # Secrets for sandbox credentials (update+patch required by pool_service
+  # when refreshing per-sandbox alchemi-regcred-* image-pull secrets).
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "alchemi-compute-api.fullname" . }}-rolebinding
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "alchemi-compute-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "alchemi-compute-api.serviceAccountName" . }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "alchemi-compute-api.fullname" . }}-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -1,0 +1,55 @@
+# =============================================================================
+# Bundled Redis — folded in from phase-03 apply-platform.sh. Standalone (single
+# shard), password from the generated alchemi-secrets (REDIS_PASSWORD). Skipped
+# when redis.mode=external. Provenance note: the AppCo redis chart is the
+# support-backed swap; this plain mirror keeps the chart self-contained.
+# =============================================================================
+{{- if eq .Values.redis.mode "bundled" }}
+{{- $ns := .Values.global.namespaces.data -}}
+{{- $img := .Values.redis.image | default (printf "%s/platform/redis:7" .Values.global.image.registry) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: alchemi-redis
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: redis }
+spec:
+  serviceName: alchemi-redis
+  replicas: 1
+  selector: { matchLabels: { app: alchemi-redis } }
+  template:
+    metadata: { labels: { app: alchemi-redis, app.kubernetes.io/part-of: alchemistudio-platform } }
+    spec:
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: redis
+          image: {{ $img }}
+          command: ["sh","-c","exec redis-server --requirepass \"$REDIS_PASSWORD\" --appendonly yes --dir /data"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: alchemi-secrets, key: REDIS_PASSWORD } }
+          ports: [{ containerPort: 6379 }]
+          readinessProbe:
+            exec: { command: ["sh","-c","redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts: [{ name: data, mountPath: /data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass | default "longhorn" }}
+        resources: { requests: { storage: {{ .Values.redis.storage }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-redis
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  selector: { app: alchemi-redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+{{- end }}

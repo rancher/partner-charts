@@ -1,0 +1,24 @@
+{{- /*
+  AIOS shared data-plane PVC (ReadWriteMany). Created ALWAYS — deliberately NOT
+  gated on aios.enabled — because alchemi-web + alchemi-ai mount it at
+  /mnt/aios-data (for the Files feature) on every install. If this PVC were gated
+  on aios.enabled while web/ai always mount it, then with AIOS off web/ai become
+  unschedulable: `persistentvolumeclaim "aios-data-plane" not found`, and a
+  Rancher install hangs on --wait. The heavy always-on AIOS worker tier (workers,
+  SA, image-pins) stays gated on aios.enabled in aios.yaml; only the shared
+  storage the apps depend on lives here so it always exists.
+*/ -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aios-data-plane
+  namespace: {{ .Values.global.namespaces.app }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    alchemi.io/aios-data-plane: "true"
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: {{ .Values.aios.dataPlane.storageClass | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.aios.dataPlane.storage | quote }}

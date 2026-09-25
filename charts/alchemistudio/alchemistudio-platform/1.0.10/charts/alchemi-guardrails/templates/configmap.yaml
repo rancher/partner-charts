@@ -1,0 +1,40 @@
+{{- $root := . }}
+{{- $services := list "contentFilter" "secretDetection" "jailbreak" "pii" "topical" "toxic" }}
+{{- $nameMap := dict "contentFilter" "guardrails-content-filter" "secretDetection" "guardrails-secret-detection" "jailbreak" "guardrails-jailbreak" "pii" "guardrails-pii" "topical" "guardrails-topical" "toxic" "guardrails-toxic" }}
+{{/*
+  All 6 guardrail services read the same 5 env vars (confirmed against nonprod
+  manifest comments and on-prem v5.1.0 configmaps). A single global config.data
+  block is used; per-service ConfigMap objects are still created so each
+  Deployment can ref its own resource.
+
+  config.create = false disables all ConfigMap creation (e.g., when a GitOps
+  repo manages them externally, as nonprod does via raw manifests).
+
+  Excluded from nonprod configmap.yaml with rationale:
+    GUARDRAILS_LOG_LEVEL     — Dockerfile CMD does not pass --log-level to uvicorn
+    GUARDRAILS_PROCESS_COUNT — Dockerfile CMD hardcodes --workers 1
+    AZURE_OPENAI_ENDPOINT    — no guardrails Python code calls Azure OpenAI
+    AZURE_DEPLOYMENT_NAME    — same; kept only in alchemi-ai-secrets path
+*/}}
+{{- if $root.Values.config.create }}
+{{- range $services }}
+{{- $svcKey := . }}
+{{- $svcCfg := index $root.Values $svcKey }}
+{{- $svcName := index $nameMap $svcKey }}
+{{- if $svcCfg.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $svcName }}-config
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $svcName }}
+    app.kubernetes.io/component: content-safety
+    helm.sh/chart: {{ include "alchemi-guardrails.chart" $root }}
+    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
+data:
+  {{- toYaml $root.Values.config.data | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}

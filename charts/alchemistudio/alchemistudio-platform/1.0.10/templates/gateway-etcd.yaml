@@ -1,0 +1,49 @@
+# =============================================================================
+# etcd for APISIX — standalone official CNCF etcd (NOT Bitnami, NOT AppCo-gated).
+# Folded in from phase-03. Skipped when gateway.mode=external.
+# =============================================================================
+{{- if eq .Values.gateway.mode "bundled" }}
+{{- $img := .Values.gateway.etcdImage | default (printf "%s/platform/etcd:v3.5.17" .Values.global.image.registry) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: apisix-etcd
+  namespace: apisix
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: apisix-etcd }
+spec:
+  serviceName: apisix-etcd
+  replicas: 1
+  selector: { matchLabels: { app: apisix-etcd } }
+  template:
+    metadata: { labels: { app: apisix-etcd } }
+    spec:
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: etcd
+          image: {{ $img }}
+          command: ["/usr/local/bin/etcd"]
+          args:
+            - --data-dir=/var/lib/etcd
+            - --listen-client-urls=http://0.0.0.0:2379
+            - --advertise-client-urls=http://apisix-etcd.apisix.svc.cluster.local:2379
+          ports: [{ containerPort: 2379 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/etcd }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass | default "longhorn" }}
+        resources: { requests: { storage: {{ .Values.gateway.storage }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-etcd
+  namespace: apisix
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  selector: { app: apisix-etcd }
+  ports: [{ name: client, port: 2379, targetPort: 2379 }]
+{{- end }}

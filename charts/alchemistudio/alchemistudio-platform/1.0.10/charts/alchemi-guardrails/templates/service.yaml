@@ -1,0 +1,30 @@
+{{- $root := . }}
+{{- $services := list "contentFilter" "secretDetection" "jailbreak" "pii" "topical" "toxic" }}
+{{- $nameMap := dict "contentFilter" "guardrails-content-filter" "secretDetection" "guardrails-secret-detection" "jailbreak" "guardrails-jailbreak" "pii" "guardrails-pii" "topical" "guardrails-topical" "toxic" "guardrails-toxic" }}
+{{- range $services }}
+{{- $svcKey := . }}
+{{- $svcCfg := index $root.Values $svcKey }}
+{{- $svcName := index $nameMap $svcKey }}
+{{- if $svcCfg.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $svcName }}
+    app.kubernetes.io/component: api
+    helm.sh/chart: {{ include "alchemi-guardrails.chart" $root }}
+    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $svcName }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+{{- end }}
+{{- end }}

@@ -1,0 +1,76 @@
+# =============================================================================
+# acme (Let's Encrypt) TLS — automated, DNS-provider-agnostic via HTTP-01.
+#
+# Flow: cert-manager solves an HTTP-01 challenge through the nginx-ingress
+# controller (which cert-manager natively integrates with). Because DNS points
+# at the APISIX gateway (not nginx), the routes-job adds an APISIX route that
+# forwards /.well-known/acme-challenge/* to nginx (via the ClusterIP Service
+# below), so the challenge reaches cert-manager's solver. Once issued, the
+# cert lands in tls.secretName; the cert-sync CronJob loads it into APISIX.
+#
+# PREREQUISITES (documented in NOTES): cert-manager installed, the app
+# subdomains' DNS A-records already pointing at the gateway IP, and port 80
+# reachable from the internet. Only an A-record is needed — no DNS credentials.
+# =============================================================================
+{{- if and .Values.tls.enabled (eq .Values.tls.mode "acme") }}
+{{- $email := .Values.tls.acme.email | default (required "admin.email is required for acme (Let's Encrypt account)" .Values.admin.email) }}
+{{- $server := ternary "https://acme-staging-v02.api.letsencrypt.org/directory" "https://acme-v02.api.letsencrypt.org/directory" .Values.tls.acme.staging }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Release.Name }}-letsencrypt
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  acme:
+    server: {{ $server | quote }}
+    email: {{ $email | quote }}
+    privateKeySecretRef:
+      name: {{ .Release.Name }}-letsencrypt-account
+    solvers:
+      - http01:
+          ingress:
+            # cert-manager creates a temporary Ingress of this class; nginx-ingress
+            # serves the challenge, reached from APISIX via the forward route.
+            ingressClassName: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: alchemistudio-platform-tls
+  namespace: apisix
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  secretName: {{ .Values.tls.secretName | quote }}
+  issuerRef:
+    name: {{ .Release.Name }}-letsencrypt
+    kind: ClusterIssuer
+  # Each dnsName gets its own HTTP-01 challenge — every host listed here MUST
+  # resolve to the gateway IP or issuance fails. (HTTP-01 cannot do wildcards.)
+  dnsNames:
+    - {{ include "alchemi.appHost" . | quote }}
+    - {{ include "alchemi.authHost" . | quote }}
+    - {{ include "alchemi.opsHost" . | quote }}
+{{- if .Values.gateway.exposeZenith }}
+    - {{ include "alchemi.zenithHost" . | quote }}
+{{- end }}
+---
+# Stable in-cluster target for the ACME challenge: a ClusterIP Service selecting
+# the nginx-ingress controller pods on :80. The APISIX challenge route forwards
+# here; nginx then matches cert-manager's solver Ingress and answers the token.
+# Lives in kube-system because a Service's selector only matches same-namespace pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-acme-http-solver
+  namespace: kube-system
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: rke2-ingress-nginx
+    app.kubernetes.io/component: controller
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+{{- end }}
