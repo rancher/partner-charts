@@ -1,0 +1,381 @@
+{{- if eq (include "csi-powerstore.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "prometheusRule" }}
+{{- if eq .Values.metrics.prometheusRule.enabled true }}
+{{- $pr := .Values.metrics.prometheusRule }}
+{{- $apiWindow := default "5m" $pr.apiErrorRateWindow }}
+{{- $crashLoopWindow := default "15m" $pr.driverCrashLoopWindow }}
+{{- $crashLoopThreshold := default 3 $pr.driverCrashLoopRestartThreshold }}
+{{- $volOpFailureThreshold := default 3 $pr.volumeOperationFailureThreshold }}
+---
+# PrometheusRule for Prometheus Operator alerting rules.
+# Created when metrics.enabled AND metrics.prometheusRule.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-powerstore-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    platform: powerstore
+    component: csi-driver
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  groups:
+    # Volume Operation Failure Alerts (PST-01 to PST-08)
+    - name: powerstore-csi-volume-operations
+      interval: 30s
+      rules:
+        # PST-01: CreateVolume failures
+        - alert: PowerStoreCreateVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="CreateVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI CreateVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} CreateVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-02: DeleteVolume failures
+        - alert: PowerStoreDeleteVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="DeleteVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI DeleteVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} DeleteVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-03: ControllerPublishVolume failures
+        - alert: PowerStoreControllerPublishVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="ControllerPublishVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI ControllerPublishVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} ControllerPublishVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-04: ControllerUnpublishVolume failures
+        - alert: PowerStoreControllerUnpublishVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="ControllerUnpublishVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI ControllerUnpublishVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} ControllerUnpublishVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-05: NodeStageVolume failures
+        - alert: PowerStoreNodeStageVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeStageVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI NodeStageVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} NodeStageVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-06: NodeUnstageVolume failures
+        - alert: PowerStoreNodeUnstageVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeUnstageVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI NodeUnstageVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} NodeUnstageVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-07: NodePublishVolume failures
+        - alert: PowerStoreNodePublishVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodePublishVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI NodePublishVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} NodePublishVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+        # PST-08: NodeUnpublishVolume failures
+        - alert: PowerStoreNodeUnpublishVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeUnpublishVolume"}[5m]) > {{ $volOpFailureThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI NodeUnpublishVolume operation failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} NodeUnpublishVolume failures in the last 5 minutes. Protocol: {{`{{ $labels.protocol }}`}}, Error Code: {{`{{ $labels.error_code }}`}}"
+            runbook_url: ""
+
+    # Driver Health & Resource Alerts (PST-09 to PST-14)
+    - name: powerstore-csi-driver-health
+      interval: 30s
+      rules:
+        # PST-09: Driver pod unavailable (critical)
+        # Checks each role separately and treats missing series as zero, so the alert
+        # fires when either the controller or the node metrics drop to zero for 5 minutes.
+        - alert: PowerStoreDriverPodUnavailable
+          expr: (count(dell_csi_driver_uptime_seconds{namespace="{{ .Release.Namespace }}",instance_type="controller"}) or on() vector(0)) == 0 or (count(dell_csi_driver_uptime_seconds{namespace="{{ .Release.Namespace }}",instance_type="node"}) or on() vector(0)) == 0
+          for: 5m
+          labels:
+            severity: critical
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI driver metrics are unavailable"
+            description: "PowerStore CSI driver has zero controller instances or zero node instances reporting metrics for 5 minutes."
+            runbook_url: ""
+
+        # PST-10: Driver crash looping (warning)
+        # Using changes() instead of delta() for more reliable detection across staleness gaps
+        - alert: PowerStoreDriverCrashLooping
+          expr: changes(dell_csi_driver_restart_total[{{ $crashLoopWindow }}]) > {{ $crashLoopThreshold }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI driver is crash looping"
+            description: "PowerStore CSI driver pod {{`{{ $labels.pod }}`}} (instance type: {{`{{ $labels.instance_type }}`}}) has restarted {{`{{ $value }}`}} times in the last {{ $crashLoopWindow }}, indicating a crash loop."
+            runbook_url: ""
+
+        # PST-11: Driver high memory usage (warning)
+        - alert: PowerStoreDriverHighMemoryUsage
+          expr: dell_csi_driver_memory_usage_bytes > {{ $pr.memoryWarningThreshold | default 2147483648 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI driver high memory usage"
+            description: "PowerStore CSI driver pod {{`{{ $labels.pod }}`}} on node {{`{{ $labels.node }}`}} has memory usage of {{`{{ $value }}`}} bytes (threshold: {{ $pr.memoryWarningThreshold | default 2147483648 }} bytes) for more than 5 minutes."
+            runbook_url: ""
+
+        # PST-12: Driver high CPU usage (warning)
+        - alert: PowerStoreDriverHighCPUUsage
+          expr: dell_csi_driver_cpu_usage_percent > {{ $pr.cpuWarningThreshold | default 80 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore CSI driver high CPU usage"
+            description: "PowerStore CSI driver pod {{`{{ $labels.pod }}`}} on node {{`{{ $labels.node }}`}} has CPU usage of {{`{{ $value }}`}}% (threshold: {{ $pr.cpuWarningThreshold | default 80 }}%) for more than 5 minutes."
+            runbook_url: ""
+
+        # PST-13: High API error rate (warning)
+        # Division-by-zero guard: only fires when denominator > 0.
+        - alert: PowerStoreHighAPIErrorRate
+          expr: (rate(dell_csi_api_call_total{status="failure"}[{{ $apiWindow }}]) / ignoring(status) sum without(status) (rate(dell_csi_api_call_total[{{ $apiWindow }}]))) * 100 > {{ $pr.apiErrorRateThreshold | default 10 }} and ignoring(status) sum without(status) (rate(dell_csi_api_call_total[{{ $apiWindow }}])) > 0
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore API error rate elevated"
+            description: "PowerStore API error rate on array {{`{{ $labels.global_id }}`}} endpoint {{`{{ $labels.endpoint }}`}} ({{`{{ $labels.method }}`}}) is {{`{{ $value }}`}}% over the last {{ $apiWindow }} (threshold: {{ $pr.apiErrorRateThreshold | default 10 }}%)."
+            runbook_url: ""
+
+        # PST-14: Metrics stale (warning)
+        - alert: PowerStoreMetricsStale
+          expr: dell_powerstore_metrics_stale == 1
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore metrics collection is stale on array {{`{{ $labels.global_id }}`}}"
+            description: "PowerStore metrics collection has reported stale data for 5 minutes on array {{`{{ $labels.global_id }}`}}. The stale flag is set immediately on any collection failure, ensuring the alert fires even when the cache is empty."
+            runbook_url: ""
+
+        # PST-15: Authentication failure (critical)
+        - alert: PowerStoreAuthenticationFailure
+          expr: increase(dell_csi_operation_failure_total{error_code="auth_failure"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore authentication failures detected"
+            description: "Array {{`{{ $labels.global_id }}`}} has {{`{{ $value }}`}} authentication failures in the last 5 minutes for operation {{`{{ $labels.operation }}`}}. Check array credentials."
+            runbook_url: ""
+
+    # Appliance Capacity Alerts (PST-16 to PST-18)
+    - name: powerstore-csi-appliance-capacity
+      interval: 30s
+      rules:
+        # PST-16: Appliance capacity warning
+        - alert: PowerStoreApplianceCapacityWarning
+          expr: dell_powerstore_appliance_utilization_ratio * 100 > {{ $pr.applianceWarningThreshold | default 80 }}
+          for: 10m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore appliance {{`{{ $labels.appliance_name }}`}} utilization is high"
+            description: 'PowerStore appliance {{`{{ $labels.appliance_name }}`}} on array {{`{{ $labels.global_id }}`}} has exceeded the warning utilization threshold at {{`{{ $value | printf "%.1f" }}`}}% (threshold: {{ $pr.applianceWarningThreshold | default 80 }}%).'
+            runbook_url: ""
+
+        # PST-16: Appliance capacity critical
+        - alert: PowerStoreApplianceCapacityCritical
+          expr: dell_powerstore_appliance_utilization_ratio * 100 > {{ $pr.applianceCriticalThreshold | default 90 }}
+          for: 10m
+          labels:
+            severity: critical
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore appliance {{`{{ $labels.appliance_name }}`}} utilization is critical"
+            description: 'PowerStore appliance {{`{{ $labels.appliance_name }}`}} on array {{`{{ $labels.global_id }}`}} has exceeded the critical utilization threshold at {{`{{ $value | printf "%.1f" }}`}}% (threshold: {{ $pr.applianceCriticalThreshold | default 90 }}%). Immediate action required.'
+            runbook_url: ""
+
+        # PST-17: Thin provisioning over-commitment
+        - alert: PowerStoreThinProvisioningOvercommitment
+          expr: (dell_powerstore_appliance_compression_ratio * dell_powerstore_appliance_utilization_ratio) > 1.0
+          for: 10m
+          labels:
+            severity: warning
+            platform: powerstore
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerStore thin provisioning over-commitment detected on array {{`{{ $labels.global_id }}`}}"
+            description: "PowerStore appliance {{`{{ $labels.appliance_name }}`}} on array {{`{{ $labels.global_id }}`}} has logical provisioned capacity exceeding physical total."
+            runbook_url: ""
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and .Values.podmon .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled (hasKey .Values.podmon.metrics "prometheusRule") (eq .Values.podmon.metrics.prometheusRule.enabled true) }}
+---
+# PrometheusRule for PowerStore CSI Driver resiliency alerting rules.
+# Created when podmon.metrics.prometheusRule.enabled is true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+#
+# CSM Resiliency Alerts (RES-01 to RES-04):
+# Cross-platform PodMon failover and connectivity alerts scoped to this driver.
+# These rules evaluate metrics emitted by PodMon sidecars running in this driver's pods.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-resiliency-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  groups:
+    - name: csm-resiliency-powerstore
+      interval: 30s
+      rules:
+        # RES-01 — Pod failure detected due to node unreachable
+        - alert: CSMResiliencyPodFailureDetected
+          expr: increase(dell_csm_resiliency_failover_total{reason="node_unreachable",driver="csi-powerstore"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: csm-resiliency
+            platform: powerstore
+            driver: csi-powerstore
+            alert_id: RES-01
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency pod failure detected for driver {{`{{ $labels.driver }}`}}"
+            description: "Pod failure detected due to node unreachable for driver {{`{{ $labels.driver }}`}}."
+            runbook_url: ""
+
+        # RES-02 — Connectivity success ratio below threshold
+        - alert: CSMResiliencyConnectivityLost
+          expr: dell_csm_resiliency_connectivity_success_ratio{driver="csi-powerstore"} * 100 < {{ .Values.podmon.metrics.prometheusRule.connectivitySuccessRatio | default 90 }}
+          for: 2m
+          labels:
+            severity: critical
+            component: csm-resiliency
+            platform: powerstore
+            driver: csi-powerstore
+            alert_id: RES-02
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency connectivity lost for driver {{`{{ $labels.driver }}`}}"
+            description: "Volume connectivity success ratio for driver {{`{{ $labels.driver }}`}} is below {{ .Values.podmon.metrics.prometheusRule.connectivitySuccessRatio | default 90 }}%."
+            runbook_url: ""
+
+        # RES-03 — Automated failover triggered successfully (info: expected behavior)
+        - alert: CSMResiliencyFailoverTriggered
+          expr: increase(dell_csm_resiliency_failover_total{status="success",driver="csi-powerstore"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: info
+            component: csm-resiliency
+            platform: powerstore
+            driver: csi-powerstore
+            alert_id: RES-03
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency automated failover triggered for driver {{`{{ $labels.driver }}`}}"
+            description: "Automated pod failover operation initiated successfully for driver {{`{{ $labels.driver }}`}}. Reason: {{`{{ $labels.reason }}`}}."
+            runbook_url: ""
+
+        # RES-04 — Automated failover failed
+        - alert: CSMResiliencyFailoverFailed
+          expr: increase(dell_csm_resiliency_failover_total{status="failure",driver="csi-powerstore"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: csm-resiliency
+            platform: powerstore
+            driver: csi-powerstore
+            alert_id: RES-04
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency failover failed for driver {{`{{ $labels.driver }}`}}"
+            description: "Automated pod failover operation failed for driver {{`{{ $labels.driver }}`}}. Reason: {{`{{ $labels.reason }}`}}. Manual intervention may be required."
+            runbook_url: ""
+{{- end }}

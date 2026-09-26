@@ -1,0 +1,102 @@
+{{- if eq (include "csi-vxflexos.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "serviceMonitor" }}
+{{- if eq .Values.metrics.serviceMonitor.enabled true }}
+---
+# ServiceMonitor for Prometheus Operator integration.
+# Created when metrics.enabled AND metrics.serviceMonitor.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      {{- if .Values.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      path: /metrics
+      {{- if .Values.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        # The metrics endpoint uses a self-provided TLS certificate.
+        # Set insecureSkipVerify to true if the certificate is self-signed;
+        # alternatively configure ca, cert, and keySecret for full verification.
+        insecureSkipVerify: {{ .Values.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- else }}
+      scheme: http
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if eq (include "csi-vxflexos.isResiliencyMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.podmon.metrics "serviceMonitor" }}
+{{- if eq .Values.podmon.metrics.serviceMonitor.enabled true }}
+---
+# ServiceMonitor for Prometheus Operator integration with podmon resiliency metrics on controller pods.
+# Created when podmon.enabled AND podmon.metrics.enabled AND podmon.metrics.serviceMonitor.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-resiliency-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: resiliency-metrics
+      interval: {{ .Values.podmon.metrics.serviceMonitor.interval | default "30s" }}
+      path: /metrics
+      {{- if .Values.podmon.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.podmon.metrics.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      {{- if .Values.podmon.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.podmon.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- else }}
+      scheme: http
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and (hasKey .Values.controller "replication") .Values.controller.replication.enabled (hasKey .Values.controller.replication "metrics") .Values.controller.replication.metrics.enabled }}
+{{- if and (hasKey .Values.controller.replication.metrics "serviceMonitor") .Values.controller.replication.metrics.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-replication-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: repl-metrics
+      interval: {{ .Values.controller.replication.metrics.serviceMonitor.interval | default "30s" }}
+      {{- if .Values.controller.replication.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.controller.replication.metrics.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      path: /metrics
+      {{- if .Values.controller.replication.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.controller.replication.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}

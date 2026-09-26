@@ -1,0 +1,405 @@
+# Copyright © 2022-2026 Dell Inc. or its subsidiaries. All Rights Reserved.
+{{- if eq (include "csi-powermax.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "prometheusRule" }}
+{{- if eq .Values.metrics.prometheusRule.enabled true }}
+---
+# PrometheusRule for PowerMax CSI Driver alerting rules.
+# Created when metrics.enabled AND metrics.prometheusRule.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+#
+# PowerMax alert catalog — 15 alert rules across 3 groups:
+#   Group 1 — powermax-csi-volume-operations  (PM-01 to PM-08)
+#   Group 2 — powermax-csi-driver-health      (PM-09 to PM-12)
+#   Group 3 — powermax-csi-capacity           (PM-13 to PM-15)
+#
+# NOTE: SRDF Replication Alerts (PM-16 to PM-18) are managed by the csm-replication Helm chart
+# since SRDF metrics are emitted by the csm-replication module.
+#
+# NOTE: Driver-level alerts (PM-01 to PM-15) are gated by both metrics.enabled and
+# metrics.prometheusRule.enabled. Resiliency alerts (RES-01 to RES-04) are defined
+# separately under the podmon section and are gated independently by podmon.metrics.prometheusRule.enabled.
+# This allows operators to enable driver alerts without resiliency alerts, or vice versa.
+#
+# PERFORMANCE TARGETS (BR JA-23013):
+# Critical alerts use 1m for: duration to meet the 120s BR target.
+# Warning and capacity alerts use longer durations (5m-10m) as documented exceptions
+# to reduce false positives on transient conditions.
+#
+# All thresholds configurable via .Values.metrics.prometheusRule.*
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-powermax-csi-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  groups:
+    # ── Group 1: Volume Operation Failure Alerts (PM-01 to PM-08) ──
+    # Metric: dell_csi_operation_failure_total (CounterVec)
+    # Labels: array_id, operation, error_code
+    # Source: service/interceptors.go
+    # Behavior: Alert fires when failure count exceeds threshold in 5m window.
+    # for: 1m meets the 120s BR latency target.
+    - name: powermax-csi-volume-operations
+      interval: 30s
+      rules:
+        # PM-01
+        - alert: PowerMaxCreateVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="CreateVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-01
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax CreateVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "CreateVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-02
+        - alert: PowerMaxDeleteVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="DeleteVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-02
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax DeleteVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "DeleteVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-03
+        - alert: PowerMaxControllerPublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="ControllerPublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-03
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax ControllerPublishVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "ControllerPublishVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-04
+        - alert: PowerMaxControllerUnpublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="ControllerUnpublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-04
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax ControllerUnpublishVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "ControllerUnpublishVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-05 — NodeStageVolume (corrected: CreateSnapshot was incorrect per ER spec)
+        - alert: PowerMaxNodeStageFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeStageVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-05
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax NodeStageVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "NodeStageVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-06 — NodeUnstageVolume (corrected: DeleteSnapshot was incorrect per ER spec)
+        - alert: PowerMaxNodeUnstageFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeUnstageVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-06
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax NodeUnstageVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "NodeUnstageVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-07
+        - alert: PowerMaxNodePublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodePublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-07
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax NodePublishVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "NodePublishVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PM-08
+        - alert: PowerMaxNodeUnpublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeUnpublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-08
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax NodeUnpublishVolume failures detected on array {{`{{ $labels.array_id }}`}}"
+            description: "NodeUnpublishVolume operation failed {{`{{ printf \"%.0f\" $value }}`}} times in the last 5 minutes on array {{`{{ $labels.array_id }}`}} with error code {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+    # ── Group 2: Driver Health & Resource Alerts (PM-09 to PM-12) ──
+    - name: powermax-csi-driver-health
+      interval: 30s
+      rules:
+        # PM-09 — Driver pod unavailable: uses absent() on the controller-scoped driver uptime metric.
+        # Source: service/collectors/driver_health_collector.go
+        # Filter by instance_type="controller" so that running node pods do not mask a controller outage.
+        # for: 5m meets the ER requirement; absent() fires after 5 continuous minutes with no metric.
+        # namespace static label is required because absent() only carries labels from its selector;
+        # without it the alert has no namespace label and cannot be routed by AlertmanagerConfig CRD
+        # routes that inject a mandatory namespace matcher (standard Prometheus Operator behaviour).
+        - alert: PowerMaxDriverPodUnavailable
+          expr: absent(dell_csi_driver_uptime_seconds{instance_type="controller"})
+          for: 5m
+          labels:
+            severity: critical
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-09
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax CSI driver pod is unavailable"
+            description: "The PowerMax CSI driver has not reported metrics for 5 minutes. The driver pod may be down or crash-looping. Check kubectl get pods -n {{ .Release.Namespace }}."
+            runbook_url: ""
+
+        # PM-10 — Driver high CPU.
+        # Source: service/collectors/driver_health_collector.go
+        # Metric emits values 0-100; threshold stored as integer percentage.
+        # NOTE: 5m duration is an intentional exception to the 120s BR target to reduce false positives.
+        - alert: PowerMaxDriverHighCPU
+          expr: dell_csi_driver_cpu_usage_percent > {{ .Values.metrics.prometheusRule.cpuWarningThreshold | default 80 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-10
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax CSI driver high CPU usage"
+            description: "PowerMax CSI driver CPU usage exceeds {{ .Values.metrics.prometheusRule.cpuWarningThreshold | default 80 }}% threshold. Current value: {{`{{ printf \"%.1f\" $value }}`}}%."
+            runbook_url: ""
+
+        # PM-11 — Driver high memory.
+        # Source: service/collectors/driver_health_collector.go
+        # NOTE: 5m duration is an intentional exception to the 120s BR target to reduce false positives.
+        - alert: PowerMaxDriverHighMemory
+          expr: dell_csi_driver_memory_usage_bytes > {{ .Values.metrics.prometheusRule.memoryWarningThreshold | default 2147483648 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-11
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax CSI driver high memory usage"
+            description: "PowerMax CSI driver memory usage exceeds {{ .Values.metrics.prometheusRule.memoryWarningThreshold | default 2147483648 }} bytes (default: 2 GiB). Current value: {{`{{ $value }}`}} bytes."
+            runbook_url: ""
+
+        # PM-12 — Unisphere API error rate.
+        # Source: pkg/metrics/powermax_api_observer.go
+        # Uses increase() to count failures in window; clamp_min(1) prevents division by zero.
+        # NOTE: 5m duration is an intentional exception to the 120s BR target to reduce false positives.
+        - alert: PowerMaxAPIErrorRateHigh
+          expr: |
+            (
+              sum without(status)(increase(dell_csi_api_call_total{status="failure"}[{{ .Values.metrics.prometheusRule.apiErrorRateWindow | default "5m" }}]))
+              /
+              clamp_min(sum without(status)(increase(dell_csi_api_call_total[{{ .Values.metrics.prometheusRule.apiErrorRateWindow | default "5m" }}])), 1)
+            ) * 100 > {{ .Values.metrics.prometheusRule.apiErrorRateThreshold | default 10 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-12
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax Unisphere API error rate high on array {{`{{ $labels.array_id }}`}}"
+            description: "Unisphere API error rate exceeds {{ .Values.metrics.prometheusRule.apiErrorRateThreshold | default 10 }}% threshold on array {{`{{ $labels.array_id }}`}}. Current rate: {{`{{ printf \"%.1f\" $value }}`}}%."
+            runbook_url: ""
+
+    # ── Group 3: Capacity Alerts (PM-13 to PM-15) ──
+    - name: powermax-csi-capacity
+      interval: 30s
+      rules:
+        # PM-13 — Storage group capacity warning.
+        # Source: service/collectors/storagegroup_collector.go
+        # Labels: {array_id, storage_group} (corrected from storage_group_name per ER)
+        # NOTE: 10m duration is an exception to the 120s BR target; capacity changes slowly.
+        - alert: PowerMaxStorageGroupCapacityWarning
+          expr: dell_csi_storagegroup_utilization_ratio * 100 > {{ .Values.metrics.prometheusRule.storageGroupCapacityWarning | default 80 }}
+          for: 10m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-13
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax storage group {{`{{ $labels.storage_group }}`}} capacity warning on array {{`{{ $labels.array_id }}`}}"
+            description: "Storage group {{`{{ $labels.storage_group }}`}} on array {{`{{ $labels.array_id }}`}} utilization exceeds {{ .Values.metrics.prometheusRule.storageGroupCapacityWarning | default 80 }}% warning threshold."
+            runbook_url: ""
+
+        # PM-14 — Storage group capacity critical.
+        # for: 1m meets the 120s BR target for critical capacity alerts.
+        - alert: PowerMaxStorageGroupCapacityCritical
+          expr: dell_csi_storagegroup_utilization_ratio * 100 > {{ .Values.metrics.prometheusRule.storageGroupCapacityCritical | default 90 }}
+          for: 1m
+          labels:
+            severity: critical
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-14
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax storage group {{`{{ $labels.storage_group }}`}} capacity critical on array {{`{{ $labels.array_id }}`}}"
+            description: "Storage group {{`{{ $labels.storage_group }}`}} on array {{`{{ $labels.array_id }}`}} utilization exceeds {{ .Values.metrics.prometheusRule.storageGroupCapacityCritical | default 90 }}% critical threshold. Immediate action required."
+            runbook_url: ""
+
+        # PM-15 — SRP snapshot capacity warning (SRP-level; approved permanent solution per PM-15 note).
+        # Source: service/collectors/srp_collector.go
+        # Labels: {array_id, srp_id} (corrected from srp_name per ER)
+        # NOTE: sum by(array_id, srp_id) deduplicates when multiple controller replicas scrape same array.
+        # namespace static label is required because sum by(array_id, srp_id) drops all other labels
+        # including namespace; without it the alert has no namespace label and cannot be routed by
+        # AlertmanagerConfig CRD routes that inject a mandatory namespace matcher (standard Prometheus
+        # Operator behaviour).
+        # NOTE: 10m duration is an exception to the 120s BR target; snapshot capacity changes slowly.
+        - alert: PowerMaxSRPSnapshotCapacityWarning
+          expr: |
+            (
+              sum by(array_id, srp_id) (dell_powermax_srp_capacity_bytes{capacity_type="snapshot"})
+              /
+              sum by(array_id, srp_id) (dell_powermax_srp_capacity_bytes{capacity_type="total"})
+            ) * 100 > {{ .Values.metrics.prometheusRule.srpSnapshotCapacityWarning | default 80 }}
+          for: 10m
+          labels:
+            severity: warning
+            platform: powermax
+            component: csi-driver
+            alert_id: PM-15
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerMax SRP {{`{{ $labels.srp_id }}`}} snapshot capacity warning on array {{`{{ $labels.array_id }}`}}"
+            description: "SRP {{`{{ $labels.srp_id }}`}} on array {{`{{ $labels.array_id }}`}} snapshot capacity exceeds {{ .Values.metrics.prometheusRule.srpSnapshotCapacityWarning | default 80 }}% threshold."
+            runbook_url: ""
+
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and .Values.podmon .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled (hasKey .Values.podmon.metrics "prometheusRule") (eq .Values.podmon.metrics.prometheusRule.enabled true) }}
+---
+# PrometheusRule for PowerMax CSM Resiliency alerting rules.
+# Created when podmon.enabled AND podmon.metrics.prometheusRule.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+#
+# CSM Resiliency Alerts (RES-01 to RES-04):
+# Cross-platform PodMon failover and connectivity alerts scoped to this driver.
+# These rules evaluate metrics emitted by PodMon sidecars running in this driver's pods.
+#
+# All thresholds configurable via .Values.podmon.metrics.prometheusRule.*
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-resiliency-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  groups:
+    - name: csm-resiliency-powermax
+      interval: 30s
+      rules:
+        # RES-01 — Pod failure detected due to node unreachable
+        - alert: CSMResiliencyPodFailureDetected
+          expr: increase(dell_csm_resiliency_failover_total{reason="node_unreachable",driver="csi-powermax"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: csm-resiliency
+            platform: powermax
+            driver: csi-powermax
+            alert_id: RES-01
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency pod failure detected for driver {{`{{ $labels.driver }}`}}"
+            description: "Pod failure detected due to node unreachable for driver {{`{{ $labels.driver }}`}}."
+            runbook_url: ""
+
+        # RES-02 — Connectivity success ratio below threshold
+        - alert: CSMResiliencyConnectivityLost
+          expr: dell_csm_resiliency_connectivity_success_ratio{driver="csi-powermax"} * 100 < {{ .Values.podmon.metrics.prometheusRule.connectivitySuccessRatio | default 90 }}
+          for: 2m
+          labels:
+            severity: critical
+            component: csm-resiliency
+            platform: powermax
+            driver: csi-powermax
+            alert_id: RES-02
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency connectivity lost for driver {{`{{ $labels.driver }}`}}"
+            description: "Volume connectivity success ratio for driver {{`{{ $labels.driver }}`}} is below {{ .Values.podmon.metrics.prometheusRule.connectivitySuccessRatio | default 90 }}%."
+            runbook_url: ""
+
+        # RES-03 — Automated failover triggered successfully (info: expected behavior)
+        - alert: CSMResiliencyFailoverTriggered
+          expr: increase(dell_csm_resiliency_failover_total{status="success",driver="csi-powermax"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: info
+            component: csm-resiliency
+            platform: powermax
+            driver: csi-powermax
+            alert_id: RES-03
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency automated failover triggered for driver {{`{{ $labels.driver }}`}}"
+            description: "Automated pod failover operation initiated successfully for driver {{`{{ $labels.driver }}`}}. Reason: {{`{{ $labels.reason }}`}}."
+            runbook_url: ""
+
+        # RES-04 — Automated failover failed
+        - alert: CSMResiliencyFailoverFailed
+          expr: increase(dell_csm_resiliency_failover_total{status="failure",driver="csi-powermax"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: csm-resiliency
+            platform: powermax
+            driver: csi-powermax
+            alert_id: RES-04
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency failover failed for driver {{`{{ $labels.driver }}`}}"
+            description: "Automated pod failover operation failed for driver {{`{{ $labels.driver }}`}}. Reason: {{`{{ $labels.reason }}`}}. Manual intervention may be required."
+            runbook_url: ""
+{{- end }}

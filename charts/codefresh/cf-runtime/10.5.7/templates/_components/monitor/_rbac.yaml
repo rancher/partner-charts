@@ -1,0 +1,56 @@
+{{- define "monitor.resources.rbac" -}}
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "monitor.serviceAccountName" . }}
+  labels:
+    {{- include "monitor.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.rbac.create }}
+kind: {{ .Values.rbac.namespaced | ternary "Role" "ClusterRole" }}
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "monitor.fullname" . }}
+  labels:
+    {{- include "monitor.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "*" ]
+    verbs: [ "get", "list", "watch", "create", "delete" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list", "watch", "create", "deletecollection" ]
+  - apiGroups: [ "extensions" ]
+    resources: [ "*" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "apps" ]
+    resources: [ "*" ]
+    verbs: [ "get", "list", "watch" ]
+{{- with .Values.rbac.rules }}
+  {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+---
+{{- if and .Values.serviceAccount.create .Values.rbac.create }}
+kind: {{ .Values.rbac.namespaced | ternary "RoleBinding" "ClusterRoleBinding" }}
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "monitor.fullname" . }}
+  labels:
+    {{- include "monitor.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "monitor.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: {{ .Values.rbac.namespaced | ternary "Role" "ClusterRole" }}
+  name: {{ include "monitor.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end -}}

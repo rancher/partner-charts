@@ -1,0 +1,63 @@
+{{- if eq (include "csi-powermax.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "podMonitor" }}
+{{- if eq .Values.metrics.podMonitor.enabled true }}
+---
+# PodMonitor for Prometheus Operator integration with node DaemonSet pods.
+# Created when metrics.enabled AND metrics.podMonitor.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ .Release.Name }}-node-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-node
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  podMetricsEndpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.podMonitor.interval | default "30s" }}
+      path: /metrics
+      {{- if .Values.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.metrics.podMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if and (hasKey .Values "podmon") .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+{{- if hasKey .Values.podmon.metrics "podMonitor" }}
+{{- if .Values.podmon.metrics.podMonitor.enabled }}
+---
+# PodMonitor for Prometheus Operator integration with podmon resiliency metrics on node pods.
+# Created when podmon.enabled AND podmon.metrics.enabled AND podmon.metrics.podMonitor.enabled are true.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ .Release.Name }}-resiliency-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-node
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  podMetricsEndpoints:
+    - port: metrics
+      interval: {{ .Values.podmon.metrics.podMonitor.interval | default "30s" }}
+      {{- if .Values.podmon.metrics.podMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.podmon.metrics.podMonitor.scrapeTimeout }}
+      {{- end }}
+      path: /metrics
+      {{- if .Values.podmon.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.podmon.metrics.podMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

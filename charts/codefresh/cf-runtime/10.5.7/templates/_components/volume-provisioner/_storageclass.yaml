@@ -1,0 +1,47 @@
+{{- define "dind-volume-provisioner.resources.storageclass" -}}
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  {{/* has to be exactly that */}}
+  name: {{ include "dind-volume-provisioner.storageClassName" . }}
+  labels:
+    {{- include "dind-volume-provisioner.labels" . | nindent 4 }}
+provisioner: {{ include "dind-volume-provisioner.volumeProvisionerName" . }}
+parameters:
+{{- if eq .Values.storage.backend "local" }}
+  volumeBackend: local
+  volumeParentDir: {{ .Values.storage.local.volumeParentDir }}
+{{- else if eq .Values.storage.backend "gcedisk" }}
+  volumeBackend: {{ .Values.storage.backend }}
+  type: {{ .Values.storage.gcedisk.volumeType | default "pd-ssd" }}
+  zone: {{ required ".Values.storage.gcedisk.availabilityZone is required" .Values.storage.gcedisk.availabilityZone }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+{{- else if or (eq .Values.storage.backend "ebs") (eq .Values.storage.backend "ebs-csi")}}
+  volumeBackend: {{ .Values.storage.backend }}
+  VolumeType: {{ .Values.storage.ebs.volumeType | default "gp3" }}
+  AvailabilityZone: {{ required ".Values.storage.ebs.availabilityZone is required" .Values.storage.ebs.availabilityZone }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+  encrypted: {{ .Values.storage.ebs.encrypted | default "false" | quote }}
+  {{- with .Values.storage.ebs.kmsKeyId }}
+  kmsKeyId: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.storage.ebs.iops }}
+  iops: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.storage.ebs.throughput }}
+  throughput: {{ . | quote }}
+  {{- end }}
+{{- else if or (eq .Values.storage.backend "azuredisk") (eq .Values.storage.backend "azuredisk-csi")}}
+  volumeBackend: {{ .Values.storage.backend }}
+  kind: managed
+  skuName: {{ .Values.storage.azuredisk.skuName | default "Premium_LRS" }}
+  fsType: {{ .Values.storage.fsType | default "ext4" }}
+  cachingMode: {{ .Values.storage.azuredisk.cachingMode | default "None" }}
+  {{- with .Values.storage.azuredisk.availabilityZone }}
+  availabilityZone: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.storage.azuredisk.resourceGroup }}
+  resourceGroup: {{ . | quote }}
+  {{- end }}
+{{- end }}
+{{- end -}}

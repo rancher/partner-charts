@@ -1,0 +1,957 @@
+{{- $authorizationConfigSecret := lookup "v1" "Secret" .Release.Namespace "karavi-authorization-config" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{.Release.Name}}-controller
+  namespace: {{ .Release.Namespace }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  {{- if eq .Values.customDriverName.enabled true}}
+  name: {{printf "%s-%s-controller" .Release.Namespace .Values.customDriverName.value}}
+  {{- else }}
+  name: {{ .Release.Name }}-controller
+  {{- end }}
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    {{- if eq .Values.podmon.enabled true }}
+    verbs: [ "get", "list", "watch", "patch" ]
+    {{- else }}
+    verbs: [ "get", "list", "watch" ]
+    {{- end }}
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete", "update", "patch" ]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattributesclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "volumeattachments" ]
+  {{- if eq .Values.podmon.enabled true }}
+    verbs: [ "get", "list", "watch", "update", "patch", "delete" ]
+  {{- else }}
+    verbs: [ "get", "list", "watch", "update", "patch" ]
+  {{- end }}
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodeinfos"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+  {{- if hasKey .Values "podmon" }}
+  {{- if eq .Values.podmon.enabled true }}
+    verbs: [ "get", "list", "watch", "delete" ]
+  {{- else }}
+    verbs: [ "get", "list", "watch" ]
+  {{- end }}
+  {{- end }}
+# below for snapshotter
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list", "watch", "update", "create", "delete", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshots/status"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create", "list", "watch", "delete"]
+# below for dell-csi-replicator
+  {{- if eq .Values.replication.enabled true}}
+  - apiGroups: ["replication.storage.dell.com"]
+    resources: ["dellcsireplicationgroups"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["replication.storage.dell.com"]
+    resources: ["dellcsireplicationgroups/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+  {{- end}}
+  # below for dell-csi-migrator
+  {{- if eq .Values.migration.enabled true}}
+  - apiGroups: [ "replication.storage.dell.com" ]
+    resources: [ "dellcsimigrationgroups" ]
+    verbs: [ "create", "delete", "get", "list", "patch", "update", "watch" ]
+  - apiGroups: [ "replication.storage.dell.com" ]
+    resources: [ "dellcsimigrationgroups/status" ]
+    verbs: [ "get", "patch", "update" ]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+  {{- end}}
+  # Permissions for volume group snapshots
+  {{- $vgsnapshotEnabled := include "csi-powermax.isVgsnapshotEnabled" . | eq "true" }}
+  {{- if $vgsnapshotEnabled }}
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshotcontents"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshotcontents/status"]
+    verbs: ["update", "patch"]
+  {{- end }}
+  {{- if hasKey .Values.controller "csiAddonsReplication" }}
+  {{- if eq .Values.controller.csiAddonsReplication.enabled true}}
+  # below for csi-addons replication
+  - apiGroups: ["replication.storage.openshift.io"]
+    resources: ["volumegroupreplications", "volumegroupreplications/status"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["replication.storage.openshift.io"]
+    resources: ["volumegroupreplicationcontents", "volumegroupreplicationcontents/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["csiaddons.openshift.io"]
+    resources: ["csiaddonsnodes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  {{- end}}
+  {{- end}}
+  # Permissions for Metro site-failure VolumeJournal CRD.
+  # H-7 fix: these RBAC rules are unconditional (matching the operator config)
+  # so that enabling Metro site-failure handling after initial install does not
+  # require a Helm upgrade just to add permissions. The VolumeJournal CRD RBAC
+  # has no security impact when the feature is disabled — the controller simply
+  # will not create any VolumeJournal resources in that case.
+  - apiGroups: ["dr.storage.dell.com"]
+    resources: ["volumejournals"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["dr.storage.dell.com"]
+    resources: ["volumejournals/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["csi-powermax-metro-journal-queue"]
+    verbs: ["get", "update", "patch", "delete"]
+  # Permissions for Storage Capacity
+  {{- if eq (include "csi-powermax.isStorageCapacitySupported" .) "true" }}
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csistoragecapacities"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  {{- if eq .Values.customDriverName.enabled true}}
+  name: {{ printf "%s-%s-controller" .Release.Namespace .Values.customDriverName.value }}
+  {{- else }}
+  name: {{ .Release.Name }}-controller
+  {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  {{- if eq .Values.customDriverName.enabled true}}
+  name: {{ printf "%s-%s-controller" .Release.Namespace .Values.customDriverName.value }}
+  {{- else }}
+  name: {{ .Release.Name }}-controller
+  {{- end }}
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for Driver-specific Permissions in a Namespace
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+# RoleBinding for Driver-specific Role
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-controller
+  namespace: {{ .Release.Namespace }}
+  {{- if hasKey .Values "authorization" }}
+  {{- if eq .Values.authorization.enabled true }}
+  annotations:
+      com.dell.karavi-authorization-proxy: "true"
+  {{ end }}
+  {{ end }}
+spec:
+  replicas: {{ required "Must provide the number of controller instances to create." .Values.controller.controllerCount }}
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-controller
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: "driver"
+      labels:
+        name: {{ .Release.Name }}-controller
+    spec:
+      {{ if .Values.controller.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.controller.nodeSelector | nindent 8 }}
+      {{ end }}
+      {{ if .Values.controller.tolerations }}
+      tolerations:
+      {{- toYaml .Values.controller.tolerations | nindent 6 }}
+      {{ end }}
+      serviceAccountName: {{ .Release.Name }}-controller
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - {{ .Release.Name }}-controller
+            topologyKey: kubernetes.io/hostname
+      containers:
+        {{- if hasKey .Values "podmon" }}
+        {{- if eq .Values.podmon.enabled true }}
+        - name: podmon
+          image: {{ required "Must provide the podmon container image." .Values.images.podmon.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            {{- toYaml .Values.podmon.controller.args | nindent 12 }}
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- if and (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+            - name: X_CSI_METRICS_ENABLED
+              value: "true"
+            - name: X_CSI_METRICS_PORT
+              value: "{{ .Values.podmon.metrics.port }}"
+            - name: X_CSI_METRICS_COLLECTION_INTERVAL
+              value: "{{ .Values.podmon.metrics.collection.interval }}"
+            {{- if .Values.podmon.metrics.tlsCertSecret }}
+            - name: X_CSI_METRICS_TLS_CERT_FILE
+              value: /etc/metrics-tls/tls.crt
+            - name: X_CSI_METRICS_TLS_KEY_FILE
+              value: /etc/metrics-tls/tls.key
+            {{- end }}
+            {{- end }}
+          {{- if and (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.podmon.metrics.port }}
+              protocol: TCP
+          {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+            {{- if and (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled .Values.podmon.metrics.tlsCertSecret }}
+            - name: resiliency-metrics-tls
+              mountPath: /etc/metrics-tls
+              readOnly: true
+            {{- end }}
+                {{- end }}
+                {{- end }}
+        - name: attacher
+          image: {{ required "Must provide the CSI attacher container image." .Values.images.attacher.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--timeout=180s"
+            - "--worker-threads=6"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        - name: provisioner
+          image: {{ required "Must provide the CSI provisioner container image." .Values.images.provisioner.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--volume-name-prefix={{ required "Must provide a Volume Name Prefix." .Values.controller.volumeNamePrefix }}"
+            - "--volume-name-uuid-length=10"
+            - "--timeout=120s"
+            - "--worker-threads=6"
+            - "--v=5"
+            - "--default-fstype={{ .Values.defaultFsType | default "ext4" }}"
+            - "--leader-election"
+            - "--extra-create-metadata"
+            - "--feature-gates=Topology=true"
+            - "--enable-capacity={{ (include "csi-powermax.isStorageCapacitySupported" .) | default false }}"
+            - "--capacity-ownerref-level=2"
+            - "--capacity-poll-interval={{ .Values.storageCapacity.pollInterval | default "5m" }}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- if hasKey .Values.controller "snapshot" }}
+        {{- if eq .Values.controller.snapshot.enabled true }}
+        {{- $vgsnapshotEnabled := include "csi-powermax.isVgsnapshotEnabled" . | eq "true" }}
+        - name: snapshotter
+          image: {{ required "Must provide the CSI snapshotter container image." .Values.images.snapshotter.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--snapshot-name-prefix={{ required "Must provide a Snapshot Name Prefix" .Values.controller.snapshot.snapNamePrefix }}"
+            - "--snapshot-name-uuid-length=10"
+            - "--timeout=180s"
+            - "--leader-election"
+            - "--feature-gates=CSIVolumeGroupSnapshot={{ $vgsnapshotEnabled }}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        {{- if hasKey .Values.controller "csiAddonsReplication" }}
+        {{- if eq .Values.controller.csiAddonsReplication.enabled true}}
+        - name: csi-addons
+          image: {{ required "Must provide the CSI Addons sidecar container image." .Values.images.csiAddons.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--node-id=$(KUBE_NODE_NAME)"
+            - "--v=5"
+            - "--csi-addons-address=$(CSI_ADDONS_ENDPOINT)"
+            - "--controller-port=9809"
+            - "--pod=$(POD_NAME)"
+            - "--namespace=$(POD_NAMESPACE)"
+            - "--pod-uid=$(POD_UID)"
+          env:
+            - name: CSI_ADDONS_ENDPOINT
+              value: /var/run/csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        {{- if eq .Values.replication.enabled true}}
+        - name: dell-csi-replicator
+          image: {{ required "Must provide the Dell CSI Replicator Resizer image." .Values.images.replication.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+            - "--worker-threads=2"
+            - "--retry-interval-start=1s"
+            - "--retry-interval-max=300s"
+            - "--timeout=300s"
+            - "--context-prefix={{ .Values.replication.replicationContextPrefix}}"
+            - "--prefix={{ .Values.replication.replicationPrefix}}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+            - name: X_CSI_REPLICATION_CONFIG_DIR
+              value: /powermax-config-params
+            - name: X_CSI_REPLICATION_CONFIG_FILE_NAME
+              value: driver-config-params.yaml
+            {{- if hasKey .Values.replication "metrics" }}
+            - name: X_CSI_REPLICATION_METRICS_ENABLED
+              value: "{{ .Values.replication.metrics.enabled | default false }}"
+            - name: X_CSI_REPLICATION_METRICS_PORT
+              value: "{{ .Values.replication.metrics.port | default 8445 }}"
+            {{- if .Values.replication.metrics.collection }}
+            - name: X_CSI_REPLICATION_METRICS_COLLECTION_INTERVAL
+              value: "{{ .Values.replication.metrics.collection.interval | default "30s" }}"
+            {{- end }}
+            {{- if .Values.replication.metrics.tlsCertSecret }}
+            - name: X_CSI_REPLICATION_METRICS_TLS_CERT_FILE
+              value: /etc/replication-metrics-tls/tls.crt
+            - name: X_CSI_REPLICATION_METRICS_TLS_KEY_FILE
+              value: /etc/replication-metrics-tls/tls.key
+            {{- end }}
+            {{- end }}
+          {{- if and (hasKey .Values.replication "metrics") (.Values.replication.metrics.enabled) }}
+          ports:
+            - containerPort: {{ .Values.replication.metrics.port | default 8445 }}
+              name: repl-metrics
+              protocol: TCP
+          {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+            {{- if and (hasKey .Values.replication "metrics") (.Values.replication.metrics.tlsCertSecret) }}
+            - name: replication-metrics-tls
+              mountPath: /etc/replication-metrics-tls
+              readOnly: true
+            {{- end }}
+        {{- end }}
+        {{- if eq .Values.migration.enabled true}}
+        - name: dell-csi-migrator
+          image: {{ required "Must provide the Dell CSI Migrator Resizer image." .Values.images.migration.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+            - "--worker-threads=2"
+            - "--retry-interval-start=1s"
+            - "--retry-interval-max=300s"
+            - "--timeout=300s"
+            - "--prefix={{ .Values.migration.migrationPrefix}}"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+            - name: X_CSI_REPLICATION_CONFIG_DIR
+              value: /powermax-config-params
+            - name: X_CSI_REPLICATION_CONFIG_FILE_NAME
+              value: driver-config-params.yaml
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+        {{- end }}
+        {{- if hasKey .Values.controller "resizer" }}
+        {{- if eq .Values.controller.resizer.enabled true }}
+        - name: resizer
+          image: {{ required "Must provide the CSI resizer container image." .Values.images.resizer.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=180s"
+            - "--v=5"
+            - "--leader-election"
+            - "--feature-gates=VolumeAttributesClass=true"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        {{- if hasKey .Values "authorization" }}
+        {{- if eq .Values.authorization.enabled true }}
+        - name: karavi-authorization-proxy
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{ required "Must provide the authorization sidecar container image." .Values.images.authorization.image }}
+          env:
+            - name: PROXY_HOST
+              value: "{{ .Values.authorization.proxyHost }}"
+            - name: SKIP_CERTIFICATE_VALIDATION
+              value: "{{ .Values.authorization.skipCertificateValidation }}"
+            - name: PLUGIN_IDENTIFIER
+              value: powermax
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: proxy-authz-tokens
+                  key: access
+            - name: REFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: proxy-authz-tokens
+                  key: refresh
+          volumeMounts:
+            {{- if $authorizationConfigSecret }}
+            - name: karavi-authorization-config
+              mountPath: /etc/karavi-authorization/config
+            {{- else }}
+            - name: powermax-reverseproxy-secret
+              mountPath: /powermax-reverseproxy-secret
+            {{- end }}
+            {{- if not .Values.authorization.skipCertificateValidation }}
+            - name: proxy-server-root-certificate
+              mountPath: /etc/karavi-authorization/root-certificates
+            {{- end }}
+            - name: powermax-config-params
+              mountPath: /etc/karavi-authorization
+        {{- end }}
+        {{- end }}
+        {{- if hasKey .Values.controller "healthMonitor" }}
+        {{- if eq .Values.controller.healthMonitor.enabled true }}
+        - name: csi-external-health-monitor-controller
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{ required "Must provide the CSI external health monitor controller image." .Values.images.healthmonitor.image }}
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--http-endpoint=:8080"
+            - "--enable-node-watcher=true"
+            - "--monitor-interval={{ .Values.controller.healthMonitor.interval | default "60s" }}"
+            - "--timeout=180s"
+          env:
+            - name: ADDRESS
+              value: /var/run/csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+        {{- end }}
+        {{- end }}
+        - name: driver
+          image: {{ required "Must provide the PowerMax driver image repository." .Values.images.driver.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [ "/csi-powermax.sh" ]
+          env:
+            {{- $_ := first .Values.global.storageArrays  }}
+            {{- $arraysStr := "" }}
+            {{- range $i, $array := .Values.global.storageArrays }}
+              {{- $arraysStr = trim (cat $arraysStr $array.storageArrayId) }}
+            {{- end }}
+            - name: X_CSI_POWERMAX_DRIVER_NAME
+              {{- if eq .Values.customDriverName.enabled true}}
+              value: {{ required "Must provide a driver name" (printf "%s.%s.dellemc.com" .Release.Namespace .Values.customDriverName.value) }}
+              {{- else }}
+              value: csi-powermax.dellemc.com
+              {{- end }}
+            - name: CSI_ENDPOINT
+              value: /var/run/csi/csi.sock
+            - name: X_CSI_MODE
+              value: controller
+              {{- if or (not (hasKey .Values.global "useSecret")) (empty .Values.global.useSecret) }}
+            - name: X_CSI_POWERMAX_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.defaultCredentialsSecret }}
+                  key: username
+            - name: X_CSI_POWERMAX_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.defaultCredentialsSecret }}
+                  key: password
+              {{- end }}
+            - name: X_CSI_POWERMAX_CONFIG_PATH
+              value: /powermax-config-params/driver-config-params.yaml
+            - name: X_CSI_POWERMAX_ARRAY_CONFIG_PATH
+              value: /powermax-array-config/powermax-array-config.yaml
+              {{- $useRevProxySecret := and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+            - name: X_CSI_MANAGED_ARRAYS
+              value: {{ .Values.global.managedArrays | quote }}
+            - name: X_CSI_POWERMAX_PORTGROUPS
+              value: {{ .Values.global.portGroups | toJson }}
+            - name: X_CSI_TRANSPORT_PROTOCOL
+              value: {{ .Values.global.transportProtocol | default "" }}
+            - name: X_CSI_POWERMAX_HOST_MGMT_MODE
+              value: {{ .Values.global.hostManagementMode | default "create" }}
+            - name: X_CSI_POWERMAX_HOST_ADOPTION_MIN_OVERLAP_RATIO
+              value: {{ .Values.global.hostAdoptionMinOverlapRatio | default "0.5" | quote }}
+            - name: X_CSI_POWERMAX_NVMETCP_CONN_MODE
+              value: {{ .Values.global.nvmeTcpConnMode | default "driver" }}
+            - name: X_CSI_REVPROXY_USE_SECRET
+              value: {{ $useRevProxySecret | quote }}
+              {{- if $useRevProxySecret }}
+            - name: X_CSI_REVPROXY_SECRET_FILEPATH
+              value: "/etc/powermax/config"
+              {{- end }}
+            - name: X_CSI_POWERMAX_DEBUG
+              value: {{ .Values.powerMaxDebug | default "false" | lower | quote }}
+            - name: X_CSI_POWERMAX_SKIP_CERTIFICATE_VALIDATION
+              value: {{ .Values.skipCertificateValidation | default "true" | lower | quote }}
+              {{- if eq .Values.csireverseproxy.deployAsSidecar true }}
+            - name: X_CSI_POWERMAX_SIDECAR_PROXY_PORT
+              value: {{ .Values.csireverseproxy.port | quote }}
+              {{- else }}
+            - name: X_CSI_POWERMAX_PROXY_SERVICE_NAME
+              value: {{ .Release.Name }}-reverseproxy
+              {{- end }}
+            - name: X_CSI_K8S_CLUSTER_PREFIX
+              value: {{ required "Must provide a Cluster Prefix." .Values.clusterPrefix }}
+            - name: X_CSI_GRPC_MAX_THREADS
+              value: "50"
+            - name: SSL_CERT_DIR
+              value: /certs
+            - name: X_CSI_IG_NODENAME_TEMPLATE
+              value: {{ .Values.nodeNameTemplate | default "" }}
+            - name: X_CSI_IG_MODIFY_HOSTNAME
+              value: {{ .Values.modifyHostName | default "false" | lower | quote }}
+            - name: X_CSI_REPLICATION_CONTEXT_PREFIX
+              value: {{ .Values.replication.replicationContextPrefix | default "powermax"}}
+            - name: X_CSI_REPLICATION_PREFIX
+              value: {{ .Values.replication.replicationPrefix | default "replication.storage.dell.com"}}
+            - name: X_CSI_MIGRATION_PREFIX
+              value: {{ .Values.migration.migrationPrefix | default "migration.storage.dell.com"}}
+            - name: X_CSI_UNISPHERE_TIMEOUT
+              value: {{.Values.unisphereTimeout | default "5m"}}
+            {{- if hasKey .Values.controller "healthMonitor" }}
+            {{- if eq .Values.controller.healthMonitor.enabled true }}
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.controller.healthMonitor.enabled }}"
+            {{- end }}
+            {{- end }}
+            - name: X_CSI_VSPHERE_ENABLED
+              value: "{{ .Values.vSphere.enabled }}"
+            {{- if eq .Values.vSphere.enabled true }}
+            - name: X_CSI_VSPHERE_PORTGROUP
+              value: {{ required "Must provide portgroup for vsphere" .Values.vSphere.fcPortGroup }}
+            - name: X_CSI_VSPHERE_HOSTNAME
+              value: {{ required "Must provide host group for vsphere" .Values.vSphere.fcHostName }}
+            - name: X_CSI_VCENTER_HOST
+              value: {{ required "Must provide host url for vsphere" .Values.vSphere.vCenterHost }}
+            - name: X_CSI_VCENTER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vSphere.vCenterCredSecret }}
+                  key: username
+            - name: X_CSI_VCENTER_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vSphere.vCenterCredSecret }}
+                  key: password
+            {{- end }}
+            {{- if hasKey .Values "podmon" }}
+            - name: X_CSI_PODMON_ENABLED
+              value: "{{ .Values.podmon.enabled }}"
+            {{- if eq .Values.podmon.enabled true }}
+              {{- range $key, $value := .Values.podmon.controller.args }}
+                {{- if contains "--arrayConnectivityPollRate" $value }}
+            - name: X_CSI_PODMON_ARRAY_CONNECTIVITY_POLL_RATE
+              value: "{{ (split "=" $value)._1 }}"
+                {{- end }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            - name: X_CSI_PODMON_API_PORT
+              value: "{{ .Values.podmon.podmonAPIPort }}"
+            {{- if .Values.podmon.podmonAPITokenSecret }}
+            - name: X_CSI_PODMON_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.podmon.podmonAPITokenSecret.name }}
+                  key: {{ .Values.podmon.podmonAPITokenSecret.key | default "podmon-api-token" }}
+            {{- else if .Values.podmon.podmonAPIToken }}
+            - name: X_CSI_PODMON_API_TOKEN
+              value: "{{ .Values.podmon.podmonAPIToken }}"
+            {{- end }}
+            - name: X_CSI_REVPROXY_TLS_CERT_DIR
+              value: /app/tls
+            - name: X_CSI_DYNAMIC_SG_ENABLED
+              value: {{ .Values.dynamicSGEnabled | default "false" | lower | quote }}
+            {{- $rootMetroEnabled := .Values.metroSiteFailureHandlingEnabled | toString | lower -}}
+            {{- $nestedMetroEnabled := "" -}}
+            {{- if hasKey .Values.controller.metro.siteFailureHandling "enabled" }}
+            {{- $nestedMetroEnabled = .Values.controller.metro.siteFailureHandling.enabled | toString | lower -}}
+            {{- end }}
+            {{- $metroEnabled := $rootMetroEnabled -}}
+            {{- if ne $nestedMetroEnabled "" }}
+            {{- $metroEnabled = $nestedMetroEnabled -}}
+            {{- end }}
+            - name: X_CSI_POWERMAX_METRO_SITE_FAILURE_HANDLING_ENABLED
+              value: {{ $metroEnabled | quote }}
+            {{- if eq $metroEnabled "true" }}
+            {{- /* H-6 fix: validate Metro tuning parameters at install time (NFR-3 Req-SEC-C-2).
+                   Out-of-range values are rejected here rather than silently coerced at runtime,
+                   so operators get an immediate actionable error instead of a warn log. */ -}}
+            {{- $timeoutValue := .Values.metroSiteFailureHandling.stateCheckTimeoutSeconds -}}
+            {{- if and (hasKey .Values.controller.metro.siteFailureHandling "stateCheckTimeoutSeconds") (ne .Values.controller.metro.siteFailureHandling.stateCheckTimeoutSeconds nil) }}
+            {{- $timeoutValue = .Values.controller.metro.siteFailureHandling.stateCheckTimeoutSeconds -}}
+            {{- end }}
+            {{- $timeout := ($timeoutValue | int) }}
+            {{- if or (lt $timeout 5) (gt $timeout 120) }}
+            {{- fail (printf "controller.metro.siteFailureHandling.stateCheckTimeoutSeconds must be between 5 and 120 (got %d)" $timeout) }}
+            {{- end }}
+            {{- $queueWarnValue := .Values.metroSiteFailureHandling.queueWarningThreshold -}}
+            {{- if and (hasKey .Values.controller.metro.siteFailureHandling "queueWarningThreshold") (ne .Values.controller.metro.siteFailureHandling.queueWarningThreshold nil) }}
+            {{- $queueWarnValue = .Values.controller.metro.siteFailureHandling.queueWarningThreshold -}}
+            {{- end }}
+            {{- $queueWarn := ($queueWarnValue | int) }}
+            {{- if or (lt $queueWarn 1) (gt $queueWarn 10000) }}
+            {{- fail (printf "controller.metro.siteFailureHandling.queueWarningThreshold must be between 1 and 10000 (got %d)" $queueWarn) }}
+            {{- end }}
+            {{- $queueLimitValue := .Values.metroSiteFailureHandling.queueHardLimit -}}
+            {{- if and (hasKey .Values.controller.metro.siteFailureHandling "queueHardLimit") (ne .Values.controller.metro.siteFailureHandling.queueHardLimit nil) }}
+            {{- $queueLimitValue = .Values.controller.metro.siteFailureHandling.queueHardLimit -}}
+            {{- end }}
+            {{- $queueLimit := ($queueLimitValue | int) }}
+            {{- if or (lt $queueLimit 1) (gt $queueLimit 10000) }}
+            {{- fail (printf "controller.metro.siteFailureHandling.queueHardLimit must be between 1 and 10000 (got %d)" $queueLimit) }}
+            {{- end }}
+            {{- if gt $queueWarn $queueLimit }}
+            {{- fail (printf "controller.metro.siteFailureHandling.queueWarningThreshold (%d) must not exceed queueHardLimit (%d); the warning fires before the hard limit, so warn <= limit is required" $queueWarn $queueLimit) }}
+            {{- end }}
+            {{- $backoffValue := .Values.metroSiteFailureHandling.reconciliationBackoffSeconds -}}
+            {{- if and (hasKey .Values.controller.metro.siteFailureHandling "reconciliationBackoffSeconds") (ne .Values.controller.metro.siteFailureHandling.reconciliationBackoffSeconds nil) }}
+            {{- $backoffValue = .Values.controller.metro.siteFailureHandling.reconciliationBackoffSeconds -}}
+            {{- end }}
+            {{- $backoff := ($backoffValue | int) }}
+            {{- if or (lt $backoff 1) (gt $backoff 300) }}
+            {{- fail (printf "controller.metro.siteFailureHandling.reconciliationBackoffSeconds must be between 1 and 300 (got %d)" $backoff) }}
+            {{- end }}
+            - name: X_CSI_POWERMAX_METRO_STATE_CHECK_TIMEOUT
+              value: {{ $timeout | toString | quote }}
+            - name: X_CSI_POWERMAX_METRO_QUEUE_WARNING_THRESHOLD
+              value: {{ $queueWarn | toString | quote }}
+            - name: X_CSI_POWERMAX_METRO_QUEUE_HARD_LIMIT
+              value: {{ $queueLimit | toString | quote }}
+            - name: X_CSI_POWERMAX_METRO_RECONCILIATION_BACKOFF
+              value: {{ $backoff | toString | quote }}
+            {{- end }}
+            {{- if hasKey .Values "multiArrayZone" }}
+            - name: X_CSI_CAPACITY_POLL_INTERVAL
+              value: {{ .Values.multiArrayZone.capacityPollInterval | default "5m" | quote }}
+            - name: X_CSI_CAPACITY_THRESHOLD_FULL
+              value: {{ (.Values.multiArrayZone.capacityThresholdFull | default 100 | toString) | quote }}
+            {{- end }}
+            {{- if hasKey .Values.controller "csiAddonsReplication" }}
+            - name: X_CSI_CSIADDONS_REPLICATION_ENABLED
+              value: "{{ .Values.controller.csiAddonsReplication.enabled }}"
+            {{- end }}
+            - name: X_CSI_DRIVER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if eq (include "csi-powermax.isMetricsEnabled" .) "true" }}
+            - name: X_CSI_METRICS_ENABLED
+              value: "true"
+            - name: X_CSI_METRICS_PORT
+              value: "{{ .Values.metrics.port | default 8443 }}"
+            {{- if .Values.metrics.tlsCertSecret }}
+            - name: X_CSI_METRICS_TLS_CERT_FILE
+              value: "/etc/metrics-tls/tls.crt"
+            - name: X_CSI_METRICS_TLS_KEY_FILE
+              value: "/etc/metrics-tls/tls.key"
+            {{- end }}
+            {{- if hasKey .Values.metrics "leaderElection" }}
+            - name: X_CSI_METRICS_LEADER_ELECTION_ENABLED
+              value: "{{ .Values.metrics.leaderElection.enabled | default false }}"
+            - name: X_CSI_METRICS_LEADER_ELECTION_LEASE_DURATION
+              value: "{{ .Values.metrics.leaderElection.leaseDuration | default "60s" }}"
+            - name: X_CSI_METRICS_LEADER_ELECTION_RENEW_DEADLINE
+              value: "{{ .Values.metrics.leaderElection.renewDeadline | default "40s" }}"
+            - name: X_CSI_METRICS_LEADER_ELECTION_RETRY_PERIOD
+              value: "{{ .Values.metrics.leaderElection.retryPeriod | default "5s" }}"
+            {{- end }}
+            {{- if and (eq .Values.global.proxyAuthToken.enabled true) (not .Values.csireverseproxy.deployAsSidecar) }}
+            - name: X_CSI_REVPROXY_AUTH_TOKEN_FILE
+              value: /etc/proxy-auth-token/token
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/run/csi
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+            - name: powermax-array-config
+              mountPath: /powermax-array-config
+              {{- if and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+            - name: powermax-reverseproxy-secret
+              mountPath: /etc/powermax
+              {{- end }}
+            - name: tls-secret
+              mountPath: /app/tls
+            {{- if eq (include "csi-powermax.isMetricsEnabled" .) "true" }}
+            {{- if .Values.metrics.tlsCertSecret }}
+            - name: metrics-tls
+              mountPath: /etc/metrics-tls
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if and (eq .Values.global.proxyAuthToken.enabled true) (not .Values.csireverseproxy.deployAsSidecar) }}
+            - name: proxy-auth-token
+              mountPath: /etc/proxy-auth-token
+              readOnly: true
+            {{- end }}
+        {{- if eq .Values.csireverseproxy.deployAsSidecar true }}
+        - name: reverseproxy
+          image: {{ required "Must provided an image for reverseproxy container." .Values.images.csireverseproxy.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+              {{- $useRevProxySecret := and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+            - name: X_CSI_REVPROXY_USE_SECRET
+              value: {{ $useRevProxySecret | quote }}
+              {{- if $useRevProxySecret }}
+            - name: X_CSI_REVPROXY_SECRET_FILEPATH
+              value: "/etc/powermax/config"
+            - name: X_CSI_POWERMAX_CONFIG_PATH
+              value: "/powermax-config-params/driver-config-params.yaml"
+              {{- else }}
+            - name: X_CSI_REVPROXY_CONFIG_DIR
+              value: /etc/config/configmap
+            - name: X_CSI_REVPROXY_CONFIG_FILE_NAME
+              value: config.yaml
+              {{- end }}
+            - name: X_CSI_REVPROXY_IN_CLUSTER
+              value: "true"
+            - name: DeployAsSidecar
+              value: "true"
+            - name: X_CSI_REVPROXY_TLS_CERT_DIR
+              value: /app/tls
+            - name: X_CSI_REVPROXY_WATCH_NAMESPACE
+              value: {{ .Release.Namespace }}
+          volumeMounts:
+              {{- if and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+            - name: powermax-reverseproxy-secret
+              mountPath: /etc/powermax
+            - name: powermax-config-params
+              mountPath: /powermax-config-params
+              {{- else }}
+            - name: configmap-volume
+              mountPath: /etc/config/configmap
+              {{- end }}
+            - name: tls-secret
+              mountPath: /app/tls
+            - name: cert-dir
+              mountPath: /app/certs
+        {{- end }}
+      volumes:
+        - name: socket-dir
+          emptyDir:
+        - name: certs
+          secret:
+              secretName: {{ .Release.Name }}-certs
+              optional: true
+          {{- if and (hasKey .Values.global "useSecret") (.Values.global.useSecret | default false) }}
+        - name: powermax-reverseproxy-secret
+          secret:
+            secretName: {{ required "Must provide defaultCredentialsSecret secret name." .Values.global.defaultCredentialsSecret }}
+          {{- else }}
+        - name: configmap-volume
+          configMap:
+            name: {{ .Release.Name }}-reverseproxy-config
+            optional: true
+          {{- end }}
+        - name: tls-secret
+          secret:
+            secretName: {{ .Values.csireverseproxy.tlsSecret }}
+        - name: powermax-array-config
+          configMap:
+            name: {{ .Release.Name }}-array-config
+            optional: true
+        - name: cert-dir
+          emptyDir:
+        - name: powermax-config-params
+          configMap:
+            name: {{ .Release.Name }}-config-params
+        {{- if eq (include "csi-powermax.isMetricsEnabled" .) "true" }}
+        {{- if .Values.metrics.tlsCertSecret }}
+        - name: metrics-tls
+          secret:
+            secretName: {{ .Values.metrics.tlsCertSecret }}
+        {{- end }}
+        {{- end }}
+        {{- if and (hasKey .Values "podmon") .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled .Values.podmon.metrics.tlsCertSecret }}
+        - name: resiliency-metrics-tls
+          secret:
+            secretName: {{ .Values.podmon.metrics.tlsCertSecret }}
+        {{- end }}
+        {{- if and (eq .Values.replication.enabled true) (hasKey .Values.replication "metrics") }}
+        {{- if .Values.replication.metrics.tlsCertSecret }}
+        - name: replication-metrics-tls
+          secret:
+            secretName: {{ .Values.replication.metrics.tlsCertSecret }}
+        {{- end }}
+        {{- end }}
+        {{- if and (eq .Values.global.proxyAuthToken.enabled true) (not .Values.csireverseproxy.deployAsSidecar) }}
+        - name: proxy-auth-token
+          secret:
+            secretName: {{ .Values.global.proxyAuthToken.secretName }}
+        {{- end }}
+        {{- if hasKey .Values "authorization" }}
+        {{- if eq .Values.authorization.enabled true }}
+        {{- if $authorizationConfigSecret }}
+        - name: karavi-authorization-config
+          secret:
+            secretName: karavi-authorization-config
+        {{- end }}
+        {{- if not .Values.authorization.skipCertificateValidation }}
+        - name: proxy-server-root-certificate
+          secret:
+            secretName: proxy-server-root-certificate
+        {{- end }}
+        {{- end }}
+        {{- end }}

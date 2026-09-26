@@ -1,0 +1,911 @@
+---
+global:
+  # CSI driver log level
+  # Allowed values: "error", "warn"/"warning", "info", "debug"
+  # Default value: "info"
+  logLevel: "info"
+
+  # CSI driver log format
+  # Allowed values: "TEXT" or "JSON"
+  # Default value: "TEXT"
+  logFormat: "TEXT"
+  ##########################
+  # PLATFORM ATTRIBUTES
+  ##########################
+  # The CSI PowerMax ReverseProxy section to fill out the required configuration
+  # Please refer to the doc website about a
+  # detailed explanation of each configuration parameter
+  # X_CSI_MANAGED_ARRAYS: Serial ID of the arrays that will be used for provisioning
+  # For Multi-Array Zone support, include all arrays managed by this driver instance.
+  # Default value: None
+  # Examples: "000000000001,000000000002"
+  managedArrays: "000000000001,000000000002"
+
+  # defaultCredentialsSecret
+  # The name of the Kubernetes Secret containing the details of the PowerMax arrays,
+  # their Unisphere endpoints and their login credentials.
+  # Default: "powermax-creds"
+  defaultCredentialsSecret: "powermax-creds"
+  # useSecret
+  # Defines if a Secret should be used to provide Unisphere for PowerMax endpoints
+  # and login credentials instead of the deprecated powermax-reverseproxy-config ConfigMap.
+  # If set to true, the contents of the secret specified by defaultCredentialsSecret
+  # will be used, in the new format, to specify Unisphere for PowerMax endpoints, array IDs,
+  # and login credentials. If set to false, the deprecated ConfigMap will be automatically
+  # created and used.
+  # Default value: false
+  useSecret: false
+  # portGroups: Define the set of existing port groups that the driver will use.
+  # It is a comma separated list of portgroup names.
+  # Required only in case of iSCSI and NVMETCP port groups
+  # Allowed values: iSCSI and NVMETCP Port Group names
+  # Default value: None
+  # Examples: "pg1, pg2, pg3", "pg1"
+  portGroups:
+  # "transportProtocol" can be "FC" or "FIBRE" for fibrechannel,
+  # "ISCSI" for iSCSI, or "" for autoselection.
+  # Allowed values:
+  #   "FC"    - Fiber Channel protocol
+  #   "FIBER" - Fiber Channel protocol
+  #   "ISCSI" - iSCSI protocol
+  #   ""      - Automatic selection of transport protocol
+  # Default value: "" <empty>
+  transportProtocol: ""
+  # "hostManagementMode" controls how the driver manages host objects on PowerMax arrays.
+  # Allowed values:
+  #   "create" - Default. The driver creates new host objects for each node.
+  #   "adopt"  - The driver discovers and adopts pre-existing BFS (Boot from SAN) host
+  #              objects by matching FC WWPN initiators. Use this mode for nodes that
+  #              boot from PowerMax arrays with pre-configured host objects.
+  # Default value: "create"
+  hostManagementMode: "create"
+  # "nvmeTcpConnMode" controls who owns NVMe/TCP fabric sessions.
+  # Allowed values:
+  #   "driver" - Default. The driver discovers NVMe/TCP targets and establishes
+  #              the fabric sessions itself.
+  #   "host"   - The host owns the sessions. The driver issues no discovery and no
+  #              connect, and uses the sessions the host has already established.
+  #              Staging fails with a precondition error when no eligible session
+  #              exists, and succeeds on retry once the host establishes one.
+  # Applies to every array in the deployment; there is no per-array override.
+  # Requires host automation that establishes source-bound NVMe/TCP sessions and
+  # restores them after a node reboot. That automation is the customer's
+  # responsibility and is not provided by Dell.
+  # Default value: "driver"
+  nvmeTcpConnMode: "driver"
+  # "hostAdoptionMinOverlapRatio" controls the minimum overlap ratio for host adoption validation.
+  # Allowed values: 0.0 to 1.0
+  #   - 0.5 (default) - Directional relaxation with >50% majority for larger HBA counts
+  #   - 0.75 - Stricter threshold for regulated environments
+  #   - 1.0 - Strict match (100% coverage required for all HBA counts)
+  # Note: For 2-WWPN systems, 100% coverage is always required regardless of this setting.
+  # Default value: 0.5
+  hostAdoptionMinOverlapRatio: 0.5
+
+  # proxyAuthToken: Shared authentication token between the CSI driver and the reverse proxy.
+  # When enabled, the driver sends the token in an X-Proxy-Auth-Token header, and the
+  # reverse proxy validates it. Both containers mount the same Kubernetes Secret.
+  #
+  # Note:
+  # - Sidecar deployments: Authentication is considered secure within the trusted boundary; hence, auth tokens are not implemented.
+  # - Standalone deployments: The authentication token will be considered if provided; otherwise, the process will continue without the token.
+  proxyAuthToken:
+    # enabled: Enable/Disable shared auth token authentication
+    # Allowed values:
+    #   true: enable proxy auth token
+    #   false: disable proxy auth token
+    # Default value: false
+    enabled: false
+    # secretName: Name of the Kubernetes Secret that contains the shared auth token.
+    # The secret must have a key named "token" whose value is the shared token string.
+    # Default value: "proxy-auth-token"
+    secretName: "proxy-auth-token"
+
+  # DEPRECATION NOTICE: The storageArrays parameter has been deprecated in this helm chart
+  # and will be removed in a future release. It remains for backward compatibility only.
+  # storageArrays have been migrated to the 'secret' format. Please refer to the official
+  # documentation website for further details.
+  storageArrays:
+    - storageArrayId: "000000000001"
+      endpoint: https://primary-1.unisphe.re:8443
+      backupEndpoint: https://backup-1.unisphe.re:8443
+  # - storageArrayId: "000000000002"
+  #   endpoint: https://primary-2.unisphe.re:8443
+  #   backupEndpoint: https://backup-2.unisphe.re:8443
+
+  # DEPRECATION NOTICE: The managementServers parameter has been deprecated in this helm chart
+  # and will be removed in a future release. It remains for backward compatibility only.
+  # managementServers have been migrated to the 'secret' format. Please refer to the official
+  # documentation website for further details.
+  managementServers:
+    - endpoint: https://primary-1.unisphe.re:8443
+      credentialsSecret: primary-1-secret
+      skipCertificateValidation: true
+      certSecret: primary-cert
+      limits:
+        maxActiveRead: 5
+        maxActiveWrite: 4
+        maxOutStandingRead: 50
+        maxOutStandingWrite: 50
+    - endpoint: https://backup-1.unisphe.re:8443
+      credentialsSecret: backup-1-secret
+      skipCertificateValidation: true
+#    - endpoint: https://primary-2.unisphe.re:8443
+#      credentialsSecret: primary-2-secret
+#      skipCertificateValidation: true
+#      certSecret: no-secret
+#    - endpoint: https://backup-2.unisphe.re:8443
+#      credentialsSecret: backup-2-secret
+#      skipCertificateValidation: true
+
+# Current version of the driver
+# Don't modify this value as this value will be used by the install script
+version: "v2.18.0"
+
+# "images" defines every container images used for the driver and its sidecars.
+#  To use your own images, or a private registry, change the values here.
+images:
+  # "driver" defines the container image, used for the driver container.
+  driver:
+    image: quay.io/dell/container-storage-modules/csi-powermax:v2.18.0
+  csireverseproxy:
+    image: quay.io/dell/container-storage-modules/csipowermax-reverseproxy:v2.17.0
+  # CSI sidecars
+  attacher:
+    image: registry.k8s.io/sig-storage/csi-attacher:v4.13.0
+  provisioner:
+    image: registry.k8s.io/sig-storage/csi-provisioner:v6.3.0
+  snapshotter:
+    image: registry.k8s.io/sig-storage/csi-snapshotter:v8.6.0
+  resizer:
+    image: registry.k8s.io/sig-storage/csi-resizer:v2.2.1
+  registrar:
+    image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0
+  healthmonitor:
+    image: registry.k8s.io/sig-storage/csi-external-health-monitor-controller:v0.18.0
+  # CSI Addons sidecar
+  csiAddons:
+    image: quay.io/csiaddons/k8s-sidecar:v0.15.0
+  # CSM sidecars
+  replication:
+    image: quay.io/dell/container-storage-modules/dell-csi-replicator:v1.16.0
+  authorization:
+    image: quay.io/dell/container-storage-modules/csm-authorization-sidecar:v2.6.0
+  migration:
+    image: quay.io/dell/container-storage-modules/dell-csi-migrator:v1.11.0
+  podmon:
+    image: quay.io/dell/container-storage-modules/podmon:v1.17.0
+  # Node rescan sidecar does a rescan on nodes for identifying new paths
+  noderescan:
+    image: quay.io/dell/container-storage-modules/dell-csi-node-rescanner:v1.10.0
+## K8S/DRIVER ATTRIBUTES
+########################
+# customDriverName: If enabled, sets the driver name to the
+# value provided to its value field with namespace prefixed to it.
+
+# e.g, namespace.csi-powermax
+# Default value: None
+# Examples: "namespace.dellemc-array", "namespace.powermaxarray"
+customDriverName:
+  value: csi-powermax
+  # Allowed values:
+  #   "true"  - Custom driver name is enabled
+  #   "false" - Custom driver name is disabled
+  # Default value: "false"
+  enabled: false
+
+# defaultFsType: Sets the default FS type which will be used
+# for mount volumes if FsType is not specified in the storage class
+# Allowed values:
+#   "ext4" - EXT4 File system
+#   "xfs"  - XFS File system
+# Default value: "ext4"
+defaultFsType: ext4
+
+# fsCheck: configure automatic file system check before mount
+fsCheck:
+  # enabled: Enable/Disable automatic file system check before mount
+  # Allowed values:
+  #   true: enable file system check
+  #   false: disable file system check
+  # Default value: false
+  enabled: false
+
+  # mode: Controls the file system check mode
+  # Allowed values: "checkOnly", "checkAndRepair"
+  # Default value: "checkOnly"
+  mode: "checkOnly"
+
+# spaceReclamation: Settings for space reclamation (fstrim/blkdiscard)
+# Reclaims unused storage blocks from Persistent Volumes.
+# Allowed Values:
+#   enabled: "true"/"false" - enable/disable space reclamation
+#   schedule: cron expression for reclamation schedule
+#   maxConcurrentVolumes: max number of concurrent reclamation operations per node
+#   timeoutSeconds: timeout for each reclamation operation in seconds
+# Default values shown below
+spaceReclamation:
+  enabled: false
+  schedule: "0 2 * * 0"
+  maxConcurrentVolumes: 2
+  timeoutSeconds: 14400
+
+# imagePullPolicy: Policy to determine if the image should be pulled prior to starting the container.
+# Allowed values:
+#  Always: Always pull the image.
+#  IfNotPresent: Only pull the image if it does not already exist on the node.
+#  Never: Never pull the image.
+# Default value: None
+imagePullPolicy: IfNotPresent
+
+# Specify kubelet config dir path.
+# Ensure that the config.yaml file is present at this path.
+# Default value: /var/lib/kubelet
+kubeletConfigDir: /var/lib/kubelet
+
+# fsGroupPolicy: Defines if the underlying volume supports changing ownership and permission of the volume before being mounted.
+# Allowed values:
+#   ReadWriteOnceWithFSType: supports volume ownership and permissions change only if the fsType is defined
+#   and the volume's accessModes contains ReadWriteOnce.
+#   File: kubernetes may use fsGroup to change permissions and ownership of the volume
+#   to match user requested fsGroup in the pod's security policy regardless of fstype or access mode.
+#   None: volumes will be mounted with no modifications.
+# Default value: ReadWriteOnceWithFSType
+fsGroupPolicy: ReadWriteOnceWithFSType
+
+# maxPowermaxVolumesPerNode: Specify default value for maximum number of volumes that controller can publish to the node.
+# If value is zero CO SHALL decide how many volumes of this type can be published by the controller to the node.
+# This limit is applicable to all the nodes in the cluster for which node label 'max-Powermax-volumes-per-node' is not set.
+# Allowed values: n, where n >= 0
+# Default value: 0
+maxPowerMaxVolumesPerNode: 0
+
+# X_CSI_DYNAMIC_SG_ENABLED: Enable/Disable dynamic Storage Group support for the driver
+# When enabled, the driver supports multiple Storage Groups under a single StorageClass
+# When disabled (default), the driver maintains backward compatibility and uses a single Storage Group
+# Allowed values:
+#   "true"  - Enable dynamic Storage Group support
+#   "false" - Disable dynamic Storage Group support (backward compatible)
+# Default value: "false"
+dynamicSGEnabled: "false"
+
+# X_CSI_POWERMAX_METRO_SITE_FAILURE_HANDLING_ENABLED: Enable/Disable SRDF/Metro
+# site-failure handling. When enabled, the driver automatically detects the
+# winning/loser array during a site failure, defers operations that cannot be
+# completed on the offline array, and reconciles them after recovery.
+# Allowed values:
+#   "true"  - Enable Metro site-failure handling
+#   "false" - Disable Metro site-failure handling (default)
+# Default value: "false"
+metroSiteFailureHandlingEnabled: "false"
+# Metro site-failure handling tuning parameters
+metroSiteFailureHandling:
+  stateCheckTimeoutSeconds: 15
+  queueWarningThreshold: 75
+  queueHardLimit: 100
+  reconciliationBackoffSeconds: 5
+
+# controller: configure controller specific parameters
+controller:
+  # Metro site-failure handling configuration
+  metro:
+    siteFailureHandling:
+      # Enable Metro site-failure handling
+      # Allowed values:
+      #   "true"  - Enable Metro site-failure handling
+      #   "false" - Disable Metro site-failure handling (default)
+      # Default value: "false"
+      # Leave empty to use the root metroSiteFailureHandlingEnabled value.
+      enabled: ""
+      # stateCheckTimeoutSeconds: Context timeout for CheckMetroState RDF group
+      # queries. Must be 5–120.
+      # Default value: 15
+      stateCheckTimeoutSeconds: null
+      # queueWarningThreshold: Number of pending deferred operations that
+      # triggers a Kubernetes warning event. Must be 10–1000.
+      # Default value: 75
+      queueWarningThreshold: null
+      # queueHardLimit: Maximum number of deferred operations. New deferrals are
+      # rejected when this limit is reached. Must be 50–10000.
+      # Default value: 100
+      queueHardLimit: null
+      # reconciliationBackoffSeconds: Base backoff (seconds) for retry on
+      # reconciliation failures. Actual delay = base * 2^retry, capped
+      # at 5 minutes. Must be 1–60.
+      # Default value: 5
+      reconciliationBackoffSeconds: null
+
+  # controllerCount: Define the number of PowerMax controller nodes
+  # to deploy to the Kubernetes release
+  # Allowed values: n, where n > 0
+  # Default value: None
+  controllerCount: 2
+
+  # volumeNamePrefix: Define a prefix that is prepended to volumes.
+  # THIS MUST BE ALL LOWER CASE.
+  # Default value: csivol
+  # Examples: "volumes", "vol"
+  volumeNamePrefix: csivol
+
+  snapshot:
+    # enabled: Enable/Disable volume snapshot feature
+    # Allowed values:
+    #   true: enable volume snapshot feature(install snapshotter sidecar)
+    #   false: disable volume snapshot feature(do not install snapshotter sidecar)
+    # Default value: None
+    enabled: true
+    # snapNamePrefix: Define a prefix that is prepended to snapshots.
+    # THIS MUST BE ALL LOWER CASE.
+    # Default value: csi-snap
+    # Examples: "snap", "snapshot"
+    snapNamePrefix: csi-snap
+
+    # volumeGroupSnapshot: allows to configure volume group snapshot support
+    # volumeGroupSnapshot CRDs (v1beta2) must be installed before enabling this feature
+  volumeGroupSnapshot:
+    # enabled: Enable/Disable native volume group snapshot capabilities
+    # Allowed values:
+    #   true: enable volume group snapshot feature
+    #   false: disable volume group snapshot feature
+    # Default value: false
+    enabled: false
+
+  resizer:
+    # enabled: Enable/Disable volume expansion feature
+    # Allowed values:
+    #   true: enable volume expansion feature(install resizer sidecar)
+    #   false: disable volume snapshot feature(do not install resizer sidecar)
+    # Default value: None
+    enabled: true
+
+  # nodeSelector: Define node selection constraints for controller pods.
+  # For the pod to be eligible to run on a node, the node must have each
+  # of the indicated key-value pairs as labels.
+  # Leave as blank to consider all nodes
+  # Allowed values: map of key-value pairs
+  # Default value: None
+  # Examples:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  node-role.kubernetes.io/master
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  node-role.kubernetes.io/control-plane
+  nodeSelector:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  node-role.kubernetes.io/master: ""
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  node-role.kubernetes.io/control-plane: ""
+
+  # tolerations: Define tolerations that would be applied to controller deployment
+  # Leave as blank to install controller on worker nodes
+  # Allowed values: map of key-value pairs
+  # Default value: None
+  tolerations:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  - key: "node-role.kubernetes.io/master"
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  - key: "node-role.kubernetes.io/control-plane"
+  #    operator: "Exists"
+  #    effect: "NoSchedule"
+
+  # health monitor showcase the volume usage and volume condition
+  healthMonitor:
+    # enabled: Enable/Disable health monitor of CSI volumes- volume status, volume condition
+    # Allowed values:
+    #   true: enable checking of health condition of CSI volumes
+    #   false: disable checking of health condition of CSI volumes
+    # Default value: None
+    enabled: false
+
+    # interval: Interval of monitoring volume health condition
+    # Allowed values: Number followed by unit of time (s,m,h)
+    # Default value: 60s
+    interval: 60s
+
+  # csiAddonsReplication: allows to configure CSI Addons replication
+  # CSI Addons provides additional capabilities like volume group replication
+  # CSI Addons CRDs (VolumeGroupReplication, VolumeReplicationClass) must be installed
+  # before enabling this feature.
+  csiAddonsReplication:
+    # enabled: Enable/Disable CSI Addons replication feature
+    # Allowed values:
+    #   true: enable CSI Addons replication feature (install csi-addons sidecar)
+    #   false: disable CSI Addons replication feature (do not install csi-addons sidecar)
+    # Default value: false
+    enabled: false
+
+# node: configure node specific parameters
+node:
+  # nodeSelector: Define node selection constraints for node pods.
+  # For the pod to be eligible to run on a node, the node must have each
+  # of the indicated key-value pairs as labels.
+  # Leave as blank to consider all nodes
+  # Allowed values: map of key-value pairs
+  # Default value: None
+  # Examples:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  node-role.kubernetes.io/master
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  node-role.kubernetes.io/control-plane
+  nodeSelector:
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/master taint
+  #  node-role.kubernetes.io/master: ""
+  # Uncomment if nodes you wish to use have the node-role.kubernetes.io/control-plane taint
+  #  node-role.kubernetes.io/control-plane: ""
+
+  # tolerations: Define tolerations that would be applied to node daemonset
+  # Add/Remove tolerations as per requirement
+  # Leave as blank if you wish to not apply any tolerations
+  # Allowed values: map of key-value pairs
+  # Default value: None
+  tolerations:
+    - key: "node.kubernetes.io/memory-pressure"
+      operator: "Exists"
+      effect: "NoExecute"
+    - key: "node.kubernetes.io/disk-pressure"
+      operator: "Exists"
+      effect: "NoExecute"
+    - key: "node.kubernetes.io/network-unavailable"
+      operator: "Exists"
+      effect: "NoExecute"
+
+  # health monitor showcase the volume usage and volume condition
+  healthMonitor:
+    # enabled: Enable/Disable health monitor of CSI volumes- volume usage, volume condition
+    # Allowed values:
+    #   true: enable checking of health condition of CSI volumes
+    #   false: disable checking of health condition of CSI volumes
+    # Default value: false
+    enabled: false
+
+  # Topology control provides a way to filter topology keys
+  # Please refer to the doc website about a detailed explanation on its configuration and usage
+  # REQUIRED for Multi-Array Zone Support.
+  topologyControl:
+    # enabled: Enable/Disable Topology Control
+    # Allowed values:
+    #   true: enable the filtration based on config map
+    #   false: disable the filtration based on config map
+    # Default value: false
+    enabled: false
+
+# enableCHAP: Determine if the driver is going to configure
+# ISCSI node databases on the nodes with the CHAP credentials
+# If enabled, the CHAP secret must be provided in the credentials secret
+# and set to the key "chapsecret"
+# Allowed values:
+#   "true"  - CHAP is enabled
+#   "false" - CHAP is disabled
+# Default value: "false"
+enableCHAP: false
+
+# Use of this param is depreciated;
+# setting this to any value will have no effect.
+# "unisphere" defines the Unisphere endpoint,
+# with full URL, typically leveraging HTTPS.
+# This should include the port number as well (the default is 8443)
+# You must set this for your Unisphere instance.
+# unisphere: https://127.0.0.1:8443
+
+# csireverseproxy: Refers to the subchart csireverseproxy
+csireverseproxy:
+  # "tlsSecret" defines the TLS secret that is created with certificate
+  # and its associated key
+  # Default value: None
+  # Example: "tls-secret"
+  tlsSecret: csirevproxy-tls-secret
+  # Set enabled to true if you want to deploy csireverseproxy as sidecar
+  # Allowed values:
+  #   "true"  - CSI reverse proxy will be deployed as a sidecar
+  #   "false" - CSI reverse proxy will be deployed along with driver
+  # Default value: "true"
+  deployAsSidecar: true
+  # Port number for csireverseproxy to listen
+  # Default value: None
+  # Examples: "1111", "8080"
+  port: 2222
+  # Auto-create TLS certificate for csi-reverseproxy
+  certManager:
+    # Set selfSignedCert to use a self-signed certificate
+    # Default value: true
+    selfSignedCert: true
+    # certificateFile has tls.key content in encoded format
+    # Allowed Values:
+    #    - encoded base64 value of tls.crt: cat tls.crt | base64
+    #    - comment the param, if selfsigned should be used
+    certificateFile: tls.crt.encoded64
+    # privateKeyFile has tls.key content in encoded format
+    # Allowed Values:
+    #   - encoded base64 value of tls.key: cat tls.key | base64
+    #   - comment the param, if selfsigned should be used
+    privateKeyFile: tls.key.encoded64
+# clusterPrefix: Define a prefix that is appended onto
+# all resources created in the Array
+# This should be unique per K8s/CSI deployment
+# maximum length of this value is 3 characters
+# Default value: None
+# Examples: "XYZ"
+clusterPrefix: ABC
+
+# "skipCertificateValidation" determines if driver is going to skip verification
+# of TLS certificates while connecting to Unisphere RESTAPI interface
+# If it is set to false,
+# then a secret powermax-certs has to be created with a X.509 certificate of CA
+# which signed the Unisphere certificate
+# Allowed values:
+#   "true"  - TLS certificates verification will be skipped
+#   "false" - TLS certificates will be verified
+# Default value: "true"
+skipCertificateValidation: "true"
+
+# "powerMaxDebug" enables low level and http traffic logging
+# between the CSI driver and Unisphere.
+# Do not enable this unless asked to do so by the support team.
+# Allowed values:
+#   "true"  - Traffic between the CSI driver and Unisphere is logged
+#   "false" - Traffic between the CSI driver and Unisphere will not be logged
+# Default value: "false"
+powerMaxDebug: "false"
+
+# nodeNameTemplate: Provide a template for the CSI driver to use
+# while creating the Host/IG on the array for the nodes in the cluster.
+# It is of the format a-b-c-%foo%-xyz
+# where foo will be replaced by host name of each node in the cluster.
+# For e.g. - If a node in the cluster has a hostname - worker1
+# then the host name with the above template would be a-b-c-worker1-xyz
+# Default value: "" <empty>
+# Examples: "a-b-c-worker1-xyz" , "a-b-c-workernode-xyz"
+nodeNameTemplate: ""
+
+# modifyHostName: Change any existing host names.
+# When nodenametemplate is set,
+# it changes the name to the specified format
+# else it uses driver default host name format.
+# Allowed values:
+#   "true"  - Host name will be modified
+#   "false" - Driver default host name format will be used
+# Default value: "false"
+modifyHostName: "false"
+
+# openshift: Define that the installation
+# is being done on a Red Hat OpenShift cluster in the Helm Chart
+# Don't modify this value as this value is overridden by the install script
+openshift: false
+
+# CSM module attributes
+# Set this to true to enable replication
+# Replication CRDs must be installed before installing driver
+# Allowed values:
+#   "true" - replication is enabled
+#   "false" - replication is disabled
+# Default value: "false"
+replication:
+  enabled: false
+  # replicationContextPrefix enables side cars to read
+  # required information from the volume context
+  # Default value: "powermax"
+  # Examples: "powermax-replication", "replication"
+  replicationContextPrefix: "powermax"
+  # replicationPrefix: Determine if replication is enabled
+  # Default value: "replication.storage.dell.com"
+  # Examples: "replication.storage.dell.com", "rdf.storage.dell.com"
+  replicationPrefix: "replication.storage.dell.com"
+
+  # Metrics configuration for replication sidecar
+  metrics:
+    # enabled: Enable/Disable replication metrics endpoint on the dell-csi-replicator sidecar
+    # Default value: false
+    enabled: false
+    # port: Port for the replication metrics endpoint
+    # Default value: 8445
+    port: 8445
+    # tlsCertSecret: Name of the TLS secret for replication metrics. Leave empty to disable TLS.
+    # Default value: ""
+    tlsCertSecret: ""
+    collection:
+      # interval: How frequently replication metrics are collected
+      # Default value: "30s"
+      interval: 30s
+    serviceMonitor:
+      # enabled: Enable/Disable ServiceMonitor for Prometheus Operator
+      # Default value: false
+      enabled: false
+      # interval: Scrape interval for the ServiceMonitor
+      # Default value: "30s"
+      interval: 30s
+      # scrapeTimeout: Scrape timeout for the ServiceMonitor
+      # Default value: ""
+      scrapeTimeout: ""
+      # insecureSkipVerify: Skip TLS verification for ServiceMonitor
+      # Default value: false
+      insecureSkipVerify: false
+
+# CSM module attributes
+# Set this to true to enable migration
+# Allowed values:
+#   "true" - migration is enabled
+#   "false" - migration is disabled
+# Default value: "false"
+migration:
+  enabled: false
+  # migrationPrefix: Determine if migration is enabled
+  # Default value: "migration.storage.dell.com"
+  # Examples: "migration.storage.dell.com"
+  migrationPrefix: "migration.storage.dell.com"
+
+# CSM module attributes
+# authorization: enable csm-authorization for RBAC
+# Deploy and configure authorization before installing driver
+# Allowed values:
+#   "true" - authorization is enabled
+#   "false" - authorization is disabled
+# Default value: "false"
+authorization:
+  enabled: false
+  # proxyHost: hostname of the csm-authorization server
+  # Default value: None
+  proxyHost:
+  # skipCertificateValidation: certificate validation of the csm-authorization server
+  # Allowed Values:
+  #   "true" - TLS certificate verification will be skipped
+  #   "false" - TLS certificate will be verified
+  # Default value: "true"
+  skipCertificateValidation: true
+
+# Storage Capacity Tracking
+# Note: Capacity tracking is supported in kubernetes v1.24 and above, this feature will be automatically disabled in older versions.
+storageCapacity:
+  # enabled : Enable/Disable storage capacity tracking
+  # Allowed values:
+  #   true: enable storage capacity tracking
+  #   false: disable storage capacity tracking
+  # Default value: true
+  enabled: true
+  # pollInterval : Configure how often external-provisioner polls the driver to detect changed capacity
+  # Allowed values: 1m,2m,3m,...,10m,...,60m etc
+  # Default value: 5m
+  pollInterval: 5m
+
+# Multi-Array Zone Configuration
+# Settings for multi-array zones where multiple PowerMax arrays share the same zone label.
+# The driver uses capacity-based array selection to distribute volumes across arrays.
+# multiArrayZone: Configuration for Multi-Array Zone Support
+# This feature allows multiple PowerMax arrays to be configured within the same
+# Kubernetes availability zone. The driver will automatically balance provisioning
+# requests based on free capacity and array health.
+multiArrayZone:
+  # capacityPollInterval: Interval at which the background capacity poller refreshes
+  # per-array free-capacity utilization and health for multi-array zones.
+  # Accepts a Go duration string (e.g. "5m", "1m", "30s").
+  # Also defines the staleness window: an array is marked unavailable if no successful
+  # poll has completed within the last interval.
+  # Allowed values: Any valid Go duration string
+  # Default value: "5m"
+  capacityPollInterval: "5m"
+  # capacityThresholdFull: Capacity utilization percentage (0-100) at which an array
+  # is considered full and excluded from selection. A warning event is emitted when
+  # utilization crosses (threshold - 10) percent (e.g. warn at 90% when full=100%,
+  # warn at 80% when full=90%).
+  # Allowed values: 0-100
+  # Default value: 100
+  capacityThresholdFull: 100
+
+# VMware/vSphere virtualization support
+# set enable to true, if you to enable VMware virtualized environment support via RDM
+# Allowed Values:
+#   "true" - vSphere volumes are enabled
+#   "false" - vSphere volumes are disabled
+# Default value: "false"
+vSphere:
+  enabled: false
+  # fcPortGroup: an existing portGroup that driver will use for vSphere
+  # recommended format: csi-x-VC-PG, x can be anything of user choice
+  fcPortGroup: "csi-vsphere-VC-PG"
+  # fcHostName: an existing host(initiator group) that driver will use for vSphere
+  # this host should contain initiators from all the ESXs/ESXi host
+  # where the cluster is deployed
+  # recommended format: csi-x-VC-HN, x can be anything of user choice
+  fcHostName: "csi-vsphere-VC-HN"
+  # vCenterHost: URL/endpoint of the vCenter where all the ESX are present
+  vCenterHost: "00.000.000.00"
+  # vCenterCredSecret: secret name for the vCenter credentials
+  vCenterCredSecret: vcenter-creds
+
+# Enable this feature only after contact support for additional information
+podmon:
+  # podmonAPIPort: Defines the port to be used within the kubernetes cluster
+  # Allowed values:
+  # Any valid and free port.
+  # Default value: 8083
+  podmonAPIPort: 8083
+  # podmonAPIToken: Shared secret token for authenticating podmon API requests
+  # When set, the driver will require Bearer token authentication on /array-status endpoints
+  # Allowed values: Any string (recommend using a randomly generated token)
+  # Security note: podmon API is HTTP; use this token only on trusted cluster-internal networks.
+  # For production, use podmonAPITokenSecret to source this value from a Kubernetes Secret.
+  # Default value: "" (empty - authentication disabled for backward compatibility)
+  podmonAPIToken: ""
+  # podmonAPITokenSecret: Kubernetes Secret containing the podmon API token
+  # When set, the token will be sourced from the specified Secret instead of podmonAPIToken value
+  # Allowed values:
+  #   name: Secret name (required)
+  #   key: Secret key containing the token (required, default: "podmon-api-token")
+  # Example:
+  #   podmonAPITokenSecret:
+  #     name: my-podmon-secret
+  #     key: api-token
+  # Default value: null (use podmonAPIToken value instead)
+  podmonAPITokenSecret: null
+  enabled: false
+  controller:
+    args:
+      - "--csisock=unix:/var/run/csi/csi.sock"
+      - "--labelvalue=csi-powermax"
+      - "--arrayConnectivityPollRate=60"
+      - "--driverPath=csi-powermax.dellemc.com"
+      - "--mode=controller"
+      - "--skipArrayConnectionValidation=false"
+      - "--driver-config-params=/powermax-config-params/driver-config-params.yaml"
+      - "--driverPodLabelValue=dell-storage"
+      - "--ignoreVolumelessPods=false"
+
+  node:
+    args:
+      - "--csisock=unix:/var/lib/kubelet/plugins/powermax.emc.dell.com/csi_sock"
+      - "--labelvalue=csi-powermax"
+      - "--arrayConnectivityPollRate=60"
+      - "--driverPath=csi-powermax.dellemc.com"
+      - "--mode=node"
+      - "--leaderelection=false"
+      - "--driver-config-params=/powermax-config-params/driver-config-params.yaml"
+      - "--driverPodLabelValue=dell-storage"
+      - "--ignoreVolumelessPods=false"
+
+  # Metrics configuration for podmon resiliency
+  metrics:
+    # enabled: Set to true to expose the metrics endpoint on the podmon containers.
+    # Default value: false
+    enabled: false
+    # port: Port on which the metrics endpoint is exposed. Default for podmon: 8444.
+    port: 8444
+    # tlsCertSecret: Name of a Kubernetes TLS Secret (tls.crt / tls.key) used to serve metrics over HTTPS.
+    # When set the operator mounts the secret and configures HTTPS automatically.
+    # Leave unset to serve metrics over plain HTTP.
+    tlsCertSecret: ""
+    # collection: Controls metrics collection cadence inside the resiliency module.
+    collection:
+      interval: 30s
+    # serviceMonitor: Creates a Prometheus Operator ServiceMonitor targeting the controller pods.
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: ""
+      insecureSkipVerify: false
+    # podMonitor: Creates a Prometheus Operator PodMonitor targeting the node pods.
+    podMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: ""
+      insecureSkipVerify: false
+    # prometheusRule: Controls optional Prometheus Operator PrometheusRule creation for resiliency alerts.
+    prometheusRule:
+      # enabled: When true, a PrometheusRule CR is created for resiliency alerting rules.
+      # Type: bool
+      # Default: true
+      # Effect: Requires the Prometheus Operator CRDs to be installed in the cluster.
+      enabled: true
+      # connectivitySuccessRatio: Minimum acceptable connectivity success ratio as percentage (0-100).
+      # Used by RES-02 (CSMResiliencyConnectivityLost) alert threshold.
+      # Type: integer
+      # Default: 90 (alert fires when connectivity drops below 90%)
+      connectivitySuccessRatio: 90
+
+# metrics: configuration for driver metrics and monitoring
+metrics:
+  # enabled: Enable/Disable the shared Prometheus metrics HTTP server.
+  # Type: bool
+  # Default: false
+  # Effect: When true, the controller Deployment receives X_CSI_METRICS_ENABLED=true,
+  #         X_CSI_METRICS_PORT, and a metrics Service is created.
+  enabled: false
+
+  # port: Port on which the shared driver metrics endpoint is exposed.
+  # Type: integer
+  # Default: 8443
+  # Effect: Passed as X_CSI_METRICS_PORT to the driver container; used as targetPort in the Service.
+  port: 8443
+
+  # tlsCertSecret: Name of a Kubernetes TLS Secret whose "tls.crt" and "tls.key" entries
+  # are used to serve the metrics endpoint over HTTPS instead of plain HTTP.
+  # Leave empty (the default) to use plain HTTP.
+  # Type: string
+  # Default: "" (disabled - plain HTTP)
+  tlsCertSecret: ""
+
+  # leaderElection: Configuration for leader election to avoid duplicate metrics collection.
+  # Only the leader controller will collect array-level metrics to avoid duplicate API calls.
+  leaderElection:
+    # enabled: When true, leader election is enabled for the metrics server.
+    # Type: bool
+    # Default: false
+    enabled: false
+    # leaseDuration: Duration in seconds that the current leader will hold the lease.
+    # Type: string (Prometheus duration, e.g. "15s", "30s")
+    # Default: "60s"
+    leaseDuration: "60s"
+    # renewDeadline: Duration in seconds that the leader will attempt to renew the lease.
+    # Type: string (Prometheus duration, e.g. "10s", "20s")
+    # Default: "40s"
+    renewDeadline: "40s"
+    # retryPeriod: Duration in seconds that the leader will wait before attempting to acquire the lease.
+    # Type: string (Prometheus duration, e.g. "5s", "10s")
+    # Default: "5s"
+    retryPeriod: "5s"
+
+  # serviceMonitor: Controls optional Prometheus Operator ServiceMonitor creation.
+  serviceMonitor:
+    # enabled: When true, a ServiceMonitor CR is created for automatic Prometheus Operator integration.
+    # Type: bool
+    # Default: false
+    # Effect: Requires the Prometheus Operator CRDs to be installed in the cluster.
+    enabled: false
+    # interval: Prometheus scrape interval for the metrics endpoint.
+    # Type: string (Prometheus duration, e.g. "30s", "1m")
+    # Default: "30s"
+    interval: "30s"
+    # insecureSkipVerify: Controls TLS certificate verification when scraping metrics.
+    # Only used when metrics.tlsCertSecret is set (HTTPS endpoint).
+    # Type: bool
+    # Default: false
+    insecureSkipVerify: false
+
+  # podMonitor: Controls optional Prometheus Operator PodMonitor creation for node DaemonSet pods.
+  podMonitor:
+    # enabled: When true, a PodMonitor CR is created for scraping metrics from node pods.
+    # Type: bool
+    # Default: false
+    # Effect: Requires the Prometheus Operator CRDs to be installed in the cluster.
+    enabled: false
+    # interval: Prometheus scrape interval for the node metrics endpoint.
+    # Type: string (Prometheus duration, e.g. "30s", "1m")
+    # Default: "30s"
+    interval: "30s"
+    # insecureSkipVerify: Controls TLS certificate verification when scraping node metrics.
+    # Only used when metrics.tlsCertSecret is set (HTTPS endpoint).
+    # Type: bool
+    # Default: false
+    insecureSkipVerify: false
+
+  prometheusRule:
+    # enabled: When true, a PrometheusRule CR is created for the 15 PowerMax CSI driver alert rules.
+    # Requires the Prometheus Operator CRDs (monitoring.coreos.com/v1) to be installed in the cluster.
+    # Type: bool — Default: false
+    enabled: false
+    # volumeOperationFailureThreshold: Cumulative failure count threshold for volume operations.
+    # Used by PM-01 to PM-08. Alert fires when increase() in 5m window exceeds this count.
+    # Type: integer — Default: 3
+    volumeOperationFailureThreshold: 3
+    # cpuWarningThreshold: CPU usage threshold as integer percentage (0-100). Used by PM-10.
+    # Type: integer — Default: 80
+    cpuWarningThreshold: 80
+    # memoryWarningThreshold: Memory usage threshold in bytes. Used by PM-11.
+    # Type: integer — Default: 2147483648 (2 GiB)
+    memoryWarningThreshold: 2147483648
+    # apiErrorRateThreshold: Unisphere API error rate threshold as integer percentage (0-100). Used by PM-12.
+    # Type: integer — Default: 10
+    apiErrorRateThreshold: 10
+    # apiErrorRateWindow: Time window for API error rate calculation. Used by PM-12.
+    # Type: string (Prometheus duration) — Default: "5m"
+    apiErrorRateWindow: "5m"
+    # storageGroupCapacityWarning: Storage group utilization warning threshold as integer percentage (0-100).
+    # Used by PM-13. Labels: {array_id, storage_group}.
+    # Type: integer — Default: 80
+    storageGroupCapacityWarning: 80
+    # storageGroupCapacityCritical: Storage group utilization critical threshold as integer percentage (0-100).
+    # Used by PM-14. Labels: {array_id, storage_group}.
+    # Type: integer — Default: 90
+    storageGroupCapacityCritical: 90
+    # srpSnapshotCapacityWarning: SRP snapshot capacity warning threshold as integer percentage (0-100).
+    # Used by PM-15. SRP-level monitoring (per-SG snapshot metric not required per product management decision).
+    # Labels: {array_id, srp_id}.
+    # Type: integer — Default: 80
+    srpSnapshotCapacityWarning: 80

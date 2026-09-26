@@ -1,0 +1,30 @@
+{{- define "runner-init.environment-variables.defaults" }}
+HOME: /tmp
+{{- end }}
+
+{{- define "runner-init.environment-variables.calculated" }}
+AGENT_NAME: {{ include "runtime.runtime-environment-spec.agent-name" . }}
+API_HOST: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+AGENT_CODEFRESH_TOKEN:
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "runner.fullname" . }}
+      key: agent-codefresh-token
+      optional: true
+EXISTING_AGENT_CODEFRESH_TOKEN: {{ include "runtime.agent-token-env-var-value" . | nindent 2 }}
+KUBE_CONTEXT: {{ include "runtime.runtime-environment-spec.context-name" . }}
+KUBE_NAMESPACE: {{ .Release.Namespace }}
+OWNER_NAME: {{ include "runner.fullname" . }}
+RUNTIME_NAME: {{ include "runtime.runtime-environment-spec.runtime-name" . }}
+SECRET_NAME: {{ include "runner.fullname" . }}
+USER_CODEFRESH_TOKEN: {{ include "runtime.installation-token-env-var-value" . | nindent 2 }}
+{{- end }}
+
+{{- define "runner-init.environment-variables" }}
+  {{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+  {{- $defaults := (include "runner-init.environment-variables.defaults" . | fromYaml) }}
+  {{- $calculated := (include "runner-init.environment-variables.calculated" . | fromYaml) }}
+  {{- $overrides := .Values.env }}
+  {{- $mergedValues := mergeOverwrite (merge $defaults $calculated) $overrides }}
+  {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $mergedValues "context" .) }}
+{{- end }}

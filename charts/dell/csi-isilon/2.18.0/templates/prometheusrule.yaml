@@ -1,0 +1,445 @@
+{{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "prometheusRule" }}
+{{- if eq .Values.metrics.prometheusRule.enabled true }}
+---
+# PrometheusRule for PowerScale CSI Driver alerting rules.
+# Created when metrics.enabled AND metrics.prometheusRule.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+#
+# NOTE: Driver-level alerts (PS-01 to PS-22) are gated by both metrics.enabled and
+# metrics.prometheusRule.enabled. Resiliency alerts (RES-01 to RES-04) are defined
+# separately under the podmon section and are gated independently by podmon.metrics.prometheusRule.enabled.
+# This allows operators to enable driver alerts without resiliency alerts, or vice versa.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-powerscale-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    platform: powerscale
+    component: csi-driver
+spec:
+  groups:
+    # Volume Operation Failure Alerts (PS-01 to PS-08)
+    # Threshold: volumeOperationFailureThreshold (default 3) — failure count in 5m window.
+    # for: 1m meets the 120s BR latency target for operation failure alerts.
+    - name: powerscale-csi-volume-operations
+      interval: 30s
+      rules:
+        # PS-01: CreateVolume failures
+        - alert: PowerScaleCreateVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="CreateVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI CreateVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} CreateVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-02: DeleteVolume failures
+        - alert: PowerScaleDeleteVolumeFailure
+          expr: increase(dell_csi_operation_failure_total{operation="DeleteVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI DeleteVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} DeleteVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-03: ControllerPublishVolume failures
+        - alert: PowerScaleControllerPublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="ControllerPublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI ControllerPublishVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} ControllerPublishVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-04: ControllerUnpublishVolume failures
+        - alert: PowerScaleControllerUnpublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="ControllerUnpublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI ControllerUnpublishVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} ControllerUnpublishVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-05: NodeStageVolume failures
+        - alert: PowerScaleNodeStageFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeStageVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI NodeStageVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} NodeStageVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-06: NodeUnstageVolume failures
+        - alert: PowerScaleNodeUnstageFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeUnstageVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI NodeUnstageVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} NodeUnstageVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-07: NodePublishVolume failures
+        - alert: PowerScaleNodePublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodePublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI NodePublishVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} NodePublishVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+        # PS-08: NodeUnpublishVolume failures
+        - alert: PowerScaleNodeUnpublishFailure
+          expr: increase(dell_csi_operation_failure_total{operation="NodeUnpublishVolume"}[5m]) > {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI NodeUnpublishVolume operation failures detected"
+            description: "Cluster {{`{{ $labels.cluster_name }}`}} has {{`{{ printf \"%.0f\" $value }}`}} NodeUnpublishVolume failures in the last 5 minutes. Error Code: {{`{{ $labels.error_code }}`}}. Threshold: {{ .Values.metrics.prometheusRule.volumeOperationFailureThreshold | default 3 }} failures."
+            runbook_url: ""
+
+    # Driver Health & Resource Alerts (PS-09 to PS-13)
+    - name: powerscale-csi-driver-health
+      interval: 30s
+      rules:
+        # PS-09: Driver unavailable (critical)
+        # Expression explicitly checks controller AND node counts separately; absent() cannot detect
+        # partial failure (e.g. controllers down, nodes still reporting).
+        - alert: PowerScaleDriverUnavailable
+          expr: (count(dell_csi_driver_uptime_seconds{cluster_name=~".+",instance_type="controller"}) or on() vector(0)) == 0 or (count(dell_csi_driver_uptime_seconds{cluster_name=~".+",instance_type="node"}) or on() vector(0)) == 0
+          for: 5m
+          labels:
+            severity: critical
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI driver metrics are unavailable"
+            description: "PowerScale CSI driver has zero controller instances or zero node instances reporting metrics for 5 minutes."
+            runbook_url: ""
+
+        # PS-10: Driver crash looping (warning)
+        - alert: PowerScaleDriverCrashLooping
+          expr: changes(dell_csi_driver_restart_total[{{ .Values.metrics.prometheusRule.driverCrashLoopWindow | default "15m" }}]) > {{ .Values.metrics.prometheusRule.driverCrashLoopRestartThreshold | default 3 }}
+          for: 0m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI driver is crash looping"
+            description: "PowerScale CSI driver pod {{`{{ $labels.pod }}`}} (instance type: {{`{{ $labels.instance_type }}`}}) has restarted {{`{{ $value }}`}} times in the last {{ .Values.metrics.prometheusRule.driverCrashLoopWindow | default "15m" }}, indicating a crash loop."
+            runbook_url: ""
+
+        # PS-11: Driver high CPU usage (warning)
+        - alert: PowerScaleDriverHighCPU
+          expr: dell_csi_driver_cpu_usage_percent > {{ .Values.metrics.prometheusRule.cpuWarningThreshold | default 80 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI driver high CPU usage"
+            description: "PowerScale CSI driver pod {{`{{ $labels.pod }}`}} on cluster {{`{{ $labels.cluster_name }}`}} has CPU usage of {{`{{ $value }}`}}% (threshold: {{ .Values.metrics.prometheusRule.cpuWarningThreshold | default 80 }}%) for more than 5 minutes."
+            runbook_url: ""
+
+        # PS-12: Driver high memory usage (warning)
+        - alert: PowerScaleDriverHighMemory
+          expr: dell_csi_driver_memory_usage_bytes > {{ .Values.metrics.prometheusRule.memoryWarningThreshold | default 2147483648 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale CSI driver high memory usage"
+            description: "PowerScale CSI driver pod {{`{{ $labels.pod }}`}} on cluster {{`{{ $labels.cluster_name }}`}} has memory usage of {{`{{ $value }}`}} bytes (threshold: {{ .Values.metrics.prometheusRule.memoryWarningThreshold | default 2147483648 }} bytes) for more than 5 minutes."
+            runbook_url: ""
+
+        # PS-13: Metrics stale (warning)
+        - alert: PowerScaleMetricsStale
+          expr: dell_powerscale_metrics_stale == 1
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale metrics collection is stale on cluster {{`{{ $labels.cluster_name }}`}}"
+            description: "PowerScale metrics collection has reported stale data for 5 minutes on cluster {{`{{ $labels.cluster_name }}`}}. The stale flag is set immediately on any collection failure, regardless of whether cached data is available, ensuring the alert fires even when the cache is empty."
+            runbook_url: ""
+
+    # Quota Capacity Alerts (PS-14 to PS-16)
+    - name: powerscale-csi-quota
+      interval: 30s
+      rules:
+        # PS-14: Quota utilization warning
+        - alert: PowerScaleQuotaWarning
+          expr: dell_powerscale_quota_utilization_ratio * 100 > {{ .Values.metrics.prometheusRule.quotaWarningThreshold | default 80 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+            access_zone: "{{`{{ $labels.access_zone }}`}}"
+          annotations:
+            summary: "Quota warning for volume {{`{{ $labels.volume_id }}`}} in access zone {{`{{ $labels.access_zone }}`}}"
+            description: 'Volume {{`{{ $labels.volume_id }}`}} in access zone {{`{{ $labels.access_zone }}`}} on cluster {{`{{ $labels.cluster_name }}`}} has exceeded the quota threshold at {{`{{ $value | printf "%.1f" }}`}}% utilization (threshold: {{ .Values.metrics.prometheusRule.quotaWarningThreshold | default 80 }}%).'
+            runbook_url: ""
+
+        # PS-15: Quota utilization critical
+        - alert: PowerScaleQuotaCritical
+          expr: dell_powerscale_quota_utilization_ratio * 100 > {{ .Values.metrics.prometheusRule.quotaCriticalThreshold | default 90 }}
+          for: 5m
+          labels:
+            severity: critical
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+            access_zone: "{{`{{ $labels.access_zone }}`}}"
+          annotations:
+            summary: "Quota critical for volume {{`{{ $labels.volume_id }}`}} in access zone {{`{{ $labels.access_zone }}`}}"
+            description: 'Volume {{`{{ $labels.volume_id }}`}} in access zone {{`{{ $labels.access_zone }}`}} on cluster {{`{{ $labels.cluster_name }}`}} has exceeded the quota threshold at {{`{{ $value | printf "%.1f" }}`}}% utilization (threshold: {{ .Values.metrics.prometheusRule.quotaCriticalThreshold | default 90 }}%). Immediate action required.'
+            runbook_url: ""
+
+        # PS-16: Quota hard breach
+        - alert: PowerScaleQuotaHardBreach
+          expr: dell_powerscale_quota_hard_breach_total > 0
+          for: 0m
+          labels:
+            severity: critical
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "Hard quota breach detected on cluster {{`{{ $labels.cluster_name }}`}}"
+            description: '{{`{{ $value | printf "%.0f" }}`}} volume(s) on cluster {{`{{ $labels.cluster_name }}`}} have exceeded their hard quota limit. Check individual volume quota metrics (dell_powerscale_quota_utilization_ratio) to identify affected volumes. Write operations may be blocked.'
+            runbook_url: ""
+
+    # Node Pool Capacity Alerts (PS-17 to PS-18)
+    - name: powerscale-csi-nodepool
+      interval: 30s
+      rules:
+        # PS-17: Node pool utilization warning
+        - alert: PowerScaleNodePoolWarning
+          expr: dell_powerscale_nodepool_utilization_percent > {{ .Values.metrics.prometheusRule.nodepoolWarningThreshold | default 80 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale node pool utilization warning"
+            description: "Node pool {{`{{ $labels.nodepool_name }}`}} on cluster {{`{{ $labels.cluster_name }}`}} is at {{`{{ $value }}`}}% utilization (threshold: {{ .Values.metrics.prometheusRule.nodepoolWarningThreshold | default 80 }}%)."
+            runbook_url: ""
+
+        # PS-18: Node pool utilization critical
+        - alert: PowerScaleNodePoolCritical
+          expr: dell_powerscale_nodepool_utilization_percent > {{ .Values.metrics.prometheusRule.nodepoolCriticalThreshold | default 90 }}
+          for: 5m
+          labels:
+            severity: critical
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale node pool utilization critical"
+            description: "Node pool {{`{{ $labels.nodepool_name }}`}} on cluster {{`{{ $labels.cluster_name }}`}} is at {{`{{ $value }}`}}% utilization (threshold: {{ .Values.metrics.prometheusRule.nodepoolCriticalThreshold | default 90 }}%). Immediate action required."
+            runbook_url: ""
+
+    # Access Control & Auth Alerts (PS-19 to PS-20)
+    - name: powerscale-csi-access-control
+      interval: 30s
+      rules:
+        # PS-19: NFS authentication failure rate
+        - alert: PowerScaleNFSAuthFailureRate
+          expr: rate(dell_powerscale_nfs_mount_auth_failures_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale NFS authentication failures detected"
+            description: "NFS mount authentication failures detected on cluster {{`{{ $labels.cluster_name }}`}} at a rate of {{`{{ $value }}`}} failures/second over the last 5 minutes."
+            runbook_url: ""
+
+        # PS-20: API error rate
+        - alert: PowerScaleAPIErrorRate
+          expr: (rate(dell_powerscale_api_calls_total{status="failure"}[{{ .Values.metrics.prometheusRule.apiErrorRateWindow | default "5m" }}]) / ignoring(status) sum without(status) (rate(dell_powerscale_api_calls_total[{{ .Values.metrics.prometheusRule.apiErrorRateWindow | default "5m" }}]))) * 100 > {{ .Values.metrics.prometheusRule.apiErrorRateThreshold | default 10 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale API error rate elevated"
+            description: "PowerScale API error rate on cluster {{`{{ $labels.cluster_name }}`}} is {{`{{ $value }}`}}% over the last {{ .Values.metrics.prometheusRule.apiErrorRateWindow | default "5m" }} (threshold: {{ .Values.metrics.prometheusRule.apiErrorRateThreshold | default 10 }}%)."
+            runbook_url: ""
+
+    # NFS Performance Alerts (PS-21 to PS-22)
+    - name: powerscale-csi-nfs-performance
+      interval: 30s
+      rules:
+        # PS-21: NFSv3 high latency
+        - alert: PowerScaleNFSv3HighLatency
+          expr: histogram_quantile(0.99, rate(dell_powerscale_nfs_v3_latency_seconds_bucket[5m])) > {{ .Values.metrics.prometheusRule.nfsV3LatencyWarningSeconds | default 10 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale NFSv3 high latency detected"
+            description: "NFSv3 P99 latency on cluster {{`{{ $labels.cluster_name }}`}} is {{`{{ $value | humanizeDuration }}`}} (threshold: {{ .Values.metrics.prometheusRule.nfsV3LatencyWarningSeconds | default 10 }}s). Note: latency is bucket-approximated from the OneFS optime API; minimum resolution is 100ms."
+            runbook_url: ""
+
+        # PS-22: NFSv4 high latency
+        - alert: PowerScaleNFSv4HighLatency
+          expr: histogram_quantile(0.99, rate(dell_powerscale_nfs_v4_latency_seconds_bucket[5m])) > {{ .Values.metrics.prometheusRule.nfsV4LatencyWarningSeconds | default 10 }}
+          for: 5m
+          labels:
+            severity: warning
+            platform: powerscale
+            component: csi-driver
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "PowerScale NFSv4 high latency detected"
+            description: "NFSv4 P99 latency on cluster {{`{{ $labels.cluster_name }}`}} is {{`{{ $value | humanizeDuration }}`}} (threshold: {{ .Values.metrics.prometheusRule.nfsV4LatencyWarningSeconds | default 10 }}s). Note: latency is bucket-approximated from the OneFS optime API; minimum resolution is 100ms."
+            runbook_url: ""
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if and .Values.podmon .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled (hasKey .Values.podmon.metrics "prometheusRule") .Values.podmon.metrics.prometheusRule.enabled }}
+---
+# PrometheusRule for CSM Resiliency (podmon) alerting rules.
+# Created when podmon.enabled AND podmon.metrics.prometheusRule.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-resiliency-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  groups:
+    - name: csm-resiliency-powerscale
+      interval: 30s
+      rules:
+        # RES-01 — Pod failure detected due to node unreachable
+        - alert: CSMResiliencyPodFailureDetected
+          expr: increase(dell_csm_resiliency_failover_total{reason="node_unreachable",driver="csi-powerscale"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: csm-resiliency
+            platform: powerscale
+            driver: csi-powerscale
+            alert_id: RES-01
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency pod failure detected for driver {{`{{ $labels.driver }}`}}"
+            description: "Pod failure detected due to node unreachable for driver {{`{{ $labels.driver }}`}}."
+            runbook_url: ""
+
+        # RES-02 — Connectivity success ratio below threshold
+        - alert: CSMResiliencyConnectivityLost
+          expr: dell_csm_resiliency_connectivity_success_ratio{driver="csi-powerscale"} * 100 < {{ .Values.podmon.metrics.prometheusRule.connectivitySuccessRatio | default 90 }}
+          for: 2m
+          labels:
+            severity: critical
+            component: csm-resiliency
+            platform: powerscale
+            driver: csi-powerscale
+            alert_id: RES-02
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency connectivity lost for driver {{`{{ $labels.driver }}`}}"
+            description: "Volume connectivity success ratio for driver {{`{{ $labels.driver }}`}} is below {{ .Values.podmon.metrics.prometheusRule.connectivitySuccessRatio | default 90 }}%."
+            runbook_url: ""
+
+        # RES-03 — Automated failover triggered successfully (info: expected behavior)
+        - alert: CSMResiliencyFailoverTriggered
+          expr: increase(dell_csm_resiliency_failover_total{status="success",driver="csi-powerscale"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: info
+            component: csm-resiliency
+            platform: powerscale
+            driver: csi-powerscale
+            alert_id: RES-03
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency automated failover triggered for driver {{`{{ $labels.driver }}`}}"
+            description: "Automated pod failover operation initiated successfully for driver {{`{{ $labels.driver }}`}}. Reason: {{`{{ $labels.reason }}`}}."
+            runbook_url: ""
+
+        # RES-04 — Automated failover failed
+        - alert: CSMResiliencyFailoverFailed
+          expr: increase(dell_csm_resiliency_failover_total{status="failure",driver="csi-powerscale"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: csm-resiliency
+            platform: powerscale
+            driver: csi-powerscale
+            alert_id: RES-04
+            namespace: {{ .Release.Namespace }}
+          annotations:
+            summary: "CSM Resiliency failover failed for driver {{`{{ $labels.driver }}`}}"
+            description: "Automated pod failover operation failed for driver {{`{{ $labels.driver }}`}}. Reason: {{`{{ $labels.reason }}`}}. Manual intervention may be required."
+            runbook_url: ""
+{{- end }}
