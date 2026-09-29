@@ -1,0 +1,109 @@
+{{- if .Values.middleware.create -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-middleware-deploy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- with .Values.middleware.podLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.middleware.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "harikube.labels" . | nindent 8 }}
+        {{- with .Values.middleware.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.middleware.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.middleware.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.middleware.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.middleware.podSecurityContext | nindent 8 }}
+      {{- if .Values.enterprise.key }}
+      imagePullSecrets:
+      - name: harikube-registry-secret
+      {{- end }}
+      containers:
+      - name: middleware
+        {{- if .Values.enterprise.key }}
+        image: "registry.harikube.info/harikube/middleware:{{ .Values.middleware.image.tag }}"
+        {{ else }}
+        image: "quay.io/harikube/harikube:{{ .Values.middleware.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.middleware.image.pullPolicy }}
+        {{- with .Values.middleware.env }}
+        env:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        args:
+        - --endpoint={{ .Values.middleware.endPoint.url }}
+        {{- if .Values.middleware.endPoint.caPEM }}
+        - --ca-file=/etc/db/tls/ca.crt
+        - --cert-file=/etc/db/tls/tls.crt
+        - --key-file=/etc/db/tls/tls.key
+        - --skip-verify={{ .Values.middleware.endPoint.skipVerify }}
+        {{- end }}
+          {{- toYaml .Values.middleware.args | nindent 8 }}
+        ports:
+        - containerPort: {{ .Values.middleware.service.apiPort.port }}
+          name: api-port
+        - containerPort: {{ .Values.middleware.service.metrics.port }}
+          name: metrics
+        volumeMounts:
+        {{- with .Values.middleware.volumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.middleware.endPoint.caPEM }}
+        - name: harikube-endpoint-tls
+          mountPath: /etc/db/tls
+          readOnly: true
+        {{- end }}
+        {{- if .Values.enterprise.key }}
+        - name: harikube-license
+          mountPath: /etc/harikube
+          readOnly: true
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.middleware.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.middleware.readinessProbe | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.middleware.securityContext | nindent 10 }}
+        resources:
+          {{- toYaml .Values.middleware.resources | nindent 10 }}
+      volumes:
+      {{- with .Values.middleware.volumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- if .Values.middleware.endPoint.caPEM }}
+      - name: harikube-endpoint-tls
+        secret:
+          secretName: harikube-middleware-endpoint-secret
+      {{- end }}
+      {{- if .Values.enterprise.key }}
+      - name: harikube-license
+        secret:
+          secretName: harikube-license
+      {{- end }}
+{{- end }}
