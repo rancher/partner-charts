@@ -1,0 +1,53 @@
+suite: cert-manager
+templates:
+  - templates/serving-cert.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: creates cert-manager resources if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+  - it: creates Certificate in default domain if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+    asserts:
+      - equal:
+          path: kind
+          value: Certificate
+      - equal:
+          path: spec.dnsNames
+          value:
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc.cluster.local
+  - it: creates Certificate in custom domain if cert-manager enabled and auto cert disabled
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+        certManager:
+          enabled: true
+      kubernetesClusterDomain: kubey.test
+    asserts:
+      - equal:
+          path: kind
+          value: Certificate
+      - equal:
+          path: spec.dnsNames
+          value:
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc
+            - my-release-k8s-agents-operator-webhook-service.my-namespace.svc.kubey.test

@@ -1,0 +1,149 @@
+suite: job resources configuration
+templates:
+  - templates/admission-webhooks/job-patch/job-createSecret.yaml
+  - templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: sets no resources by default for admission-create job
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources
+
+  - it: sets no resources by default for admission-patch job
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources
+
+  - it: sets resources for admission-create job when provided
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      jobImage:
+        admissionCreate:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+  - it: sets resources for admission-patch job when provided
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      jobImage:
+        admissionPatch:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+
+  - it: sets different resources for admission-create and admission-patch jobs
+    set:
+      cluster: test-cluster
+      jobImage:
+        admissionCreate:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        admissionPatch:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+    asserts:
+      - template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+      - template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+        equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+
+  - it: sets only requests when limits are not specified for admission-create
+    template: templates/admission-webhooks/job-patch/job-createSecret.yaml
+    set:
+      cluster: test-cluster
+      jobImage:
+        admissionCreate:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+
+  - it: sets only limits when requests are not specified for admission-patch
+    template: templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+    set:
+      cluster: test-cluster
+      jobImage:
+        admissionPatch:
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            limits:
+              cpu: 100m
+              memory: 64Mi

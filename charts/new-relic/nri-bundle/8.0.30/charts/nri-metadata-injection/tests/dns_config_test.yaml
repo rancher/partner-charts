@@ -1,0 +1,75 @@
+suite: hostNetwork and dnsConfig
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: sets hostnetwork to false by default
+    set:
+      cluster: test-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+
+  - it: inherits global.hostNetwork when local hostNetwork not set
+    set:
+      cluster: test-cluster
+      global.hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirstWithHostNet
+
+  - it: uses local hostNetwork over global.hostNetwork
+    set:
+      cluster: test-cluster
+      hostNetwork: false
+      global.hostNetwork: true
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+
+  - it: has no dnsPolicy by default
+    set:
+      cluster: test-cluster
+    asserts:
+      - notExists:
+          path: spec.template.spec.dnsPolicy
+
+  - it: inherits global.dnsConfig when local dnsConfig not set
+    set:
+      cluster: test-cluster
+      global.dnsConfig:
+        nameservers:
+          - 1.2.3.4
+        searches:
+          - ns1.svc.cluster-domain.example
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.nameservers[0]
+          value: 1.2.3.4
+      - equal:
+          path: spec.template.spec.dnsConfig.searches[0]
+          value: ns1.svc.cluster-domain.example
+
+  - it: uses local dnsConfig over global.dnsConfig
+    set:
+      cluster: test-cluster
+      dnsConfig:
+        nameservers:
+          - 5.6.7.8
+      global.dnsConfig:
+        nameservers:
+          - 1.2.3.4
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig
+          value:
+            nameservers:
+              - 5.6.7.8
