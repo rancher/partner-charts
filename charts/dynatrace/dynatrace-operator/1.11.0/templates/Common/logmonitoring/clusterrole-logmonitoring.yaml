@@ -1,0 +1,63 @@
+{{- if .Values.rbac.logMonitoring.create }}
+# Copyright Dynatrace LLC
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dynatrace-logmonitoring
+  labels:
+    {{- include "dynatrace-operator.logMonitoringLabels" . | nindent 4 }}
+rules:
+- apiGroups:
+    - ""
+  resources:
+{{- if (include "dynatrace-operator.kubeletFineGrainedAuthz" .) }}
+    - nodes/pods
+{{- else }}
+    - nodes/proxy
+{{- end }}
+  verbs:
+    - get
+{{- if (include "dynatrace-operator.openshiftOrOlm" .) }}
+- apiGroups:
+    - security.openshift.io
+  resourceNames:
+    - privileged
+  resources:
+    - securitycontextconstraints
+  verbs:
+    - use
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dynatrace-logmonitoring
+  labels:
+    {{- include "dynatrace-operator.logMonitoringLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dynatrace-logmonitoring
+subjects:
+- kind: ServiceAccount
+  name: dynatrace-logmonitoring
+  namespace: {{ .Release.Namespace }}
+{{ if .Values.rbac.oneAgent.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dynatrace-logmonitoring-fullstack
+  labels:
+    {{- include "dynatrace-operator.logMonitoringLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dynatrace-logmonitoring
+subjects:
+- kind: ServiceAccount
+  name: dynatrace-dynakube-oneagent
+  namespace: {{ .Release.Namespace }}
+{{ end }}
+{{ end }}

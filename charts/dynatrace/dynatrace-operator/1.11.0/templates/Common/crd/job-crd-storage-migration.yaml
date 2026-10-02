@@ -1,0 +1,99 @@
+{{- if .Values.crdStorageMigrationJob }}
+# Copyright Dynatrace LLC
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dynatrace-operator-crd-storage-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dynatrace-operator.crdStorageMigrationLabels" . | nindent 4 }}
+  annotations:
+    {{- include "dynatrace-operator.helmPreUpgradeHookAnnotations" . | nindent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "dynatrace-operator.crdStorageMigrationLabels" . | nindent 8 }}
+      annotations:
+      {{- if and (.Values.operator.apparmor) (not (include "kubernetes.appArmorSecurityContextSupported" .)) }}
+        container.apparmor.security.beta.kubernetes.io/crd-storage-migration: runtime/default
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      {{- include "dynatrace-operator.nodeAffinity" . | nindent 6 }}
+      serviceAccountName: dynatrace-crd-storage-migration
+      securityContext:
+        {{- toYaml .Values.operator.podSecurityContext | nindent 8 }}
+        {{- if .Values.operator.apparmor -}}
+          {{ include "kubernetes.defaultAppArmorProfile" . | nindent 8 }}
+        {{- end -}}
+      {{- if .Values.customPullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.customPullSecret }}
+      {{- end }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- $needsCertgen := not .Values.olm }}
+      {{- if $needsCertgen }}
+      initContainers:
+        - name: webhook-cert-generator
+          image: {{ include "dynatrace-operator.image" . }}
+          {{- with .Values.imageRef.pullPolicy }}
+          imagePullPolicy: {{ . }}
+          {{- end }}
+          args:
+            - certgen
+            - --crd-check=false
+          env:
+            {{- if .Values.debugLogs }}
+            - name: LOG_LEVEL
+              value: "debug"
+            {{- end }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              {{- toYaml .Values.operator.requests | nindent 14 }}
+            limits:
+              {{- toYaml .Values.operator.limits | nindent 14 }}
+          securityContext:
+            {{- toYaml .Values.operator.securityContext | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: crd-storage-migration
+          image: {{ include "dynatrace-operator.image" . }}
+          {{- with .Values.imageRef.pullPolicy }}
+          imagePullPolicy: {{ . }}
+          {{- end }}
+          args:
+            - crd-storage-migration
+          env:
+            {{- if .Values.debugLogs }}
+            - name: LOG_LEVEL
+              value: "debug"
+            {{- end }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              {{- toYaml (.Values.operator).requests | nindent 14 }}
+            limits:
+              {{- toYaml (.Values.operator).limits | nindent 14 }}
+          securityContext:
+            {{- toYaml .Values.operator.securityContext | nindent 12 }}
+{{- end }}

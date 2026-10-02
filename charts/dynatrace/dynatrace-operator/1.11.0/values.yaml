@@ -1,0 +1,312 @@
+# Copyright Dynatrace LLC
+# SPDX-License-Identifier: Apache-2.0
+
+# special handling for "openshift" and "gke-autopilot" (deprecated)
+platform: ""
+
+#image qualifier; OBSOLETE -> use imageref instead!
+# supply either image or imageref; if both supplied, imageref will be disregarded
+image: ""
+#image description using tags
+#resulting image will be named <repository>:v<tag>, or <repository>@<digest> if a digest is provided
+imageRef:
+  repository: "" #path to repo
+  tag: "" #defaults to chart version
+  digest: "" #optional image digest (e.g. sha256:...), when set, the tag is ignored when rendering the image reference
+  pullPolicy: ""
+
+customPullSecret: ""
+installCRD: true
+
+# turns on the debug logs for all Operator components (operator/webhook/csi), does not include components that are deployed by the Operator
+debugLogs: false
+# creates a Job to migrate CRD storage during upgrade from old versions to the new one
+crdStorageMigrationJob: true
+# opt-in to extracting links from codemodules images. default behavior is to only handle regular files
+extractCodeModulesImageLinks: false
+
+operator:
+  nodeSelector: {}
+  tolerations: []
+  labels: {}
+  annotations: {}
+  apparmor: false
+  hostAvailabilityDetection: true
+  crdStorageMigrationInitManager: true
+  securityContext:
+    privileged: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  startupProbe: {} # configurable: periodSeconds, timeoutSeconds, failureThreshold
+  requeueAfter: "" # requeue period for the controller, defaults to 15m
+  clientCacheCleanupInterval: "" # defined in the Golang time.Duration format, like "30m" == 30 minutes. Defaults to 1h
+  clientConnectionTimeout: "" # defined in the Golang time.Duration format, like "30m" == 30 minutes. Defaults to 30s
+
+webhook:
+  hostNetwork: false
+  ports:
+    server: 8443
+    metrics: 8383
+    healthProbe: 10080
+  nodeSelector: {}
+  tolerations: []
+  labels: {}
+  annotations: {} # applied to the webhook deployment, its pods and the dynatrace-webhook service
+  apparmor: false
+  securityContext:
+    privileged: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  requests:
+    cpu: 300m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 128Mi
+  highAvailability: true # DEPRECATED, will be removed in future release, only for migration purposes, we will ignore it when it is false, and consider the new values when it is true.
+  replicas: 2 # Will be ignored when `highAvailability` is false, just for migration purposes.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: "topology.kubernetes.io/zone"
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          internal.dynatrace.com/app: webhook
+          internal.dynatrace.com/component: webhook
+    - maxSkew: 1
+      topologyKey: "kubernetes.io/hostname"
+      whenUnsatisfiable: ScheduleAnyway
+      nodeTaintsPolicy: Honor
+      labelSelector:
+        matchLabels:
+          internal.dynatrace.com/app: webhook
+          internal.dynatrace.com/component: webhook
+  podDisruptionBudget:
+    minAvailable: 1
+    selector:
+      matchLabels:
+        internal.dynatrace.com/app: webhook
+        internal.dynatrace.com/component: webhook
+  validatingWebhook:
+    timeoutSeconds: 10
+  mutatingWebhook:
+    failurePolicy: Ignore
+    timeoutSeconds: 10
+  certs:
+    rootDuration: "" # CA root certificate validity duration, defaults to 8760h (365 days), min: 168h (7 days), max: 87600h (10 years); must be greater than serverDuration
+    serverDuration: "" # server certificate validity duration, defaults to 168h (7 days), min: 24h, max: 8760h (365 days); must be greater than renewalThreshold
+    renewalThreshold: "" # certificate renewal threshold, defaults to 12h, min: 12h, max: 720h (30 days); must be greater than requeueAfter
+    requeueAfter: "" # requeue interval when certificates are up to date, defaults to 3h, min: 5m, max: 11h; must be less than renewalThreshold
+  volumes:
+    certsDir:
+      sizeLimit: 10Mi
+  startupProbe: {} # configurable: periodSeconds, timeoutSeconds, failureThreshold
+  metadataSizeLimit: "" # size limit for the metadata annotation, defaults to 24576 bytes
+
+csidriver:
+  enabled: true
+  migrationMode: false # if true, the provisioner runs in cleanup-only mode (no new agent installs). modules.json csiDriver=false causes the webhook to use ephemeral volumes for new pods, while existing CSI-mounted pods are gracefully unmounted.
+  nodeSelector: {}
+  kubeletPath: "/var/lib/kubelet"
+  existingPriorityClassName: "" # if defined, use this priorityclass instead of creating a new one
+  priorityClassValue: "1000000"
+  cleanupPeriod: "" # defined in the Golang time.Duration format, like "30m" == 30 minutes
+  clientConnectionTimeout: "" # defined in the Golang time.Duration format, like "30m" == 30 minutes. Defaults to 15m. Too small value can cause failures when downloading large OneAgent packages (~1GB).
+  tolerations:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+      operator: Exists
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/control-plane
+      operator: Exists
+  labels: {}
+  annotations: {}
+  apparmor: false
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  csiInit:
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+      runAsUser: 0
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: false
+      seLinuxOptions:
+        level: s0
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+      limits:
+        cpu: 50m
+        memory: 100Mi
+  server:
+    securityContext:
+      runAsUser: 0
+      privileged: true # Needed for mountPropagation
+      allowPrivilegeEscalation: true # Needed for privileged
+      readOnlyRootFilesystem: true
+      runAsNonRoot: false
+      seLinuxOptions:
+        level: s0
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+      limits:
+        cpu: 50m
+        memory: 100Mi
+    livenessProbe:
+      enabled: true
+      failureThreshold: 5
+      initialDelaySeconds: 15
+      periodSeconds: 15
+      successThreshold: 1
+      timeoutSeconds: 10
+  provisioner:
+    securityContext:
+      runAsUser: 0
+      privileged: true # Needed for mountPropagation
+      allowPrivilegeEscalation: true # Needed for privileged
+      readOnlyRootFilesystem: true
+      runAsNonRoot: false
+      seLinuxOptions:
+        level: s0
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 300m
+        memory: 100Mi
+    startupProbe: {} # configurable: periodSeconds, timeoutSeconds, failureThreshold
+  registrar:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsUser: 0
+      privileged: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: false
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 20m
+        memory: 30Mi
+      limits:
+        cpu: 20m
+        memory: 30Mi
+  livenessprobe:
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+      runAsUser: 0
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: false
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 20m
+        memory: 30Mi
+      limits:
+        cpu: 20m
+        memory: 30Mi
+  job:
+    securityContext:
+      runAsUser: 0
+      privileged: true # Needed for mountPropagation
+      allowPrivilegeEscalation: true # Needed for privileged
+      readOnlyRootFilesystem: true
+      runAsNonRoot: false
+      seLinuxOptions:
+        level: s0
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 200m
+        memory: 30Mi
+
+prometheus:
+  # If true, install Prometheus Operator CRDs used by OTEL target allocators. WARNING: this will overwrite existing CRDs.
+  installCRDs: false
+
+rbac:
+  kubeletFineGrainedAuthz: ""
+  activeGate:
+    create: true
+    annotations: {}
+  kubernetesMonitoring:
+    create: true
+  edgeConnect:
+    create: true
+    annotations: {}
+  extensions:
+    create: true
+    annotations: {}
+    database:
+      create: true
+  telemetryIngest:
+    create: true
+    annotations: {}
+  logMonitoring:
+    create: true
+    annotations: {}
+  oneAgent:
+    create: true
+    annotations: {}
+  kspm:
+    create: true
+    annotations: {}
+  operator:
+    annotations: {}
+  prometheus:
+    create: true
+  supportability: true
+
+experimental:
+  enablePrometheus: false # temporary gate; set to true to enable prometheus integration in dev/test. Remove when prometheus integration is complete.

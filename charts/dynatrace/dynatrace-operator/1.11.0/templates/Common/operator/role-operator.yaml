@@ -1,0 +1,122 @@
+# Copyright Dynatrace LLC
+# SPDX-License-Identifier: Apache-2.0
+
+# For more information why the individual permissions are required see
+# https://github.com/Dynatrace/dynatrace-operator/blob/main/doc/roles/operator-roles.md
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dynatrace-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "dynatrace-operator.operatorLabels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - dynatrace.com
+    resources:
+      - dynakubes
+      - edgeconnects
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+  - apiGroups:
+      - dynatrace.com
+    resources:
+      - dynakubes/finalizers
+      - edgeconnects/finalizers
+      - dynakubes/status
+      - edgeconnects/status
+    verbs:
+      - update
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+      - daemonsets
+      - replicasets
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - secrets
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - get
+      - list
+  - apiGroups:
+      - networking.istio.io
+    resources:
+      - serviceentries
+      - virtualservices
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - update
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dynatrace-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dynatrace-operator.operatorLabels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: dynatrace-operator
+roleRef:
+  kind: Role
+  name: dynatrace-operator
+  apiGroup: rbac.authorization.k8s.io
