@@ -1,0 +1,28 @@
+# =============================================================================
+# Namespaces the umbrella owns. Helm's --create-namespace only makes the release
+# namespace; the data/auth/observability namespaces (where bundled services and
+# the endpoints/secrets land) must be created explicitly. Kept on uninstall-safe
+# so a teardown removes them with the release.
+# =============================================================================
+{{- $mgr := .Release.Service -}}
+{{- $nslist := (values .Values.global.namespaces) -}}
+{{- if eq .Values.gateway.mode "bundled" }}{{- $nslist = append $nslist "apisix" }}{{- end }}
+{{- if .Values.openbao.enabled }}{{- $nslist = append $nslist (.Values.openbao.namespace | default "openbao") }}{{- end }}
+{{- if .Values.eso.enabled }}{{- $nslist = append $nslist "external-secrets" }}{{- end }}
+{{- range $ns := ($nslist | uniq) }}
+{{- if ne $ns $.Release.Namespace }}
+{{- /* Skip the RELEASE namespace — Helm/Rancher owns and creates it (via
+       --create-namespace / the install target). Creating it here too collides
+       with Helm's ownership ("already exists" / "cannot be imported"). We only
+       create the ADDITIONAL namespaces (data/auth/observability/albox/apisix/
+       openbao/external-secrets). */}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/managed-by: {{ $mgr }}
+---
+{{- end }}
+{{- end }}

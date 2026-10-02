@@ -1,0 +1,36 @@
+{{- $root := . }}
+{{- $services := list "contentFilter" "secretDetection" "jailbreak" "pii" "topical" "toxic" }}
+{{- $nameMap := dict "contentFilter" "guardrails-content-filter" "secretDetection" "guardrails-secret-detection" "jailbreak" "guardrails-jailbreak" "pii" "guardrails-pii" "topical" "guardrails-topical" "toxic" "guardrails-toxic" }}
+{{/*
+  PodDisruptionBudgets are created for every enabled service when pdb.enabled = true.
+  Requires Kubernetes 1.21+ (policy/v1 GA). Keeps at least pdb.minAvailable pods
+  running during voluntary disruptions (node drains, rolling upgrades).
+
+  Enable in production-grade deployments only — a minAvailable: 1 PDB on a
+  single-replica service will block eviction entirely.
+*/}}
+{{- if $root.Values.pdb.enabled }}
+{{- range $services }}
+{{- $svcKey := . }}
+{{- $svcCfg := index $root.Values $svcKey }}
+{{- $svcName := index $nameMap $svcKey }}
+{{- if $svcCfg.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $svcName }}
+    app.kubernetes.io/component: content-safety
+    helm.sh/chart: {{ include "alchemi-guardrails.chart" $root }}
+    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
+spec:
+  minAvailable: {{ $root.Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: {{ $svcName }}
+{{- end }}
+{{- end }}
+{{- end }}

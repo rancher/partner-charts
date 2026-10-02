@@ -1,0 +1,83 @@
+{{- $root := . }}
+{{- $services := list "contentFilter" "secretDetection" "jailbreak" "pii" "topical" "toxic" }}
+{{- $nameMap := dict "contentFilter" "guardrails-content-filter" "secretDetection" "guardrails-secret-detection" "jailbreak" "guardrails-jailbreak" "pii" "guardrails-pii" "topical" "guardrails-topical" "toxic" "guardrails-toxic" }}
+{{- range $services }}
+{{- $svcKey := . }}
+{{- $svcCfg := index $root.Values $svcKey }}
+{{- $svcName := index $nameMap $svcKey }}
+{{- if $svcCfg.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $svcName }}
+    app.kubernetes.io/component: api
+    helm.sh/chart: {{ include "alchemi-guardrails.chart" $root }}
+    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
+spec:
+  {{- if not $svcCfg.autoscaling.enabled }}
+  replicas: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ $svcName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: {{ $svcName }}
+        app.kubernetes.io/name: {{ $svcName }}
+    spec:
+      serviceAccountName: {{ $root.Values.serviceAccountName }}
+      {{- with $root.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $svcName }}
+          image: "{{ $svcCfg.image.repository }}:{{ $svcCfg.image.tag }}"
+          imagePullPolicy: {{ $svcCfg.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ $svcName }}-config
+            - secretRef:
+                name: {{ $svcName }}-secrets
+          livenessProbe:
+            httpGet:
+              path: /health-check
+              port: 8000
+            initialDelaySeconds: {{ $svcCfg.probeInitialDelaySeconds.liveness }}
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health-check
+              port: 8000
+            initialDelaySeconds: {{ $svcCfg.probeInitialDelaySeconds.readiness }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml $svcCfg.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+      restartPolicy: Always
+{{- end }}
+{{- end }}

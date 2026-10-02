@@ -1,0 +1,62 @@
+# =============================================================================
+# SeaweedFS bucket bootstrap (bundled object store only).
+#
+# Creates the S3 bucket the app backend expects (objectStore.bucket, default
+# "alchemi-objects") so uploads and the AIOS Files pipeline work on a fresh
+# install. WITHOUT this, the bucket only existed if something happened to write
+# to it first — a clean install hit S3 "NoSuchBucket" on every file op and files
+# stuck forever in "Queued". Idempotent: re-running (upgrade) is a no-op if the
+# bucket already exists. Retries so it tolerates SeaweedFS not being ready yet.
+# =============================================================================
+{{- if eq .Values.objectStore.mode "bundled" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-seaweedfs-bucket-init
+  namespace: {{ .Values.global.namespaces.data }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/component: object-store
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "3"          # before the apisix-routes job (weight 5) + app file use
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: seaweedfs-bucket-init }
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: bucket-init
+          image: {{ .Values.objectStore.bundled.image | default "alchemiacr.azurecr.io/platform/seaweedfs:3.75" | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              MASTER="seaweedfs.{{ .Values.global.namespaces.data }}.svc:9333"
+              BUCKET="{{ .Values.objectStore.bucket | default "alchemi-objects" }}"
+              echo "ensuring SeaweedFS S3 bucket '$BUCKET' via master $MASTER ..."
+              # HARD timeout (SIGKILL) on every `weed shell`: it talks to the master over
+              # gRPC (19333) and will HANG INDEFINITELY — ignoring SIGTERM — if that port
+              # isn't reachable. `timeout -s KILL` guarantees the call returns so the retry
+              # loop below actually runs instead of the whole install wedging on iteration 1.
+              ws() { timeout -s KILL 15 weed shell -master="$MASTER"; }
+              for i in $(seq 1 40); do
+                # create is best-effort (already-exists is fine); the list check is authoritative
+                printf "s3.bucket.create -name %s\n" "$BUCKET" | ws >/dev/null 2>&1 || true
+                if printf "s3.bucket.list\n" | ws 2>/dev/null | grep -q "$BUCKET"; then
+                  echo "  bucket '$BUCKET' present — OK"
+                  exit 0
+                fi
+                echo "  [$i/40] SeaweedFS not ready or bucket missing — retry in 5s"
+                sleep 5
+              done
+              echo "ERROR: could not ensure bucket '$BUCKET' after retries"
+              exit 1
+{{- end }}
