@@ -1,0 +1,46 @@
+# =============================================================================
+# ESO (External Secrets Operator) wiring for OpenBao.
+# The ESO controller is installed via the external-secrets subchart (Chart.yaml).
+# This file adds the k8s-side resources the controller needs to talk to OpenBao:
+#
+#   eso-openbao-sa  (ServiceAccount in external-secrets ns)
+#     → OpenBao k8s auth: role "eso" is bound to this SA
+#     → ESO controller exchanges the SA token for a Vault token
+#
+#   ClusterSecretStore "openbao-alchemi"
+#     → Vault provider, path "alchemi", v2, kubernetes auth, role=eso
+#     → referenced by ExternalSecrets in provider-secrets.yaml
+# =============================================================================
+{{- if and .Values.openbao.enabled .Values.eso.enabled }}
+---
+# SA that ESO uses when calling the OpenBao kubernetes auth endpoint.
+# Its name + namespace MUST match the role binding in the init job (step 8).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-openbao-sa
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+---
+# ClusterSecretStore: tells ESO how to reach OpenBao and authenticate.
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: openbao-alchemi
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+spec:
+  provider:
+    vault:
+      server: {{ include "alchemi.baoAddr" . | quote }}
+      path: "alchemi"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "eso"
+          serviceAccountRef:
+            name: "eso-openbao-sa"
+            namespace: "external-secrets"
+{{- end }}

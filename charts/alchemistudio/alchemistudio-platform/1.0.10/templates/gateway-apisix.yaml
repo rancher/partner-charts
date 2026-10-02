@@ -1,0 +1,153 @@
+# =============================================================================
+# APISIX gateway — folded in from the PROVEN on-prem manifests (v5.1.0), which
+# carry the fixes the phase-03 chart lacked: 256k proxy buffers (Keycloak OIDC
+# Set-Cookie -> 502 without them), X-Forwarded-Proto=https (KC scheme detection),
+# 100m body + 1200s timeouts. Skipped when gateway.mode=external. AKS-ism
+# (nodeSelector agentpool:apppool) intentionally dropped for portability.
+# =============================================================================
+{{- if eq .Values.gateway.mode "bundled" }}
+{{- $img := .Values.gateway.image | default "apache/apisix:3.9.1-debian" -}}
+{{- $svcType := .Values.gateway.serviceType -}}
+{{- if eq $svcType "auto" }}{{ $svcType = "LoadBalancer" }}{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apisix-config
+  namespace: apisix
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  config.yaml: |
+    apisix:
+      node_listen: 9080
+      enable_admin: true
+      enable_control: true
+      ssl:
+        enable: true
+        listen_port: 9443
+    nginx_config:
+      http:
+        client_max_body_size: 100m
+      http_configuration_snippet: |
+        # 256k buffers — large Keycloak OIDC/session Set-Cookie headers overflow the
+        # default ~8k -> "upstream sent too big header" -> 502 on /api/auth/callback.
+        proxy_buffer_size 256k;
+        proxy_buffers 8 256k;
+        proxy_busy_buffers_size 512k;
+        client_header_buffer_size 256k;
+        large_client_header_buffers 8 256k;
+        # APISIX terminates TLS; the external scheme is always https here.
+        proxy_set_header X-Forwarded-Proto https;
+        # long AI / streaming responses
+        proxy_read_timeout 1200s;
+        proxy_send_timeout 1200s;
+    deployment:
+      role: traditional
+      role_traditional:
+        config_provider: etcd
+      admin:
+        admin_key:
+          - name: admin
+            key: {{ .Values.gateway.adminKey }}
+            role: admin
+          - name: viewer
+            key: {{ .Values.gateway.viewerKey }}
+            role: viewer
+        allow_admin:
+          - 0.0.0.0/0
+        admin_listen:
+          ip: 0.0.0.0
+          port: 9180
+      etcd:
+        host:
+          - "http://apisix-etcd:2379"
+        prefix: "/apisix"
+    plugins:
+      - cors
+      - request-id
+      - limit-req
+      - limit-count
+      - redirect
+      - proxy-rewrite
+      - gzip
+      - real-ip
+      - response-rewrite
+      - ip-restriction
+      - consumer-restriction
+      - prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apisix
+  namespace: apisix
+  labels: { app.kubernetes.io/name: apisix, app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: gateway }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: apisix } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: apisix } }
+    spec:
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      initContainers:
+        # APISIX (config_provider: etcd) crash-loops if etcd isn't reachable yet, and
+        # those restarts make the apisix-routes hook fail (which then blocks the migrator).
+        # Wait for etcd so APISIX starts clean on the first try.
+        - name: wait-for-etcd
+          image: {{ .Values.global.image.registry }}/platform/curl:8.5.0
+          command: ["sh","-c"]
+          args:
+            - |
+              n=0; until curl -sf -o /dev/null http://apisix-etcd:2379/version; do
+                n=$((n+1)); [ "$n" -ge 60 ] && { echo "etcd not ready"; exit 1; }
+                echo "waiting for etcd ($n/60)"; sleep 3; done
+              echo "etcd ready"
+      containers:
+        - name: apisix
+          image: {{ $img }}
+          ports:
+            - { name: http, containerPort: 9080 }
+            - { name: https, containerPort: 9443 }
+            - { name: admin, containerPort: 9180 }
+            - { name: prometheus, containerPort: 9091 }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: 1000m, memory: 1Gi }
+          volumeMounts:
+            - { name: apisix-config, mountPath: /usr/local/apisix/conf/config.yaml, subPath: config.yaml }
+          startupProbe:  { tcpSocket: { port: 9080 }, initialDelaySeconds: 20, periodSeconds: 10, failureThreshold: 30 }
+          readinessProbe: { tcpSocket: { port: 9080 }, initialDelaySeconds: 10, periodSeconds: 10, failureThreshold: 6 }
+          livenessProbe:  { tcpSocket: { port: 9080 }, initialDelaySeconds: 15, periodSeconds: 15, failureThreshold: 6 }
+      volumes:
+        - name: apisix-config
+          configMap: { name: apisix-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-admin
+  namespace: apisix
+  labels: { app.kubernetes.io/name: apisix, app.kubernetes.io/component: admin }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: apisix }
+  ports: [{ name: admin, port: 9180, targetPort: 9180 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-gateway
+  namespace: apisix
+  labels: { app.kubernetes.io/name: apisix, app.kubernetes.io/component: gateway }
+  {{- if and (eq $svcType "LoadBalancer") .Values.gateway.internalLB }}
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  {{- end }}
+spec:
+  type: {{ $svcType }}
+  selector: { app.kubernetes.io/name: apisix }
+  ports:
+    - { name: http, port: 80, targetPort: 9080 }
+    - { name: https, port: 443, targetPort: 9443 }
+{{- end }}

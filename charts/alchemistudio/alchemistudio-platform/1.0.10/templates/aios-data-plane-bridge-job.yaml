@@ -1,0 +1,171 @@
+{{- /*
+  AIOS data-plane cross-namespace BRIDGE.
+
+  The AIOS shared data plane is a single ReadWriteMany PVC (aios-data-plane)
+  created in the APP namespace and mounted at /mnt/aios-data by the always-on
+  AIOS workers (learning/files/maintenance). But compute-api spawns code-sandbox
+  / AIOS user pods in the dedicated SANDBOX namespace (albox) and mounts a PVC of
+  the same name (AIOS_DATA_PLANE_CLAIM_NAME) from THAT namespace. PVCs are
+  namespace-scoped, so without a claim named aios-data-plane in the sandbox
+  namespace the sandbox comes up WITHOUT /mnt/aios-data and the Files app fails
+  with `EACCES: permission denied, mkdir '/mnt/aios-data'` (it hits root-owned
+  /mnt instead of the mount).
+
+  Fix (modelled on cluster-deployments dev's apps/.../aios-data-plane.yaml):
+  bind a SECOND PVC in the sandbox namespace to the SAME underlying CSI volume as
+  the app-namespace claim, via a static PV that reuses the bound volume's
+  csi.volumeHandle. Both namespaces then share ONE volume (single file authority)
+  — NOT two independent volumes (which would split the AIOS file store).
+
+  Because the underlying volume name is only known AFTER the app-namespace PVC
+  binds (dynamic provisioning), this runs as a post-install/post-upgrade hook that
+  reads the bound volume and creates the static PV + sandbox PVC. Storage-agnostic
+  (works for Longhorn RWX, Azure Files, any RWX CSI). Idempotent.
+
+  Skipped when the sandbox namespace == app namespace (nothing to bridge).
+*/ -}}
+{{- if .Values.aios.enabled }}
+{{- $appns := .Values.global.namespaces.app -}}
+{{- $sbns := .Values.global.namespaces.sandbox -}}
+{{- if ne $sbns $appns }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aios-dp-bridge
+  namespace: {{ .Release.Namespace }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-aios-dp-bridge
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-aios-dp-bridge
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Namespace }}-aios-dp-bridge
+subjects:
+  - kind: ServiceAccount
+    name: aios-dp-bridge
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aios-data-plane-bridge
+  namespace: {{ .Release.Namespace }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+    spec:
+      serviceAccountName: aios-dp-bridge
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bridge
+          image: {{ .Values.openbao.initImage | default (printf "%s/platform/azure-cli:2.60.0" .Values.global.image.registry) | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: APP_NS,     value: {{ $appns | quote }} }
+            - { name: SANDBOX_NS, value: {{ $sbns | quote }} }
+            - { name: CLAIM,      value: "aios-data-plane" }
+          command:
+            - python3
+            - -c
+            - |
+              import os, json, time, ssl, urllib.request, urllib.error
+              API="https://kubernetes.default.svc"
+              SA="/var/run/secrets/kubernetes.io/serviceaccount"
+              TOKEN=open(SA+"/token").read().strip()
+              CTX=ssl.create_default_context(cafile=SA+"/ca.crt")
+              APPNS=os.environ["APP_NS"]; SBNS=os.environ["SANDBOX_NS"]; CLAIM=os.environ["CLAIM"]
+              def req(method,path,body=None):
+                  data=json.dumps(body).encode() if body is not None else None
+                  r=urllib.request.Request(API+path,data=data,method=method,
+                      headers={"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"})
+                  try:
+                      with urllib.request.urlopen(r,context=CTX) as resp:
+                          return resp.status, json.loads(resp.read() or b"{}")
+                  except urllib.error.HTTPError as e:
+                      return e.code, json.loads(e.read() or b"{}")
+              # 1. wait for the app-namespace claim to bind, read its volume
+              vol=None
+              for _ in range(60):
+                  s,pvc=req("GET",f"/api/v1/namespaces/{APPNS}/persistentvolumeclaims/{CLAIM}")
+                  vol=((pvc.get("spec") or {}).get("volumeName")) if s==200 else None
+                  if vol: break
+                  time.sleep(5)
+              if not vol:
+                  print(f"[bridge] {APPNS}/{CLAIM} not bound after wait; nothing to bridge"); raise SystemExit(0)
+              # 2. read the bound PV's CSI spec
+              s,pv=req("GET",f"/api/v1/persistentvolumes/{vol}")
+              csi=((pv.get("spec") or {}).get("csi")) if s==200 else None
+              if not csi:
+                  print(f"[bridge] PV {vol} is not a CSI volume; cannot bridge"); raise SystemExit(0)
+              cap=((pv["spec"].get("capacity") or {}).get("storage")) or "10Gi"
+              pvname=f"{CLAIM}-{SBNS}-shared"
+              # 3. static PV in the sandbox namespace's name, same underlying volumeHandle (idempotent)
+              s,_=req("GET",f"/api/v1/persistentvolumes/{pvname}")
+              if s==404:
+                  body={"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":pvname,
+                          "labels":{"app.kubernetes.io/part-of":"alchemistudio-platform"}},
+                        "spec":{"capacity":{"storage":cap},"accessModes":["ReadWriteMany"],
+                          "persistentVolumeReclaimPolicy":"Retain","storageClassName":"",
+                          "csi":{"driver":csi["driver"],"fsType":csi.get("fsType","ext4"),
+                                 "volumeHandle":csi["volumeHandle"],
+                                 "volumeAttributes":csi.get("volumeAttributes",{})}}}
+                  s,r=req("POST","/api/v1/persistentvolumes",body)
+                  print(f"[bridge] create PV {pvname}: {s} {r.get('reason','')}")
+              else:
+                  print(f"[bridge] PV {pvname} already exists")
+              # 4. bind a PVC named CLAIM in the sandbox namespace to it (idempotent)
+              s,_=req("GET",f"/api/v1/namespaces/{SBNS}/persistentvolumeclaims/{CLAIM}")
+              if s==404:
+                  body={"apiVersion":"v1","kind":"PersistentVolumeClaim",
+                        "metadata":{"name":CLAIM,"namespace":SBNS,
+                          "labels":{"app.kubernetes.io/part-of":"alchemistudio-platform"}},
+                        "spec":{"accessModes":["ReadWriteMany"],"storageClassName":"",
+                          "volumeName":pvname,"resources":{"requests":{"storage":cap}}}}
+                  s,r=req("POST",f"/api/v1/namespaces/{SBNS}/persistentvolumeclaims",body)
+                  print(f"[bridge] create PVC {SBNS}/{CLAIM}: {s} {r.get('reason','')}")
+              else:
+                  print(f"[bridge] PVC {SBNS}/{CLAIM} already exists")
+              print("[bridge] done — sandbox namespace now shares the AIOS data plane")
+{{- end }}
+{{- end }}

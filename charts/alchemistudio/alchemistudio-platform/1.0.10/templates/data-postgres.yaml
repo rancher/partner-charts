@@ -1,0 +1,85 @@
+# =============================================================================
+# Bundled PostgreSQL (pgvector) — folded in from phase-03 apply-platform.sh.
+# REQUIRED image trait: the `vector` type (+ uuid-ossp, pgcrypto) — the AppCo PG
+# image lacks it and the migrator fails on the first migration. Skipped entirely
+# when postgres.mode=external (customer brings their own). Superuser password comes
+# from the generated alchemi-secrets (PG_SUPER_PASSWORD).
+# =============================================================================
+{{- if eq .Values.postgres.mode "bundled" }}
+{{- $ns := .Values.global.namespaces.data -}}
+{{- $img := .Values.postgres.image | default (printf "%s/platform/pgvector:pg17" .Values.global.image.registry) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alchemi-pgvector-initdb
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+data:
+  # Runs ONCE on first pgvector boot (/docker-entrypoint-initdb.d), BEFORE any app
+  # connects — creates the extra DBs (keycloak/compute_db/alchemi_ai_db). The seed-job
+  # also creates them but runs too late for keycloak, which crashes on a missing DB.
+  10-databases.sh: |
+    #!/bin/bash
+    set -e
+    for db in {{ .Values.postgres.extraDatabases | join " " }}; do
+      psql -U "$POSTGRES_USER" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 \
+        || psql -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE \"$db\""
+    done
+    for db in "$POSTGRES_DB" alchemi_ai_db; do
+      psql -U "$POSTGRES_USER" -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS pgcrypto" || true
+    done
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: alchemi-pgvector
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform, app.kubernetes.io/component: postgres }
+spec:
+  serviceName: alchemi-pgvector
+  replicas: 1
+  selector: { matchLabels: { app: alchemi-pgvector } }
+  template:
+    metadata: { labels: { app: alchemi-pgvector, app.kubernetes.io/part-of: alchemistudio-platform } }
+    spec:
+      securityContext: { fsGroup: 999 }
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: postgres
+          image: {{ $img }}
+          env:
+            - { name: POSTGRES_USER, value: {{ .Values.postgres.adminUser | quote }} }
+            - { name: POSTGRES_DB, value: {{ .Values.postgres.database | quote }} }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: alchemi-secrets, key: PG_SUPER_PASSWORD } }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh","-c","pg_isready -U {{ .Values.postgres.adminUser }} -d {{ .Values.postgres.database }}"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d }
+      volumes:
+        - name: initdb
+          configMap: { name: alchemi-pgvector-initdb, defaultMode: 0755 }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass | default "longhorn" }}
+        resources: { requests: { storage: {{ .Values.postgres.storage }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alchemi-pgvector
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  selector: { app: alchemi-pgvector }
+  ports: [{ port: 5432, targetPort: 5432 }]
+{{- end }}

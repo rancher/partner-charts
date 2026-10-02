@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alchemi-compute-api.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "alchemi-compute-api.labels" . | nindent 4 }}
+    alchemi.io/license-managed: "true"
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "alchemi-compute-api.selectorLabels" . | nindent 6 }}
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "alchemi-compute-api.selectorLabels" . | nindent 8 }}
+        alchemi.io/license-managed: "true"
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "alchemi-compute-api.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Wait for the migrator (main-resource db-init Job) to create the schema, so this
+        # app starts cleanly (Init state) instead of crash-looping. Polls its own DSN.
+        - name: wait-for-schema
+          image: {{ printf "%s/platform/pgvector:pg17" .Values.global.image.registry }}
+          command: ["/bin/sh","-c"]
+          env:
+            - name: WFS_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: alchemi-compute-api-secrets
+                  key: DATABASE_URL
+          args:
+            - |
+              echo "waiting for schema table instances ..."
+              until psql "$WFS_DSN" -tAc "SELECT to_regclass('public.instances')" 2>/dev/null | grep -q instances; do sleep 3; done
+              echo "schema table instances ready"
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.service.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          {{- if .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "alchemi-compute-api.fullname" . }}-config
+            {{- if .Values.secret.create }}
+            - secretRef:
+                name: {{ include "alchemi-compute-api.fullname" . }}-secrets
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
