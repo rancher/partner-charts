@@ -1,0 +1,26 @@
+{{- define "monitor.environment-variables.defaults" }}
+SERVICE_NAME: {{ include "monitor.fullname" . }}
+PORT: 9020
+HELM3: true
+NODE_OPTIONS: "--max_old_space_size=4096"
+{{- end }}
+
+{{- define "monitor.environment-variables.calculated" }}
+API_TOKEN: {{ include "runtime.installation-token-env-var-value" . | nindent 2 }}
+CLUSTER_ID: {{ include "runtime.runtime-environment-spec.context-name" . }}
+API_URL: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}/api/k8s-monitor/events
+ACCOUNT_ID: {{ .Values.global.accountId }}
+NAMESPACE: {{ .Release.Namespace }}
+{{- if .Values.rbac.namespaced }}
+ROLE_BINDING: true
+{{- end }}
+{{- end }}
+
+{{- define "monitor.environment-variables" }}
+{{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- $defaults := (include "monitor.environment-variables.defaults" . | fromYaml) }}
+{{- $calculated := (include "monitor.environment-variables.calculated" . | fromYaml) }}
+{{- $overrides := .Values.env }}
+{{- $mergedValues := mergeOverwrite (merge $defaults $calculated) $overrides }}
+{{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $mergedValues "context" .) }}
+{{- end }}

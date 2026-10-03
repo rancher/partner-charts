@@ -1,0 +1,48 @@
+{{ $values := .Values.runtime }}
+---
+{{- if or $values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  {{- /* has to be a constant */}}
+  name: codefresh-engine
+  labels:
+    {{- include "runtime.labels" . | nindent 4 }}
+  {{- with $values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if $values.rbac.create }}
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: codefresh-engine
+  labels:
+    {{- include "runner.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "secrets" ]
+    verbs: [ "get" ]
+{{- with $values.rbac.rules }}
+  {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+---
+{{- if and $values.serviceAccount.create $values.rbac.create }}
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: codefresh-engine
+  labels:
+    {{- include "runner.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: codefresh-engine
+roleRef:
+  kind: Role
+  name: codefresh-engine
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+
