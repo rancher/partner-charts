@@ -1,0 +1,37 @@
+{{- $grafana := .Values.grafana | default dict }}
+{{- $dashboards := $grafana.dashboards | default dict }}
+{{- if $dashboards.enabled }}
+{{- $folderAnnotation := $dashboards.folderAnnotation | default "grafana_folder" }}
+{{- range $path, $bytes := .Files.Glob "grafana/dashboards/operational/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "grafana-dashboard-kasten-%s" (base $path | trimSuffix ".json") }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+{{ include "helm.labels" $ | indent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    {{ $folderAnnotation }}: "Veeam Kasten"
+data:
+  {{ base $path }}: |
+    {{- $bytes | toString | nindent 4 }}
+{{- end }}
+{{- range $path, $bytes := .Files.Glob "grafana/dashboards/support/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "grafana-dashboard-kasten-support-%s" (base $path | trimSuffix ".json") }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+{{ include "helm.labels" $ | indent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    {{ $folderAnnotation }}: "Veeam Kasten Support"
+data:
+  {{ base $path }}: |
+    {{- $bytes | toString | nindent 4 }}
+{{- end }}
+{{- end }}

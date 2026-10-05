@@ -1,0 +1,29 @@
+{{- if eq (include "k10.isOcpConsolePluginEnabled" .) "true" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k10.openShiftConsolePluginConfigMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+    app.kubernetes.io/component: {{ template "k10.openShiftConsolePluginName" . }}
+    component: {{ template "k10.openShiftConsolePluginName" . }}
+data:
+  nginx.conf: |
+    pid /var/run/nginx/nginx.pid;
+    error_log /dev/stdout info;
+    events {}
+    http {
+      access_log         /dev/stdout;
+      include            /etc/nginx/mime.types;
+      default_type       application/octet-stream;
+      keepalive_timeout  65;
+      server {
+        listen              9443 ssl;
+        listen              [::]:9443 ssl;
+        ssl_certificate     /var/cert/tls.crt;
+        ssl_certificate_key /var/cert/tls.key;
+        root                /ocpconsoleplugin;
+      }
+    }
+{{- end -}}
