@@ -1,0 +1,38 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.forwarder.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ports:
+  - name: grpc
+    port: 80
+    protocol: TCP
+    targetPort: 8888
+  - name: otlp
+    port: 4317
+    protocol: TCP
+    targetPort: 4317
+  - name: snapshot
+    port: 8089
+    protocol: TCP
+    targetPort: 8089
+  # globalLabels deliberately do NOT reach the selector: adding them here stops
+  # the Service matching pods created before the labels were set.
+  selector:
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+{{- end }}
+
+{{- end }}

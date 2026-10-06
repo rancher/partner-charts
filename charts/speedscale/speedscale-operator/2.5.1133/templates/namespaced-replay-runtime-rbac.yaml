@@ -1,0 +1,124 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.replayRuntime.enabled }}
+{{/*
+The identity the replay's own pods run as: generator, responder, collector.
+
+At runtime the operator provisions build.ReplayRole per ephemeral replay. The
+namespaced chart renders it ONCE per namespace instead, which is what removes
+the coordinator's need for any RBAC-management verb. The rules below are a
+transcription of build.StaticReplayRuntimeRules() (lib/kube/build/rbac.go);
+lib/kube/build/rbac_test.go pins those against ReplayRole's actual output so the
+two provisioning paths cannot drift.
+
+One deliberate deviation: the metrics.k8s.io rule is gated behind
+replayRuntime.metricsEnabled (default off). See the comment on that rule.
+
+Names match build.StaticReplayRuntimeRoleName() / SvcAccountName("") so the
+replay components find the account they already look for.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+{{- with .Values.namespaced.image.pullSecrets }}
+imagePullSecrets: {{ toYaml . | nindent 2 }}
+{{- end }}
+metadata:
+  name: '{{ include "speedscale.namespaced.replayRuntimeName" . }}'
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: replay-runtime
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: replay-runtime
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+{{- if .Values.namespaced.replayRuntime.metricsEnabled }}
+# Opt-in, and OFF by default, for the same reason the inspector's identical rule
+# is (inspector.metricsEnabled): Kubernetes RBAC escalation prevention forbids
+# creating a Role granting a permission the installer does not itself hold, so a
+# namespace-admin customer installing this chart cannot create this rule -- and
+# on a cluster with no metrics-server the metrics.k8s.io API group does not
+# exist, so nobody can. Ungated, this one rule made the whole chart
+# uninstallable for its target user.
+#
+# It is optional in practice anyway: a 403 (or a missing API) must degrade
+# report enrichment rather than fail the replay, and that fallback lives in the
+# collector/report reader, not here. build.StaticReplayRuntimeRules()
+# (lib/kube/build/rbac.go) documents the same optionality; a default render is
+# therefore a deliberate subset of that rule list, not drift.
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: replay-runtime
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale
+subjects:
+- kind: ServiceAccount
+  name: '{{ include "speedscale.namespaced.replayRuntimeName" . }}'
+  namespace: '{{ .Release.Namespace }}'
+{{- end }}
+
+{{- end }}

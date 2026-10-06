@@ -1,0 +1,52 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.inspector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: speedscale-inspector
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-inspector
+    controlplane.speedscale.com/component: inspector
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- if .Values.http_proxy }}
+  HTTP_PROXY: {{ .Values.http_proxy | quote }}
+  {{- end }}
+  {{- if .Values.https_proxy }}
+  HTTPS_PROXY: {{ .Values.https_proxy | quote }}
+  {{- end }}
+  {{- if .Values.no_proxy }}
+  NO_PROXY: {{ .Values.no_proxy | quote }}
+  {{- end }}
+  ACCESS_LABELS: {{ .Values.namespaced.inspector.accessLabels | default dict | toJson | quote }}
+  APP_POD_NAMESPACE: '{{ .Release.Namespace }}'
+  CLUSTER_NAME: '{{ .Values.namespaced.clusterName }}'
+  DEPLOY_DEMO: '{{ .Values.namespaced.deployDemo }}'
+  HTTP_ENABLED: "true"
+  LOG_LEVEL: '{{ .Values.namespaced.logLevel }}'
+  PROCESS_ID: '{{ include "speedscale.namespaced.instanceID" . }}'
+  # Namespaced-mode gate (S-12897 E2E NEW-5/NEW-6): scopes topology service
+  # sync / Istio detection / Rollout watching to this namespace. Not emitted
+  # by the classic runtime builders - carried as a reviewed parity exemption.
+  SPEEDSCALE_NAMESPACED_MODE: 'true'
+  SPEEDSCALE_PRIMARY_TRANSPORT: {{ .Values.namespaced.forwarder.primaryTransport | quote }}
+  INSPECTOR_JOBS_ENABLED: '{{ .Values.namespaced.inspector.jobsEnabled }}'
+  # The release namespace is always appended: a namespaced install must be able
+  # to see its own namespace without the user restating it. The runtime path
+  # takes the list verbatim from cluster-scoped settings instead, which is a
+  # reviewed parity exemption (S-12915).
+  NAMESPACE_SELECTOR: {{ (uniq (append (default (list) .Values.namespaced.namespaceSelector) .Release.Namespace)) | join "," | quote }}
+  {{- if .Values.namespaced.secretAccessList }}
+  # Only listed when the operator opted in. An empty secretAccessList leaves
+  # this key unset AND grants no Secret rule at all -- see inspector-rbac.yaml.
+  SECRET_ACCESS_LIST: {{ (uniq .Values.namespaced.secretAccessList) | join "," | quote }}
+  {{- end }}
+{{- end }}
+
+{{- end }}

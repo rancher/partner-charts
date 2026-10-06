@@ -1,0 +1,184 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.replayCoordinator.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-replay-coordinator
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-replay-coordinator
+    controlplane.speedscale.com/component: replay-coordinator
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+# This is the widest identity the chart installs, and it is still confined to
+# one namespace. Two things it deliberately CANNOT do, and must never be given:
+#   * manage RBAC. No roles, rolebindings or serviceaccounts verbs of any kind.
+#     A replay that could mint its own permissions is a privilege-escalation
+#     primitive, and the chart pre-creates the only Role a replay needs
+#     (see replay-runtime-rbac.yaml).
+#   * read arbitrary Secrets. Only the names the installation configured.
+rules:
+# Replay requests, the mutation inventory that records what was changed on a
+# workload, and the snapshot payload are all ConfigMaps in this namespace: a
+# namespaced install may not install a CRD, so labeled ConfigMaps are the
+# replay API (operator/replaycoordinator/doc.go).
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# The self-check's component readiness probe reads Endpoints for the
+# forwarder/inspector Services; without this it warns on every start
+# (observed as 12x 403 in the kind E2E).
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+# The responder Service a replay stands up, whose cluster IP the injection
+# needs.
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# Observe the generator / responder / collector pods and their logs to report
+# replay progress, and delete them on teardown. No pod creation: pods only ever
+# arrive via the Deployment and Job below.
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+# Only the Secrets this installation was configured with, by name.
+- apiGroups:
+  - ""
+  resourceNames: {{ include "speedscale.namespaced.secretNames" . | nindent 2 }}
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+# The replay's own components. The responder runs as a Deployment and the
+# generator as a Job, both created and torn down per replay.
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# Patch the workload under test to add the Speedscale sidecar, and restore it
+# afterwards. StatefulSets can be targets too, but nothing creates or deletes
+# a customer workload -- teardown is a patch back to the recorded original.
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+# Watch the target's ReplicaSets to know when a patched rollout has actually
+# converged. Read-only: a ReplicaSet is owned by its Deployment.
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+{{- if .Values.namespaced.replayCoordinator.leaseEnabled }}
+# Optional. The workload lease is in-memory in a single-replica deployment; a
+# Lease is only needed once the coordinator elects a leader across replicas.
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-replay-coordinator
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-replay-coordinator
+    controlplane.speedscale.com/component: replay-coordinator
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-replay-coordinator
+subjects:
+- kind: ServiceAccount
+  name: speedscale-replay-coordinator
+  namespace: '{{ .Release.Namespace }}'
+{{- end }}
+
+{{- end }}

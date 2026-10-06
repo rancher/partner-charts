@@ -1,0 +1,123 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.forwarder.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    # Keeps a classic cluster-wide operator, if one is also installed, from
+    # reconciling the resources this chart owns.
+    operator.speedscale.com/ignore: "true"
+    speedscale.com/install-mode: namespaced
+spec:
+  replicas: {{ .Values.namespaced.forwarder.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: speedscale-forwarder
+      controlplane.speedscale.com/component: forwarder
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+        checksum/config: '{{ include (print $.Template.BasePath "/namespaced-forwarder-configmap.yaml") . | sha256sum }}'
+      labels:
+        {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+        app: speedscale-forwarder
+        controlplane.speedscale.com/component: forwarder
+    spec:
+      terminationGracePeriodSeconds: 60
+      serviceAccountName: speedscale-forwarder
+      securityContext: {{- toYaml .Values.namespaced.globalSecurityContext | nindent 8 }}
+      containers:
+      - name: speedscale-forwarder
+        image: '{{ .Values.namespaced.image.registry }}/forwarder:{{ .Values.namespaced.image.tag }}'
+        imagePullPolicy: '{{ .Values.namespaced.image.pullPolicy }}'
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SPEEDSCALE_APP_URL
+          value: '{{ .Values.namespaced.appUrl }}'
+        envFrom:
+        - configMapRef:
+            name: speedscale-forwarder
+        - secretRef:
+            name: '{{ include "speedscale.namespaced.apiKeySecretName" . }}'
+            optional: false
+        ports:
+        - containerPort: 8888
+          name: grpc
+        - containerPort: 4317
+          name: otlp
+        - containerPort: 8089
+          name: snapshot
+        livenessProbe:
+          failureThreshold: 30
+          grpc:
+            port: 6666
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe:
+          failureThreshold: 2
+          httpGet:
+            path: /healthz
+            port: 8089
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {{- toYaml .Values.namespaced.forwarder.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.namespaced.globalPodSecurityContext | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp
+          name: speedscale-diagnostics
+        - mountPath: /etc/speedscale/dlp
+          name: speedscale-dlp
+          readOnly: true
+        - mountPath: /etc/speedscale/filter
+          name: speedscale-filter
+          readOnly: true
+      volumes:
+      - emptyDir: {}
+        name: speedscale-diagnostics
+      - configMap:
+          name: speedscale-forwarder-dlp
+          optional: true
+        name: speedscale-dlp
+      - configMap:
+          name: speedscale-forwarder-filter
+          optional: true
+        name: speedscale-filter
+      {{- with .Values.namespaced.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.namespaced.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.namespaced.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+{{- end }}

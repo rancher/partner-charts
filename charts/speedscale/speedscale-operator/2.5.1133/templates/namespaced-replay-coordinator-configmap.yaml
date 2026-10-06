@@ -1,0 +1,99 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.replayCoordinator.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: speedscale-replay-coordinator
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-replay-coordinator
+    controlplane.speedscale.com/component: replay-coordinator
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- if .Values.http_proxy }}
+  HTTP_PROXY: {{ .Values.http_proxy | quote }}
+  {{- end }}
+  {{- if .Values.https_proxy }}
+  HTTPS_PROXY: {{ .Values.https_proxy | quote }}
+  {{- end }}
+  {{- if .Values.no_proxy }}
+  NO_PROXY: {{ .Values.no_proxy | quote }}
+  {{- end }}
+  # S-12919 config-key sync follow-up: every key below now matches a real
+  # operator/settings field by exact name (uppercase(mapstructure tag), viper
+  # AutomaticEnv) and has a genuine consumer in operator/replaycoordinator.
+  # Renaming a key here without renaming the settings field produces a
+  # coordinator that starts with defaults and silently instruments the wrong
+  # Service -- keep the two in lockstep, and re-run
+  # operator/settings.TestLoadConfig_NamespacedChartKeys after any rename.
+  #
+  # Three keys this ConfigMap used to render were deleted rather than synced,
+  # because nothing on the operator side reads them today (see the S-12919
+  # follow-up report for the grep trail): FORWARDER_SERVICE_NAME,
+  # SIDECAR_ENABLE_DIAGNOSTICS, and SPEEDSCALE_CONTROL_PLANE_NAMESPACE (the
+  # coordinator already learns its namespace from the POD_NAMESPACE
+  # downward-API env var on the Deployment, below).
+  CLUSTER_NAME: '{{ .Values.namespaced.clusterName }}'
+  LOG_LEVEL: '{{ .Values.namespaced.logLevel }}'
+  # INSTANCE_ID, not PROCESS_ID. This ConfigMap feeds the OPERATOR binary, whose
+  # settings field is `mapstructure:"instance_id"` -> INSTANCE_ID (viper
+  # AutomaticEnv), and Settings.Validate() makes a blank InstanceID a FATAL
+  # startup error ("InstanceID: cannot be blank"). PROCESS_ID is the FORWARDER's
+  # and inspector's name for the same id (lib/kube/build/forwarder.go,
+  # inspector.go, forwarder/stats/stats.go) -- those ConfigMaps keep it, and the
+  # parity harness asserts the two match. Same value, two binaries, two names.
+  INSTANCE_ID: '{{ include "speedscale.namespaced.instanceID" . }}'
+  CONTAINER_REGISTRY: '{{ .Values.namespaced.image.registry }}'
+  # IMAGE_TAG, not CONTAINER_TYPE, for the same reason: the operator reads
+  # `mapstructure:"image_tag"` and defaults it to "latest" when unset, so the
+  # pinned .Values.image.tag was being silently discarded and every replay
+  # component came up on :latest. operator/controllers/operator_configmap.go's
+  # propagatedKeys map is the canonical statement of the rename
+  # (IMAGE_TAG -> CONTAINER_TYPE) as a value crosses from operator to forwarder.
+  IMAGE_TAG: '{{ .Values.namespaced.image.tag }}'
+  IMAGE_PULL_POLICY: '{{ .Values.namespaced.image.pullPolicy }}'
+  # Names the installation provisioned. Config.Names exists precisely so a
+  # namespaced install pins nothing to a cluster-wide default.
+  API_KEY_SECRET_NAME: '{{ include "speedscale.namespaced.apiKeySecretName" . }}'
+  # The static replay-runtime ServiceAccount (S-12897 F5): when set, the
+  # coordinator points generator/responder/collector pods at this account and
+  # creates no per-replay RBAC - which its Role could not create anyway.
+  SPEEDSCALE_REPLAY_RUNTIME_SERVICE_ACCOUNT: '{{ include "speedscale.namespaced.replayRuntimeName" . }}'
+  TLS_SECRET_NAME: '{{ include "speedscale.namespaced.certsSecretName" . }}'
+  {{- if .Values.namespaced.tls.createJKS }}
+  JKS_SECRET_NAME: '{{ .Values.namespaced.tls.jksSecret | default "speedscale-jks" }}'
+  {{- end }}
+  # Capture wiring handed to instrumented workloads. capture.enableDiagnostics
+  # is deliberately NOT rendered here: build.SidecarConfigOverride has no field
+  # for it yet, so there is nowhere on the operator side for the value to land
+  # (see capture.enableDiagnostics in values.yaml).
+  SIDECAR_REINITIALIZE_IPTABLES: {{ .Values.namespaced.capture.reinitializeIptables | quote }}
+  # Loop timings (Go durations).
+  RESYNC_INTERVAL: {{ .Values.namespaced.replayCoordinator.resyncInterval | default "10s" | quote }}
+  PROVISIONING_TIMEOUT: {{ .Values.namespaced.replayCoordinator.provisioningTimeout | default "1m0s" | quote }}
+  # Cloud-issued tenant identity; same S-12914 hole as the forwarder's.
+  #
+  # ALL SIX keys, not three. The operator resolves its tenant identity from
+  # settings.updateTenant() -> schema.SubTenant.Incomplete(), which is false
+  # only when Stream, and the root Tenant's ID, Name, Region AND Bucket are all
+  # non-empty (lib/schema/tenant.go). Rendering only ID/Name/SubTenantName left
+  # the identity permanently incomplete, so the documented "supply tenant.* by
+  # hand" escape hatch could never actually work. The operator's env names for
+  # these happen to match the forwarder's, but they are read through the
+  # operator's own mapstructure tags (tenant_id, tenant_name, tenant_bucket,
+  # tenant_region, sub_tenant_name, sub_tenant_stream in operator/settings) --
+  # not inherited from the forwarder ConfigMap.
+  TENANT_ID: '{{ .Values.namespaced.tenant.id }}'
+  TENANT_NAME: '{{ .Values.namespaced.tenant.name }}'
+  TENANT_BUCKET: '{{ .Values.namespaced.tenant.bucket }}'
+  TENANT_REGION: '{{ .Values.namespaced.tenant.region }}'
+  SUB_TENANT_NAME: '{{ .Values.namespaced.tenant.subTenantName | default "default" }}'
+  SUB_TENANT_STREAM: '{{ .Values.namespaced.tenant.stream }}'
+{{- end }}
+
+{{- end }}
