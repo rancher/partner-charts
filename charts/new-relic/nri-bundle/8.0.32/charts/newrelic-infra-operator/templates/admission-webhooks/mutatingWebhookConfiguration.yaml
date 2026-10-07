@@ -1,0 +1,32 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "newrelic.common.naming.fullname" . }}
+{{- if .Values.certManager.enabled }}
+  annotations:
+    certmanager.k8s.io/inject-ca-from: {{ printf "%s/%s-root-cert" .Release.Namespace (include "newrelic.common.naming.fullname" .) | quote }}
+    cert-manager.io/inject-ca-from: {{ printf "%s/%s-root-cert" .Release.Namespace (include "newrelic.common.naming.fullname" .) | quote }}
+{{- end }}
+  labels:
+    {{- include "newrelic.common.labels" . | nindent 4 }}
+webhooks:
+- name: newrelic-infra-operator.newrelic.com
+  clientConfig:
+    service:
+      name: {{ include "newrelic.common.naming.fullname" . }}
+      namespace: {{ .Release.Namespace }}
+      path: "/mutate-v1-pod"
+{{- if not .Values.certManager.enabled }}
+    caBundle: ""
+{{- end }}
+  rules:
+  - operations: ["CREATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  failurePolicy: Ignore
+  timeoutSeconds: {{ .Values.timeoutSeconds }}
+  sideEffects: NoneOnDryRun
+  admissionReviewVersions:
+  - v1
+  reinvocationPolicy: IfNeeded

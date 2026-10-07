@@ -1,0 +1,324 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.tls.create }}
+{{- /*
+  This Secret holds a SIGNING CA, not a serving certificate.
+
+  The released sidecar contract has two halves and both are load bearing:
+
+    * goproxy forges a certificate for every upstream host it unwraps and signs
+      it with <tls-cert-dir>/tls.crt + tls.key (goproxy/proxy/tls.go, the
+      crypto.GenerateOutCertFn call). So tls.crt MUST be CA:TRUE with certSign
+      key usage. A CA:FALSE leaf here is what makes every TLS-validating client
+      in an instrumented pod fail with "certificate signature failure (7)".
+
+    * the instrumented application gets SSL_CERT_FILE, REQUESTS_CA_BUNDLE,
+      NODE_EXTRA_CA_CERTS, CURL_CA_BUNDLE, AWS_CA_BUNDLE, PGSSLROOTCERT and
+      GRPC_DEFAULT_SSL_ROOTS_FILE_PATH pointed at
+      <tls-cert-dir>/ca-certificates.crt (lib/kube/build/tls.go TLSEnvVars,
+      filename crypto.DefaultCABundleFilename). That key must therefore exist in
+      this Secret and must contain the CA above -- an absent key points the whole
+      process at a file that does not exist and no certificate verifies at all.
+
+  Both classic provisioning paths render exactly that: the operator chart's
+  tlsCertTemplate is `genCA "Speedscale" 3650` into tls.crt/tls.key
+  (lib/kube/build/operator/helm.go), and the operator's own runtime path is
+  crypto.GenerateKeyAndCert -- IsCA:true, KeyUsageCertSign -- plus
+  crypto.AddCertToBundle appending that CA to a trust bundle stored under
+  ca-certificates.crt (operator/inventory/kube.go CreateTLSCerts).
+
+  Reuse across upgrades: `lookup` returns the live Secret, so `helm upgrade`
+  does NOT rotate the CA out from under workloads already trusting it. The
+  marker for "this Secret already follows the signing-CA contract" is the
+  presence of the ca-certificates.crt key -- a Secret left behind by a chart
+  version that rendered a serving leaf does not have it, so it is regenerated
+  exactly once and the broken install self-heals. Under `helm template` lookup
+  is always empty and a throwaway CA is generated, which is why the evidence
+  pack shows different bytes on every regeneration.
+*/ -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace "speedscale-certs" -}}
+{{- $existingData := dict -}}
+{{- if $existing -}}
+{{- $existingData = default dict $existing.data -}}
+{{- end -}}
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- $bundle := "" -}}
+{{- if and (index $existingData "tls.crt") (index $existingData "tls.key") (index $existingData "ca-certificates.crt") -}}
+{{- $crt = index $existingData "tls.crt" | b64dec -}}
+{{- $key = index $existingData "tls.key" | b64dec -}}
+{{- $bundle = index $existingData "ca-certificates.crt" | b64dec -}}
+{{- else -}}
+{{- $ca := genCA .Values.namespaced.tls.caCommonName (int .Values.namespaced.tls.validityDays) -}}
+{{- $crt = $ca.Cert -}}
+{{- $key = $ca.Key -}}
+{{- end -}}
+{{- /*
+  An empty $bundle means the CA was just generated. A non-empty one was carried
+  forward and is left alone unless tls.systemCABundle is set: a bundle written
+  by the operator (or by a previous install with roots supplied) may hold real
+  OS roots this template cannot reproduce, and silently replacing it with a
+  CA-only bundle would be a downgrade. Setting tls.systemCABundle is the
+  explicit "recompute it from what I gave you" instruction.
+*/ -}}
+{{- $systemRoots := trimSuffix "\n" (.Values.namespaced.tls.systemCABundle | default "") -}}
+{{- if or (eq $bundle "") $systemRoots -}}
+{{- if $systemRoots -}}
+{{- $bundle = printf "%s\n%s" $systemRoots $crt -}}
+{{- else -}}
+{{- $bundle = $crt -}}
+{{- end -}}
+{{- end }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: speedscale-certs
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: tls
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  # The signing CA. goproxy loads this pair from the mounted cert dir and issues
+  # a forged certificate per upstream host from it, so it is CA:TRUE.
+  tls.crt: {{ $crt | b64enc }}
+  tls.key: {{ $key | b64enc }}
+  # Same bytes as tls.crt, under the conventional kubernetes.io/tls name, for
+  # anything that expects the trust anchor to be called ca.crt.
+  ca.crt: {{ $crt | b64enc }}
+  # The app-facing trust bundle. Every CA-bundle environment variable the
+  # sidecar sets on the instrumented containers resolves to this file, so it has
+  # to be a complete trust store for that process: the Speedscale CA above, plus
+  # whatever roots tls.systemCABundle supplies. See values.yaml for what is NOT
+  # in here by default.
+  ca-certificates.crt: {{ $bundle | b64enc }}
+{{- end }}
+
+{{- if .Values.namespaced.tls.createJKS }}
+{{- $jksName := .Values.namespaced.tls.jksSecret | default "speedscale-jks" -}}
+{{- $jksExisting := lookup "v1" "Secret" .Release.Namespace $jksName -}}
+{{- /*
+  The keystore Secret is part of the release so the Job that fills it needs only
+  update/patch -- never create, never delete. Existing content is carried
+  forward on upgrade so Helm's apply does not blank out what the Job wrote.
+*/}}
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: '{{ $jksName }}'
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: tls
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    helm.sh/resource-policy: keep
+{{- if and $jksExisting $jksExisting.data }}
+data: {{ toYaml $jksExisting.data | nindent 2 }}
+{{- else }}
+data: {}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+{{- with .Values.namespaced.image.pullSecrets }}
+imagePullSecrets: {{ toYaml . | nindent 2 }}
+{{- end }}
+metadata:
+  name: speedscale-jks
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: tls
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-jks
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: tls
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "2"
+    helm.sh/hook-delete-policy: before-hook-creation
+# Exactly one Secret, by name, and no create or delete. The keystore Secret is
+# rendered by the chart, so this identity only ever fills one in place -- it
+# cannot mint new Secrets and it cannot destroy the API key or the certs.
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - '{{ $jksName }}'
+  resources:
+  - secrets
+  verbs:
+  - get
+  - update
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-jks
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: tls
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-jks
+subjects:
+- kind: ServiceAccount
+  name: speedscale-jks
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: speedscale-create-jks
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale
+    controlplane.speedscale.com/component: tls
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    # post-install/post-upgrade, not pre-install: the keystore Secret it fills
+    # is a release resource, so it has to exist first.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+        # A mesh sidecar would keep this pod Running forever after the job
+        # container exits, and the hook would never complete.
+        sidecar.istio.io/inject: "false"
+      labels:
+        {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+        app: speedscale
+        controlplane.speedscale.com/component: tls
+    spec:
+      restartPolicy: Never
+      serviceAccountName: speedscale-jks
+      securityContext:
+        # keytool writes into the JVM's own trust store, which is root-owned in
+        # the image. This is the ONLY pod in the chart that is not runAsNonRoot,
+        # and it is opt-in (tls.createJKS, default false).
+        runAsNonRoot: false
+        fsGroup: 0
+      containers:
+      - name: create-jks
+        image: '{{ .Values.namespaced.image.registry }}/{{ .Values.namespaced.tls.jks.image }}'
+        imagePullPolicy: '{{ .Values.namespaced.image.pullPolicy }}'
+        command:
+        - sh
+        - -c
+        args:
+        - |-
+          set -eu
+          trap 'curl -s -X POST http://127.0.0.1:15000/quitquitquit >/dev/null 2>&1 || true' EXIT
+          # tls.crt is the signing CA itself, which is the anchor the JVM has to
+          # trust. This is the same file the classic operator's JKS hook imports.
+          keytool -keystore /usr/lib/jvm/jre/lib/security/cacerts \
+            -importcert -noprompt -trustcacerts -storepass changeit \
+            -alias speedscale -file /etc/ssl/speedscale/tls.crt
+          # update/patch only. The Secret is a release resource; this identity
+          # has no create and no delete verb, by design.
+          kubectl -n "${POD_NAMESPACE}" patch secret "${JKS_SECRET_NAME}" \
+            --type=merge \
+            -p "{\"data\":{\"cacerts.jks\":\"$(base64 < /usr/lib/jvm/jre/lib/security/cacerts | tr -d '\n')\"}}"
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: JKS_SECRET_NAME
+          value: '{{ $jksName }}'
+        resources: {{- toYaml .Values.namespaced.tls.jks.resources | nindent 10 }}
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          runAsGroup: 0
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /etc/ssl/speedscale
+          name: speedscale-tls
+          readOnly: true
+      volumes:
+      - name: speedscale-tls
+        secret:
+          secretName: '{{ include "speedscale.namespaced.certsSecretName" . }}'
+      {{- with .Values.namespaced.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.namespaced.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.namespaced.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+{{- end }}

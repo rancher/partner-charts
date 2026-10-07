@@ -1,0 +1,120 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.replayCoordinator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: speedscale-replay-coordinator
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-replay-coordinator
+    controlplane.speedscale.com/component: replay-coordinator
+  annotations:
+    {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    operator.speedscale.com/ignore: "true"
+spec:
+  # Pinned at 1 unless overridden. operator/replaycoordinator holds the lease
+  # that stops two replays patching one workload in memory, so a second replica
+  # would not see the first replica's leases. Raising this needs leader
+  # election, not a bigger number.
+  replicas: {{ .Values.namespaced.replayCoordinator.replicas | default 1 }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: speedscale-replay-coordinator
+      controlplane.speedscale.com/component: replay-coordinator
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.namespaced.globalAnnotations }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+        checksum/config: '{{ include (print $.Template.BasePath "/namespaced-replay-coordinator-configmap.yaml") . | sha256sum }}'
+      labels:
+        {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+        app: speedscale-replay-coordinator
+        controlplane.speedscale.com/component: replay-coordinator
+    spec:
+      serviceAccountName: speedscale-replay-coordinator
+      securityContext: {{- toYaml .Values.namespaced.globalSecurityContext | nindent 8 }}
+      containers:
+      # The operator image, running its namespaced startup path instead of the
+      # CRD reconciler: no TrafficReplay watch, no webhook server, no
+      # cluster-scoped client.
+      - name: speedscale-replay-coordinator
+        image: '{{ .Values.namespaced.image.registry }}/operator:{{ .Values.namespaced.image.tag }}'
+        imagePullPolicy: '{{ .Values.namespaced.image.pullPolicy }}'
+        ports:
+        - name: health
+          containerPort: 8081
+        # Liveness only: `/` answers 200 whenever the process is up, degraded
+        # or not, so a hung process restarts but a by-design cloud-degraded
+        # install does not flap. `/readyz` (503 while degraded) is deliberately
+        # NOT wired as a readinessProbe yet - nothing routes traffic to this
+        # pod, and marking a degraded install NotReady forever would alarm
+        # without protecting anything. Readiness semantics are S-12949.
+        livenessProbe:
+          httpGet:
+            path: /
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        env:
+        # This is the switch that selects the namespaced startup path
+        # (operator/replaycoordinator.Runtime) over the classic
+        # controller-runtime manager. Confirmed synced against
+        # operator/settings (mapstructure:"speedscale_namespaced_mode") by the
+        # S-12919 config-key sync follow-up; re-run
+        # operator/settings.TestLoadConfig_NamespacedChartKeys and
+        # charts/validation/denylist.sh before renaming it.
+        - name: SPEEDSCALE_NAMESPACED_MODE
+          value: "true"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        # The only namespace the coordinator reads requests from or creates
+        # anything in. It is the release namespace by construction; there is no
+        # value that widens it. Read operator-side as POD_NAMESPACE
+        # (mapstructure:"pod_namespace"), the same downward-API convention
+        # every other Speedscale component uses -- there is deliberately no
+        # separate "control plane namespace" key.
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SPEEDSCALE_APP_URL
+          value: '{{ .Values.namespaced.appUrl }}'
+        envFrom:
+        - configMapRef:
+            name: speedscale-replay-coordinator
+        - secretRef:
+            name: '{{ include "speedscale.namespaced.apiKeySecretName" . }}'
+            optional: false
+        resources: {{- toYaml .Values.namespaced.replayCoordinator.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.namespaced.globalPodSecurityContext | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp
+          name: speedscale-diagnostics
+      volumes:
+      - emptyDir: {}
+        name: speedscale-diagnostics
+      {{- with .Values.namespaced.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.namespaced.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.namespaced.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+{{- end }}

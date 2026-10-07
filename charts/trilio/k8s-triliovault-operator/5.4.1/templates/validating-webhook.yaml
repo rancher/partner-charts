@@ -1,0 +1,104 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ template "k8s-triliovault-operator.name" . }}-validating-webhook-configuration
+  labels:
+    {{- include "k8s-triliovault-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/instance: {{ template "k8s-triliovault-operator.appName" . }}-validating-webhook-configuration
+webhooks:
+- clientConfig:
+    service:
+      name: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-triliovault-trilio-io-v1-triliovaultmanager
+  failurePolicy: Fail
+  name: v1-tvm-validation.trilio.io
+  rules:
+  - apiGroups:
+    - triliovault.trilio.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - triliovaultmanagers
+  sideEffects: None
+  admissionReviewVersions:
+    - v1
+- clientConfig:
+    service:
+      name: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-core-v1-secret
+  failurePolicy: Fail
+  name: v1-encryption-secret-validation.trilio.io
+  objectSelector:
+    matchExpressions:
+      - key: triliovault.trilio.io/master-secret
+        operator: Exists
+  rules:
+    - apiGroups:
+        - "*"
+      apiVersions:
+        - v1
+      operations:
+        - DELETE
+        - UPDATE
+      resources:
+        - secrets
+  sideEffects: None
+  admissionReviewVersions:
+    - v1
+- clientConfig:
+    service:
+      name: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-core-v1-namespace
+  failurePolicy: Fail
+  name: v1-tvm-ns-validation.trilio.io
+  namespaceSelector:
+    matchExpressions:
+      - key: trilio-operator-label
+        operator: In
+        values:
+          - {{ .Release.Namespace }}
+  rules:
+    - apiGroups:
+        - ""
+      apiVersions:
+        - v1
+      operations:
+        - DELETE
+      resources:
+        - namespaces
+      scope: '*'
+  sideEffects: None
+  admissionReviewVersions:
+    - v1
+{{- if .Values.observability.enabled }}
+- clientConfig:
+    service:
+      name: {{ template "k8s-triliovault-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-core-v1-secret
+  failurePolicy: Ignore
+  name: v1-observability-secret-validation.trilio.io
+  objectSelector:
+    matchExpressions:
+      - key: triliovault.trilio.io/observability
+        operator: Exists
+  rules:
+    - apiGroups:
+        - "*"
+      apiVersions:
+        - v1
+      operations:
+        - DELETE
+        - UPDATE
+      resources:
+        - secrets
+  sideEffects: None
+  admissionReviewVersions:
+    - v1
+{{- end }}
