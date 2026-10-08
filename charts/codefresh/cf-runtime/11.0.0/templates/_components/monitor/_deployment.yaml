@@ -1,0 +1,70 @@
+{{- define "monitor.resources.deployment" -}}
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "monitor.fullname" . }}
+  labels:
+    {{- include "monitor.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicasCount }}
+  strategy:
+    type: {{ .Values.updateStrategy.type }}
+  selector:
+    matchLabels:
+      {{- include "monitor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "monitor.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver ) . | nindent 8 }}
+      serviceAccountName: {{ include "monitor.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: monitor
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+        env:
+        {{- include "monitor.environment-variables" . | nindent 8 }}
+        ports:
+        - name: http
+          containerPort: 9020
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          httpGet:
+            path: /api/ping
+            port: 9020
+        resources:
+          {{- toYaml .Values.resources | nindent 12  }}
+        volumeMounts:
+        {{- with .Values.extraVolumeMounts }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      volumes:
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end -}}

@@ -1,0 +1,88 @@
+{{- define "dind-volume-provisioner.environment-variables.defaults" }}
+{{- end }}
+
+{{- define "dind-volume-provisioner.environment-variables.calculated" }}
+DOCKER_REGISTRY: {{ .Values.global.imageRegistry }}
+PROVISIONER_NAME: {{ include "dind-volume-provisioner.volumeProvisionerName" . }}
+
+{{- if or .Values.storage.ebs.accessKeyId .Values.storage.ebs.accessKeyIdSecretKeyRef }}
+AWS_ACCESS_KEY_ID:
+  {{- if .Values.storage.ebs.accessKeyId }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "dind-volume-provisioner.fullname" . }}
+      key: aws_access_key_id
+  {{- else if .Values.storage.ebs.accessKeyIdSecretKeyRef }}
+  valueFrom:
+    secretKeyRef:
+  {{- .Values.storage.ebs.accessKeyIdSecretKeyRef | toYaml | nindent 6 }}
+  {{- end }}
+{{- end }}
+
+{{- if or .Values.storage.ebs.secretAccessKey .Values.storage.ebs.secretAccessKeySecretKeyRef }}
+AWS_SECRET_ACCESS_KEY:
+  {{- if .Values.storage.ebs.secretAccessKey }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "dind-volume-provisioner.fullname" . }}
+      key: aws_secret_access_key
+  {{- else if .Values.storage.ebs.secretAccessKeySecretKeyRef }}
+  valueFrom:
+    secretKeyRef:
+  {{- .Values.storage.ebs.secretAccessKeySecretKeyRef | toYaml | nindent 6 }}
+  {{- end }}
+{{- end }}
+
+{{- if or .Values.storage.gcedisk.serviceAccountJson .Values.storage.gcedisk.serviceAccountJsonSecretKeyRef }}
+GOOGLE_APPLICATION_CREDENTIALS: {{ printf "/etc/dind-volume-provisioner/credentials/%s" (.Values.storage.gcedisk.serviceAccountJsonSecretKeyRef.key | default "google-service-account.json") }}
+{{- end }}
+
+{{- if and .Values.storage.mountAzureJson }}
+AZURE_CREDENTIAL_FILE: /etc/kubernetes/azure.json
+CLOUDCONFIG_AZURE: /etc/kubernetes/azure.json
+{{- end }}
+
+{{- end }}
+
+{{- define "dind-volume-provisioner.environment-variables" }}
+{{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- $defaults := (include "dind-volume-provisioner.environment-variables.defaults" . | fromYaml) }}
+{{- $calculated := (include "dind-volume-provisioner.environment-variables.calculated" . | fromYaml) }}
+{{- $overrides := .Values.env }}
+{{- $mergedValues := mergeOverwrite (merge $defaults $calculated) $overrides }}
+{{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $mergedValues "context" .) }}
+{{- end }}
+
+
+{{- define "dind-volume-provisioner.volumes.calculated" }}
+  {{- if .Values.storage.gcedisk.serviceAccountJson }}
+- name: credentials
+  secret:
+    secretName: {{ include "dind-volume-provisioner.fullname" . }}
+    optional: true
+  {{- else if .Values.storage.gcedisk.serviceAccountJsonSecretKeyRef }}
+- name: credentials
+  secret:
+    secretName: {{ .Values.storage.gcedisk.serviceAccountJsonSecretKeyRef.name }}
+    optional: true
+  {{- end }}
+  {{- if .Values.storage.mountAzureJson }}
+- name: azure-json
+  hostPath:
+    path: /etc/kubernetes/azure.json
+    type: File
+  {{- end }}
+{{- end }}
+
+{{- define "dind-volume-provisioner.volumeMounts.calculated" }}
+  {{- if or .Values.storage.gcedisk.serviceAccountJson .Values.storage.gcedisk.serviceAccountJsonSecretKeyRef }}
+- name: credentials
+  readOnly: true
+  mountPath: "/etc/dind-volume-provisioner/credentials"
+  {{- end }}
+  {{- if .Values.storage.mountAzureJson }}
+- name: azure-json
+  readOnly: true
+  mountPath: "/etc/kubernetes/azure.json"
+  {{- end }}
+{{- end }}
