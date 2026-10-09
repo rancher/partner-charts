@@ -1,0 +1,87 @@
+{{- if eq .Values.gateway.className "nginx" }}
+
+{{- if .Values.gateway.caCert }}
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: {{ .Release.Name }}-nginx-proxy-config
+  namespace: {{ .Release.Namespace }}
+spec:
+  kubernetes:
+    deployment:
+      container:
+        volumeMounts:
+          - mountPath: /etc/nginx/extra-secrets/ca.crt
+            name: gateway-ca-cert
+            subPath: ca.crt
+          - mountPath: /etc/nginx/extra-secrets
+            name: extra-secrets
+      pod:
+        volumes:
+          - name: extra-secrets
+            emptyDir: {}
+          - name: gateway-ca-cert
+            secret:
+              defaultMode: 0664
+              secretName: {{ .Release.Name }}-gateway-ca-cert
+{{- end }}
+
+{{- /* Start of Snippets definition */}}
+{{- if and (.Values.gateway.verifyClientCertProtection) (.Values.additionalConfig.nginx.enableClientCertSnippets) }}
+---
+
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: {{ .Release.Name }}-nginx-verify-client
+  namespace: {{ .Release.Namespace }}
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        if ($ssl_client_verify != SUCCESS) {
+          return 403;
+        }
+        proxy_set_header X-ClientCert $ssl_client_escaped_cert;
+
+{{- if .Values.gateway.caCert }}
+---
+
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsPolicy
+metadata:
+  name: {{ .Release.Name }}-nginx-verify-client
+  namespace: {{ .Release.Namespace }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.gateway.name }}
+  snippets:
+    - context: http.server
+      value: |
+        ssl_client_certificate /etc/nginx/extra-secrets/ca.crt;
+        ssl_verify_client optional;
+{{- end }}
+
+{{- end }}
+{{- /* End of Snippets definition */}}
+
+{{- /* Start of Snippets definition */}}
+{{- if (.Values.additionalConfig.nginx.enableAuditGrpcRewriteSnippets) }}
+---
+
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: {{ .Release.Name }}-nginx-audit-grpc-rewrite
+  namespace: {{ .Release.Namespace }}
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        rewrite ^/io.jans.lock.audit.AuditService([^?]*)? /jans-auth/io.jans.lock.audit.AuditService$1?$args? break;
+{{- end }}
+{{- /* End of Snippets definition */}}
+
+{{- end }}
