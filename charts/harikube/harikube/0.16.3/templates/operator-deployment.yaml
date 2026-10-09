@@ -1,0 +1,73 @@
+{{- if .Values.operator.create -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "harikube.labels" . | nindent 4 }}
+  name: harikube-operator-deploy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- with .Values.operator.podLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.operator.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "harikube.labels" . | nindent 8 }}
+        {{- with .Values.operator.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      serviceAccountName: harikube-operator-sa
+      {{- with .Values.operator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.operator.podSecurityContext | nindent 8 }}
+      imagePullSecrets:
+      - name: harikube-registry-secret
+      containers:
+      - name: manager
+        image: "registry.harikube.info/harikube/operator:{{ .Values.operator.image.tag }}"
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        args:
+          {{- toYaml .Values.operator.args | nindent 8 }}
+        command:
+        - /manager
+        ports:
+        - containerPort: {{ .Values.operator.service.webhook.port }}
+          name: webhook
+        {{- with .Values.operator.volumeMounts }}
+        volumeMounts:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.operator.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.operator.readinessProbe | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.operator.securityContext | nindent 10 }}
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+      {{- with .Values.operator.volumes }}
+      volumes:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}
