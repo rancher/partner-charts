@@ -1,0 +1,80 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.forwarder.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- if .Values.http_proxy }}
+  HTTP_PROXY: {{ .Values.http_proxy | quote }}
+  {{- end }}
+  {{- if .Values.https_proxy }}
+  HTTPS_PROXY: {{ .Values.https_proxy | quote }}
+  {{- end }}
+  {{- if .Values.no_proxy }}
+  NO_PROXY: {{ .Values.no_proxy | quote }}
+  {{- end }}
+  {{- if .Values.namespaced.kerberos.enabled }}
+  SPEEDSCALE_KERBEROS_PROXY: "true"
+  KRB5_CONFIG: "/etc/speedscale/kerberos/krb5.conf"
+  {{- if eq .Values.namespaced.kerberos.credentialSource "keytab" }}
+  KRB5_CLIENT_KTNAME: "FILE:/etc/speedscale/kerberos/client.keytab"
+  SPEEDSCALE_KERBEROS_PRINCIPAL: {{ .Values.namespaced.kerberos.principal | quote }}
+  {{- else }}
+  KRB5CCNAME: "FILE:/etc/speedscale/kerberos/cache"
+  {{- end }}
+  {{- if .Values.namespaced.kerberos.proxySPN }}
+  SPEEDSCALE_KERBEROS_PROXY_SPN: {{ .Values.namespaced.kerberos.proxySPN | quote }}
+  {{- end }}
+  SPEEDSCALE_KERBEROS_DISABLE_FAST: {{ .Values.namespaced.kerberos.disableFAST | quote }}
+  {{- end }}
+  CLUSTER_NAME: '{{ .Values.namespaced.clusterName }}'
+  CONTAINER_REGISTRY: '{{ .Values.namespaced.image.registry }}'
+  CONTAINER_TYPE: '{{ .Values.namespaced.image.tag }}'
+  EXPORTERS: {{ .Values.namespaced.forwarder.exporters | default dict | toJson | quote }}
+  IMAGE_PULL_POLICY: '{{ .Values.namespaced.image.pullPolicy }}'
+  LOG_LEVEL: '{{ .Values.namespaced.logLevel }}'
+  PROCESS_ID: '{{ include "speedscale.namespaced.instanceID" . }}'
+  # Namespaced-mode gate (S-12897 E2E NEW-5/NEW-6): scopes topology service
+  # sync / Istio detection / Rollout watching to this namespace. Not emitted
+  # by the classic runtime builders - carried as a reviewed parity exemption.
+  SPEEDSCALE_NAMESPACED_MODE: 'true'
+  SPEEDSCALE_PRIMARY_TRANSPORT: {{ .Values.namespaced.forwarder.primaryTransport | quote }}
+  {{- if eq .Values.namespaced.forwarder.primaryTransport "byoc" }}
+  SPEEDSCALE_BYOC_PROVIDER: {{ .Values.namespaced.forwarder.byoc.provider | default "s3" | quote }}
+  SPEEDSCALE_BYOC_BUCKET: {{ .Values.namespaced.forwarder.byoc.bucket | quote }}
+  SPEEDSCALE_BYOC_REGION: {{ .Values.namespaced.forwarder.byoc.region | quote }}
+  SPEEDSCALE_BYOC_ENDPOINT: {{ .Values.namespaced.forwarder.byoc.endpoint | quote }}
+  SPEEDSCALE_BYOC_PREFIX: {{ .Values.namespaced.forwarder.byoc.prefix | quote }}
+  SPEEDSCALE_BYOC_PATH_STYLE: {{ .Values.namespaced.forwarder.byoc.pathStyle | quote }}
+  {{- end }}
+  SPEEDSCALE_DLP_CONFIG: '{{ .Values.namespaced.dlp.config }}'
+  SPEEDSCALE_DLP_CONFIG_FILE: /etc/speedscale/dlp/dlp.json
+  SPEEDSCALE_FILTER_CONFIG_FILE: /etc/speedscale/filter/filter.json
+  SPEEDSCALE_FILTER_RULE: '{{ .Values.namespaced.filterRule }}'
+  SPEEDSCALE_REDACT: {{ .Values.namespaced.dlp.enabled | quote }}
+  TAP_ENABLED: "true"
+  TELEMETRY_INTERVAL: {{ .Values.namespaced.forwarder.telemetryInterval | default "1m0s" | quote }}
+  # Cloud-issued tenant identity. The operator resolves these from the API key
+  # at startup; a chart cannot. They render empty until S-12914 settles how a
+  # namespaced install obtains them, and the forwarder will not become ready
+  # with an empty TENANT_ID.
+  TENANT_ID: '{{ .Values.namespaced.tenant.id }}'
+  TENANT_NAME: '{{ .Values.namespaced.tenant.name }}'
+  TENANT_BUCKET: '{{ .Values.namespaced.tenant.bucket }}'
+  TENANT_REGION: '{{ .Values.namespaced.tenant.region }}'
+  SUB_TENANT_NAME: '{{ .Values.namespaced.tenant.subTenantName | default "default" }}'
+  SUB_TENANT_STREAM: '{{ .Values.namespaced.tenant.stream }}'
+{{- end }}
+
+{{- end }}

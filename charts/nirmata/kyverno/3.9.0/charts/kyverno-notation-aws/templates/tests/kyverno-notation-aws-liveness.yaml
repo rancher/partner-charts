@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "kyverno-notation-aws.fullname" . }}-kyverno-notation-aws-liveness
+  namespace: {{ template "kyverno-notation-aws.namespace" }}
+  labels:
+    {{ include "kyverno-notation-aws.test.labels" . | nindent 4 }}
+  annotations:
+    {{ include "kyverno-notation-aws.test.annotations" . | nindent 4 }}
+spec:
+  automountServiceAccountToken: {{ .Values.test.automountServiceAccountToken }}
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: {{ template "kyverno-notation-aws.test.image" . }}
+      imagePullPolicy: {{ template "kyverno-notation-aws.test.imagePullPolicy" }}
+      {{- with .Values.test.resources }}
+      resources:
+        {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.test.securityContext }}
+      securityContext:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      command:
+        - /bin/sh
+        - -c
+        - sleep {{ .Values.test.sleep }} ; wget -O- -S --no-check-certificate http://{{ template "kyverno-notation-aws.serviceName" . }}.{{ template "kyverno-notation-aws.namespace" . }}:8081/healthz
+  {{- with .Values.test.nodeSelector | default .Values.deployment.nodeSelector }}
+  nodeSelector:
+    {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.test.tolerations | default .Values.deployment.tolerations}}
+  tolerations:
+    {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
