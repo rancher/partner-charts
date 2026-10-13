@@ -1,0 +1,118 @@
+{{- if .Capabilities.APIVersions.Has "metrics.appscode.com/v1alpha1/MetricsConfiguration" }}
+apiVersion: metrics.appscode.com/v1alpha1
+kind: MetricsConfiguration
+metadata:
+  name: apps-k8s-appscode-com-sidekick
+spec:
+  targetRef:
+    apiVersion: apps.k8s.appscode.com/v1alpha1
+    kind: Sidekick
+  commonLabels:
+    - key: app
+      valuePath: .metadata.name
+    - key: app_namespace
+      valuePath: .metadata.namespace
+  metrics:
+    - name: created
+      help: "Unix creation timestamp"
+      type: gauge
+      field:
+        path: .metadata.creationTimestamp
+        type: DateTime
+      metricValue:
+        valueFromPath: .metadata.creationTimestamp
+
+    - name: status_phase
+      help: "Sidekick instance current phase"
+      type: gauge
+      field:
+        path: .status.phase
+        type: String
+      params:
+        - key: phase
+          valuePath: .status.phase
+      states:
+        labelKey: phase
+        values:
+          - labelValue: Pending
+            metricValue:
+              valueFromExpression: "int(phase == 'Pending')"
+          - labelValue: Current
+            metricValue:
+              valueFromExpression: "int(phase == 'Current')"
+          - labelValue: Failed
+            metricValue:
+              valueFromExpression: "int(phase == 'Failed')"
+          - labelValue: Succeeded
+            metricValue:
+              valueFromExpression: "int(phase == 'Succeeded')"
+          - labelValue: Degraded
+            metricValue:
+              valueFromExpression: "int(phase == 'Degraded')"
+
+    - name: status_pod_phase
+      help: "Phase of the pod managed by the Sidekick"
+      type: gauge
+      field:
+        path: .status.pod
+        type: String
+      params:
+        - key: pod
+          valuePath: .status.pod
+      states:
+        labelKey: pod
+        values:
+          - labelValue: Pending
+            metricValue:
+              valueFromExpression: "int(pod == 'Pending')"
+          - labelValue: Running
+            metricValue:
+              valueFromExpression: "int(pod == 'Running')"
+          - labelValue: Succeeded
+            metricValue:
+              valueFromExpression: "int(pod == 'Succeeded')"
+          - labelValue: Failed
+            metricValue:
+              valueFromExpression: "int(pod == 'Failed')"
+          - labelValue: Unknown
+            metricValue:
+              valueFromExpression: "int(pod == 'Unknown')"
+
+    - name: info
+      help: "Sidekick instance information"
+      type: gauge
+      labels:
+        - key: leader
+          valuePath: .spec.leader.name
+        - key: selectionPolicy
+          valuePath: .spec.leader.selectionPolicy
+        - key: restartPolicy
+          valuePath: .spec.restartPolicy
+        - key: distributed
+          valuePath: .spec.distributed
+      metricValue:
+        value: 1
+
+    - name: status_conditions
+      help: "Sidekick instance status condition"
+      type: gauge
+      field:
+        path: .status.conditions
+        type: Array
+      labels:
+        - key: type
+          valuePath: .status.conditions[*].type
+        - key: status
+          valuePath: .status.conditions[*].status
+      metricValue:
+        value: 1
+
+    - name: backoff_limit
+      help: "Number of retries before marking the Sidekick failed"
+      type: gauge
+      field:
+        path: .spec.backoffLimit
+        type: Integer
+      metricValue:
+        valueFromPath: .spec.backoffLimit
+{{- end }}

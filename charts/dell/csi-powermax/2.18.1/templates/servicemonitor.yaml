@@ -1,0 +1,92 @@
+{{- if eq (include "csi-powermax.isMetricsEnabled" .) "true" }}
+{{- if hasKey .Values.metrics "serviceMonitor" }}
+{{- if eq .Values.metrics.serviceMonitor.enabled true }}
+---
+# ServiceMonitor for Prometheus Operator integration with the controller Deployment.
+# Created when metrics.enabled AND metrics.serviceMonitor.enabled are true.
+# Requires the Prometheus Operator CRDs to be installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      path: /metrics
+      {{- if .Values.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if and (hasKey .Values "podmon") .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+{{- if hasKey .Values.podmon.metrics "serviceMonitor" }}
+{{- if .Values.podmon.metrics.serviceMonitor.enabled }}
+---
+# ServiceMonitor for Prometheus Operator integration with podmon resiliency metrics on controller pods.
+# Created when podmon.enabled AND podmon.metrics.enabled AND podmon.metrics.serviceMonitor.enabled are true.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-resiliency-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.podmon.metrics.serviceMonitor.interval | default "30s" }}
+      {{- if .Values.podmon.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.podmon.metrics.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      path: /metrics
+      {{- if .Values.podmon.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.podmon.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and (eq .Values.replication.enabled true) (hasKey .Values.replication "metrics") }}
+{{- if and (eq .Values.replication.metrics.enabled true) (hasKey .Values.replication.metrics "serviceMonitor") }}
+{{- if eq .Values.replication.metrics.serviceMonitor.enabled true }}
+---
+# ServiceMonitor for replication metrics Prometheus Operator integration.
+# Created when replication.metrics.enabled AND replication.metrics.serviceMonitor.enabled are true.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-replication-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-controller
+  endpoints:
+    - port: repl-metrics
+      interval: {{ .Values.replication.metrics.serviceMonitor.interval | default "30s" }}
+      path: /metrics
+      {{- if .Values.replication.metrics.tlsCertSecret }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.replication.metrics.serviceMonitor.insecureSkipVerify | default false }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

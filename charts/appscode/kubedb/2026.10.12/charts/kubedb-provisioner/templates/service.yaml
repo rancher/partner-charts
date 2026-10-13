@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubedb-provisioner.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubedb-provisioner.labels" . | nindent 4 }}
+  {{- if eq "prometheus.io/builtin" ( include "monitoring.agent" . ) }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: {{ .Values.monitoring.bindPort | quote }}
+    prometheus.io/scheme: "http"
+  {{- end }}
+spec:
+  ports:
+  - name: metrics
+    port: {{ .Values.monitoring.bindPort }}
+    targetPort: metrics
+  selector:
+    {{- include "kubedb-provisioner.selectorLabels" . | nindent 4 }}

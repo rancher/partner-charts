@@ -1,0 +1,500 @@
+{{- $authorizationConfigSecret := lookup "v1" "Secret" .Release.Namespace "karavi-authorization-config" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumesclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [ "security.openshift.io" ]
+    resourceNames: [ "privileged" ]
+    resources: [ "securitycontextconstraints" ]
+    verbs: [ "use" ]
+  {{- if or (eq (include "csi-isilon.isMetricsEnabled" .) "true") (and (hasKey .Values "podmon") (eq .Values.podmon.enabled true)) }}
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  {{ end }}
+  {{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  {{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-node
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-node
+  apiGroup: rbac.authorization.k8s.io
+---
+
+{{- if hasKey .Values "podmon" }}
+{{- if eq .Values.podmon.enabled true }}
+# RoleBinding for Driver-specific Role
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-node
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-node
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for Driver-specific Permissions in a Namespace
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+{{ end }}
+{{ end }}
+---
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}-node
+  namespace: {{ .Release.Namespace }}
+  {{- if hasKey .Values "authorization" }}
+  {{- if eq .Values.authorization.enabled true }}
+  annotations:
+    com.dell.karavi-authorization-proxy: "true"
+  {{ end }}
+  {{ end }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-node
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: "driver"
+      labels:
+        app: {{ .Release.Name }}-node
+{{- if .Values.podmon.enabled }}
+        driver.dellemc.com: dell-storage
+{{- end }}
+    spec:
+      serviceAccount: {{ .Release.Name }}-node
+      {{ if .Values.node.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.node.nodeSelector | nindent 8 }}
+      {{ end }}
+      {{ if .Values.node.tolerations }}
+      tolerations:
+      {{- toYaml .Values.node.tolerations | nindent 8 }}
+      {{ end }}
+      hostNetwork: true
+      dnsPolicy: {{ .Values.node.dnsPolicy }}
+      containers:
+        {{- $driverSock := "csi_sock" }}
+        {{- $csiSidecarSuffix := "" }}
+      {{- if hasKey .Values "podmon" }}
+      {{- if eq .Values.podmon.enabled true }}
+        - name: podmon
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: {{ required "Must provide the podmon container image." .Values.images.podmon.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            {{- toYaml .Values.podmon.node.args | nindent 12 }}
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: X_CSI_PRIVATE_MOUNT_DIR
+              value: "{{ .Values.kubeletConfigDir }}/plugins/csi-isilon/disks"
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- if and (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+            - name: X_CSI_METRICS_ENABLED
+              value: "true"
+            - name: X_CSI_METRICS_PORT
+              value: "{{ .Values.podmon.metrics.port }}"
+            - name: X_CSI_METRICS_COLLECTION_INTERVAL
+              value: "{{ .Values.podmon.metrics.collection.interval }}"
+            {{- if .Values.podmon.metrics.tlsCertSecret }}
+            - name: X_CSI_METRICS_TLS_CERT_FILE
+              value: /etc/metrics-tls/tls.crt
+            - name: X_CSI_METRICS_TLS_KEY_FILE
+              value: /etc/metrics-tls/tls.key
+            {{- end }}
+            {{- end }}
+          {{- if and (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.podmon.metrics.port }}
+              protocol: TCP
+          {{- end }}
+          volumeMounts:
+            - name: kubelet-pods
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/csi-isilon
+              mountPropagation: "Bidirectional"
+            - name: volumedevices-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/volumeDevices
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: usr-bin
+              mountPath: /usr-bin
+            - name: var-run
+              mountPath: /var/run
+            - name: csi-isilon-config-params
+              mountPath: /csi-isilon-config-params
+            {{- if and (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled .Values.podmon.metrics.tlsCertSecret }}
+            - name: resiliency-metrics-tls
+              mountPath: /etc/metrics-tls
+              readOnly: true
+            {{- end }}
+      {{- end }}
+      {{- end }}
+        - name: driver
+          command: ["/csi-isilon"]
+          args:
+            - "--driver-config-params=/csi-isilon-config-params/driver-config-params.yaml"
+          {{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+          ports:
+            - containerPort: {{ .Values.metrics.port | default 8443 }}
+              name: metrics
+              protocol: TCP
+          {{- end }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: {{ required "Must provide the Isilon driver image repository." .Values.images.driver.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: CSI_ENDPOINT
+              value: "{{ .Values.kubeletConfigDir }}/plugins/csi-isilon/{{ $driverSock }}"
+            - name: X_CSI_MODE
+              value: node
+            - name: X_CSI_ISI_SKIP_CERTIFICATE_VALIDATION
+              value: "{{ .Values.skipCertificateValidation }}"
+            - name: X_CSI_ISI_AUTH_TYPE
+              value: "{{ .Values.isiAuthType }}"
+            - name: X_CSI_ALLOWED_NETWORKS
+              value: "{{ .Values.allowedNetworks }}"
+            - name: X_CSI_ALLOWED_NETWORKS_MODE
+              value: "{{ .Values.allowedNetworksMode | default "single" }}"
+            - name: X_CSI_VERBOSE
+              value: "{{ .Values.verbose }}"
+            - name: X_CSI_PRIVATE_MOUNT_DIR
+              value: "{{ .Values.kubeletConfigDir }}/plugins/csi-isilon/disks"
+            - name: X_CSI_ISI_PORT
+              value: "{{ .Values.endpointPort }}"
+            - name: X_CSI_ISI_PATH
+              value: {{ .Values.isiPath }}
+            - name: X_CSI_ISI_NO_PROBE_ON_START
+              value: "{{ .Values.noProbeOnStart }}"
+            - name: X_CSI_ISI_NFS_MOUNT_FQDN
+              value: "{{ .Values.nfsMountFQDN }}"
+            - name: X_CSI_ISI_TLS_HANDSHAKE_TIMEOUT_SECONDS
+              value: "{{ .Values.tlsHandshakeTimeoutSeconds }}"
+            - name: X_CSI_ISI_AUTOPROBE
+              value: "{{ .Values.autoProbe }}"
+            - name: X_CSI_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: X_CSI_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: SSL_CERT_DIR
+              value: /certs
+            - name: X_CSI_ISI_QUOTA_ENABLED
+              value: "{{ .Values.enableQuota }}"
+            - name: X_CSI_CUSTOM_TOPOLOGY_ENABLED
+              value: "{{ .Values.enableCustomTopology }}"
+            - name: X_CSI_ISI_CONFIG_PATH
+              value: /isilon-configs/config
+            - name: X_CSI_MAX_VOLUMES_PER_NODE
+              value: "{{ .Values.maxIsilonVolumesPerNode }}"
+            - name: X_CSI_HEALTH_MONITOR_ENABLED
+              value: "{{ .Values.node.healthMonitor.enabled }}"
+            - name: X_CSI_PODMON_ENABLED
+              value: "{{ .Values.podmon.enabled }}"
+            - name: X_CSI_PODMON_API_PORT
+              value: "{{ .Values.podmonAPIPort }}"
+            {{- if .Values.podmonAPITokenSecret }}
+            - name: X_CSI_PODMON_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.podmonAPITokenSecret.name }}
+                  key: {{ .Values.podmonAPITokenSecret.key | default "podmon-api-token" }}
+            {{- else if .Values.podmonAPIToken }}
+            - name: X_CSI_PODMON_API_TOKEN
+              value: "{{ .Values.podmonAPIToken }}"
+            {{- end }}
+            {{- if eq .Values.podmon.enabled true }}
+              {{- range $key, $value := .Values.podmon.node.args }}
+                {{- if contains "--arrayConnectivityPollRate" $value }}
+            - name: X_CSI_PODMON_ARRAY_CONNECTIVITY_POLL_RATE
+              value: "{{ (split "=" $value)._1 }}"
+                {{ end }}
+              {{ end }}
+            {{ end }}
+            - name: X_CSI_MAX_PATH_LIMIT
+              value: "{{ .Values.maxPathLen }}"
+            - name: X_CSI_ISILON_ENABLE_DRIVER_FSGROUP_CHOWN
+              value: "{{ .Values.fsGroupChown.enabled }}"
+            - name: X_CSI_ISILON_CHOWN_WORKERS
+              value: "{{ .Values.fsGroupChown.workers }}"
+            - name: X_CSI_ISILON_CHOWN_WRITEBATCH
+              value: "{{ .Values.fsGroupChown.writeBatch }}"
+            - name: X_CSI_ISILON_CHOWN_TIMEOUT_SECONDS
+              value: "{{ .Values.fsGroupChown.timeoutSeconds }}"
+            - name: X_CSI_DRIVER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+            - name: X_CSI_METRICS_ENABLED
+              value: "true"
+            - name: X_CSI_METRICS_PORT
+              value: "{{ .Values.metrics.port | default 8443 }}"
+            - name: X_CSI_METRICS_COLLECTION_INTERVAL
+              value: "{{ .Values.metrics.collection.interval | default "30s" }}"
+            - name: X_CSI_METRICS_COLLECTION_CACHE_TTL
+              value: "{{ .Values.metrics.collection.cacheTTL | default "25s" }}"
+            - name: X_CSI_METRICS_ARRAY_RATE_LIMIT
+              value: "{{ .Values.metrics.array.rateLimit | default 100 }}"
+            - name: X_CSI_METRICS_ARRAY_TIMEOUT
+              value: "{{ .Values.metrics.array.timeout | default "30s" }}"
+            - name: X_CSI_METRICS_ARRAY_CB_THRESHOLD
+              value: "{{ .Values.metrics.array.circuitBreaker.threshold | default 3 }}"
+            - name: X_CSI_METRICS_ARRAY_CB_RESET_TIMEOUT
+              value: "{{ .Values.metrics.array.circuitBreaker.resetTimeout | default "30s" }}"
+            {{- if .Values.metrics.tlsCertSecret }}
+            - name: X_CSI_METRICS_TLS_CERT_FILE
+              value: "/etc/metrics-tls/tls.crt"
+            - name: X_CSI_METRICS_TLS_KEY_FILE
+              value: "/etc/metrics-tls/tls.key"
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: driver-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/csi-isilon
+            - name: volumedevices-path
+              mountPath: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/volumeDevices
+            - name: pods-path
+              mountPath: {{ .Values.kubeletConfigDir }}/pods
+              mountPropagation: "Bidirectional"
+            - name: dev
+              mountPath: /dev
+            - name: usr-sbin-tlshd
+              mountPath: /host/usr/sbin
+              readOnly: true
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            - name: isilon-configs
+              mountPath: /isilon-configs
+            - name: csi-isilon-config-params
+              mountPath: /csi-isilon-config-params
+{{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+{{- if .Values.metrics.tlsCertSecret }}
+            - name: metrics-tls
+              mountPath: /etc/metrics-tls
+              readOnly: true
+{{- end }}
+{{- end }}
+        - name: registrar{{ $csiSidecarSuffix }}
+          image: {{ required "Must provide the CSI node registrar container image." .Values.images.registrar.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/{{ $driverSock }}"
+            - --kubelet-registration-path={{ .Values.kubeletConfigDir }}/plugins/csi-isilon/{{ $driverSock }}
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: registration-dir
+              mountPath: /registration
+            - name: driver-path
+              mountPath: /csi
+        {{- if hasKey .Values "authorization" }}
+        {{- if eq .Values.authorization.enabled true }}
+        - name: karavi-authorization-proxy
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: {{ required "Must provide the authorization sidecar container image." .Values.images.authorization.image }}
+          env:
+            - name: PROXY_HOST
+              value: "{{ .Values.authorization.proxyHost }}"
+            - name: SKIP_CERTIFICATE_VALIDATION
+              value: "{{ .Values.authorization.skipCertificateValidation }}"
+            - name: PLUGIN_IDENTIFIER
+              value: powerscale
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: proxy-authz-tokens
+                  key: access
+            - name: REFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: proxy-authz-tokens
+                  key: refresh
+          volumeMounts:
+            {{- if $authorizationConfigSecret }}
+            - name: karavi-authorization-config
+              mountPath: /etc/karavi-authorization/config
+            {{- else }}
+            - name: isilon-configs
+              mountPath: /isilon-configs
+            {{- end }}
+            {{- if not .Values.authorization.skipCertificateValidation }}
+            - name: proxy-server-root-certificate
+              mountPath: /etc/karavi-authorization/root-certificates
+            {{- end }}
+            - name: csi-isilon-config-params
+              mountPath: /etc/karavi-authorization
+        {{ end }}
+        {{ end }}
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: driver-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/csi-isilon
+            type: DirectoryOrCreate
+        - name: volumedevices-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/plugins/kubernetes.io/csi/volumeDevices
+            type: DirectoryOrCreate
+        - name: pods-path
+          hostPath:
+            path: {{ .Values.kubeletConfigDir }}/pods
+            type: Directory
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: usr-sbin-tlshd
+          hostPath:
+            path: /usr/sbin
+            type: DirectoryOrCreate
+        - name: certs
+          projected:
+            sources:
+{{- range $i, $e := until (int .Values.certSecretCount ) }}
+              - secret:
+                  name: {{ print $.Release.Name "-certs-" $e }}
+                  items:
+                    - key: cert-{{ $e }}
+                      path: cert-{{ $e }}
+{{- end }}
+        - name: isilon-configs
+          secret:
+            secretName: {{ .Release.Name }}-creds
+        - name: csi-isilon-config-params
+          configMap:
+             name: {{ .Release.Name }}-config-params
+        {{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+        {{- if .Values.metrics.tlsCertSecret }}
+        - name: metrics-tls
+          secret:
+            secretName: {{ .Values.metrics.tlsCertSecret }}
+        {{- end }}
+        {{- end }}
+        {{- if and (hasKey .Values "podmon") .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled .Values.podmon.metrics.tlsCertSecret }}
+        - name: resiliency-metrics-tls
+          secret:
+            secretName: {{ .Values.podmon.metrics.tlsCertSecret }}
+        {{- end }}
+        {{- if hasKey .Values "authorization" }}
+        {{- if eq .Values.authorization.enabled true }}
+        {{- if $authorizationConfigSecret }}
+        - name: karavi-authorization-config
+          secret:
+            secretName: karavi-authorization-config
+        {{- end }}
+        {{- if not .Values.authorization.skipCertificateValidation }}
+        - name: proxy-server-root-certificate
+          secret:
+            secretName: proxy-server-root-certificate
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if hasKey .Values "podmon" }}
+        {{- if eq .Values.podmon.enabled true }}
+        - name: usr-bin
+          hostPath:
+            path: /usr/bin
+            type: Directory
+        - name: kubelet-pods
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+        - name: var-run
+          hostPath:
+            path: /var/run
+            type: Directory
+        {{- end }}
+        {{- end }}

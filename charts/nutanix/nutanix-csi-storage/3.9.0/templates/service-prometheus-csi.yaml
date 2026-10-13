@@ -1,0 +1,103 @@
+# Copyright 2021 Nutanix Inc
+#
+# Services are always created (plain k8s networking, no CRD dependency).
+# The ServiceMonitor requires the Prometheus Operator CRD and is gated
+# behind .Values.servicemonitor.enabled.
+#
+# Resources in this file:
+#   Service           nutanix-csi-metrics          - controller pods
+#                                                    (sidecar ports + controller-plugin custom metrics)
+#   Service           nutanix-csi-node-metrics     - node pods (node-plugin custom metrics)
+#   ServiceMonitor    nutanix-csi-driver           - discovers both Services by matching their
+#                                                    app labels (nutanix-csi-metrics,
+#                                                    nutanix-csi-node-metrics)
+
+# ── Service: controller metrics ──────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutanix-csi-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nutanix-csi-metrics
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: nutanix-csi-controller
+  ports:
+    - name: provisioner
+      port: {{ .Values.sidecars.provisioner.port }}
+      targetPort: {{ .Values.sidecars.provisioner.port }}
+      protocol: TCP
+    - name: attacher
+      port: {{ .Values.sidecars.attacher.port }}
+      targetPort: {{ .Values.sidecars.attacher.port }}
+      protocol: TCP
+    - name: resizer
+      port: {{ .Values.sidecars.resizer.port }}
+      targetPort: {{ .Values.sidecars.resizer.port }}
+      protocol: TCP
+    - name: snapshotter
+      port: {{ .Values.sidecars.snapshotter.port }}
+      targetPort: {{ .Values.sidecars.snapshotter.port }}
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.controller.metricsPort }}
+      targetPort: {{ .Values.controller.metricsPort }}
+      protocol: TCP
+---
+# ── Service: node metrics ────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutanix-csi-node-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nutanix-csi-node-metrics
+    {{- include "nutanix-csi-storage.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ if eq .Values.kubernetesClusterDeploymentType "ntnx-msp-default" }}csi-node-ntnx-plugin{{ else }}nutanix-csi-node{{ end }}
+  ports:
+    - name: metrics
+      port: {{ .Values.node.metricsPort }}
+      targetPort: {{ .Values.node.metricsPort }}
+      protocol: TCP
+{{- if eq .Values.servicemonitor.enabled true }}
+---
+# ── ServiceMonitor ───────────────────────────────────────────────────────────
+# Single ServiceMonitor that discovers both CSI metrics Services by matching
+# their `app` labels. Each port is listed explicitly so that Prometheus
+# Operator creates a scrape target per port. Ports that don't exist on a
+# given Service are silently skipped.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+{{- with .Values.servicemonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+  name: nutanix-csi-driver
+  namespace: {{ .Release.Namespace }}
+spec:
+  endpoints:
+  - interval: 30s
+    port: provisioner
+  - interval: 30s
+    port: resizer
+  - interval: 30s
+    port: attacher
+  - interval: 30s
+    port: snapshotter
+  - interval: 30s
+    port: metrics
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - nutanix-csi-metrics
+          - nutanix-csi-node-metrics
+{{- end }}

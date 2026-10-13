@@ -1,0 +1,43 @@
+{{ template "kubedb-webhook-server.prepare-certs" $ }}
+
+{{ $featureGates := .Values.featureGates }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+{{- end }}
+
+{{- if .Values.apiserver.enableValidatingWebhook }}
+{{- if list "kubedb-webhook-server" "kubedb-dashboard" | has .Values.server.repository }}
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validators.elasticsearch.kubedb.com
+  labels:
+    app.kubernetes.io/component: kubedb-dashboard
+    {{- include "kubedb-webhook-server.labels" . | nindent 4 }}
+  {{- $caInject := include "kubedb-webhook-server.webhook-ca-inject-annotations" . }}
+  {{- if $caInject }}
+  annotations:
+    {{- $caInject | nindent 4 }}
+  {{- end }}
+webhooks:
+{{- if $featureGates.Elasticsearch }}
+- name: elasticsearchdashboardwebhook.validators.elasticsearch.kubedb.com
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: {{ include "kubedb-webhook-server.fullname" . }}
+      path: /validate-elasticsearch-kubedb-com-v1alpha1-elasticsearchdashboard
+      port: 443
+{{- include "kubedb-webhook-server.webhook-ca-bundle" $ | nindent 4 }}
+  rules:
+  - apiGroups: ["elasticsearch.kubedb.com"]
+    apiVersions: ["*"]
+    resources: ["elasticsearchdashboards"]
+    operations: ["CREATE", "UPDATE", "DELETE"]
+  admissionReviewVersions: ["v1beta1"]
+  failurePolicy: {{ .Values.apiserver.webhook.failurePolicy }}
+  sideEffects: None
+{{- end }}
+{{- end }}
+{{- end }}
