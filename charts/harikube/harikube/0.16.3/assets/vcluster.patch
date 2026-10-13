@@ -1,0 +1,30 @@
+diff --git a/harikube/charts/vcluster/templates/statefulset.yaml b/harikube/charts/vcluster/templates/statefulset.yaml
+index 0ce4c70..e288466 100644
+--- a/harikube/charts/vcluster/templates/statefulset.yaml
++++ b/harikube/charts/vcluster/templates/statefulset.yaml
+@@ -66,7 +66,13 @@ spec:
+       {{- end }}
+       {{- if .Values.controlPlane.statefulSet.security.podSecurityContext }}
+       securityContext:
+-{{ toYaml .Values.controlPlane.statefulSet.security.podSecurityContext | indent 8 }}
++        {{- $podSecurityContext := merge dict .Values.controlPlane.statefulSet.security.podSecurityContext }}
++        {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1" }}
++          {{- $_ := unset $podSecurityContext "runAsUser" }}
++          {{- $_ := unset $podSecurityContext "runAsGroup" }}
++          {{- $_ := unset $podSecurityContext "fsGroup" }}
++        {{- end }}
++{{ toYaml $podSecurityContext | indent 8 }}
+       {{- end }}
+       {{- if .Values.controlPlane.statefulSet.scheduling.nodeSelector }}
+       nodeSelector:
+@@ -178,6 +184,10 @@ spec:
+           {{- if or .Values.controlPlane.statefulSet.security.containerSecurityContext .Values.controlPlane.advanced.kubeVip.enabled }}
+           securityContext:
+             {{- $securityContext := merge .Values.controlPlane.statefulSet.security.containerSecurityContext dict }}
++            {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1" }}
++              {{- $_ := unset $securityContext "runAsUser" }}
++              {{- $_ := unset $securityContext "runAsGroup" }}
++            {{- end }}
+             {{- if .Values.controlPlane.advanced.kubeVip.enabled }}
+               {{- $_ := set $securityContext "capabilities" ($securityContext.capabilities | default dict) }}
+               {{- $existingCaps := $securityContext.capabilities.add | default list }}
