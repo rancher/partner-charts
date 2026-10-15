@@ -1,0 +1,54 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+The release is installed in namespace {{ .Release.Namespace }}
+
+To learn more about the release, try:
+
+  $ helm status -n {{ .Release.Namespace}} {{ .Release.Name }}
+  $ helm get all -n {{ .Release.Namespace}} {{ .Release.Name }}
+
+Official Weka CSI Plugin documentation can be found here: https://docs.weka.io/appendices/weka-csi-plugin
+
+Examples on how to configure a storage class and start using the driver are here:
+https://github.com/weka/csi-wekafs/tree/master/examples
+
+-------------------------------------------------- NOTICE --------------------------------------------------
+| THIS VERSION INTRODUCES SUPPORT FOR ADDITIONAL VOLUME TYPES, AS WELL AS SNAPSHOT AND VOLUME CLONING CAPS |
+| TO BETTER UNDERSTAND DIFFERENT TYPES OF VOLUMES AND THEIR IMPLICATIONS, REFER TO THE DOCUMENTATION ABOVE |
+| ALSO, IT IS RECOMMENDED TO CAREFULLY GO OVER NEW CONFIGURATION PARAMETERS AND ITS MEANINGS, AS BEHAVIOR  |
+| OF THE PLUGIN AND ITS REPORTED CAPABILITIES LARGELY DEPEND ON THE CONFIGURATION AND WEKA CLUSTER VERSION |
+------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------- WARNING -------------------------------------------------
+|  SUPPORT OF LEGACY VOLUMES WITHOUT API BINDING WILL BE REMOVED IN NEXT MAJOR RELEASE OF WEKA CSI PLUGIN. |
+|  NEW FEATURES RELY ON API CONNECTIVITY TO WEKA CLUSTER AND WILL NOT BE SUPPORTED ON API-UNBOUND VOLUMES. |
+|  PLEASE MAKE SURE TO MIGRATE ALL EXISTING VOLUMES TO API-BASED SCHEME PRIOR TO NEXT VERSION UPGRADE.     |
+------------------------------------------------------------------------------------------------------------
+
+{{- if or .Values.pluginConfig.mountProtocol.useNfs .Values.pluginConfig.mountProtocol.allowNfsFailback }}
+-------------------------------------------------- WARNING -------------------------------------------------
+{{- if .Values.pluginConfig.mountProtocol.useNfs }}
+| WARNING: NFS PROTOCOL IS ENFORCED AND WILL ALWAYS BE USED FOR MOUNTING WEKA FILESYSTEMS!                 |
+| NFS TRANSPORT DOES NOT PROVIDE MAXIMUM PERFORMANCE AND IS NOT RECOMMENDED FOR PRODUCTION USE.            |
+{{- else }}
+| WARNING: NFS MOUNT PROTOCOL FAILBACK IS ENABLED, AND NFS MOUNTS WILL BE USED IF WEKA IS NOT INSTALLED.   |
+| NFS TRANSPORT DOES NOT PROVIDE MAXIMUM PERFORMANCE AND IS NOT RECOMMENDED FOR PRODUCTION USE.            |
+| HOWEVER, IN CERTAIN CASES WHEN WEKA CLIENT INSTALLATION IS NOT POSSIBLE, NFS MOUNTS WILL BE USED.        |
+| IF WEKA CLIENT IS INSTALLED ON NODES AFTER CSI PLUGIN INSTALLATION, RESTART IS REQUIRED FOR THE          |
+| CORRESPONDENT CSI PLUGIN COMPONENTS RUNNING ON THE NODE TO SWITCH BACK TO WEKAFS PROTOCOL MOUNTING.      |
+{{- end }}
+| MAKE SURE THAT AT LEAST ONE INTERFACE GROUP IS CONFIGURED ON WEKA CLUSTER, OTHERWISE PROVISION WILL FAIL |
+| REFER TO THE DOCUMENTATION ABOVE FOR MORE INFORMATION ON NFS INTERFACE GROUP CONFIGURATION.              |
+| REFER TO WEKA CUSTOMER SUCCESS TEAM FOR RECOMMENDED CONFIGURATION AND BEST PRACTICES                     |
+------------------------------------------------------------------------------------------------------------
+{{- end }}
+{{- if .Values.pluginConfig.encryption.allowEncryptionWithoutKms }}
+
+-------------------------------------------------- WARNING -------------------------------------------------
+| WARNING: FILESYSTEM ENCRYPTION IS ALLOWED WITHOUT KMS SERVER CONFIGURATION.                              |
+| THIS CONFIGURATION IS STRONGLY DISCOURAGED AND SHOULD BE USED FOR TESTING PURPOSES ONLY.                 |
+| RUNNING PRODUCTION WORKLOADS WITH FILESYSTEMS ENCRYPTED WITHOUT A KMS SERVER CONFIGURED ON WEKA CLUSTER  |
+| IS NOT CONSIDERED SECURE, NOT SUPPORTED AND MAY LEAD TO DATA LOSS IN CASE OF A CLUSTER RECOVERY          |
+------------------------------------------------------------------------------------------------------------
+{{- end }}
