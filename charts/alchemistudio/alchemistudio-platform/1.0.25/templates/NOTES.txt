@@ -1,0 +1,65 @@
+✅ AlchemiStudio Platform {{ .Chart.AppVersion }} is installing as "{{ .Release.Name }}".
+   First install pulls several GB of images — it can take 15–25 min to be fully ready.
+
+──────────────────────────────  YOUR URLS  ──────────────────────────────
+  App     https://{{ include "alchemi.appHost" . }}      ← sign in here
+  Auth    https://{{ include "alchemi.authHost" . }}     (Keycloak)
+  Ops     https://{{ include "alchemi.opsHost" . }}      (audit logs / OpenObserve)
+{{- if .Values.gateway.exposeZenith }}
+  Zenith  https://{{ include "alchemi.zenithHost" . }}
+{{- end }}
+
+────────────────────────────  FIRST LOGIN  ──────────────────────────────
+  Email:    {{ required "admin.email is required" .Values.admin.email }}
+{{- if .Values.admin.initialPassword }}
+  Password: the one you set (admin.initialPassword). It is TEMPORARY — Keycloak
+            prompts you to choose a new password on first login.
+{{- else }}
+  Password: kubectl -n {{ .Values.global.namespaces.app }} get secret alchemi-secrets \
+              -o jsonpath='{.data.FIRST_USER_PASSWORD}' | base64 -d ; echo
+            This is TEMPORARY — Keycloak prompts you to set a new password on first login.
+{{- end }}
+
+{{- if .Values.keycloak.enabled }}
+─────────────────  KEYCLOAK ADMIN CONSOLE (break-glass)  ─────────────────
+  Only needed for identity admin (add an IdP, SMTP, user federation) — most
+  trials never open it. Not asked in the form; the password is auto-generated:
+    URL:      https://{{ include "alchemi.authHost" . }}/admin
+    Username: admin
+    Password: kubectl -n {{ .Values.global.namespaces.auth }} get secret keycloak-secrets \
+                -o jsonpath='{.data.KC_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d ; echo
+{{- end }}
+
+──────────────────────  POINT DNS AT YOUR GATEWAY  ──────────────────────
+  kubectl -n apisix get svc apisix-gateway        # note the EXTERNAL-IP
+  Create A-records for the hostnames above → that IP (all share one IP;
+  APISIX routes by host).
+{{- if and .Values.tls.enabled (eq .Values.tls.mode "acme") }}
+  TLS = Let's Encrypt (acme). The cert issues ONLY once these subdomains resolve to the
+  gateway IP above and port 80 is reachable from the internet. Watch it with:
+    kubectl -n apisix get certificate,order,challenge
+{{- else if and .Values.tls.enabled (eq .Values.tls.mode "selfsigned") }}
+  TLS = self-signed (CLI-only fallback): browsers warn and app login may fail. For a trusted
+  cert use tls.mode=byo (Bring Your Own Certificate) or tls.mode=acme (Let's Encrypt).
+{{- end }}
+
+────────────────────  AI GUARDRAILS — OFF BY DEFAULT  ────────────────────
+  The AI-safety tier (PII / secret-detection / jailbreak / toxicity / topical /
+  content-filter) is DISABLED by default to keep this first install fast and light.
+  Enable it any time — on its OWN upgrade, not during the first install:
+
+    CLI:  helm upgrade {{ .Release.Name }} alchemi/alchemistudio-platform \
+            --reuse-values --set guardrails.enabled=true --wait --timeout 30m
+    UI:   flip "Enable AI guardrails" in the form → Upgrade
+
+  It adds 6 services (~2.2 CPU / 6.6Gi) and pulls several GB of model images.
+
+──────────────────  IF AN INSTALL/UPGRADE TIMES OUT  ────────────────────
+  Heavy image pulls can exceed Rancher's default 10-minute timeout, leaving the
+  release stuck ("another operation in progress"). To avoid it:
+    • Rancher UI: tick "Customize Helm options" → set Timeout = 1800 (30 min),
+      or uncheck "Wait".
+    • CLI:        helm install ... --wait --timeout 30m
+
+  Trial runs in fixed-seats mode (no license needed). Production (your own
+  registry, a license, scale): support@alchemistudio.ai

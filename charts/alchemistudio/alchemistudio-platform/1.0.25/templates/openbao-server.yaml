@@ -1,0 +1,161 @@
+# =============================================================================
+# OpenBao — open-source Vault fork (Azure KeyVault replacement for SUSE/on-prem).
+# Standalone mode, 1 replica. Auto-init/unseal handled by the openbao-init-job.
+# ESO's ClusterSecretStore (eso.yaml) authenticates via k8s auth and pulls secrets
+# from the KV v2 engine mounted at path "alchemi".
+# =============================================================================
+{{- if .Values.openbao.enabled }}
+{{- $baons := .Values.openbao.namespace | default "openbao" -}}
+{{- $baoImage := .Values.openbao.image | default "alchemiacr.azurecr.io/platform/openbao:2.1.0" -}}
+---
+# ConfigMap: standalone HCL config (file backend; no HA for basic tier)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-config
+  namespace: {{ $baons }}
+  labels:
+    app: openbao
+    app.kubernetes.io/part-of: alchemistudio-platform
+data:
+  openbao.hcl: |
+    ui = false
+    listener "tcp" {
+      tls_disable     = 1
+      address         = "0.0.0.0:8200"
+      cluster_address = "0.0.0.0:8201"
+    }
+    storage "file" {
+      path = "/openbao/data"
+    }
+    default_lease_ttl = "168h"
+    max_lease_ttl     = "720h"
+---
+# ServiceAccount for OpenBao itself: needs system:auth-delegator to validate k8s
+# token reviews (required for the kubernetes auth method ESO uses to log in).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao
+  namespace: {{ $baons }}
+  labels:
+    app: openbao
+    app.kubernetes.io/part-of: alchemistudio-platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openbao-tokenreviewer
+  labels:
+    app: openbao
+    app.kubernetes.io/part-of: alchemistudio-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: openbao
+    namespace: {{ $baons }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openbao
+  namespace: {{ $baons }}
+  labels:
+    app: openbao
+    app.kubernetes.io/part-of: alchemistudio-platform
+spec:
+  serviceName: openbao
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openbao
+  template:
+    metadata:
+      labels:
+        app: openbao
+    spec:
+      serviceAccountName: openbao
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        fsGroup: 1000
+      containers:
+        - name: openbao
+          image: {{ $baoImage | quote }}
+          # entrypoint auto-adds -config=/openbao/config (BAO_CONFIG_DIR, the dir where
+          # openbao.hcl is mounted). Passing the file too made openbao read openbao.hcl
+          # TWICE -> duplicate listener -> "0.0.0.0:8200 address already in use". Just "server".
+          args: ["server"]
+          env:
+            - name: SKIP_CHOWN
+              value: "true"
+            - name: SKIP_SETCAP
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8200
+            - name: cluster
+              containerPort: 8201
+          volumeMounts:
+            - name: data
+              mountPath: /openbao/data
+            - name: config
+              mountPath: /openbao/config
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+              port: 8200
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200
+              port: 8200
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: openbao-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass | default "longhorn" }}
+        resources:
+          requests:
+            storage: {{ .Values.openbao.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao
+  namespace: {{ $baons }}
+  labels:
+    app: openbao
+    app.kubernetes.io/part-of: alchemistudio-platform
+spec:
+  selector:
+    app: openbao
+  ports:
+    - name: http
+      port: 8200
+      targetPort: 8200
+    - name: cluster
+      port: 8201
+      targetPort: 8201
+{{- end }}

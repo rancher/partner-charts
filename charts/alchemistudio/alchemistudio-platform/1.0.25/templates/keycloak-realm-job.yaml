@@ -1,0 +1,118 @@
+# =============================================================================
+# Keycloak realm bootstrap — replaces the manual `kcadm.sh` runbook. A post-install
+# /post-upgrade Job (after keycloak is up) that idempotently creates the realm, the
+# alchemi-web + alchemi-admin-svc clients (secrets = the generated KEYCLOAK_*_CLIENT_SECRET
+# so web/keycloak match automatically), and the first admin user (admin.email). Safe
+# to re-run: every step is create-if-absent / update-secret.
+# =============================================================================
+{{- if .Values.keycloak.enabled }}
+{{- $authns := .Values.global.namespaces.auth }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: alchemi-keycloak-realm
+  namespace: {{ $authns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ .Values.global.image.pullSecret }} }]
+      {{- end }}
+      containers:
+        - name: kcadm
+          image: {{ .Values.global.image.registry }}/alchemi-keycloak:{{ dig "image" "tag" .Values.global.image.tag (index .Values "alchemi-keycloak") }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            - name: KC_URL
+              value: "http://keycloak.{{ $authns }}.svc.cluster.local:8080"
+            - name: REALM
+              value: "alchemi"
+            - name: REDIRECT_URI
+              value: "{{ include "alchemi.redirectUri" . }}"
+            - name: WEB_ORIGIN
+              value: "{{ include "alchemi.appUrl" . }}"
+            - name: ADMIN_EMAIL
+              value: {{ required "admin.email is required" .Values.admin.email | quote }}
+            - name: KC_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: keycloak-secrets, key: KC_BOOTSTRAP_ADMIN_PASSWORD } }
+            - name: WEB_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: alchemi-secrets, key: KEYCLOAK_WEB_CLIENT_SECRET } }
+            - name: ADMIN_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: alchemi-secrets, key: KEYCLOAK_ADMIN_CLIENT_SECRET } }
+            - name: FIRST_USER_PASSWORD
+              valueFrom: { secretKeyRef: { name: alchemi-secrets, key: FIRST_USER_PASSWORD } }
+            - name: KC_LOGIN_THEME
+              value: {{ .Values.branding.theme | default "splitv1" | quote }}
+          command: ["/bin/bash", "-ec"]
+          args:
+            - |
+              KCADM=/opt/keycloak/bin/kcadm.sh
+              echo "waiting for keycloak admin API at $KC_URL ..."
+              n=0
+              until $KCADM config credentials --server "$KC_URL" --realm master --user admin --password "$KC_ADMIN_PASSWORD" >/dev/null 2>&1; do
+                n=$((n+1))
+                if [ "$n" -ge 60 ]; then echo "ERROR: keycloak not ready"; exit 1; fi
+                sleep 5
+              done
+              echo "admin login ok"
+              cid() { $KCADM get clients -r "$REALM" -q clientId="$1" --fields id --format csv --noquotes 2>/dev/null | tr -d '\r' | head -1; }
+
+              # 1. realm
+              $KCADM get "realms/$REALM" >/dev/null 2>&1 || $KCADM create realms -s realm="$REALM" -s enabled=true
+              echo "realm $REALM ready"
+
+              # 2. alchemi-web client (confidential, standard flow)
+              WID=$(cid alchemi-web)
+              if [ -z "$WID" ]; then
+                $KCADM create clients -r "$REALM" -s clientId=alchemi-web -s enabled=true \
+                  -s protocol=openid-connect -s publicClient=false -s standardFlowEnabled=true \
+                  -s directAccessGrantsEnabled=false -s "redirectUris=[\"$REDIRECT_URI\"]" \
+                  -s "webOrigins=[\"$WEB_ORIGIN\"]" -s secret="$WEB_CLIENT_SECRET"
+              else
+                $KCADM update "clients/$WID" -r "$REALM" -s secret="$WEB_CLIENT_SECRET" \
+                  -s "redirectUris=[\"$REDIRECT_URI\"]" -s "webOrigins=[\"$WEB_ORIGIN\"]"
+              fi
+              echo "client alchemi-web ready"
+
+              # 3. alchemi-admin-svc client (service account + realm-admin)
+              AID=$(cid alchemi-admin-svc)
+              if [ -z "$AID" ]; then
+                $KCADM create clients -r "$REALM" -s clientId=alchemi-admin-svc -s enabled=true \
+                  -s protocol=openid-connect -s publicClient=false -s standardFlowEnabled=false \
+                  -s serviceAccountsEnabled=true -s secret="$ADMIN_CLIENT_SECRET"
+              else
+                $KCADM update "clients/$AID" -r "$REALM" -s secret="$ADMIN_CLIENT_SECRET"
+              fi
+              $KCADM add-roles -r "$REALM" --uusername service-account-alchemi-admin-svc \
+                --cclientid realm-management --rolename realm-admin 2>/dev/null || true
+              echo "client alchemi-admin-svc ready (realm-admin granted)"
+
+              # 4. first admin user (links to the seeded app-admin by email)
+              # NOTE: UID is a bash readonly variable — must use a different name.
+              KC_UID=$($KCADM get users -r "$REALM" -q email="$ADMIN_EMAIL" --fields id --format csv --noquotes 2>/dev/null | tr -d '\r' | head -1)
+              if [ -z "$KC_UID" ]; then
+                $KCADM create users -r "$REALM" -s username="$ADMIN_EMAIL" -s email="$ADMIN_EMAIL" \
+                  -s enabled=true -s emailVerified=true
+                # --temporary: force a password reset on first login, so the initial
+                # credential (generated OR operator-supplied via admin.initialPassword) is
+                # single-use and never persists as the standing password.
+                $KCADM set-password -r "$REALM" --username "$ADMIN_EMAIL" --new-password "$FIRST_USER_PASSWORD" --temporary
+                echo "first user $ADMIN_EMAIL created (temporary password — reset on first login)"
+              else
+                echo "first user $ADMIN_EMAIL already exists (leaving password as-is)"
+              fi
+
+              # 5. login theme — set once on the realm so all KC pages use splitv1
+              $KCADM update "realms/$REALM" -s loginTheme="$KC_LOGIN_THEME"
+              echo "loginTheme=$KC_LOGIN_THEME applied to realm $REALM"
+              echo "keycloak realm bootstrap complete"
+{{- end }}

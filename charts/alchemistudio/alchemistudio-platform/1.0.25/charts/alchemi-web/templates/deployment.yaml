@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alchemi-web.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "alchemi-web.labels" . | nindent 4 }}
+    app: {{ include "alchemi-web.fullname" . }}
+    alchemi.io/license-managed: "true"
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  # tier=standard -> 2 replicas of this load-bearing service (global.tier, set by the umbrella); basic -> replicaCount (1)
+  replicas: {{ if eq (.Values.global.tier | default "basic") "standard" }}2{{ else }}{{ .Values.replicaCount }}{{ end }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "alchemi-web.selectorLabels" . | nindent 6 }}
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "alchemi-web.selectorLabels" . | nindent 8 }}
+        app: {{ include "alchemi-web.fullname" . }}
+        alchemi.io/license-managed: "true"
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.service.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- end }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          envFrom:
+            {{- if .Values.config.create }}
+            - configMapRef:
+                name: {{ include "alchemi-web.fullname" . }}-config
+            {{- else if .Values.config.existingConfigMap }}
+            - configMapRef:
+                name: {{ .Values.config.existingConfigMap }}
+            {{- end }}
+            {{- if .Values.secret.create }}
+            - secretRef:
+                name: {{ include "alchemi-web.fullname" . }}-secrets
+            {{- else if .Values.secret.existingSecret }}
+            - secretRef:
+                name: {{ .Values.secret.existingSecret }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          {{- if .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if .Values.aiosDataPlane.enabled }}
+          # AIOS shared data plane (RWX). The web app serves the Files UI, which
+          # reads/writes ~/Files on this POSIX share — without the mount it fails
+          # with `EACCES: mkdir '/mnt/aios-data'`. Matches cluster-deployments web.
+          volumeMounts:
+            - name: aios-data
+              mountPath: {{ .Values.aiosDataPlane.mountPath | default "/mnt/aios-data" }}
+          {{- end }}
+      {{- if .Values.aiosDataPlane.enabled }}
+      volumes:
+        - name: aios-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.aiosDataPlane.claimName | default "aios-data-plane" }}
+      {{- end }}
