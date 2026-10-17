@@ -1,0 +1,82 @@
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{ $values := .Values.runtime.patch.hook }}
+{{- if and .Values.runtime.patch.enabled $values.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ coalesce .Values.runtime.patch.name (printf "%s-runtime-patch" (include "runtime.fullname" .)) }}
+  labels:
+    {{- include "runtime.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- with $values.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with $values.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  {{- with $values.backoffLimit }}
+  backoffLimit: {{ . | int }}
+  {{- end }}
+  template:
+    metadata:
+      name: {{ coalesce .Values.runtime.patch.name (printf "%s-runtime-patch" (include "runtime.fullname" .)) }}
+      labels:
+        {{- include "runtime.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml $values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: patch-runtime
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" $values.image "context" .) }}
+        imagePullPolicy: {{ $values.image.pullPolicy | default "Always" }}
+        command:
+        - "/bin/bash"
+        args:
+        - -ec
+        - |
+          {{- .Files.Get "files/patch-runtime.sh" | nindent 10 }}
+        env:
+        - name: API_KEY
+          {{- include "runtime.installation-token-env-var-value" . | indent 10}}
+        - name: API_HOST
+          value: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+        - name: AGENT
+          value: {{  .Values.runtime.agent | quote | default "true" }}
+          {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $values.env "context" .) | nindent 8 }}
+        volumeMounts:
+        - name: runtime-config
+          mountPath: /opt/codefresh/{{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}
+          subPath: {{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}
+        {{- range $runtimeIndex, $runtimeItem := .Values.extraRuntimes }}
+        - name: {{ printf "%s-runtime-config" ( include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) ) }}
+          mountPath: /opt/codefresh/runtime.d/system/{{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) }}
+          subPath: {{ include "runtime.runtime-environment-spec.runtime-filename-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) }}
+        {{- end }}
+      {{- with $values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      volumes:
+      - name: runtime-config
+        configMap:
+          name: {{ include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" (include "runtime.runtime-environment-spec.runtime-name" .)) }}-runtime-config
+      {{- range $runtimeIndex, $runtimeItem := .Values.extraRuntimes }}
+      - name: {{ printf "%s-runtime-config" ( include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) ) }}
+        configMap:
+            name: {{ printf "%s-runtime-config" ( include "runtime.runtime-environment-spec.runtime-name-normalized" (dict "context" . "runtimeName" $runtimeItem.runtimeName) ) }}
+      {{- end }}
+      restartPolicy: OnFailure
+{{- end }}

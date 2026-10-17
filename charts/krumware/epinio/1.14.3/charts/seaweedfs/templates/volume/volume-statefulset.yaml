@@ -1,0 +1,423 @@
+{{ $volumes := deepCopy .Values.volumes | mergeOverwrite (dict "" .Values.volume)  }}
+{{- range $vname, $volume := $volumes }}
+{{- $volumeName := trimSuffix "-" (printf "volume-%s" $vname) }}
+{{- $volume := mergeOverwrite (deepCopy $.Values.volume) (dict "enabled" true) $volume }}
+
+{{- if $volume.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "seaweedfs.componentName" (list $ $volumeName) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" $ }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $volumeName }}
+{{- if $volume.annotations }}
+  annotations:
+    {{- toYaml $volume.annotations | nindent 4 }}
+{{- end }}
+spec:
+  serviceName: {{ include "seaweedfs.componentName" (list $ $volumeName) }}
+  replicas: {{ $volume.replicas }}
+  podManagementPolicy: {{ $volume.podManagementPolicy }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "seaweedfs.name" $ }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $volumeName }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "seaweedfs.name" $ }}
+        helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: {{ $volumeName }}
+      {{ with $.Values.podLabels }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $volume.podLabels }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      annotations:
+      {{ with $.Values.podAnnotations }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $volume.podAnnotations }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if $volume.affinity }}
+      affinity:
+        {{ tpl (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.affinity) $ | indent 8 | trim }}
+      {{- end }}
+      {{- if $volume.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{ tpl (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.topologySpreadConstraints) $ | nindent 8 | trim }}
+      {{- end }}
+      restartPolicy: {{ default $.Values.global.restartPolicy $volume.restartPolicy }}
+      {{- if $volume.tolerations }}
+      tolerations:
+        {{ tpl (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.tolerations) $ | indent 8 | trim }}
+      {{- end }}
+      {{- include "seaweedfs.imagePullSecrets" $ | nindent 6 }}
+      terminationGracePeriodSeconds: 150
+      {{- if $volume.priorityClassName }}
+      priorityClassName: {{ $volume.priorityClassName | quote }}
+      {{- end }}
+      enableServiceLinks: false
+      {{- if $.Values.global.createClusterRole }}
+      serviceAccountName: {{ $volume.serviceAccountName | default (include "seaweedfs.serviceAccountName" $) | quote }} # for deleting statefulset pods after migration
+      {{- end }}
+      {{- $initContainers_exists := include "volume.initContainers_exists" $ -}}
+      {{- if $initContainers_exists }}
+      initContainers:
+        {{- if $volume.idx }}
+        - name: seaweedfs-vol-move-idx
+          image: {{ template "volume.image" $ }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
+          command: [ '/bin/sh', '-c' ]
+          args: [ '{{range $dir :=  $volume.dataDirs }}if ls /{{$dir.name}}/*.idx  >/dev/null 2>&1; then mv /{{$dir.name}}/*.idx /idx/ ; fi; {{end}}' ]
+          volumeMounts:
+            - name: idx
+              mountPath: /idx
+          {{- range $dir :=  $volume.dataDirs }}
+            - name: {{ $dir.name }}
+              mountPath: /{{ $dir.name }}
+          {{- end }}
+          {{- if $volume.containerSecurityContext.enabled }}
+          securityContext: {{- omit $volume.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- if $volume.initContainers }}
+        {{ tpl (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.initContainers) $ | indent 8 | trim }}
+        {{- end }}
+      {{- end }}
+      {{- if $volume.podSecurityContext.enabled }}
+      securityContext: {{- omit $volume.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: seaweedfs
+          image: {{ template "volume.image" $ }}
+          imagePullPolicy: {{ default "IfNotPresent" $.Values.global.imagePullPolicy }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: SEAWEEDFS_FULLNAME
+              value: "{{ include "seaweedfs.fullname" $ }}"
+            {{- if $volume.extraEnvironmentVars }}
+            {{- range $key, $value := $volume.extraEnvironmentVars }}
+            - name: {{ $key }}
+            {{- if kindIs "string" $value }}
+              value: {{ tpl $value $ | quote }}
+            {{- else }}
+              valueFrom:
+                {{ toYaml $value | nindent 16 | trim }}
+            {{- end -}}
+            {{- end }}
+            {{- end }}
+            {{- if $.Values.global.extraEnvironmentVars }}
+            {{- range $key, $value := $.Values.global.extraEnvironmentVars }}
+            - name: {{ $key }}
+            {{- if kindIs "string" $value }}
+              value: {{ tpl $value $ | quote }}
+            {{- else }}
+              valueFrom:
+                {{ toYaml $value | nindent 16 | trim }}
+            {{- end -}}
+            {{- end }}
+            {{- end }}
+          command:
+            - "/bin/sh"
+            - "-ec"
+            - |
+              exec /usr/bin/weed \
+                {{- if $volume.logs }}
+                -logdir=/logs \
+                {{- else }}
+                -logtostderr=true \
+                {{- end }}
+                {{- if $volume.loggingOverrideLevel }}
+                -v={{ $volume.loggingOverrideLevel }} \
+                {{- else }}
+                -v={{ $.Values.global.loggingLevel }} \
+                {{- end }}
+                volume \
+                -port={{ $volume.port }} \
+                {{- if $volume.metricsPort }}
+                -metricsPort={{ $volume.metricsPort }} \
+                {{- end }}
+                {{- if $volume.metricsIp }}
+                -metricsIp={{ $volume.metricsIp }} \
+                {{- end }}
+                -dir {{range $index, $dir :=  $volume.dataDirs }}{{if ne $index 0}},{{end}}/{{$dir.name}}{{end}} \
+                {{- if $volume.idx }}
+                -dir.idx=/idx \
+                {{- end }}
+                -max {{range $index, $dir :=  $volume.dataDirs }}{{if ne $index 0}},{{end}}
+                {{- if eq ($dir.maxVolumes | toString) "0" }}0{{ else if not $dir.maxVolumes }}7{{ else }}{{$dir.maxVolumes}}{{ end }}
+                {{- end }} \
+                {{- if $volume.rack }}
+                -rack={{ $volume.rack }} \
+                {{- end }}
+                {{- if $volume.dataCenter }}
+                -dataCenter={{ $volume.dataCenter }} \
+                {{- end }}
+                {{- if $volume.id }}
+                -id={{ $volume.id }} \
+                {{- end }}
+                -ip.bind={{ $volume.ipBind }} \
+                -readMode={{ $volume.readMode }} \
+                {{- if $volume.whiteList }}
+                -whiteList={{ $volume.whiteList }} \
+                {{- end }}
+                {{- if $volume.imagesFixOrientation }}
+                -images.fix.orientation \
+                {{- end }}
+                {{- if $volume.pulseSeconds }}
+                -pulseSeconds={{ $volume.pulseSeconds }} \
+                {{- end }}
+                {{- if $volume.index }}
+                -index={{ $volume.index }} \
+                {{- end }}
+                {{- if $volume.fileSizeLimitMB }}
+                -fileSizeLimitMB={{ $volume.fileSizeLimitMB }} \
+                {{- end }}
+                -minFreeSpacePercent={{ $volume.minFreeSpacePercent }} \
+                -ip=${POD_NAME}.{{ include "seaweedfs.componentName" (list $ $volumeName) }}.{{ $.Release.Namespace }} \
+                -compactionMBps={{ $volume.compactionMBps }} \
+                -master={{ include "seaweedfs.masterServerArg" $ }} \
+                {{- range $volume.extraArgs }}
+                {{ . }} \
+                {{- end }}
+          volumeMounts:
+            {{- range $dir := $volume.dataDirs }}
+            {{- if not ( eq $dir.type "custom" ) }}
+            - name: {{ $dir.name }}
+              mountPath: "/{{ $dir.name }}/"
+            {{- end }}
+            {{- end }}
+            {{- if $volume.logs }}
+            - name: logs
+              mountPath: "/logs/"
+            {{- end }}
+            {{- if $volume.idx }}
+            - name: idx
+              mountPath: "/idx/"
+            {{- end }}
+            {{- if $.Values.global.enableSecurity }}
+            - name: security-config
+              readOnly: true
+              mountPath: /etc/seaweedfs/security.toml
+              subPath: security.toml
+            - name: ca-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificates/ca/
+            - name: master-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificates/master/
+            - name: volume-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificates/volume/
+            - name: filer-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificates/filer/
+            - name: client-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificates/client/
+            {{- end }}
+            {{ tpl (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.extraVolumeMounts) $ | indent 12 | trim }}
+          ports:
+            - containerPort: {{ $volume.port }}
+              name: swfs-vol
+            {{- if $volume.metricsPort }}
+            - containerPort: {{ $volume.metricsPort }}
+              name: metrics
+            {{- end }}
+            - containerPort: {{ $volume.grpcPort }}
+              name: swfs-vol-grpc
+          {{- if $volume.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ $volume.readinessProbe.httpGet.path }}
+              port: {{ $volume.port }}
+              scheme: {{ $volume.readinessProbe.httpGet.scheme }}
+            initialDelaySeconds: {{ $volume.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $volume.readinessProbe.periodSeconds }}
+            successThreshold: {{ $volume.readinessProbe.successThreshold }}
+            failureThreshold: {{ $volume.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ $volume.readinessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if $volume.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ $volume.livenessProbe.httpGet.path }}
+              port: {{ $volume.port }}
+              scheme: {{ $volume.livenessProbe.httpGet.scheme }}
+            initialDelaySeconds: {{ $volume.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $volume.livenessProbe.periodSeconds }}
+            successThreshold: {{ $volume.livenessProbe.successThreshold }}
+            failureThreshold: {{ $volume.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ $volume.livenessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- with $volume.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $volume.containerSecurityContext.enabled }}
+          securityContext: {{- omit $volume.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+      {{- if $volume.sidecars }}
+      {{- include "common.tplvalues.render" (dict "value" (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.sidecars) "context" $) | nindent 8 }}
+      {{- end }}
+      volumes:
+
+     {{- range $dir := $volume.dataDirs }}
+
+      {{- if eq $dir.type "hostPath" }}
+        - name: {{ $dir.name }}
+          hostPath:
+            path: {{ $dir.hostPathPrefix }}/object_store/
+            type: DirectoryOrCreate
+      {{- end }}
+      {{- if eq $dir.type "existingClaim" }}
+        - name: {{ $dir.name }}
+          persistentVolumeClaim:
+            claimName: {{ $dir.claimName }}
+      {{- end }}
+      {{- if eq $dir.type "emptyDir" }}
+        - name: {{ $dir.name }}
+          emptyDir: {}
+      {{- end }}
+
+     {{- end }}
+
+     {{- if $volume.idx }}
+       {{- if eq $volume.idx.type "hostPath" }}
+        - name: idx
+          hostPath:
+            path: {{ $volume.idx.hostPathPrefix }}/seaweedfs-volume-idx/
+            type: DirectoryOrCreate
+       {{- end }}
+       {{- if eq $volume.idx.type "existingClaim" }}
+        - name: idx
+          persistentVolumeClaim:
+            claimName: {{ $volume.idx.claimName }}
+       {{- end }}
+       {{- if eq $volume.idx.type "emptyDir" }}
+        - name: idx
+          emptyDir: {}
+       {{- end }}
+     {{- end }}
+
+     {{- if $volume.logs }}
+       {{- if eq $volume.logs.type "hostPath" }}
+        - name: logs
+          hostPath:
+            path: {{ $volume.logs.hostPathPrefix }}/logs/seaweedfs/volume
+            type: DirectoryOrCreate
+       {{- end }}
+       {{- if eq $volume.logs.type "existingClaim" }}
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ $volume.logs.claimName }}
+       {{- end }}
+       {{- if eq $volume.logs.type "emptyDir" }}
+        - name: logs
+          emptyDir: {}
+       {{- end }}
+     {{- end }}
+     {{- if $.Values.global.enableSecurity }}
+        - name: security-config
+          configMap:
+            name: {{ include "seaweedfs.fullname" $ }}-security-config
+        - name: ca-cert
+          secret:
+            secretName: {{ include "seaweedfs.fullname" $ }}-ca-cert
+        - name: master-cert
+          secret:
+            secretName: {{ include "seaweedfs.fullname" $ }}-master-cert
+        - name: volume-cert
+          secret:
+            secretName: {{ include "seaweedfs.fullname" $ }}-volume-cert
+        - name: filer-cert
+          secret:
+            secretName: {{ include "seaweedfs.fullname" $ }}-filer-cert
+        - name: client-cert
+          secret:
+            secretName: {{ include "seaweedfs.fullname" $ }}-client-cert
+      {{- end }}
+      {{- if $volume.extraVolumes }}
+        {{ tpl $volume.extraVolumes $ | indent 8 | trim }}
+      {{- end }}
+      {{- if $volume.nodeSelector }}
+      nodeSelector:
+        {{ tpl (printf "{{ $volumeName := \"%s\" }}%s" $volumeName $volume.nodeSelector) $ | indent 8 | trim }}
+      {{- end }}
+  volumeClaimTemplates:
+    {{- range $dir := $volume.dataDirs }}
+    {{- if eq $dir.type "persistentVolumeClaim" }}
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ $dir.name }}
+        {{- with $dir.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ $dir.storageClass }}
+        resources:
+          requests:
+            storage: {{ $dir.size }}
+    {{- end }}
+    {{- end }}
+
+    {{- if and $volume.idx (eq $volume.idx.type "persistentVolumeClaim") }}
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: idx
+        {{- with $volume.idx.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ $volume.idx.storageClass }}
+        resources:
+          requests:
+            storage: {{ $volume.idx.size }}
+    {{- end }}
+    {{- if and $volume.logs (eq $volume.logs.type "persistentVolumeClaim") }}
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: logs
+        {{- with $volume.logs.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ $volume.logs.storageClass }}
+        resources:
+          requests:
+            storage: {{ $volume.logs.size }}
+    {{- end }}
+{{- end }}
+{{- end }}

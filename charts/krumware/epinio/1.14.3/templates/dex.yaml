@@ -1,0 +1,167 @@
+{{- if .Values.global.dex.enabled -}}
+
+{{- if .Values.dex.manageConfigSecret -}}
+{{- $dexConfigSecretName := .Values.dex.configSecret.name | default "dex-config" -}}
+{{- $dexSecret := (lookup "v1" "Secret" .Release.Namespace $dexConfigSecretName).data | default dict -}}
+{{- $prevUiClientSecret := (get $dexSecret "uiClientSecret") -}}
+{{- $uiClientSecret := empty $prevUiClientSecret | ternary (randAlphaNum 32) (b64dec $prevUiClientSecret) -}}
+{{- $rancherUrl := .Values.global.cattle.url | default .Values.rancher.url -}}
+{{- /* Keys the chart renders itself; extraConfig may not redefine them. */ -}}
+{{- $reservedKeys := list "web" "issuer" "storage" "oauth2" "enablePasswordDB"
+      "staticPasswords" "staticClients" "connectors" -}}
+{{- range $key, $_ := .Values.dex.extraConfig -}}
+{{- if has $key $reservedKeys -}}
+{{- fail (printf "%s %s"
+      (printf "dex.extraConfig.%s is managed by the chart" $key)
+      "and cannot be set in dex.extraConfig") -}}
+{{- end -}}
+{{- end -}}
+
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  annotations:
+  name: {{ $dexConfigSecretName }}
+  namespace: {{ .Release.Namespace }}
+stringData:
+  issuer: {{ include "epinio-dex-issuer" . }}
+  endpoint: {{ printf "http://%s.%s.svc.cluster.local:5556" .Values.dex.fullnameOverride .Release.Namespace }}
+  uiClientSecret: {{ $uiClientSecret }}
+{{- with .Values.dex.rolesMapping }}
+  rolesMapping: |-
+{{- toYaml . | nindent 4 }}
+{{- end }}
+  config.yaml: |-
+{{- if $rancherUrl }}
+    web:
+      allowedOrigins: ['{{ $rancherUrl }}']
+{{- end }}
+    issuer: {{ include "epinio-dex-issuer" . }}
+    storage:
+      type: kubernetes
+      config:
+        inCluster: true
+    oauth2:
+      skipApprovalScreen: true
+{{- with .Values.dex.extraConfig }}
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- with .Values.dex.connectors }}
+    connectors:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+    {{- /* An absent key (old values under --reuse-values) means true. */}}
+    enablePasswordDB: {{ ne .Values.dex.enablePasswordDB false }}
+{{- if kindIs "slice" .Values.dex.staticPasswords }}
+{{- with .Values.dex.staticPasswords }}
+    staticPasswords:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- else }}
+    staticPasswords:
+    - email: "admin@epinio.io"
+      # bcrypt hash of the string "password": $(echo password | htpasswd -BinC 10 admin | cut -d: -f2)
+      hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+      username: "admin"
+      userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+    - email: "epinio@epinio.io"
+      hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+      userID: "08a8684b-db88-4b73-90a9-3cd1661f5467"
+{{- end }}
+
+    staticClients:
+    - id: epinio-api
+      name: 'Epinio API'
+      public: true
+      # The 'Epinio API' lets the 'Epinio cli' issue ID tokens on its behalf.
+      # https://dexidp.io/docs/custom-scopes-claims-clients/#cross-client-trust-and-authorized-party
+      trustedPeers:
+      - epinio-cli
+      - epinio-ui
+{{- if $rancherUrl }}
+      - rancher-dashboard
+{{- end }}
+{{- with .Values.dex.apiTrustedPeers }}
+      {{- range . }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end }}
+
+    - id: epinio-cli
+      name: 'Epinio cli'
+      public: true
+
+    - id: epinio-ui
+      name: 'Epinio UI'
+      secret: {{ $uiClientSecret | quote }}
+      # Shouldn't be public, https://dexidp.io/docs/custom-scopes-claims-clients/#public-clients
+      redirectURIs:
+      - {{ .Values.dex.ui.redirectURI | default (printf "https://%s/auth/verify/" (include "epinio-hostname" .)) | quote }}
+
+{{- if $rancherUrl }}
+    - id: rancher-dashboard
+      name: 'Rancher Dashboard'
+      public: true
+      redirectURIs:
+      - "{{ $rancherUrl }}/dashboard/epinio/auth/verify/"
+{{- end }}
+{{- with .Values.dex.extraStaticClients }}
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: {{ include "epinio-truncate" (print "user-" "admin@epinio.io") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    epinio.io/api-user-credentials: "true"
+  annotations:
+    epinio.io/roles: "admin"
+stringData:
+  username: "admin@epinio.io"
+  password: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+
+---
+# TODO (Future):  Remove this custom resource and leverage Dex Helm chart values instead
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dex
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.ingress.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ default .Values.global.tlsIssuer .Values.global.customTlsIssuer | quote }}
+    {{- end }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key | quote }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.ingressClassName }}
+  ingressClassName: "{{ .Values.ingress.ingressClassName }}"
+  {{- end }}
+  rules:
+  - host: {{ (include "epinio-dex-hostname" .) | quote }}
+    http:
+      paths:
+      - backend:
+          service:
+            name: dex
+            port:
+              number: {{ .Values.dex.service.ports.http.port | default 5556 | int }}
+        path: /
+        pathType: Prefix
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ (include "epinio-dex-hostname" .) | quote }}
+    secretName: dex-tls
+  {{- end }}
+
+{{- end }}

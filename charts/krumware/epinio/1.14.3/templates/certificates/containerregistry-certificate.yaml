@@ -1,0 +1,30 @@
+{{- if .Values.containerregistry.enabled }}
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: epinio-registry
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+  - registry.{{ .Release.Namespace }}.svc.cluster.local
+  ipAddresses:
+  - 127.0.0.1
+  issuerRef:
+    kind: ClusterIssuer
+    name: epinio-ca
+  secretName: epinio-registry-tls
+{{ else }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  annotations:
+  name: epinio-registry-tls
+  namespace: {{ .Release.Namespace }}
+stringData:
+  ca.crt: {{ .Values.certManager.registry.ca | quote }}
+  tls.key: {{ .Values.certManager.registry.key | quote }}
+  tls.crt: {{ .Values.certManager.registry.cert | quote }}
+{{- end }}
+{{- end }}
