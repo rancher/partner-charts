@@ -1,0 +1,25 @@
+{{/* Template to generate the aggregated APIService/Service objects */}}
+{{- if .Values.apiservices.deployed -}}
+{{- $main := . -}}
+{{- $container_port := .Values.service.internalPort -}}
+{{- $namespace := .Release.Namespace -}}
+{{- range include "k10.aggregatedAPIs" . | splitList " " -}}
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.{{ . }}.{{ template "apiDomain" $main }}
+  labels:
+    apiserver: "true"
+{{ include "helm.labels" $ | indent 4 }}
+spec:
+  version: v1alpha1
+  group: {{ . }}.{{ template "apiDomain" $main }}
+  groupPriorityMinimum: 2000
+  service:
+    namespace: {{$namespace}}
+    name: aggregatedapis-svc
+  versionPriority: 10
+  insecureSkipTLSVerify: true
+{{ end }}
+{{- end -}}
