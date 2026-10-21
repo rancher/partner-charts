@@ -1,0 +1,158 @@
+suite: securityContext
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: sets pod securityContext set to defaults when no values provided
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+        template: templates/deployment.yaml
+  - it: ignores global podSecurityContext when local defaults exist
+    set:
+      licenseKey: us-whatever
+      global:
+        podSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+        template: templates/deployment.yaml
+  - it: appends pod securityContext from values by common-library
+    set:
+      licenseKey: us-whatever
+      podSecurityContext:
+        topLevelKey: topLevelValue
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: sets pod securityContext from values by common-library overriding global values
+    set:
+      licenseKey: us-whatever
+      podSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        podSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: sets container securityContext set to defaults when no values provided
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+        template: templates/deployment.yaml
+  - it: respects global containerSecurityContext with defaults
+    set:
+      licenseKey: us-whatever
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            globalKey: globalValue
+        template: templates/deployment.yaml
+  - it: respects local containerSecurityContext overriding global
+    set:
+      licenseKey: us-whatever
+      containerSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            topLevelKey: topLevelValue
+        template: templates/deployment.yaml
+  - it: merges manager containerSecurityContext with defaults
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          containerSecurityContext:
+            managerKey: managerValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            managerKey: managerValue
+        template: templates/deployment.yaml
+  - it: validates complete 4-level precedence chain (manager > local > global > defaults)
+    set:
+      licenseKey: us-whatever
+      containerSecurityContext:
+        topLevelKey: topLevelValue
+      global:
+        containerSecurityContext:
+          globalKey: globalValue
+      controllerManager:
+        manager:
+          containerSecurityContext:
+            managerKey: managerValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            managerKey: managerValue
+        template: templates/deployment.yaml
+  - it: manager can override defaults
+    set:
+      licenseKey: us-whatever
+      controllerManager:
+        manager:
+          containerSecurityContext:
+            allowPrivilegeEscalation: true
+            managerKey: managerValue
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+                - ALL
+            managerKey: managerValue
+        template: templates/deployment.yaml
