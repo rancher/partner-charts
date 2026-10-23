@@ -1,0 +1,68 @@
+{{ if (include "dynatrace-operator.needCSI" .) }}
+# Copyright Dynatrace LLC
+# SPDX-License-Identifier: Apache-2.0
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dynatrace-oneagent-csi-driver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dynatrace-operator.csiLabels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - dynatrace.com
+    resources:
+      - dynakubes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - dynatrace.com
+    resources:
+      - dynakubes/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - create
+      - delete
+      - watch
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dynatrace-oneagent-csi-driver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dynatrace-operator.csiLabels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: dynatrace-oneagent-csi-driver
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: dynatrace-oneagent-csi-driver
+  apiGroup: rbac.authorization.k8s.io
+{{- end -}}

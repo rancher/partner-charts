@@ -1,0 +1,148 @@
+# Switches on every optional template and `if`/`with` branch in the chart so
+# the null scan in .hack/check-chart-render.sh (and `ct lint`) covers them:
+# metrics + ServiceMonitor + PrometheusRule + Grafana dashboard ConfigMap
+# (+ compliance), HPA (with memory target and behavior), PodDisruptionBudget
+# (minAvailable branch), the post-install migrate hook Job, the API services,
+# the database Secret, and every scheduling/security knob that is a `with`.
+# Intended to render the grafana ConfigMap and the migrate Job under plain
+# `helm template` (the Job is hidden when `templating.enabled=true`).
+#
+# Deliberately LEFT EMPTY so the null scan exercises their empty branches (a
+# regression there renders a bare key, i.e. a YAML null, enterprise-kyverno#1090):
+#   metrics.grafanaDashboard.annotations      (ConfigMap `metadata.annotations`)
+#   jobConfigurations.podLabels / podAnnotations (migrate Job `spec.template.metadata`)
+# The non-empty variants are asserted by .hack/check-chart-render.sh using --set.
+# Lint-only: the monitoring.coreos.com CRDs and the referenced Secrets/PVC
+# classes do not exist, so never `ct install` with this file.
+fipsEnabled: true
+commonLabels:
+  team: platform
+imagePullSecrets:
+  - name: regcred
+podAnnotations:
+  example.com/scrape: "true"
+nodeSelector:
+  kubernetes.io/os: linux
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: reports
+    effect: NoSchedule
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64
+serviceAccount:
+  annotations:
+    example.com/role: reports-server
+extraArgs:
+  max-requests-inflight: "400"
+  skipped-flag: ""
+compliance:
+  enabled: true
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: prometheus
+    interval: 30s
+    scrapeTimeout: 10s
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: go_.*
+        action: drop
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_node_name]
+        targetLabel: node
+  prometheusRules:
+    enabled: true
+    additionalLabels:
+      release: prometheus
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetMemoryUtilizationPercentage: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+pdb:
+  enabled: true
+  maxUnavailable: ~
+  minAvailable: 1
+config:
+  noKeepAlive: true
+  etcd:
+    enabled: true
+    insecure: false
+    storageClassName: standard
+    nodeSelector:
+      kubernetes.io/os: linux
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: reports
+        effect: NoSchedule
+    imagePullSecrets:
+      - name: regcred
+  db:
+    secretCreation: true
+    secretName: reports-server-db-credentials
+    sslrds:
+      secretName: rds-ca
+apiServicesManagement:
+  podSecurityContext:
+    runAsNonRoot: true
+  installApiServices:
+    enabled: true
+  migrateReportsServer:
+    enabled: true
+jobConfigurations:
+  imagePullSecrets:
+    - name: regcred
+  podSecurityContext:
+    runAsNonRoot: true
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: reports
+      effect: NoSchedule
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: reports-server
+  podAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: reports-server
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64

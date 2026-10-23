@@ -1,0 +1,93 @@
+# Copyright Dynatrace LLC
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dynatrace-webhook
+  labels:
+    {{- include "dynatrace-operator.webhookLabels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    resourceNames:
+      - dynatrace-bootstrapper-config
+      - dynatrace-bootstrapper-certs
+      - dynatrace-otlp-exporter-config
+      - dynatrace-otlp-exporter-certs
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+  # metadata-enrichment workload owner lookup
+  - apiGroups:
+      - ""
+    resources:
+      - replicationcontrollers
+    verbs:
+      - get
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - deployments
+    verbs:
+      - get
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+  - apiGroups:
+      - apps.openshift.io
+    resources:
+      - deploymentconfigs
+    verbs:
+      - get
+  {{- if (include "dynatrace-operator.openshiftOrOlm" .) }}
+  - apiGroups:
+      - security.openshift.io
+    resourceNames:
+      - privileged
+      - nonroot-v2
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - use
+  {{ end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dynatrace-webhook
+  labels:
+    {{- include "dynatrace-operator.webhookLabels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: dynatrace-webhook
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: dynatrace-webhook
+  apiGroup: rbac.authorization.k8s.io

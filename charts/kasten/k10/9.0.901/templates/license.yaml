@@ -1,0 +1,27 @@
+{{- if not ( or ( .Values.license ) ( .Values.metering.awsMarketplace ) ( .Values.metering.awsManagedLicense ) ( .Values.metering.licenseConfigSecretName ) (.Values.metering.skipFreeLicenses)) }}
+{{- if .Files.Get "triallicense" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-trial-license
+type: Opaque
+data:
+  license: {{ print (.Files.Get "triallicense") }}
+{{- end }}
+{{- end }}
+{{- if not (.Values.metering.skipFreeLicenses) }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: k10-license
+type: Opaque
+data:
+  license: {{ include "k10.getlicense" . }}
+{{- end }}
