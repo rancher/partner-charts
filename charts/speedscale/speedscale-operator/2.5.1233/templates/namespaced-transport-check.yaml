@@ -1,0 +1,35 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if and (eq .Values.namespaced.forwarder.primaryTransport "cloud") .Values.namespaced.inspector.enabled (not .Values.namespaced.forwarder.enabled) -}}
+{{- fail "cloud inspector transport requires forwarder.enabled=true" -}}
+{{- end -}}
+{{- if and (eq .Values.namespaced.forwarder.primaryTransport "byoc") (not .Values.namespaced.forwarder.enabled) -}}
+{{- fail "BYOC transport requires forwarder.enabled=true" -}}
+{{- end -}}
+{{- if and (eq .Values.namespaced.forwarder.primaryTransport "byoc") (ne (int .Values.namespaced.forwarder.replicas) 1) -}}
+{{- fail "BYOC transport requires one forwarder replica for serialized report patches" -}}
+{{- end -}}
+{{- if and (eq .Values.namespaced.forwarder.primaryTransport "byoc") (eq (.Values.namespaced.forwarder.byoc.provider | default "s3") "azureblob") (not .Values.namespaced.forwarder.byoc.endpoint) (not .Values.namespaced.forwarder.byoc.credentialsSecret) -}}
+{{- fail "BYOC azureblob storage requires forwarder.byoc.endpoint (storage account URL) or forwarder.byoc.credentialsSecret with AZURE_STORAGE_CONNECTION_STRING" -}}
+{{- end -}}
+{{- if and (eq .Values.namespaced.forwarder.primaryTransport "byoc") (or (not .Values.namespaced.forwarder.byoc.bucket) (and (eq (.Values.namespaced.forwarder.byoc.provider | default "s3") "s3") (not .Values.namespaced.forwarder.byoc.region))) -}}
+{{- fail "BYOC transport requires forwarder.byoc.bucket, and forwarder.byoc.region for s3" -}}
+{{- end -}}
+{{- if and (eq .Values.namespaced.forwarder.primaryTransport "byoc") .Values.namespaced.networkPolicy.enabled -}}
+{{- fail "BYOC transport requires customer-specific default-deny CNI policies; the chart's generic NetworkPolicy allows public 443" -}}
+{{- end -}}
+{{- if .Values.namespaced.kerberos.enabled -}}
+  {{- if not .Values.namespaced.kerberos.secretName -}}
+    {{- fail "kerberos.secretName is required when kerberos.enabled=true" -}}
+  {{- end -}}
+  {{- if not .Values.https_proxy -}}
+    {{- fail "https_proxy is required when kerberos.enabled=true" -}}
+  {{- end -}}
+  {{- if not (has .Values.namespaced.kerberos.credentialSource (list "keytab" "cache")) -}}
+    {{- fail "kerberos.credentialSource must be keytab or cache" -}}
+  {{- end -}}
+  {{- if and (eq .Values.namespaced.kerberos.credentialSource "keytab") (not .Values.namespaced.kerberos.principal) -}}
+    {{- fail "kerberos.principal is required for keytab credentials" -}}
+  {{- end -}}
+{{- end -}}
+
+{{- end }}
