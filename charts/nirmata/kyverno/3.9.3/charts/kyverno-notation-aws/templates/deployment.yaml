@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "kyverno-notation-aws.name" . }}
+  namespace: {{ template "kyverno-notation-aws.namespace" . }}
+  labels:
+    {{- include "kyverno-notation-aws.labels" . | nindent 4 }}
+spec:
+  progressDeadlineSeconds: 600
+  revisionHistoryLimit: 10
+  replicas: 1
+  {{- with .Values.deployment.updateStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "kyverno-notation-aws.matchLabels.common" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kyverno-notation-aws.labels" . | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ template "kyverno-notation-aws.serviceAccountName" . }}
+      containers:
+      - image: {{ include "kyverno-notation-aws.image" (dict "image" .Values.image "defaultTag" .Chart.AppVersion) | quote }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: kyverno-notation-aws
+        args:
+          - --debug
+          - --cacheEnabled
+          - --cacheMaxSize=2000
+          - --cacheTTLDurationSeconds=7200
+          - --pluginConfigMap={{ template "kyverno-notation-aws.configMap" . }}
+          - --allowInsecureRegistry={{ .Values.deployment.allowInsecureRegistry }}
+          - --maxSignatureAttempts={{ .Values.deployment.maxSignatureAttempts }}
+          {{- with .Values.deployment.tokenAudiences }}
+          - --tokenAudiences={{ . }}
+          {{- end }}
+          {{- if .Values.deployment.imagePullSecrets }}
+          - --imagePullSecrets={{ keys .Values.deployment.imagePullSecrets | join "," }}
+          {{- end }}
+          {{- if eq (include "kyverno-notation-aws.license.enabled" .) "true" }}
+          - --licensePath={{ include "kyverno-notation-aws.license.filePath" . }}
+          {{- end }}
+        resources:
+          limits:
+            memory: 512Mi
+          requests:
+            memory: 32Mi
+            cpu: 100m
+        securityContext:
+          runAsUser: 2000
+          runAsGroup: 3000
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+        env:
+        - name: NOTATION_DIR
+          value: /notation
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SERVICE_NAME
+          value: {{ template "kyverno-notation-aws.serviceName" . }}
+        - name: DEPLOYMENT_NAME
+          value: {{ template "kyverno-notation-aws.name" . }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: AWS_REGION
+          value: {{ .Values.region }}
+        - name: DEFAULT_TRUST_POLICY
+          value: aws-signer-trust-policy
+        {{- with .Values.startupProbe }}
+        startupProbe:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{ tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{ tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+          - name: notation
+            mountPath: /notation
+          {{- if eq (include "kyverno-notation-aws.license.enabled" .) "true" }}
+          - name: license
+            mountPath: {{ include "kyverno-notation-aws.license.mountPath" . }}
+            readOnly: true
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: notation
+          emptyDir: {}
+        {{- if eq (include "kyverno-notation-aws.license.enabled" .) "true" }}
+        - name: license
+          secret:
+            secretName: {{ include "kyverno-notation-aws.license.secretName" . }}
+            optional: true
+        {{- end }}
