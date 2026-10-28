@@ -1,0 +1,539 @@
+---
+{{/*
+Cluster-scoped RBAC permissions
+*/}}
+{{- define "speedscale-operator.clusterScopedPermissions" -}}
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - get
+  - create
+  - list
+{{/*
+  Names the operator reconciles the cluster-scoped RBAC of. Kept in sync with
+  operatorClusterRole() in operator/controlplane/local.go - this chart is the
+  bootstrap, that is the reconcile, and a name missing from either breaks
+  upgrades of the component it belongs to.
+*/}}
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - speedscale-operator
+  - speedscale-nettap
+  - speedscale-forwarder
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - "*"
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  {{- if .Values.namespaceSelector }}
+  {{- $namespaceList := append $.Values.namespaceSelector .Release.Namespace }}
+  resourceNames: {{ toYaml $namespaceList | nindent 4 }}
+  {{- end }}
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cilium.io
+  resources:
+  - ciliumnodes
+  verbs:
+  - get
+  - list
+{{- end -}}
+
+{{/*
+Namespace-scoped RBAC permissions
+*/}}
+{{- define "speedscale-operator.namespaceScopedPermissions" -}}
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - services
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+  {{- if .Values.secretAccessList }}
+  {{- $secretList := concat $.Values.secretAccessList ( list "speedscale-certs" "speedscale-apikey" "speedscale-jks" "speedscale-webhook-certs" "speedscale-operator-upgrade-bootstrap" ) }}
+  resourceNames: {{ toYaml $secretList | nindent 4 }}
+  {{- end }}
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+- apiGroups:
+    - ""
+  resources:
+    - events
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - envoyfilters
+  - sidecars
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - security.istio.io
+  resources:
+  - peerauthentications
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - speedscale.com
+  resources:
+  - trafficreplays
+  - agenttasks
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - speedscale.com
+  resources:
+  - trafficreplays/status
+  - agenttasks/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - rollouts
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+{{- end -}}
+{{- if not ((.Values.namespaced | default dict).enabled | default false) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: speedscale-operator
+  {{- if .Values.globalAnnotations }}
+  annotations: {{ toYaml .Values.globalAnnotations | nindent 4 }}
+  {{- end }}
+rules:
+{{- if not .Values.namespaceSelector }}
+{{/* Namespace-scoped permissions (only included when namespaceSelector is not set) */}}
+{{ include "speedscale-operator.namespaceScopedPermissions" . }}
+{{- end }}
+{{/* Cluster-scoped permissions (always included) */}}
+{{ include "speedscale-operator.clusterScopedPermissions" . }}
+---
+# ClusterRoleBinding for cluster-scoped permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: speedscale-operator
+  {{- if .Values.globalAnnotations }}
+  annotations: {{ toYaml .Values.globalAnnotations | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: speedscale-operator
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator
+  namespace: {{ .Release.Namespace }}
+---
+{{/* Create a role and rolebinding for each namespace if specified, otherwise we just use the clusterrole.
+*/}}
+{{- if .Values.namespaceSelector }}
+{{- $namespaceList := append $.Values.namespaceSelector .Release.Namespace }}
+{{- range $namespaceList }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-operator
+  namespace: {{ . }}
+  {{- if $.Values.globalAnnotations }}
+  annotations: {{ toYaml $.Values.globalAnnotations | nindent 4 }}
+  {{- end }}
+rules:
+{{ include "speedscale-operator.namespaceScopedPermissions" $ }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-operator
+  namespace: {{ . }}
+  {{- if $.Values.globalAnnotations }}
+  annotations: {{ toYaml $.Values.globalAnnotations | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-operator
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator
+  namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  creationTimestamp: null
+  labels:
+    app: speedscale-operator
+    controlplane.speedscale.com/component: operator
+  name: speedscale-operator
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.globalAnnotations }}
+  annotations: {{ toYaml .Values.globalAnnotations | nindent 4 }}
+  {{- end }}
+---
+{{- if .Values.operatorUpgrade.enabled }}
+{{- if .Values.secretAccessList }}{{ fail "operatorUpgrade.enabled needs namespace-wide Secret access for Helm history and retained plans; clear secretAccessList or disable operatorUpgrade" }}{{- end }}
+{{- if ne .Values.operatorUpgrade.manager "helm" }}{{ fail "operatorUpgrade.manager must be helm" }}{{- end }}
+{{- $images := fromJson (index .Chart.Annotations "speedscale.com/operator-images" | default "{}") }}
+{{- $keys := .Values.operatorUpgrade.releasePublicKeys | default (fromJsonArray (index .Chart.Annotations "speedscale.com/operator-release-keys" | default "[]")) }}
+{{- $recovery := .Values.operatorUpgrade.recoveryImage | default (index $images "operator") }}
+{{- if not $keys }}{{ fail "operatorUpgrade needs release signing keys from a bootstrap chart or releasePublicKeys" }}{{- end }}
+{{- if not (regexMatch "^.+@sha256:[a-f0-9]{64}$" $recovery) }}{{ fail "operatorUpgrade requires a pinned bootstrap recovery image" }}{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: speedscale-operator-upgrade-policy
+  namespace: {{ .Release.Namespace }}
+data:
+  enabled: "true"
+  manager: {{ .Values.operatorUpgrade.manager | quote }}
+  releasePublicKeys: {{ join "," $keys | quote }}
+  recoveryImage: {{ $recovery | quote }}
+  applyTimeout: {{ .Values.operatorUpgrade.applyTimeout | quote }}
+  recoveryTimeout: {{ .Values.operatorUpgrade.recoveryTimeout | quote }}
+  heartbeatTimeout: {{ .Values.operatorUpgrade.heartbeatTimeout | quote }}
+  stability: {{ .Values.operatorUpgrade.stability | quote }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: speedscale-operator-upgrader
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-operator-upgrader
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "services", "serviceaccounts", "pods", "pods/proxy", "resourcequotas"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["speedscale-operator", "speedscale-operator-override", "speedscale-inspector", "speedscale-forwarder", "speedscale-operator-upgrade", "speedscale-operator-upgrade-policy", "speedscale-nettap", "speedscale-jks-program", "speedscale-forwarder-filter", "speedscale-forwarder-dlp"]
+  verbs: ["update", "patch"]
+# Helm sends a patch for every resource in the release, so each named chart object needs it.
+- apiGroups: [""]
+  resources: ["services"]
+  resourceNames: ["speedscale-operator", "speedscale-nettap"]
+  verbs: ["update", "patch"]
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  resourceNames: ["speedscale-operator", "speedscale-operator-provisioning", "speedscale-operator-upgrader", "speedscale-nettap"]
+  verbs: ["update", "patch"]
+- apiGroups: [""]
+  resources: ["resourcequotas"]
+  resourceNames: ["speedscale-nettap-critical-pods"]
+  verbs: ["update", "patch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  resourceNames: ["speedscale-operator", "speedscale-inspector", "speedscale-forwarder", "speedscale-collector-persistent"]
+  verbs: ["update", "patch"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  resourceNames: ["speedscale-nettap"]
+  verbs: ["update", "patch"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings"]
+  verbs: ["get", "list"]
+# Patching a Role the caller does not itself hold needs escalate and bind; both are limited to the chart's own Roles.
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles"]
+  resourceNames: ["speedscale-operator", "speedscale-nettap-config", "speedscale-operator-upgrade-planner", "speedscale-operator-upgrader"]
+  verbs: ["update", "patch", "escalate", "bind"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["rolebindings"]
+  resourceNames: ["speedscale-operator", "speedscale-nettap-config", "speedscale-operator-upgrade-planner", "speedscale-operator-upgrader"]
+  verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-operator-upgrader
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-operator-upgrader
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator-upgrader
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-operator-upgrade-planner
+  namespace: {{ .Release.Namespace }}
+rules:
+# Inspector verifies the source executable and snapshot endpoint before planning.
+- apiGroups: [""]
+  resources: ["pods/proxy"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-operator-upgrade-planner
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-operator-upgrade-planner
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ printf "%s-%s-upgrade-read" .Release.Namespace .Release.Name }}
+rules:
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["get", "list"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  resourceNames: [{{ .Release.Namespace | quote }}]
+  verbs: ["get"]
+- apiGroups: ["speedscale.com"]
+  resources: ["trafficreplays"]
+  verbs: ["get", "list"]
+- apiGroups: ["security.openshift.io"]
+  resources: ["securitycontextconstraints"]
+  verbs: ["get", "list"]
+- apiGroups: ["security.openshift.io"]
+  resources: ["securitycontextconstraints"]
+  resourceNames: ["speedscale-nettap"]
+  verbs: ["update", "patch"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  resourceNames: ["trafficreplays.speedscale.com"]
+  verbs: ["update", "patch"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations"]
+  resourceNames: ["speedscale-operator", "speedscale-operator-replay"]
+  verbs: ["update", "patch"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations"]
+  resourceNames: ["speedscale-operator-replay"]
+  verbs: ["update", "patch"]
+# Patching a ClusterRole the caller does not itself hold needs escalate and bind; both are limited to the chart's own ClusterRoles.
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles"]
+  resourceNames: ["speedscale-operator", "speedscale-nettap", "speedscale-operator-provisioning", {{ printf "%s-%s-upgrade-read" .Release.Namespace .Release.Name | quote }}]
+  verbs: ["update", "patch", "escalate", "bind"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterrolebindings"]
+  resourceNames: ["speedscale-operator", "speedscale-nettap", "speedscale-operator-provisioning", {{ printf "%s-%s-upgrade-read" .Release.Namespace .Release.Name | quote }}]
+  verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ printf "%s-%s-upgrade-read" .Release.Namespace .Release.Name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ printf "%s-%s-upgrade-read" .Release.Namespace .Release.Name }}
+subjects:
+- kind: ServiceAccount
+  name: speedscale-operator-upgrader
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+
+{{- end }}

@@ -1,0 +1,55 @@
+suite: webhook namespace selector
+templates:
+  - templates/instrumentation-crd.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  # webhooks[0]=v1beta3, [1]=v1alpha2, [2]=v1beta1, [3]=v1beta2, [4]=mpod
+
+  - it: excludes system namespaces from pod webhook by default
+    set:
+      licenseKey: us-whatever
+    asserts:
+      - equal:
+          path: webhooks[4].namespaceSelector.matchExpressions[0].key
+          value: kubernetes.io/metadata.name
+        documentIndex: 2
+      - equal:
+          path: webhooks[4].namespaceSelector.matchExpressions[0].operator
+          value: NotIn
+        documentIndex: 2
+      - equal:
+          path: webhooks[4].namespaceSelector.matchExpressions[0].values
+          value:
+            - kube-system
+            - kube-public
+            - kube-node-lease
+        documentIndex: 2
+
+  - it: uses a custom ignore list for pod webhook when ignoreNamespaces is overridden
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks.ignoreNamespaces:
+        - custom-system-ns
+        - another-ns
+    asserts:
+      - equal:
+          path: webhooks[4].namespaceSelector.matchExpressions[0].operator
+          value: NotIn
+        documentIndex: 2
+      - equal:
+          path: webhooks[4].namespaceSelector.matchExpressions[0].values
+          value:
+            - custom-system-ns
+            - another-ns
+        documentIndex: 2
+
+  - it: omits namespaceSelector from pod webhook when ignoreNamespaces is empty
+    set:
+      licenseKey: us-whatever
+      admissionWebhooks.ignoreNamespaces: []
+    asserts:
+      - isNull:
+          path: webhooks[4].namespaceSelector
+        documentIndex: 2

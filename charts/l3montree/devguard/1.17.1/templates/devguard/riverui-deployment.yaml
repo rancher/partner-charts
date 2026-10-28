@@ -1,0 +1,66 @@
+{{- if .Values.api.riverUI.enabled }}
+{{- $image := include "devguard.image" (dict "image" .Values.api.riverUI.image "defaultTag" "latest") -}}
+{{- $imagePullPolicy := include "devguard.imagePullPolicy" (dict "image" .Values.api.riverUI.image) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devguard-riverui-deployment
+  labels:
+    {{- include "devguard.labels" . | nindent 4 }}
+    app: devguard-riverui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devguard-riverui
+  template:
+    metadata:
+      labels:
+        {{- include "devguard.labels" . | nindent 8 }}
+        app: devguard-riverui
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # the image does not set a user
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: riverui
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop:
+              - ALL
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ $imagePullPolicy }}
+          env:
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: postgres-password
+                name: db-secret
+          - name: DATABASE_URL
+            value: {{ printf "postgres://devguard:$(DB_PASSWORD)@%s:%s/devguard?sslmode=%s" (include "devguard.postgresHost" .) (include "devguard.postgresPort" .) (include "devguard.postgresSslMode" .) | quote }}
+          - name: PATH_PREFIX
+            value: "/"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/health-checks/minimal
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /api/health-checks/complete
+              port: http
+          resources:
+            {{- toYaml .Values.api.riverUI.resources | nindent 12 }}
+{{- end }}

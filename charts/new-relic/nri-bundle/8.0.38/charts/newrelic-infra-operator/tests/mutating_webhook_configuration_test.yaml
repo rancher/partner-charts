@@ -1,0 +1,26 @@
+suite: test MutatingWebhookConfiguration
+templates:
+  - templates/admission-webhooks/mutatingWebhookConfiguration.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: does not set caBundle so the certgen patch job is its only field manager
+    set:
+      cluster: test-cluster
+      licenseKey: use-whatever
+    asserts:
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+
+  - it: does not set caBundle when cert-manager injects it
+    set:
+      cluster: test-cluster
+      licenseKey: use-whatever
+      certManager.enabled: true
+    asserts:
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: my-namespace/my-release-newrelic-infra-operator-root-cert
