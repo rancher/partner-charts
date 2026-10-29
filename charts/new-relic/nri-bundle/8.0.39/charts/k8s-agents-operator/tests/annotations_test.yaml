@@ -1,0 +1,40 @@
+suite: annotations
+templates:
+  - templates/deployment.yaml
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: sets pod annotations to default when no values provided
+    set:
+      licenseKey: us-whatever
+
+      # This makes sure that the checksum annotation is always the same, since the default value of the CA cert is an empty string, which has a known sha256sum value.
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            checksum/serving-ca: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        template: templates/deployment.yaml
+  - it: sets pod annotations from values
+    set:
+      licenseKey: us-whatever
+      # This makes sure that the checksum annotation is always the same, since the default value of the CA cert is an empty string, which has a known sha256sum value.
+      admissionWebhooks:
+        autoGenerateCert:
+          enabled: false
+      podAnnotations:
+        deploymentKey1: "deploymentValue1"
+        deploymentKey2: "deploymentValue2"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            checksum/serving-ca: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+            deploymentKey1: "deploymentValue1"
+            deploymentKey2: "deploymentValue2"
+        template: templates/deployment.yaml
+

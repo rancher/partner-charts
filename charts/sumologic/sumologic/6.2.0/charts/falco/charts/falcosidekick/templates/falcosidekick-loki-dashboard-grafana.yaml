@@ -1,0 +1,22 @@
+{{- if and .Values.config.loki.grafanaDashboard.enabled (ne .Values.config.loki.hostport "") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.config.loki.grafanaDashboard.configMap.name }}
+  {{ if .Values.config.loki.grafanaDashboard.configMap.namespace }}
+  namespace: {{ .Values.config.loki.grafanaDashboard.configMap.namespace }}
+  {{- else -}}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "falcosidekick.labels" .  | nindent 4 }}
+    grafana_dashboard: "1"
+  {{- if .Values.config.loki.grafanaDashboard.configMap.folder }}
+  annotations:
+    k8s-sidecar-target-directory: /tmp/dashboards/{{ .Values.config.loki.grafanaDashboard.configMap.folder}}
+    grafana_dashboard_folder: {{ .Values.config.loki.grafanaDashboard.configMap.folder }}
+  {{- end }}
+data:
+  falcosidekick-loki-dashboard.json: |-
+    {{- .Files.Get "dashboards/falcosidekick-loki-dashboard.json" | nindent 4 }}
+ {{- end -}}

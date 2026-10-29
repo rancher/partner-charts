@@ -1,0 +1,119 @@
+{{- /*
+  Namespace labels for AIOS sandbox networking.
+
+  compute-api gives an AIOS sandbox with gateway access a NetworkPolicy whose egress to the
+  AI service (alchemi-ai:8000) only matches namespaces labelled
+      app.kubernetes.io/name=alchemi
+      app.kubernetes.io/environment=<compute-api ENVIRONMENT>
+  (apps/compute-api network_service._gateway_egress). The app tier lives in the RELEASE
+  namespace, which Helm / Rancher / the AI Factory blueprint creates — not this chart — so
+  the chart can't declare those labels on it. Without them, on a cluster that enforces
+  NetworkPolicy (RKE2's default CNI does), those sandboxes can't reach the AI service.
+
+  This post-install/post-upgrade hook adds the two labels to the release namespace with a
+  JSON merge-patch. Its RBAC can only get/patch THAT namespace (resourceNames). Idempotent.
+*/ -}}
+{{- $ns := include "alchemi.ns.app" . -}}
+{{- $env := include "alchemi.computeEnvironment" . -}}
+{{- $name := printf "%s-alchemi-ns-labeler" $ns -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alchemi-ns-labeler
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: [{{ $ns | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+subjects:
+  - kind: ServiceAccount
+    name: alchemi-ns-labeler
+    namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: alchemi-ns-labeler
+  namespace: {{ $ns }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600   # hook Jobs survive uninstall; self-clean an hour after finishing
+  template:
+    metadata:
+      labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+    spec:
+      serviceAccountName: alchemi-ns-labeler
+      restartPolicy: Never
+      {{- with .Values.global.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      containers:
+        - name: label
+          image: {{ include "alchemi.jobImage" . | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: TARGET_NS, value: {{ $ns | quote }} }
+            - { name: ENV_LABEL, value: {{ $env | quote }} }
+          command:
+            - python3
+            - -c
+            - |
+              import os, json, ssl, urllib.request, urllib.error
+              API = "https://kubernetes.default.svc"
+              SA = "/var/run/secrets/kubernetes.io/serviceaccount"
+              token = open(SA + "/token").read().strip()
+              ctx = ssl.create_default_context(cafile=SA + "/ca.crt")
+              ns = os.environ["TARGET_NS"]
+              labels = {
+                  "app.kubernetes.io/name": "alchemi",
+                  "app.kubernetes.io/environment": os.environ["ENV_LABEL"],
+              }
+              body = json.dumps({"metadata": {"labels": labels}}).encode()
+              req = urllib.request.Request(
+                  f"{API}/api/v1/namespaces/{ns}", data=body, method="PATCH",
+                  headers={"Authorization": "Bearer " + token,
+                           "Content-Type": "application/merge-patch+json"})
+              try:
+                  with urllib.request.urlopen(req, context=ctx) as resp:
+                      got = json.loads(resp.read()).get("metadata", {}).get("labels", {})
+              except urllib.error.HTTPError as e:
+                  raise SystemExit(f"[ns-labeler] patch {ns} failed: {e.code} {e.read()[:300]!r}")
+              missing = {k: v for k, v in labels.items() if got.get(k) != v}
+              if missing:
+                  raise SystemExit(f"[ns-labeler] labels not applied on {ns}: {missing}")
+              print(f"[ns-labeler] {ns} labelled {labels}")

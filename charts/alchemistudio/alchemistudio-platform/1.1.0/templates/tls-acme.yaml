@@ -1,0 +1,80 @@
+{{- if and .Values.tls.enabled (eq .Values.tls.mode "acme") }}
+# =============================================================================
+# acme (Let's Encrypt) TLS — automated, DNS-provider-agnostic via HTTP-01.
+#
+# Flow: cert-manager solves an HTTP-01 challenge through the cluster's ingress
+# controller (tls.acme.ingressClass — traefik by default, RKE2's default; nginx or
+# another class is configurable). Because DNS points at the APISIX gateway, the
+# routes-job adds an APISIX route that forwards /.well-known/acme-challenge/* to
+# that controller (via the ClusterIP Service below), so the challenge reaches
+# cert-manager's solver. Once issued, the
+# cert lands in tls.secretName; the cert-sync CronJob loads it into APISIX.
+#
+# PREREQUISITES (documented in NOTES): cert-manager installed, the app
+# subdomains' DNS A-records already pointing at the gateway IP, and port 80
+# reachable from the internet. Only an A-record is needed — no DNS credentials.
+# =============================================================================
+{{- $email := .Values.tls.acme.email | default (required "admin.email is required for acme (Let's Encrypt account)" .Values.admin.email) }}
+{{- $server := ternary "https://acme-staging-v02.api.letsencrypt.org/directory" "https://acme-v02.api.letsencrypt.org/directory" .Values.tls.acme.staging }}
+# Namespaced Issuer (not ClusterIssuer) so each instance owns its own ACME account and
+# several instances can share a cluster. Same namespace as the Certificate (gateway tier).
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Release.Name }}-letsencrypt
+  namespace: {{ include "alchemi.ns.gateway" $ }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  acme:
+    server: {{ $server | quote }}
+    email: {{ $email | quote }}
+    privateKeySecretRef:
+      name: {{ .Release.Name }}-letsencrypt-account
+    solvers:
+      - http01:
+          ingress:
+            # cert-manager creates a temporary Ingress of this class; the controller
+            # serves the challenge, reached from APISIX via the forward route.
+            ingressClassName: {{ include "alchemi.acme.class" . }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: alchemistudio-platform-tls
+  namespace: {{ include "alchemi.ns.gateway" $ }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  secretName: {{ .Values.tls.secretName | quote }}
+  issuerRef:
+    name: {{ .Release.Name }}-letsencrypt
+    kind: Issuer
+  # Each dnsName gets its own HTTP-01 challenge — every host listed here MUST
+  # resolve to the gateway IP or issuance fails. (HTTP-01 cannot do wildcards.)
+  dnsNames:
+    - {{ include "alchemi.appHost" . | quote }}
+    - {{ include "alchemi.authHost" . | quote }}
+    - {{ include "alchemi.opsHost" . | quote }}
+{{- if .Values.gateway.exposeZenith }}
+    - {{ include "alchemi.zenithHost" . | quote }}
+{{- end }}
+---
+# Stable in-cluster target for the ACME challenge: a ClusterIP Service selecting
+# the ingress controller pods on their HTTP port. The APISIX challenge route forwards
+# here; the controller matches cert-manager's solver Ingress and answers the token.
+# Lives in the controller's namespace (kube-system on RKE2) because a Service's
+# selector only matches same-namespace pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "alchemi.acme.solverName" . }}   # per-instance name (the namespace is shared)
+  namespace: {{ include "alchemi.acme.solverNs" . }}
+  labels: { app.kubernetes.io/part-of: alchemistudio-platform }
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "alchemi.acme.solverSelector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: {{ include "alchemi.acme.solverPort" . }}
+{{- end }}

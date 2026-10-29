@@ -1,0 +1,89 @@
+{{- if and .Values.vapPolicies.enabled (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy") }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cfk-c3-byop-validation-{{ .Release.Namespace }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["platform.confluent.io"]
+        apiVersions: ["v1beta1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["controlcenters"]
+  variables:
+    - name: svc
+      expression: "has(object.spec.services) ? object.spec.services : {}"
+    # An absent prometheus/alertmanager block counts as off (not on), same as PrometheusSpec.IsEnabled()
+    # / AlertManagerSpec.IsEnabled() at reconcile time (prometheus_types.go / alertmanager_types.go) -
+    # kept in sync with the webhook (validator.go) and the CRD CEL rules (controlcenter_types.go).
+    - name: promEnabled
+      expression: >
+        has(variables.svc.prometheus)
+          ? (has(variables.svc.prometheus.enabled) ? variables.svc.prometheus.enabled : true)
+          : false
+    - name: amEnabled
+      expression: >
+        has(variables.svc.alertmanager)
+          ? (has(variables.svc.alertmanager.enabled) ? variables.svc.alertmanager.enabled : true)
+          : false
+    - name: hasExternalUrl
+      expression: >
+        has(object.spec.dependencies) && has(object.spec.dependencies.prometheusClient) &&
+        has(object.spec.dependencies.prometheusClient.url) &&
+        object.spec.dependencies.prometheusClient.url != ''
+  validations:
+    # spec.dependencies.prometheusClient.url is required whenever services is configured, in every
+    # mode (bundled or BYOP) - matching the transformer (c3Dependencies), which has required it
+    # unconditionally since before BYOP existed.
+    # Keep this rule and its message in sync with the other 3 enforcement surfaces: the webhook
+    # (webhooks/pkg/resources/controlcenter/validator.go), the CRD CEL rule (controlcenter_types.go),
+    # and cfk-validator's CC-012 (tools/cfk-validator/internal/rules/controlcenter/controlcenter.go +
+    # catalog.go).
+    - expression: "!has(object.spec.services) || variables.hasExternalUrl"
+      messageExpression: "'spec.dependencies.prometheusClient.url is required'"
+    - expression: "variables.promEnabled || !variables.amEnabled"
+      messageExpression: >
+        'the bundled Alertmanager cannot run against an external Prometheus: set
+        services.alertmanager.enabled: false when services.prometheus.enabled is false'
+    - expression: "!variables.promEnabled || variables.amEnabled"
+      messageExpression: >
+        'the bundled Alertmanager must be enabled together with the bundled Prometheus: set
+        services.alertmanager.enabled: true'
+    - expression: >
+        !has(variables.svc.prometheus) || !variables.promEnabled ||
+        (has(variables.svc.prometheus.image) && variables.svc.prometheus.image != '')
+      messageExpression: >
+        'the bundled Prometheus is enabled but services.prometheus.image is not set'
+    - expression: >
+        !has(variables.svc.alertmanager) || !variables.amEnabled ||
+        (has(variables.svc.alertmanager.image) && variables.svc.alertmanager.image != '')
+      messageExpression: >
+        'the bundled Alertmanager is enabled but services.alertmanager.image is not set'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cfk-c3-byop-validation-binding-{{ .Release.Namespace }}
+spec:
+  policyName: cfk-c3-byop-validation-{{ .Release.Namespace }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        {{- if .Values.namespaced }}
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            {{- if empty .Values.namespaceList }}
+            - {{ .Release.Namespace }}
+            {{- else }}
+            {{- range $i, $v := .Values.namespaceList }}
+            - {{ trim $v }}
+            {{- end }}
+            {{- end }}
+        {{- else }}
+        - key: kubernetes.io/metadata.name
+          operator: Exists
+        {{- end }}
+{{- end }}

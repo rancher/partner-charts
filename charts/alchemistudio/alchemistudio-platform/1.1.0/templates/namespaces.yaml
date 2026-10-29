@@ -1,0 +1,29 @@
+# =============================================================================
+# Namespaces (chart 1.1.0+) — see the alchemi.ns.* helpers in _helpers.tpl.
+#   global.namespaceMode=single (default): everything lives in the RELEASE namespace, which
+#     Helm / Rancher / the AI Factory blueprint creates and owns — nothing is created here.
+#   global.namespaceMode=split: the chart creates one namespace per tier,
+#     "<global.namespacePrefix>-<tier>", and removes them on uninstall. The release
+#     namespace (app tier) is never created here — Helm owns it.
+# Guard: if a tier namespace already exists and is labelled as belonging to ANOTHER
+# instance (different release namespace), stop with a clear message instead of sharing it.
+# =============================================================================
+{{- $rel := .Release.Namespace }}
+{{- range $ns := splitList " " (include "alchemi.ns.all" .) }}
+{{- if ne $ns $rel }}
+{{- $existing := lookup "v1" "Namespace" "" $ns }}
+{{- $owner := dig "metadata" "labels" "alchemistudio.ai/instance" "" ($existing | default dict) }}
+{{- if and $existing $owner (ne $owner $rel) }}
+{{- fail (printf "Namespace %q already belongs to the AlchemiStudio instance in namespace %q. Set a different global.namespacePrefix for this instance (split mode needs a unique prefix per instance), or use global.namespaceMode=single." $ns $owner) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: alchemistudio-platform
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    alchemistudio.ai/instance: {{ $rel }}
+{{- end }}
+{{- end }}
