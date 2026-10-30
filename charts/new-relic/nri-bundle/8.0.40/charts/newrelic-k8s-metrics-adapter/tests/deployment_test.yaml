@@ -1,0 +1,99 @@
+suite: test deployent images
+release:
+  name: my-release
+  namespace: my-namespace
+tests:
+  - it: has the correct image
+    set:
+      global:
+        cluster: test-cluster
+      personalAPIKey: 21321
+      image:
+        repository: newrelic/newrelic-k8s-metrics-adapter
+        tag: "latest"
+        pullSecrets:
+          - name: regsecret
+      config:
+        accountID: 111
+        region: A-REGION
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^.*newrelic/newrelic-k8s-metrics-adapter:latest
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: regsecret
+        template: templates/deployment.yaml
+  - it: correctly uses the cluster helper
+    set:
+      personalAPIKey: 21321
+      config:
+        accountID: 111
+        region: A-REGION
+      cluster: a-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: a-cluster
+        template: templates/deployment.yaml
+  - it: correctly uses common.securityContext.podDefaults
+    set:
+      personalAPIKey: 21321
+      config:
+        accountID: 111
+        region: A-REGION
+      cluster: a-cluster
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            fsGroup: 1001
+            runAsGroup: 1001
+            runAsUser: 1001
+        template: templates/deployment.yaml
+  - it: correctly uses common.proxy
+    set:
+      personalAPIKey: 21321
+      config:
+        accountID: 111
+        region: A-REGION
+      cluster: a-cluster
+      proxy: localhost:1234
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: localhost:1234
+        template: templates/deployment.yaml
+
+  - it: has a linux node selector by default
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      config:
+        accountID: 111
+        region: A-REGION
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+        template: templates/deployment.yaml
+
+  - it: has a linux node selector and additional selectors
+    set:
+      personalAPIKey: 21321
+      cluster: test-cluster
+      config:
+        accountID: 111
+        region: A-REGION
+      nodeSelector:
+        aCoolTestLabel: aCoolTestValue
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+            aCoolTestLabel: aCoolTestValue
+        template: templates/deployment.yaml
