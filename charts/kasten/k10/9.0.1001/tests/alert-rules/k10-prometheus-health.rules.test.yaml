@@ -1,0 +1,74 @@
+rule_files:
+  - ../../files/alert-rules/k10-prometheus-health.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: TSDB utilization above 85% fires after 15m
+    input_series:
+      - series: prometheus_tsdb_storage_blocks_bytes
+        values: 900x30
+      - series: prometheus_tsdb_retention_limit_bytes
+        values: 1000x30
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: K10PrometheusTSDBUtilizationHigh
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: K10PrometheusTSDBUtilizationHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: K10 Prometheus TSDB utilization above 85% of retentionSize limit
+              description: "TSDB block storage is at 90% of the configured retentionSize limit. Size-based retention will start dropping old data soon. Consider increasing prometheus.server.persistentVolume.size."
+
+  - interval: 1m
+    name: TSDB utilization below 85% does not fire
+    input_series:
+      - series: prometheus_tsdb_storage_blocks_bytes
+        values: 500x30
+      - series: prometheus_tsdb_retention_limit_bytes
+        values: 1000x30
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: K10PrometheusTSDBUtilizationHigh
+        exp_alerts: []
+
+  - interval: 1m
+    name: TSDB utilization with zero retention limit (clamp_min protects against divide-by-zero)
+    input_series:
+      - series: prometheus_tsdb_storage_blocks_bytes
+        values: 0x30
+      - series: prometheus_tsdb_retention_limit_bytes
+        values: 0x30
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: K10PrometheusTSDBUtilizationHigh
+        exp_alerts: []
+
+  - interval: 1m
+    name: Size retention active fires on counter increase
+    input_series:
+      - series: prometheus_tsdb_size_retentions_total
+        values: 0+1x70
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: K10PrometheusSizeRetentionActive
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Prometheus is actively dropping data due to retentionSize limit
+              description: "Size-based retention events detected in the last hour. The retention time window may be shorter than configured. Consider increasing prometheus.server.persistentVolume.size."
+
+  - interval: 1m
+    name: Size retention does not fire when counter is flat
+    input_series:
+      - series: prometheus_tsdb_size_retentions_total
+        values: 5x70
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: K10PrometheusSizeRetentionActive
+        exp_alerts: []

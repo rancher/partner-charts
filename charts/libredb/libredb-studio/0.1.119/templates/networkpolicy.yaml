@@ -1,0 +1,89 @@
+{{- if include "libredb-studio.networkPolicyEnabled" . }}
+{{- $onOpenShift := include "libredb-studio.openshiftApiServed" (dict "ctx" $ "api" "security.openshift.io/v1") }}
+{{- $openshiftSignIn := include "libredb-studio.openshiftSignIn" . }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "libredb-studio.fullname" . }}
+  labels:
+    {{- include "libredb-studio.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "libredb-studio.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: {{ .Values.service.targetPort }}
+          protocol: TCP
+    {{- with .Values.networkPolicy.additionalIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+        {{- if or $onOpenShift $openshiftSignIn }}
+        # OpenShift's dns-default Service listens on 53 and forwards to the CoreDNS pods on 5353;
+        # a policy is matched after that rewrite, so 53 alone leaves resolution failing there.
+        - port: 5353
+          protocol: UDP
+        - port: 5353
+          protocol: TCP
+        {{- end }}
+    # Allow HTTPS outbound (for database connections, AI APIs, OIDC)
+    - ports:
+        - port: 443
+          protocol: TCP
+    {{- if or (include "libredb-studio.accessReviewEnabled" .) $onOpenShift $openshiftSignIn }}
+    # kube-proxy rewrites https://kubernetes.default.svc to the API server's endpoint port,
+    # 6443 on RKE2, k3s, kubeadm and OpenShift. A policy is matched after that rewrite, so 443
+    # alone leaves the access review failing closed, and on OpenShift sign-in, self reviews and
+    # discovery failing too. One rule serves both, so 6443 appears once. An API server on
+    # another port goes in networkPolicy.additionalEgress.
+    - ports:
+        - port: 6443
+          protocol: TCP
+    {{- end }}
+    # Allow common database ports
+    - ports:
+        - port: 5432
+          protocol: TCP
+        - port: 3306
+          protocol: TCP
+        - port: 1521
+          protocol: TCP
+        - port: 1433
+          protocol: TCP
+        - port: 27017
+          protocol: TCP
+        - port: 6379
+          protocol: TCP
+      {{- /* openshift sign-in with discovery: only the discovered namespaces, and the release
+             namespace while the bundled PostgreSQL holds Studio's storage, so a forged Service
+             in a discovered namespace cannot point Studio at a database port elsewhere. The DNS,
+             443 and 6443 rules above keep no destination, and a policy matches after the Service
+             rewrite, so whoever may write EndpointSlices there could still reach another address
+             on those ports. Any other database Studio needs, such as an external storage
+             database, goes in additionalEgress. */}}
+      {{- if and $openshiftSignIn (include "libredb-studio.discoveryEnabled" .) }}
+      {{- $namespaces := .Values.discovery.kubernetes.namespaces }}
+      {{- if .Values.postgresql.enabled }}
+      {{- $namespaces = append $namespaces .Release.Namespace }}
+      {{- end }}
+      to:
+        {{- range $namespace := $namespaces | uniq }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $namespace | quote }}
+        {{- end }}
+      {{- end }}
+    {{- with .Values.networkPolicy.additionalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
