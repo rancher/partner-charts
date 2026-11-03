@@ -1,0 +1,60 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get {{ .Release.Name }}
+
+
+To delete :
+ helm delete {{ .Release.Name }}
+{{- if has (lower (toString .Values.updateServiceStatus)) (list "false" "no" "off" "0") }}
+
+NOTE: updateServiceStatus is false, so LoadBalancer services keep EXTERNAL-IP <pending>.
+ If you use GSLB, upgrade the GSLB controller to 4.3.x or later as well.
+ See "Disabling the service status update" in the chart README.
+{{- end }}
+{{- if and (has (lower (toString .Values.clearStaleServiceStatus)) (list "true" "yes" "on" "1")) (not (has (lower (toString .Values.updateServiceStatus)) (list "false" "no" "off" "0"))) }}
+
+WARNING: clearStaleServiceStatus has no effect unless updateServiceStatus is false.
+{{- end }}
+                                         
+ 
+
+{{- if .Values.exporter.required }}
+{{- $exporterImage := tpl (.Values.exporter.image | toString) . }}
+{{- $exporterValidateCert := .Values.exporter.validateCert | toString | lower }}
+{{- /* Same mapping as deployment.yaml. */}}
+{{- $nsValidateCertEnv := $exporterValidateCert }}
+{{- if .Values.nsValidateCert }}
+{{- $nsValidateCertEnv = "yes" }}
+{{- else if has $exporterValidateCert (list "auto" "yes" "true" "y" "on" "1") }}
+{{- $nsValidateCertEnv = "auto" }}
+{{- else if has $exporterValidateCert (list "no" "false" "n" "off" "0") }}
+{{- $nsValidateCertEnv = "no" }}
+{{- end }}
+{{- if and (not .Values.nsValidateCert) (has $exporterValidateCert (list "auto" "yes" "true" "y" "on" "1")) }}
+
+NOTE: the metrics exporter will validate the NetScaler certificate.
+
+  exporter.validateCert (as you set it)  : {{ $exporterValidateCert }}
+  NS_VALIDATE_CERT (as rendered)         : {{ $nsValidateCertEnv }}
+  exporter image                         : {{ $exporterImage }}
+
+This needs exporter 1.7.0 or later. After install, check that the exporter
+reports citrixadc_tls_validation_enabled 1.
+{{- end }}
+{{- $nsProtocol := toString (default "HTTPS" .Values.nsProtocol) }}
+{{- $nsPort := toString (default 443 .Values.nsPort) }}
+{{- if or (ne (upper $nsProtocol) "HTTPS") (ne $nsPort "443") }}
+
+NOTE: nsProtocol={{ $nsProtocol }} and nsPort={{ $nsPort }} apply to the controller only.
+The metrics exporter always connects over HTTPS on port 443.
+{{- if ne (upper $nsProtocol) "HTTPS" }}
+The controller connects to the NetScaler over HTTP (not recommended).
+{{- end }}
+{{- end }}
+{{- end }}
