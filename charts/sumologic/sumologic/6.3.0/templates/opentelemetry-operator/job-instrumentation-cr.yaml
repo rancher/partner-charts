@@ -1,0 +1,58 @@
+{{- $ctx := . }}
+{{ $operatorEnabled := index .Values "opentelemetry-operator" "enabled" }}
+{{ $tracesEnabled := .Values.sumologic.traces.enabled }}
+{{ $createDefaultInstrumentation := .Values.instrumentation.createDefaultInstrumentation }}
+{{- if and $operatorEnabled $tracesEnabled $createDefaultInstrumentation }}
+{{ $instrumentationJobImage := .Values.instrumentation.instrumentationJobImage.image }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sumologic.metadata.name.opentelemetry.operator.instrumentation.job" . }}
+  namespace: {{ template "sumologic.namespace"  . }}
+  labels:
+    app: {{ template "sumologic.labels.app.opentelemetry.operator.instrumentation.job" . }}
+    {{- include "sumologic.labels.common" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: "post-install, post-upgrade"
+    helm.sh/hook-delete-policy: "before-hook-creation, hook-succeeded"
+spec:
+  template:
+    spec:
+      serviceAccountName: {{ template "sumologic.metadata.name.roles.serviceaccount" . }}
+      containers:
+      - name: instrumentation-cr-applier
+        image: {{ $instrumentationJobImage.repository }}:{{ $instrumentationJobImage.tag }}
+        volumeMounts:
+          - name: instrumentation-cr-configmap
+            mountPath: /tmp/instrumentation-cr.yaml
+            subPath: instrumentation.cr.yaml
+        command: ["/usr/local/bin/bash", "-c"]
+        args:
+          - |
+            max_wait=180
+            sleep_interval=5
+            counter=0
+            while ! kubectl apply -f /tmp/instrumentation-cr.yaml
+            do
+              echo "Waiting for {{ .Release.Name }}-opentelemetry-operator"
+              sleep $sleep_interval
+              counter=$(($counter + $sleep_interval))
+
+              if [[ "$counter" -gt "$max_wait" ]]
+              then
+                echo "Couldn't reach {{ .Release.Name }}-opentelemetry-operator"
+                echo "Instrumentation resources not applied!"
+                exit 1
+              fi
+            done
+
+            kubectl apply -f /tmp/instrumentation-cr.yaml || exit 1
+            echo "Successfully applied Instrumentation resources"
+            exit $?
+      volumes:
+        - name: instrumentation-cr-configmap
+          configMap:
+            name: {{ template "sumologic.metadata.name.opentelemetry.operator.instrumentation.configmap" . }}
+      restartPolicy: OnFailure
+  backoffLimit: 5
+{{- end -}}
