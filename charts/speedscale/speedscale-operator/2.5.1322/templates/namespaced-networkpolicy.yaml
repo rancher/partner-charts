@@ -1,0 +1,112 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.networkPolicy.enabled }}
+{{- if .Values.namespaced.forwarder.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      app: speedscale-forwarder
+      controlplane.speedscale.com/component: forwarder
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Sidecars in this namespace ship captured traffic here.
+  - from:
+    - podSelector: {}
+    {{- with .Values.namespaced.networkPolicy.extraForwarderIngressFrom }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    ports:
+    - protocol: TCP
+      port: 8888
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 8089
+  egress:
+  # DNS.
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Speedscale cloud. Cluster-internal ranges are excluded so this rule cannot
+  # quietly become a wildcard for east-west traffic.
+  - to:
+    - ipBlock:
+        cidr: '{{ index .Values.namespaced.networkPolicy.cloudEgressCIDRs 0 }}'
+        {{- with .Values.namespaced.networkPolicy.cloudEgressExceptCIDRs }}
+        except: {{ toYaml . | nindent 8 }}
+        {{- end }}
+    ports:
+    - protocol: TCP
+      port: 443
+{{- end }}
+{{- if .Values.namespaced.inspector.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: speedscale-inspector
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-inspector
+    controlplane.speedscale.com/component: inspector
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      app: speedscale-inspector
+      controlplane.speedscale.com/component: inspector
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Pod-IP dial to instrumented workloads' diagnostics endpoint, plus the
+  # Kubernetes API and Speedscale cloud on 443.
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 4144
+  - ports:
+    - protocol: TCP
+      port: 443
+{{- end }}
+{{- end }}
+
+{{- end }}
