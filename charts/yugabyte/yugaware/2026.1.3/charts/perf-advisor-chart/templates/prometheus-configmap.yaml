@@ -1,0 +1,115 @@
+{{- if and (not .Values.prometheus.external.url) (not .Values.yugaware.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-prometheus-config
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-prometheus
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+data:
+  prometheus.yml: |-
+    global:
+        scrape_interval:     {{ .Values.prometheus.scrapeInterval }}
+        evaluation_interval: {{ .Values.prometheus.scrapeInterval }}
+        scrape_timeout:      {{ .Values.prometheus.scrapeTimeout }}
+    scrape_configs:
+      - job_name: prometheus
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets: ['{{ .Release.Name }}-prometheus.{{ include "perf-advisor-chart.namespace" .  }}.svc.cluster.local:{{ .Values.prometheus.port }}']
+      {{- if not .Values.perfAdvisor.metrics.export.topology }}
+      - job_name: pa-actuator
+        metrics_path: /actuator/prometheus
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets: ['{{ .Release.Name }}-perf-advisor-service.{{ include "perf-advisor-chart.namespace" . }}.svc.cluster.local:{{ include "getServicePort" . }}']
+
+      - job_name: pa-universe
+        metrics_path: /api/universe/metrics
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets: ['{{ .Release.Name }}-perf-advisor-service.{{ include "perf-advisor-chart.namespace" .  }}.svc.cluster.local:{{ include "getServicePort" . }}']
+      {{- end }}
+
+      {{- if .Values.prometheus.targets.collectors }}
+      - job_name: pa-collector-actuator
+        metrics_path: /actuator/prometheus
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets:
+{{ toYaml .Values.prometheus.targets.collectors | indent 12}}
+
+      - job_name: pa-collector-universe
+        metrics_path: /api/universe/metrics
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets:
+{{ toYaml .Values.prometheus.targets.collectors | indent 12}}
+      {{- end }}
+
+      {{- if .Values.prometheus.targets.apis }}
+      - job_name: pa-api-actuator
+        metrics_path: /actuator/prometheus
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets:
+{{ toYaml .Values.prometheus.targets.apis | indent 12}}
+      {{- end }}
+
+      {{- if .Values.prometheus.targets.taskRunners }}
+      - job_name: pa-task-runner-actuator
+        metrics_path: /actuator/prometheus
+      {{- if (.Values.tls.enabled) }}
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+      {{- end }}
+        static_configs:
+          - targets:
+{{ toYaml .Values.prometheus.targets.taskRunners | indent 12}}
+      {{- end }}
+
+{{- if .Values.tls.enabled }}
+  web.yml: |-
+    tls_server_config:
+      cert_file: /prometheus_certs/tls.crt
+      key_file: /prometheus_certs/tls.key
+
+  {{- if .Values.tls.prometheus.minVersion }}
+      min_version: {{ .Values.tls.prometheus.minVersion }}
+  {{- end }}
+  {{- if .Values.tls.prometheus.maxVersion }}
+      max_version: {{ .Values.tls.prometheus.maxVersion }}
+  {{- end }}
+{{- end }}
+{{- end }}

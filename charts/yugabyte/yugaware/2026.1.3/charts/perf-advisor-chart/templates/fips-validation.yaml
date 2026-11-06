@@ -1,0 +1,45 @@
+{{- /*
+  Renders nothing. In approved-only mode every PBKDF2 derivation has to meet the validated
+  module's 112-bit minimum, and that includes ones Perf Advisor does not make itself: the
+  PostgreSQL JDBC driver derives its SCRAM-SHA-256 salted password through SecretKeyFactory,
+  which resolves to BCFIPS once FIPS mode puts it first. A database password shorter than 14
+  bytes therefore fails authentication with
+
+    FipsUnapprovedOperationError: password must be at least 112 bits
+
+  during startup, before anything is logged about the database - so this is checked at render
+  time instead, where the message can say what to do.
+
+  The password is read from values when it is there and from its Secret otherwise, which covers
+  yugaware sub-chart mode: Perf Advisor and YugabyteDB Anywhere share one password, read from
+  the <release>-yugaware-global-config Secret this chart does not write. `lookup` returns nothing
+  under `helm template`, `--dry-run` and ArgoCD, so a Secret-held password can only be checked
+  against a live cluster; the render is allowed through when it cannot be read.
+*/}}
+{{- if eq (toString .Values.fips.enabled) "true" }}
+{{- $minBytes := 14 }}
+{{- $ns := include "perf-advisor-chart.namespace" . }}
+{{- $password := "" }}
+{{- $field := "" }}
+{{- $checked := true }}
+{{- if or .Values.yugaware.enabled .Values.postgres.external.secret.name }}
+  {{- $secretName := include "perf-advisor-chart.postgresSecretName" . }}
+  {{- $secretKey := include "perf-advisor-chart.postgresSecretKey" . }}
+  {{- $data := (lookup "v1" "Secret" $ns $secretName).data | default dict }}
+  {{- if index $data $secretKey }}
+    {{- $password = index $data $secretKey | b64dec }}
+    {{- $field = printf "%s in Secret %s" $secretKey $secretName }}
+  {{- else }}
+    {{- $checked = false }}
+  {{- end }}
+{{- else if .Values.postgres.external.host }}
+  {{- $password = .Values.postgres.external.pass | default "" }}
+  {{- $field = "postgres.external.pass" }}
+{{- else }}
+  {{- $password = (.Values.postgres.env).postgresPassword | default "" }}
+  {{- $field = "postgres.env.postgresPassword" }}
+{{- end }}
+{{- if and $checked (lt (len $password) $minBytes) }}
+  {{- fail (printf "\n\n%s is %d bytes, but FIPS mode needs at least %d.\nPostgreSQL SCRAM authentication derives its key with PBKDF2 through the FIPS module, which\nrejects anything shorter, so Perf Advisor would fail to reach its database on startup.\nSet a longer password, or disable FIPS mode with fips.enabled=false.\n" $field (len $password) $minBytes) }}
+{{- end }}
+{{- end }}

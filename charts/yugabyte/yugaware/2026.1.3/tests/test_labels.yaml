@@ -1,0 +1,170 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quintush/helm-unittest/master/schema/helm-testsuite.json
+#
+# Every resource this chart creates must carry app, chart, release and heritage,
+# plus whatever the operator put in commonLabels.
+#
+# Templates are picked up by glob, so a newly added template is swept in
+# automatically - nothing here needs editing when a resource is added. The
+# scenarios below exist only to switch on the values that gate conditional
+# templates; a new template gated behind a value none of them set will render
+# nothing and therefore assert nothing, so add a scenario when adding a gate.
+#
+# documentSelector matches on `kind`, which every rendered manifest has, with:
+#   matchMany         - assert every matching document, not just the first
+#   skipEmptyTemplates - tolerate templates that render nothing under these
+#                        values (validation-only templates, gated resources)
+#
+# The "canary" test at the bottom names templates explicitly and omits
+# skipEmptyTemplates. It is what stops this suite from silently passing on
+# nothing: a glob that matches no files, or a documentSelector that matches no
+# documents, is NOT an error in helm-unittest. The previous version of this
+# suite globbed "templates/**/*.yaml", which matches only the tests/
+# subdirectory, and so passed while pdb.yaml was rendering invalid YAML.
+suite: every created resource carries the standard labels
+templates:
+  - templates/*.yaml
+  - templates/tests/*.yaml
+  - charts/perf-advisor-chart/templates/*.yaml
+set:
+  commonLabels:
+    team: platform
+    cost-center: eng-42
+  # templates/perf-advisor-validation.yaml requires the sub-chart copy to match.
+  perf-advisor-chart:
+    commonLabels:
+      team: platform
+      cost-center: eng-42
+tests:
+  - it: labels every resource of a standard TLS install
+    documentSelector: &everyResource
+      path: kind
+      matchMany: true
+      skipEmptyTemplates: true
+    set: &baseInstall
+      tls:
+        enabled: true
+      securityContext:
+        enabled: true
+      rbac:
+        create: true
+      image:
+        pullSecretFile: values.yaml
+      prometheus:
+        remoteWrite:
+          tls:
+            enabled: true
+      yugaware:
+        serviceMonitor:
+          enabled: true
+    asserts: &labelAsserts
+      # `exists` fails on an absent key; `isNotEmpty` alone does not, so both
+      # are needed to catch a label that is missing rather than merely blank.
+      - exists:
+          path: metadata.labels.app
+      - isNotEmpty:
+          path: metadata.labels.app
+      - exists:
+          path: metadata.labels.chart
+      - isNotEmpty:
+          path: metadata.labels.chart
+      - exists:
+          path: metadata.labels.release
+      - isNotEmpty:
+          path: metadata.labels.release
+      - exists:
+          path: metadata.labels.heritage
+      - isNotEmpty:
+          path: metadata.labels.heritage
+      - isSubset:
+          path: metadata.labels
+          content:
+            team: platform
+            cost-center: eng-42
+
+  - it: labels every resource under namespaced RBAC
+    documentSelector: *everyResource
+    set:
+      rbac:
+        create: true
+        namespaced: true
+    asserts: *labelAsserts
+
+  - it: labels every resource on OpenShift
+    documentSelector: *everyResource
+    set:
+      rbac:
+        create: true
+      ocpCompatibility:
+        enabled: true
+    asserts: *labelAsserts
+
+  - it: labels the cert-manager Issuer and Certificate
+    documentSelector: *everyResource
+    set:
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          genSelfsigned: true
+          useClusterIssuer: false
+    asserts: *labelAsserts
+
+  - it: labels the cert-manager resources in ClusterIssuer mode
+    documentSelector: *everyResource
+    set:
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          genSelfsigned: true
+          useClusterIssuer: true
+    asserts: *labelAsserts
+
+  - it: labels every resource of a YugabyteDB-backed install
+    documentSelector: *everyResource
+    set:
+      useYugabyteDB: true
+      yugabytedb:
+        service:
+          enabled: true
+    asserts: *labelAsserts
+
+  - it: labels the universe boot script ConfigMap
+    documentSelector: *everyResource
+    set:
+      yugaware:
+        universe_boot_script: "echo hello"
+    asserts: *labelAsserts
+
+  - it: labels the post-install and pre-upgrade hooks
+    documentSelector: *everyResource
+    release:
+      upgrade: true
+    set:
+      yugaware:
+        defaultUser:
+          enabled: true
+          password: "Passw0rd#1"
+    asserts: *labelAsserts
+
+  # Canary. Explicit templates, no skipEmptyTemplates, so every one of these
+  # must render at least one document or the suite fails. Without it the whole
+  # suite could pass while matching nothing at all.
+  - it: canary - the core templates really do render and get asserted
+    templates:
+      - templates/configs.yaml
+      - templates/global-config.yaml
+      - templates/init-container-script.yaml
+      - templates/move-prometheus-data.yaml
+      - templates/pdb.yaml
+      - templates/rbac.yaml
+      - templates/service.yaml
+      - templates/statefulset.yaml
+      - templates/volumes.yaml
+      - templates/tests/test.yaml
+      - charts/perf-advisor-chart/templates/deployment.yaml
+      - charts/perf-advisor-chart/templates/perf-advisor-pvc.yaml
+      - charts/perf-advisor-chart/templates/perf-advisor-svc.yaml
+      - charts/perf-advisor-chart/templates/pdb.yaml
+    set: *baseInstall
+    asserts: *labelAsserts

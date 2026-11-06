@@ -1,0 +1,35 @@
+{{- if or .Values.perfAdvisor.metrics.export.topology .Values.yugaware.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-metrics-export-topology
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-perf-advisor
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+data:
+  metrics-export.yml: |-
+{{- if .Values.perfAdvisor.metrics.export.topology }}
+  {{ toYaml .Values.perfAdvisor.metrics.export.topology | nindent 4 }}
+{{- else if .Values.yugaware.enabled }}
+  {{- /*
+  Default topology in yugaware sub-chart mode: remote-write collected metrics into the
+  prometheus provided by yugaware (it runs with --web.enable-remote-write-receiver).
+  */}}
+    labels:
+      collector_id: local
+    shards:
+      - id: 0
+        default: true
+        type: remotewrite
+        replicas:
+          - endpoint: "{{ include "perf-advisor-chart.prometheusUrl" . }}/api/v1/write"
+            auth:
+              type: none
+{{- end }}
+{{- end }}

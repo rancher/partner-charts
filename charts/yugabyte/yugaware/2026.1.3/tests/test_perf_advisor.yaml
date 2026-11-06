@@ -1,0 +1,241 @@
+suite: Perf Advisor wiring
+# Covers the parent side of the contract with the perf-advisor sub-chart: the
+# <release>-postgres Service it connects to, the Prometheus remote-write receiver it pushes
+# to, and the validation that keeps the duplicated database settings in step. Sub-chart
+# resources themselves are out of reach for helm-unittest.
+#
+# configs.yaml is listed because statefulset.yaml checksums it via
+# `include (print $.Template.BasePath "/configs.yaml")` - leaving it out makes the render
+# fail with `no template ... associated with template "gotpl"`.
+templates:
+- service.yaml
+- statefulset.yaml
+- configs.yaml
+- perf-advisor-validation.yaml
+tests:
+- it: the in-pod postgres is published as <release>-postgres
+  template: service.yaml
+  asserts:
+  - equal:
+      path: spec.ports[0].port
+      value: 5432
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+  - equal:
+      path: spec.ports[0].targetPort
+      value: 5432
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+  - equal:
+      path: spec.selector.app
+      value: RELEASE-NAME-yugaware
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+  - equal:
+      path: spec.type
+      value: ClusterIP
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+
+- it: useYugabyteDB points the Service at the YSQL port
+  template: service.yaml
+  set:
+    useYugabyteDB: true
+    # Every template in this suite renders for every test, so the sub-chart settings have to
+    # keep perf-advisor-validation.yaml happy even where the assertions are about the Service.
+    perf-advisor-chart.postgres.external.user: yugabyte
+  asserts:
+  - equal:
+      path: spec.ports[0].port
+      value: 5432
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+  - equal:
+      path: spec.ports[0].targetPort
+      value: 5433
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+
+- it: a custom YSQL port is honoured
+  template: service.yaml
+  set:
+    useYugabyteDB: true
+    yugabytedb.config.ysqlPort: 5434
+    perf-advisor-chart.postgres.external.user: yugabyte
+  asserts:
+  - equal:
+      path: spec.ports[0].targetPort
+      value: 5434
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-postgres
+
+- it: no postgres Service is published for an external database
+  # There is no database container in the pod to select - the sub-chart is pointed straight
+  # at the external server instead.
+  template: service.yaml
+  set:
+    postgres.external.host: db.example.com
+    perf-advisor-chart.postgres.external.host: db.example.com
+  asserts:
+  - hasDocuments:
+      count: 1
+  - equal:
+      path: metadata.name
+      value: RELEASE-NAME-yugaware-ui
+
+- it: the postgres Service can be turned off
+  template: service.yaml
+  set:
+    postgres.service.enabled: false
+    # Only valid with Perf Advisor off - see the validation tests below.
+    perf-advisor-chart.yugaware.enabled: false
+  asserts:
+  - hasDocuments:
+      count: 1
+  - equal:
+      path: metadata.name
+      value: RELEASE-NAME-yugaware-ui
+
+- it: prometheus accepts remote write by default
+  template: statefulset.yaml
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[?(@.name == "prometheus")].args
+      content: --web.enable-remote-write-receiver
+
+- it: the remote write receiver can be turned off
+  template: statefulset.yaml
+  set:
+    prometheus.enableRemoteWriteReceiver: false
+  asserts:
+  - notContains:
+      path: spec.template.spec.containers[?(@.name == "prometheus")].args
+      content: --web.enable-remote-write-receiver
+
+# --- validation ------------------------------------------------------------------------
+
+- it: defaults validate cleanly
+  template: perf-advisor-validation.yaml
+  asserts:
+  - notFailedTemplate: {}
+
+- it: an external database not mirrored onto the sub-chart is rejected
+  template: perf-advisor-validation.yaml
+  set:
+    postgres.external.host: db.example.com
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.postgres\.external\.host is "" but postgres\.external\.host is "db\.example\.com"'
+
+- it: a mirrored external database validates
+  template: perf-advisor-validation.yaml
+  set:
+    postgres.external.host: db.example.com
+    postgres.external.port: 6432
+    postgres.external.user: myuser
+    perf-advisor-chart.postgres.external.host: db.example.com
+    perf-advisor-chart.postgres.external.port: 6432
+    perf-advisor-chart.postgres.external.user: myuser
+  asserts:
+  - notFailedTemplate: {}
+
+- it: a drifted external port is rejected
+  template: perf-advisor-validation.yaml
+  set:
+    postgres.external.host: db.example.com
+    postgres.external.port: 6432
+    perf-advisor-chart.postgres.external.host: db.example.com
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.postgres\.external\.port is "5432" but postgres\.external\.port is "6432"'
+
+- it: a drifted external user is rejected
+  template: perf-advisor-validation.yaml
+  set:
+    postgres.external.host: db.example.com
+    postgres.external.user: myuser
+    perf-advisor-chart.postgres.external.host: db.example.com
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.postgres\.external\.user is "postgres" but postgres\.external\.user is "myuser"'
+
+- it: a sub-chart host pointing away from the in-pod database is rejected
+  template: perf-advisor-validation.yaml
+  set:
+    perf-advisor-chart.postgres.external.host: somewhere.example.com
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.postgres\.external\.host is set to "somewhere\.example\.com" but postgres\.external\.host is empty'
+
+- it: useYugabyteDB requires the yugabytedb user on the sub-chart
+  template: perf-advisor-validation.yaml
+  set:
+    useYugabyteDB: true
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.postgres\.external\.user is "postgres" but yugabytedb\.user is "yugabyte"'
+
+- it: useYugabyteDB validates once the user matches
+  template: perf-advisor-validation.yaml
+  set:
+    useYugabyteDB: true
+    perf-advisor-chart.postgres.external.user: yugabyte
+  asserts:
+  - notFailedTemplate: {}
+
+- it: a renamed bundled postgres user must be mirrored
+  template: perf-advisor-validation.yaml
+  set:
+    postgres.user: ybadmin
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.postgres\.external\.user is "postgres" but postgres\.user is "ybadmin"'
+
+- it: disabling the postgres Service while Perf Advisor is on is rejected
+  template: perf-advisor-validation.yaml
+  set:
+    postgres.service.enabled: false
+  asserts:
+  - failedTemplate:
+      errorPattern: 'postgres\.service\.enabled is false'
+
+- it: disabling prometheus without an external URL is rejected
+  template: perf-advisor-validation.yaml
+  set:
+    prometheus.enabled: false
+  asserts:
+  - failedTemplate:
+      errorPattern: 'prometheus\.enabled is false and perf-advisor-chart\.prometheus\.external\.url is empty'
+
+- it: disabling prometheus validates with an external URL
+  template: perf-advisor-validation.yaml
+  set:
+    prometheus.enabled: false
+    perf-advisor-chart.prometheus.external.url: http://prom.example.com:9090
+  asserts:
+  - notFailedTemplate: {}
+
+- it: disabling the platform Service is rejected while Perf Advisor queries it
+  template: perf-advisor-validation.yaml
+  set:
+    yugaware.service.enabled: false
+  asserts:
+  - failedTemplate:
+      errorPattern: 'yugaware\.service\.enabled is false'
+
+- it: none of this applies once Perf Advisor is disabled
+  template: perf-advisor-validation.yaml
+  set:
+    perf-advisor-chart.yugaware.enabled: false
+    useYugabyteDB: true
+    prometheus.enabled: false
+    postgres.service.enabled: false
+  asserts:
+  - notFailedTemplate: {}

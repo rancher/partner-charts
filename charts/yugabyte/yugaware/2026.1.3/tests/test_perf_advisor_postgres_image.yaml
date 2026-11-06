@@ -1,0 +1,60 @@
+# The sub-chart's db-init init container waits for the database and creates Perf Advisor's "ts"
+# database in it. It talks to the server in the YugabyteDB Anywhere pod, so it should run the image
+# that pod runs rather than merely the same postgres version - otherwise the node pulls a second
+# postgres, and since this chart defaults to the hardened build, the second one is the unhardened
+# Docker Hub image. A release would then look hardened while running stock postgres in one
+# container.
+#
+# Helm resolves values before templates render, so the image has to be repeated under
+# perf-advisor-chart and cannot be passed down; the validation template is what stops the two
+# copies drifting.
+#
+# The deployment template checksums the sibling ConfigMaps and Secrets it mounts, so they have to
+# be rendered alongside it.
+suite: Perf Advisor sub-chart postgres image
+templates:
+- charts/perf-advisor-chart/templates/deployment.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-certs.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-collector-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-metrics-export-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-properties.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-secret.yaml
+- charts/perf-advisor-chart/templates/postgres-secret.yaml
+- perf-advisor-validation.yaml
+tests:
+- it: runs db-init on the hardened postgres this chart already uses
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  asserts:
+  - equal:
+      path: spec.template.spec.initContainers[?(@.name == "db-init")].image
+      value: quay.io/yugabyte/hardened-postgres:14.23
+
+- it: follows this chart's postgres image when it is mirrored
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  set:
+    image.postgres.registry: my-registry.example.com
+    image.postgres.name: my-postgres
+    image.postgres.tag: "14.24"
+    perf-advisor-chart.image.postgres.registry: my-registry.example.com
+    perf-advisor-chart.image.postgres.name: my-postgres
+    perf-advisor-chart.image.postgres.tag: "14.24"
+  asserts:
+  - equal:
+      path: spec.template.spec.initContainers[?(@.name == "db-init")].image
+      value: my-registry.example.com/my-postgres:14.24
+
+- it: rejects a postgres image that drifts from this chart's
+  template: perf-advisor-validation.yaml
+  set:
+    image.postgres.name: my-postgres
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.image\.postgres\.name is "hardened-postgres" but image\.postgres\.name is "my-postgres"'
+
+- it: says nothing when Perf Advisor is disabled
+  template: perf-advisor-validation.yaml
+  set:
+    image.postgres.tag: "15"
+    perf-advisor-chart.yugaware.enabled: false
+  asserts:
+  - notFailedTemplate: {}

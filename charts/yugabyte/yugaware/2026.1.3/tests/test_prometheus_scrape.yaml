@@ -1,0 +1,31 @@
+suite: YBA Prometheus keeps Perf Advisor collector pod metrics
+# YBA's Perf Advisor memory precheck reads the collector's container limit and working set from
+# this Prometheus, so the collector pod (<release>-main-*) must survive the pod filters.
+templates:
+- configs.yaml
+tests:
+- it: the kube-state-metrics and cadvisor jobs keep the collector pod
+  template: configs.yaml
+  set:
+    prometheus.scrapeKubernetesNodes: true
+  documentSelector:
+    path: metadata.name
+    value: RELEASE-NAME-yugaware-prometheus-config
+  asserts:
+  - matchRegex:
+      path: data["prometheus.yml"]
+      pattern: 'job_name: .kube-state-metrics.(?s:.*)RELEASE-NAME-yugaware\.\*\|RELEASE-NAME-main-\.\*'
+  - matchRegex:
+      path: data["prometheus.yml"]
+      pattern: 'job_name: .kubernetes-cadvisor.(?s:.*)RELEASE-NAME-yugaware\.\*\|RELEASE-NAME-main-\.\*'
+- it: the OpenShift federation job requests the collector pod
+  template: configs.yaml
+  set:
+    ocpCompatibility.enabled: true
+  documentSelector:
+    path: metadata.name
+    value: RELEASE-NAME-yugaware-prometheus-config
+  asserts:
+  - matchRegex:
+      path: data["prometheus.yml"]
+      pattern: '\{pod=~"RELEASE-NAME-main-\.\*"\}'

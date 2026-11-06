@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quintush/helm-unittest/master/schema/helm-testsuite.json
+#
+# Every pod this chart creates must get a securityContext:
+#
+#   securityContext.enabled (default true)           -> pod-level securityContext
+#   containerSecurityContext.enabled (default false) -> per-container securityContext
+#
+# Container-level context is opt-in, so the container tests below switch it on
+# and then require that NO container is left without one. That is expressed as
+# notExists over a negated filter - `containers[?(!@.securityContext)]` - which
+# stays correct as containers are added, instead of pinning names or counts.
+#
+# Templates are picked up by glob and pod-bearing documents are found with a
+# documentSelector, so a new Job, StatefulSet or Pod is swept in automatically.
+# The scenarios exist only to switch on the values that gate conditional
+# containers (TLS -> build-keystore, useYugabyteDB -> ybdb-init, upgrade -> the
+# pre-upgrade hook Jobs).
+#
+# See the canary note in test_labels.yaml: a glob matching no files and a
+# selector matching no documents are both silent passes in helm-unittest, so
+# the last test pins a few templates explicitly without skipEmptyTemplates.
+suite: every pod gets a securityContext
+templates:
+  - templates/*.yaml
+  - templates/tests/*.yaml
+tests:
+  - it: gives every controller-managed pod a pod-level securityContext
+    documentSelector: &controllerPods
+      path: spec.template.spec.containers
+      matchMany: true
+      skipEmptyTemplates: true
+    release:
+      upgrade: true
+    set: &allPods
+      yugaware:
+        defaultUser:
+          enabled: true
+          password: "Passw0rd#1"
+    asserts:
+      - exists:
+          path: spec.template.spec.securityContext
+      - isNotEmpty:
+          path: spec.template.spec.securityContext
+
+  - it: gives every bare pod a pod-level securityContext
+    documentSelector: &barePods
+      path: spec.containers
+      matchMany: true
+      skipEmptyTemplates: true
+    asserts:
+      - exists:
+          path: spec.securityContext
+      - isNotEmpty:
+          path: spec.securityContext
+
+  - it: leaves no container or initContainer without a securityContext
+    documentSelector: *controllerPods
+    release:
+      upgrade: true
+    set: &containerSC
+      containerSecurityContext:
+        enabled: true
+      yugaware:
+        defaultUser:
+          enabled: true
+          password: "Passw0rd#1"
+    asserts: &noBareContainer
+      - notExists:
+          path: "spec.template.spec.containers[?(!@.securityContext)]"
+      - notExists:
+          path: "spec.template.spec.initContainers[?(!@.securityContext)]"
+
+  - it: covers the TLS-only build-keystore initContainer
+    documentSelector: *controllerPods
+    set:
+      containerSecurityContext:
+        enabled: true
+      tls:
+        enabled: true
+    asserts: *noBareContainer
+
+  - it: covers the YugabyteDB ybdb-init initContainer
+    documentSelector: *controllerPods
+    set:
+      containerSecurityContext:
+        enabled: true
+      useYugabyteDB: true
+      yugabytedb:
+        service:
+          enabled: true
+      perf-advisor-chart:
+        postgres:
+          external:
+            user: yugabyte
+    asserts: *noBareContainer
+
+  - it: covers the OpenShift init-permissions initContainer
+    documentSelector: *controllerPods
+    set:
+      containerSecurityContext:
+        enabled: true
+      ocpCompatibility:
+        enabled: true
+    asserts: *noBareContainer
+
+  - it: leaves no bare-pod container without a securityContext
+    documentSelector: *barePods
+    set: *containerSC
+    asserts:
+      - notExists:
+          path: "spec.containers[?(!@.securityContext)]"
+      - notExists:
+          path: "spec.initContainers[?(!@.securityContext)]"
+
+  # Canary - explicit templates, no skipEmptyTemplates, so each must render.
+  # Without it the whole suite could pass while matching nothing at all.
+  - it: canary - the pod-bearing templates really do render and get asserted
+    templates:
+      - templates/configs.yaml
+      - templates/statefulset.yaml
+      - templates/customer-create-post-install-job.yaml
+      - templates/tests/test.yaml
+    set: *allPods
+    asserts:
+      - exists:
+          path: metadata.name

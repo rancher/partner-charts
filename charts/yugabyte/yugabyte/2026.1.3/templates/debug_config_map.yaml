@@ -1,0 +1,46 @@
+{{- $root := . -}}
+{{- $stsTsStart := int $root.Values.stsIndex.tserver.start -}}
+{{- $stsTsEnd := int $root.Values.stsIndex.tserver.end -}}
+{{- $stsMasterStart := int $root.Values.stsIndex.master.start -}}
+{{- $stsMasterEnd := int $root.Values.stsIndex.master.end -}}
+{{- $hasMoveOpMaster := ne $stsMasterStart $stsMasterEnd -}}
+{{- $hasMoveOpTserver := ne $stsTsStart $stsTsEnd -}}
+{{- $masterReplicas := $root.Values.replicas.master -}}
+{{- $masterMoveOpReplicas := $root.Values.moveOp.replicas.master -}}
+{{- $tserverReplicas := $root.Values.replicas.tserver -}}
+{{- $tserverMoveOpReplicas := $root.Values.moveOp.replicas.tserver -}}
+{{- $maxMasterReplicas := ($hasMoveOpMaster | ternary (max (int $masterReplicas) (int $masterMoveOpReplicas)) (int $masterReplicas)) | int }}
+{{- $maxTserverReplicas := ($hasMoveOpTserver | ternary (max (int $tserverReplicas) (int $tserverMoveOpReplicas)) (int $tserverReplicas)) | int }}
+
+---
+{{ $appLabelArgs := dict "label" "yb-master" "root" $root }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "yugabyte.fullname" $root }}-master-hooks
+  namespace: "{{ $root.Release.Namespace }}"
+  labels:
+    {{- include "yugabyte.applabel" ($appLabelArgs) | indent 4 }}
+    {{- include "yugabyte.labels" $root | indent 4 }}
+data:
+{{- range $index := until ( int ( .Values.replicas.master ) ) }}
+  yb-master-{{ $index }}-pre_debug_hook.sh: {{ include "yugabyte.debugHook" (dict "Values" $.Values "role" "master" "index" $index "phase" "pre") | quote }}
+  yb-master-{{ $index }}-post_debug_hook.sh: {{ include "yugabyte.debugHook" (dict "Values" $.Values "role" "master" "index" $index "phase" "post") | quote }}
+{{- end }}
+
+---
+{{ $appLabelArgs := dict "label" "yb-tserver" "root" $root }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "yugabyte.fullname" $root }}-tserver-hooks
+  namespace: "{{ $root.Release.Namespace }}"
+  labels:
+    {{- include "yugabyte.applabel" ($appLabelArgs) | indent 4 }}
+    {{- include "yugabyte.labels" $root | indent 4 }}
+data:
+{{- range $index := until ( int ( .Values.replicas.tserver) ) }}
+  yb-tserver-{{ $index }}-pre_debug_hook.sh: {{ include "yugabyte.debugHook" (dict "Values" $.Values "role" "tserver" "index" $index "phase" "pre") | quote }}
+  yb-tserver-{{ $index }}-post_debug_hook.sh: {{ include "yugabyte.debugHook" (dict "Values" $.Values "role" "tserver" "index" $index "phase" "post") | quote }}
+{{- end }}
+---

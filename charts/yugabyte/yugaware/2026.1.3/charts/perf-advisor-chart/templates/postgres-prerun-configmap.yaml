@@ -1,0 +1,105 @@
+{{- if and (not .Values.postgres.external.host) (not .Values.yugaware.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-postgres-prerun
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-postgres
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+data:
+  # Runs before postgres, as the user postgres will run as. Postgres refuses a data directory it
+  # does not own, and a non-root container cannot change the owner of the volume's own mount
+  # point - so the cluster lives one level down, in a directory this script creates or takes
+  # ownership of. Same approach as the yugaware chart's pg-prerun.sh, with the relocation added
+  # because Perf Advisor's earlier releases put the cluster at the mount root.
+  #
+  # Every step that touches the cluster ends in a rename, so it is atomic, and every intermediate
+  # name is recognised on the next run. The invariant is that a complete cluster is always
+  # reachable under exactly one name, and that an incomplete one is never promoted to the live
+  # path: PG_VERSION is moved last, and its presence is what marks a copy complete. The failure
+  # to design against is postgres finding an empty data directory and initdb-ing a second cluster
+  # beside the real one, which is why the unrecognised cases exit non-zero instead of continuing.
+  pg-prerun.sh: |
+    #!/bin/bash
+    set -x -o errexit -o nounset -o pipefail
+
+    MOUNT=/var/lib/postgresql/data
+    DATA="${MOUNT}/pgdata"
+    STAGED="${MOUNT}/pgdata_staged"
+    COPIED="${MOUNT}/pgdata_copied"
+    STALE="${MOUNT}/pgdata_stale"
+
+    complete() {
+      [ -f "${1}/PG_VERSION" ]
+    }
+
+    # Resume points, in the order the steps below can be interrupted. Each one only promotes a
+    # copy that carries PG_VERSION, so a directory left half-written is discarded rather than
+    # handed to postgres.
+    if [ ! -d "${DATA}" ] && complete "${COPIED}"; then
+      mv "${COPIED}" "${DATA}"
+    fi
+    if [ ! -d "${DATA}" ] && complete "${STAGED}"; then
+      mv "${STAGED}" "${DATA}"
+    fi
+    if [ -d "${DATA}" ] && complete "${DATA}"; then
+      rm -rf "${COPIED}" "${STALE}"
+    fi
+    # An interrupted ownership fix: ${DATA} was renamed aside and the copy is the live cluster.
+    if ! complete "${DATA}" && complete "${STALE}"; then
+      rm -rf "${DATA}"
+      mv "${STALE}" "${DATA}"
+    fi
+
+    # Relocate a cluster left at the mount root by an earlier release. Resumable because the
+    # moves only ever run out of the mount root and into ${STAGED}, and PG_VERSION goes last.
+    if [ ! -d "${DATA}" ] && { [ -f "${MOUNT}/PG_VERSION" ] || [ -d "${STAGED}" ]; }; then
+      mkdir -p "${STAGED}"
+      find "${MOUNT}" -mindepth 1 -maxdepth 1 \
+        ! -name pgdata_staged ! -name PG_VERSION -exec mv -t "${STAGED}" {} +
+      if [ -f "${MOUNT}/PG_VERSION" ]; then
+        mv "${MOUNT}/PG_VERSION" "${STAGED}/"
+      fi
+      mv "${STAGED}" "${DATA}"
+    fi
+
+    if [ ! -d "${DATA}" ]; then
+      # Nothing to migrate and nothing to fix: postgres initdbs into a directory it owns.
+      mkdir "${DATA}"
+      chmod 0700 "${DATA}"
+      exit 0
+    fi
+
+    if ! complete "${DATA}"; then
+      if [ -z "$(ls -A "${DATA}")" ]; then
+        # Empty and unexplained: initdb would succeed here and silently produce a second cluster.
+        echo "${DATA} is empty and no staged copy explains it - refusing to continue." >&2
+      else
+        echo "${DATA} is neither empty nor a postgres cluster - refusing to touch it." >&2
+      fi
+      exit 1
+    fi
+
+    # Running as root means postgres' own entrypoint will chown the cluster and drop to its
+    # postgres user, so there is nothing left to fix.
+    if [ "$(id -u)" = "0" ]; then
+      exit 0
+    fi
+
+    # cp writes new files, so the copy comes out owned by whoever runs this. Both halves of the
+    # swap are renames: the original is never deleted while it is the only complete copy.
+    if [ "$(stat -c '%u' "${DATA}")" != "$(id -u)" ]; then
+      rm -rf "${COPIED}"
+      cp -R --preserve=mode,timestamps "${DATA}" "${COPIED}"
+      mv "${DATA}" "${STALE}"
+      mv "${COPIED}" "${DATA}"
+      rm -rf "${STALE}"
+    fi
+    chmod 0700 "${DATA}"
+{{- end }}

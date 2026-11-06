@@ -1,0 +1,134 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quintush/helm-unittest/master/schema/helm-testsuite.json
+suite: node-agent pre-upgrade Job finds the YBA database
+# The host comes from lookup(): the <release>-postgres Service when it exists, otherwise the
+# YBA pod's IP. kubernetesProvider fakes those objects; with none, lookup is empty.
+templates:
+- node_agent_installed_preupgrade_hook.yaml
+release:
+  name: yba-test
+  namespace: yb-platform
+  upgrade: true
+tests:
+- it: uses the postgres Service name when the Service exists
+  kubernetesProvider:
+    scheme:
+      "v1/Service": {gvr: {version: "v1", resource: "services"}, namespaced: true}
+    objects:
+    - {kind: Service, apiVersion: v1, metadata: {name: yba-test-postgres, namespace: yb-platform}}
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_HOST")].value
+      value: yba-test-postgres.yb-platform.svc
+    documentIndex: 0
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_PORT")].value
+      value: "5432"
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.host="yba-test-postgres\.yb-platform\.svc"\s*$'
+    documentIndex: 1
+
+- it: uses port 5432 through the Service even with useYugabyteDB
+  set:
+    useYugabyteDB: true
+  kubernetesProvider:
+    scheme:
+      "v1/Service": {gvr: {version: "v1", resource: "services"}, namespaced: true}
+    objects:
+    - {kind: Service, apiVersion: v1, metadata: {name: yba-test-postgres, namespace: yb-platform}}
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_PORT")].value
+      value: "5432"
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.port=5432\s*$'
+    documentIndex: 1
+
+- it: falls back to the YBA pod IP when the Service does not exist
+  kubernetesProvider:
+    scheme:
+      "v1/Pod": {gvr: {version: "v1", resource: "pods"}, namespaced: true}
+    objects:
+    - kind: Pod
+      apiVersion: v1
+      metadata: {name: yba-test-yugaware-0, namespace: yb-platform, labels: {app: yba-test-yugaware}}
+      status: {podIP: 10.1.2.3}
+    - kind: Pod
+      apiVersion: v1
+      metadata: {name: other, namespace: yb-platform, labels: {app: other}}
+      status: {podIP: 10.9.9.9}
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_HOST")].value
+      value: 10.1.2.3
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.host="10\.1\.2\.3"\s*$'
+    documentIndex: 1
+
+- it: brackets an IPv6 pod IP so it is a valid JDBC host
+  kubernetesProvider:
+    scheme:
+      "v1/Pod": {gvr: {version: "v1", resource: "pods"}, namespaced: true}
+    objects:
+    - kind: Pod
+      apiVersion: v1
+      metadata: {name: yba-test-yugaware-0, namespace: yb-platform, labels: {app: yba-test-yugaware}}
+      status: {podIP: "fd00::1"}
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_HOST")].value
+      value: "[fd00::1]"
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.host="\[fd00::1\]"\s*$'
+    documentIndex: 1
+
+- it: uses the YSQL port on the pod IP path with useYugabyteDB
+  set:
+    useYugabyteDB: true
+  kubernetesProvider:
+    scheme:
+      "v1/Pod": {gvr: {version: "v1", resource: "pods"}, namespaced: true}
+    objects:
+    - kind: Pod
+      apiVersion: v1
+      metadata: {name: yba-test-yugaware-0, namespace: yb-platform, labels: {app: yba-test-yugaware}}
+      status: {podIP: 10.1.2.3}
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_PORT")].value
+      value: "5433"
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.port=5433\s*$'
+    documentIndex: 1
+
+- it: keeps the localhost fallback when lookup finds nothing (helm template)
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_HOST")].value
+      value: localhost
+    documentIndex: 0
+
+- it: uses the external host and renders no extra objects
+  set:
+    postgres.external.host: pg.example.com
+  asserts:
+  - hasDocuments:
+      count: 2
+  - equal:
+      path: spec.template.spec.containers[0].env[?(@.name == "POSTGRES_HOST")].value
+      value: pg.example.com
+    documentIndex: 0
+  - matchRegex:
+      path: data["application.docker.conf"]
+      pattern: '(?m)^\s*default\.host="pg\.example\.com"\s*$'
+    documentIndex: 1
+

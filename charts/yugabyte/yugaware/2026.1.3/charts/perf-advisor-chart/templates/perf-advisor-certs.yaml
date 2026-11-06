@@ -1,0 +1,97 @@
+{{- if and .Values.tls.enabled (not .Values.tls.certManager.enabled) }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-tls-pem
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: "{{ template "perf-advisor-chart.name" . }}"
+    chart: "{{ template "perf-advisor-chart.chart" . }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+  {{- if .Values.commonLabels }}
+  {{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+  {{- end }}
+type: Opaque
+data:
+  {{- include "getOrCreateServerPem" (dict "Namespace" (include "perf-advisor-chart.namespace" .) "Root" . "Name" (printf "%s%s" .Release.Name "-perf-advisor-tls-pem")) | nindent 2 }}
+{{- end }}
+{{- if .Values.tls.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-export-certs
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-perf-advisor
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+  {{- if .Values.commonLabels }}
+  {{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+  {{- end }}
+data:
+  export-certs.sh: |
+    #!/bin/bash
+    set -o errexit -o pipefail
+
+    CERTS_DIR=/opt/yugabyte/perf-advisor/certs
+    PEM_DIR=/opt/yugabyte/perf-advisor/pem-certs
+    KEYSTORE="${CERTS_DIR}/tls.bcfks"
+    STAGED="${KEYSTORE}.new"
+
+    # keytool comes from the JRE in this image, which is the one running Perf Advisor - the
+    # keystore has to be built by the JVM and BouncyCastle provider that later read it, so it is
+    # resolved from java rather than taken from whatever PATH offers.
+    JAVA_BIN=$(command -v java || true)
+    if [[ -z "${JAVA_BIN}" ]]; then
+      echo "No java in this image, so the BCFKS keystore cannot be built."
+      exit 1
+    fi
+    KEYTOOL="$(dirname "$(readlink -f "${JAVA_BIN}")")/keytool"
+    if [[ ! -x "${KEYTOOL}" ]]; then
+      echo "No keytool next to ${JAVA_BIN} (looked for ${KEYTOOL})."
+      exit 1
+    fi
+
+    # keytool has no BCFKS support unless it is handed the provider jar, which the image keeps in
+    # the application's lib directory.
+    BC_FIPS_JAR=$(ls /opt/yugabyte/perf-advisor/backend/lib/bc-fips-*.jar 2>/dev/null | head -1)
+    if [[ -z "${BC_FIPS_JAR}" ]]; then
+      echo "No bc-fips jar under /opt/yugabyte/perf-advisor/backend/lib - cannot build a BCFKS keystore."
+      exit 1
+    fi
+
+    # keytool dlopen()s the native libraries BouncyCastle unpacks, so they cannot go to a noexec
+    # /tmp - the failure surfaces only as "Provider ... not found".
+    BC_NATIVE_DIR=$(mktemp -d "${CERTS_DIR}/.bcnative-XXXXXX")
+
+    # keytool has no way to import a PEM key pair, so the cert goes through a throwaway PKCS12.
+    TMP_P12=$(mktemp /tmp/perf-advisor-keystore-XXXXXX)
+    trap 'rm -rf "${TMP_P12}" "${STAGED}" "${BC_NATIVE_DIR}"' EXIT
+
+    echo "Packaging the server certificate into a PKCS12 bundle"
+    openssl pkcs12 -export -inkey "${PEM_DIR}/tls.key" \
+      -in "${PEM_DIR}/tls.crt" \
+      -out "${TMP_P12}" \
+      -name perf-advisor \
+      -passout env:KEYSTORE_PASSWORD
+
+    echo "Converting the PKCS12 bundle to BCFKS"
+    # keytool appends to an existing store, so it has to write somewhere empty - but not over the
+    # keystore already there: build it alongside and rename, which is atomic within the directory.
+    # The certs mount is an emptyDir today, so nothing is at risk yet; doing it this way means
+    # giving that mount persistent backing cannot silently reintroduce either a stale entry from
+    # the previous certificate or a window with no keystore at all.
+    rm -f "${STAGED}"
+    "${KEYTOOL}" -importkeystore -noprompt \
+      -J-Dorg.bouncycastle.native.loader.install_dir="${BC_NATIVE_DIR}" \
+      -srckeystore "${TMP_P12}" -srcstoretype PKCS12 -srcstorepass:env KEYSTORE_PASSWORD \
+      -destkeystore "${STAGED}" -deststoretype BCFKS \
+      -deststorepass:env KEYSTORE_PASSWORD \
+      -providerclass org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider \
+      -providerpath "${BC_FIPS_JAR}"
+    mv -f "${STAGED}" "${KEYSTORE}"
+{{- end }}

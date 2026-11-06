@@ -1,0 +1,92 @@
+{{- if and (not .Values.postgres.external.host) (not .Values.yugaware.enabled) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}-postgres
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-postgres
+  template:
+    metadata:
+      annotations:
+        # Without these the pod does not restart when the scripts change, and postgres-init is
+        # the only thing that runs pg-prerun.sh - a later release fixing it would never take.
+        checksum/postgresPrerun: {{ include (print $.Template.BasePath "/postgres-prerun-configmap.yaml") . | sha256sum }}
+        checksum/postgresConfig: {{ include (print $.Template.BasePath "/postgres-configmap.yaml") . | sha256sum }}
+      labels:
+        app: {{ .Release.Name }}-postgres
+        chart: {{ include "perf-advisor-chart.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 8 }}
+{{- end }}
+    spec:
+      {{- with include "perf-advisor-chart.podSecurityContext" (dict "root" .) | trim }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with include "perf-advisor-chart.podPlacement" (dict "root" .) | trim }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      initContainers:
+        # Keeps the cluster in a directory postgres owns. Runs unconditionally so the on-disk
+        # layout does not depend on whether securityContext is enabled - toggling it must not
+        # move PGDATA out from under an existing cluster.
+        - name: postgres-init
+          image: {{ include "perf-advisor-chart.postgresImage" . }}
+          imagePullPolicy: "IfNotPresent"
+          {{- if eq (toString .Values.containerSecurityContext.enabled) "true" }}
+          {{- include "perf-advisor-chart.getSecurityContext" . | nindent 10 }}
+          {{- end }}
+          command: ["/bin/bash", "/pg_prerun/pg-prerun.sh"]
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgredb
+              subPath: postgres_data_14
+            - mountPath: /pg_prerun
+              name: postgres-prerun
+      containers:
+        - name: postgres
+          # Uses helper template to construct image name with registry override support.
+          # If image.commonRegistry or image.postgres.registry is set, it will override
+          # the registry. Otherwise, uses postgres.image from values.
+          image: {{ include "perf-advisor-chart.postgresImage" . }}
+          imagePullPolicy: "IfNotPresent"
+          {{- if eq (toString .Values.containerSecurityContext.enabled) "true" }}
+          {{- include "perf-advisor-chart.getSecurityContext" . | nindent 10 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.postgres.ports.containerPort }}
+
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-postgres-config
+            - secretRef:
+                name: {{ .Release.Name }}-postgres-password
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgredb
+              subPath: postgres_data_14
+      volumes:
+        - name: postgres-prerun
+          configMap:
+            name: {{ .Release.Name }}-postgres-prerun
+            items:
+              - key: pg-prerun.sh
+                path: pg-prerun.sh
+        - name: postgredb
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-postgres-pv-claim
+{{- end }}

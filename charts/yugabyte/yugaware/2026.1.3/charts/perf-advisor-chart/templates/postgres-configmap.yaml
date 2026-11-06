@@ -1,0 +1,26 @@
+{{- if and (not .Values.postgres.external.host) (not .Values.yugaware.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-postgres-config
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: {{ .Release.Name }}-postgres
+    chart: {{ include "perf-advisor-chart.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service | quote }}
+{{- if .Values.commonLabels }}
+{{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+{{- end }}
+data:
+  POSTGRES_DB: ts
+  POSTGRES_USER: postgres
+  # One level below the mount point, because a non-root postgres cannot own the mount point
+  # itself. postgres-init in the StatefulSet moves an older cluster down into it.
+  #
+  # The move is one-way. A helm rollback to a revision without this value - including the
+  # automatic one an --atomic upgrade performs if postgres-init fails - points postgres back at
+  # the mount root, where initdb refuses to run because pgdata/ is sitting there, and the pod
+  # crashloops until someone rolls forward again.
+  PGDATA: /var/lib/postgresql/data/pgdata
+{{- end }}

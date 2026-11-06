@@ -1,0 +1,181 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quintush/helm-unittest/master/schema/helm-testsuite.json
+suite: default user registration
+templates:
+- templates/customer-create-post-install-job.yaml
+tests:
+- it: renders nothing unless enabled
+  asserts:
+  - hasDocuments:
+      count: 0
+
+- it: posts the configured user, including its customer code
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].command[-1]
+      value: '{"code":"k8soperator","email":"yugabyte_k8s@yugabyte.com","name":"yugabyte_k8s","password":"Passw0rd!"}'
+
+# The policy requires a special character, so quotes and backslashes have to survive intact.
+- it: escapes quotes and backslashes in the password
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: 'Pa"ss''w0rd\'
+  asserts:
+  - equal:
+      path: spec.template.spec.containers[0].command[-1]
+      value: '{"code":"k8soperator","email":"yugabyte_k8s@yugabyte.com","name":"yugabyte_k8s","password":"Pa\"ss''w0rd\\"}'
+
+- it: fails on HTTP errors instead of reporting success
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].command
+      content: "--fail"
+  - contains:
+      path: spec.template.spec.containers[0].command
+      content: "--retry-connrefused"
+
+- it: requires a password
+  set:
+    yugaware.defaultUser.enabled: true
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.password must be set"
+
+- it: reports every policy violation, as YugabyteDB Anywhere does
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "abc"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.password does not meet the YugabyteDB Anywhere password policy: Password should contain at least 8 characters; Password should contain at least 1 upper case letters; Password should contain at least 1 digits; Password should contain at least 1 special characters"
+
+# YBA's SPECIAL_CHARACTERS includes the backtick, so it satisfies the special-character rule and
+# is then rejected on its own.
+- it: rejects a backtick, which YBA counts as special but disallows
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd`"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.password does not meet the YugabyteDB Anywhere password policy: Password should not contain `"
+
+- it: needs 14 characters in FIPS mode
+  set:
+    yugaware.fips.enabled: true
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.password does not meet the YugabyteDB Anywhere password policy: Password should contain at least 14 characters"
+
+- it: accepts a 14 character password in FIPS mode
+  set:
+    yugaware.fips.enabled: true
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!Passw"
+  asserts:
+  - hasDocuments:
+      count: 1
+
+- it: rejects a customer code longer than 15 characters
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.code: "abcdefghijklmnop"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.code is 16 characters, at most 15 are allowed"
+
+- it: accepts a 15 character customer code
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.code: "abcdefghijklmno"
+  asserts:
+  - hasDocuments:
+      count: 1
+
+- it: rejects a username shorter than 3 characters
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.username: "ab"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.username is 2 characters, at least 3 are required"
+
+# Same pattern as Play's @Email, which YugabyteDB Anywhere applies to the register form.
+- it: rejects an email Play would reject
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.email: "user@host..com"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.email \"user@host..com\" is not a valid email address"
+
+- it: accepts an email without a dot in the domain, as Play does
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.email: "admin@localhost"
+  asserts:
+  - hasDocuments:
+      count: 1
+
+- it: requires every field
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.email: ""
+    yugaware.defaultUser.username: null
+    yugaware.defaultUser.code: ""
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.email must be set; yugaware.defaultUser.username must be set; yugaware.defaultUser.code must be set; yugaware.defaultUser.password must be set"
+
+- it: lists every problem at once
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.username: "ab"
+    yugaware.defaultUser.code: "abcdefghijklmnop"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.code is 16 characters, at most 15 are allowed; yugaware.defaultUser.username is 2 characters, at least 3 are required"
+
+# Hooks are rendered on upgrade as well, but this Job only runs on install.
+- it: does not validate on upgrade, when the user already exists
+  release:
+    upgrade: true
+  set:
+    yugaware.fips.enabled: true
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.code: ""
+  asserts:
+  - hasDocuments:
+      count: 1
+
+# Java's String.length() counts UTF-16 code units: an emoji is 2.
+- it: counts a character outside the BMP as 2, as Java does
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "Passw0rd!"
+    yugaware.defaultUser.username: "a😀"
+    yugaware.defaultUser.code: "abcdefghijklmn😀"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.code is 16 characters, at most 15 are allowed"
+
+- it: counts an emoji towards the password length, but not as an upper case letter
+  set:
+    yugaware.defaultUser.enabled: true
+    yugaware.defaultUser.password: "w0rd!😀𝐀"
+  asserts:
+  - failedTemplate:
+      errorMessage: "yugaware.defaultUser cannot be registered with YugabyteDB Anywhere: yugaware.defaultUser.password does not meet the YugabyteDB Anywhere password policy: Password should contain at least 1 upper case letters"

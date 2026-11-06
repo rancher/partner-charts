@@ -1,0 +1,112 @@
+# This chart's nodeSelector, tolerations and zoneAffinity place the YugabyteDB Anywhere pod only.
+# The Perf Advisor pod is scheduled independently, and Helm resolves values before templates
+# render, so its placement has to be repeated under perf-advisor-chart - the same three keys in
+# the same form, with zoneAffinity a list of zone names the sub-chart expands the way this chart
+# does. Getting this wrong is silent on a labelled node pool and fatal on a tainted one, so the
+# drift is a render-time failure.
+#
+# The deployment template checksums the sibling ConfigMaps and Secrets it mounts, so they have to
+# be rendered alongside it.
+suite: Perf Advisor sub-chart placement
+templates:
+- charts/perf-advisor-chart/templates/deployment.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-certs.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-collector-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-metrics-export-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-properties.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-secret.yaml
+- charts/perf-advisor-chart/templates/postgres-secret.yaml
+- perf-advisor-validation.yaml
+tests:
+- it: places the Perf Advisor pod from the same three values YBA uses
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  set:
+    perf-advisor-chart.nodeSelector:
+      topology.kubernetes.io/region: us-west1
+    perf-advisor-chart.tolerations:
+    - key: dedicated
+      operator: Exists
+      effect: NoSchedule
+    perf-advisor-chart.zoneAffinity:
+    - us-west1-a
+  asserts:
+  - equal:
+      path: spec.template.spec.nodeSelector["topology.kubernetes.io/region"]
+      value: us-west1
+  - equal:
+      path: spec.template.spec.tolerations[0].key
+      value: dedicated
+  # A plain zone name, expanded into both label spellings - the same shape this chart builds.
+  - equal:
+      path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+      value: failure-domain.beta.kubernetes.io/zone
+  - equal:
+      path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[1].matchExpressions[0].key
+      value: topology.kubernetes.io/zone
+  - equal:
+      path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[1].matchExpressions[0].values[0]
+      value: us-west1-a
+
+- it: still accepts a raw pod spec for placement the three values cannot express
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  set:
+    perf-advisor-chart.perfAdvisor.spec:
+      nodeSelector:
+        topology.kubernetes.io/region: us-east1
+  asserts:
+  - equal:
+      path: spec.template.spec.nodeSelector["topology.kubernetes.io/region"]
+      value: us-east1
+
+- it: leaves the pod unplaced when neither side asks for placement
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  asserts:
+  - notExists:
+      path: spec.template.spec.nodeSelector
+  - notExists:
+      path: spec.template.spec.tolerations
+  - notExists:
+      path: spec.template.spec.affinity
+
+- it: fails the render when YBA is placed and Perf Advisor is not
+  template: perf-advisor-validation.yaml
+  set:
+    nodeSelector:
+      topology.kubernetes.io/region: us-west1
+    tolerations:
+    - key: dedicated
+      operator: Exists
+      effect: NoSchedule
+  asserts:
+  - failedTemplate:
+      errorPattern: 'nodeSelector, tolerations set for YugabyteDB Anywhere, but no placement is set under perf-advisor-chart'
+
+- it: a deliberately different placement is accepted
+  template: perf-advisor-validation.yaml
+  set:
+    nodeSelector:
+      topology.kubernetes.io/region: us-west1
+    perf-advisor-chart.nodeSelector:
+      topology.kubernetes.io/region: us-east1
+  asserts:
+  - notFailedTemplate: {}
+
+- it: a raw pod spec also satisfies the check
+  template: perf-advisor-validation.yaml
+  set:
+    nodeSelector:
+      topology.kubernetes.io/region: us-west1
+    perf-advisor-chart.perfAdvisor.spec:
+      nodeSelector:
+        topology.kubernetes.io/region: us-east1
+  asserts:
+  - notFailedTemplate: {}
+
+- it: says nothing when Perf Advisor is disabled
+  template: perf-advisor-validation.yaml
+  set:
+    nodeSelector:
+      topology.kubernetes.io/region: us-west1
+    perf-advisor-chart.yugaware.enabled: false
+  asserts:
+  - notFailedTemplate: {}

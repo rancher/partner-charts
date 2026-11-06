@@ -1,0 +1,116 @@
+# commonLabels and the pod/container security contexts have to be repeated under
+# perf-advisor-chart (Helm does not pass parent values down); perf-advisor-validation.yaml fails
+# the render if the copies differ, so a customer's mandatory options cannot miss the PA resources.
+suite: Perf Advisor sub-chart mandatory labels and security contexts
+templates:
+- charts/perf-advisor-chart/templates/deployment.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-certs.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-collector-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-metrics-export-topology.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-properties.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-pvc.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-secret.yaml
+- charts/perf-advisor-chart/templates/perf-advisor-svc.yaml
+- charts/perf-advisor-chart/templates/postgres-secret.yaml
+- perf-advisor-validation.yaml
+tests:
+- it: applies mirrored security contexts to the Perf Advisor pod and every container
+  template: charts/perf-advisor-chart/templates/deployment.yaml
+  set:
+    securityContext.runAsUser: 2000
+    securityContext.additionalSettings:
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext.enabled: true
+    containerSecurityContext.additionalSettings:
+      allowPrivilegeEscalation: false
+    perf-advisor-chart.securityContext.runAsUser: 2000
+    perf-advisor-chart.securityContext.additionalSettings:
+      seccompProfile:
+        type: RuntimeDefault
+    perf-advisor-chart.containerSecurityContext.enabled: true
+    perf-advisor-chart.containerSecurityContext.additionalSettings:
+      allowPrivilegeEscalation: false
+  asserts:
+  - equal:
+      path: spec.template.spec.securityContext.runAsUser
+      value: 2000
+  - equal:
+      path: spec.template.spec.securityContext.seccompProfile.type
+      value: RuntimeDefault
+  - equal:
+      path: spec.template.spec.initContainers[?(@.name == "db-init")].securityContext.allowPrivilegeEscalation
+      value: false
+  - equal:
+      path: spec.template.spec.containers[?(@.name == "perf-advisor")].securityContext.allowPrivilegeEscalation
+      value: false
+
+- it: applies mirrored commonLabels to the Perf Advisor PVC
+  template: charts/perf-advisor-chart/templates/perf-advisor-pvc.yaml
+  set:
+    commonLabels:
+      corp.example/owner: team-a
+    perf-advisor-chart.commonLabels:
+      corp.example/owner: team-a
+  asserts:
+  - equal:
+      path: metadata.labels["corp.example/owner"]
+      value: team-a
+
+- it: applies mirrored commonLabels to the Perf Advisor Service
+  template: charts/perf-advisor-chart/templates/perf-advisor-svc.yaml
+  set:
+    commonLabels:
+      corp.example/owner: team-a
+    perf-advisor-chart.commonLabels:
+      corp.example/owner: team-a
+  asserts:
+  - equal:
+      path: metadata.labels["corp.example/owner"]
+      value: team-a
+
+- it: rejects commonLabels set for YBA only
+  template: perf-advisor-validation.yaml
+  set:
+    commonLabels:
+      corp.example/owner: team-a
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.commonLabels is \{\} but commonLabels is \{"corp\.example/owner":"team-a"\}'
+
+- it: rejects a securityContext set for YBA only
+  template: perf-advisor-validation.yaml
+  set:
+    securityContext.runAsUser: 2000
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.securityContext is .* but securityContext is .*"runAsUser":2000'
+
+- it: rejects a containerSecurityContext set for YBA only
+  template: perf-advisor-validation.yaml
+  set:
+    containerSecurityContext.enabled: true
+  asserts:
+  - failedTemplate:
+      errorPattern: 'perf-advisor-chart\.containerSecurityContext is .*"enabled":false.* but containerSecurityContext is .*"enabled":true'
+
+- it: rejects commonLabels that override a label the chart sets itself
+  template: perf-advisor-validation.yaml
+  set:
+    commonLabels:
+      app: mine
+    perf-advisor-chart.commonLabels:
+      app: mine
+  asserts:
+  - failedTemplate:
+      errorPattern: 'commonLabels must not set "app"'
+
+- it: says nothing when Perf Advisor is disabled
+  template: perf-advisor-validation.yaml
+  set:
+    commonLabels:
+      corp.example/owner: team-a
+    containerSecurityContext.enabled: true
+    perf-advisor-chart.yugaware.enabled: false
+  asserts:
+  - notFailedTemplate: {}

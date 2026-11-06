@@ -1,0 +1,132 @@
+{{- if .Values.yugaware.defaultUser.enabled -}}
+{{- /*
+  Helm renders hooks on every upgrade too, but this Job only runs on install. Checking then
+  would block upgrades of releases whose user already exists, over values that are no longer
+  used (for example, after turning on FIPS mode).
+*/}}
+{{- if .Release.IsInstall }}
+{{- include "yugaware.validateDefaultUser" . -}}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "yugaware.fullname" . }}-customer-create-job
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app: "customer-create"
+    release: {{ .Release.Name | quote }}
+    chart: "{{ .Chart.Name }}"
+    component: "{{ .Values.Component }}"
+    heritage: {{ .Values.helm2Legacy | ternary "Tiller" (.Release.Service | quote) }}
+{{- if .Values.commonLabels }}
+{{ include "yugaware.commonLabels" . | indent 4 }}
+{{- end }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ include "yugaware.fullname" . }}-customer-create-job
+      labels:
+        app: "customer-create"
+        release: {{ .Release.Name | quote }}
+        chart: "{{ .Chart.Name }}"
+        component: "{{ .Values.Component }}"
+{{- if .Values.commonLabels }}
+{{ include "yugaware.commonLabels" . | indent 8 }}
+{{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.yugaware.pod.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ .Values.yugaware.serviceAccount | default .Release.Name }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+        {{- if .Values.image.extraPullSecrets }}
+        {{- range .Values.image.extraPullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+        {{- end }}
+      {{- if .Values.securityContext.enabled }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        runAsUser: {{ required "runAsUser cannot be empty" .Values.securityContext.runAsUser }}
+        {{- if ne .Values.securityContext.runAsGroup nil }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup }}
+        {{- else }}
+        runAsGroup: {{ .Values.securityContext.runAsUser }}
+        {{- end }}
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        {{- if (semverCompare ">=1.20-x" .Capabilities.KubeVersion.Version) }}
+        fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy }}
+        {{- end }}
+        {{- if .Values.securityContext.additionalSettings }}
+        {{- toYaml .Values.securityContext.additionalSettings | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8}}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- with .Values.tolerations }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- end }}
+      {{- if .Values.zoneAffinity }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: failure-domain.beta.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+{{ toYaml .Values.zoneAffinity | indent 18 }}
+      {{- end }}
+      restartPolicy: Never
+      containers:
+      - name: post-install-job
+        image: {{ include "full_yugaware_image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if .Values.containerSecurityContext.enabled }}
+        {{- include "getSecurityContext" . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.hooks.postInstallJob.resources }}
+        resources: {{- toYaml .Values.hooks.postInstallJob.resources | nindent 10 }}
+        {{- end }}
+        {{- /*
+          Built with toJson rather than spliced into a JSON literal: the password policy
+          requires a special character, and a quote or backslash there would otherwise
+          produce a body YugabyteDB Anywhere cannot parse, or a manifest Helm cannot.
+        */}}
+        {{- $body := dict
+              "email" (toString .Values.yugaware.defaultUser.email)
+              "password" (toString .Values.yugaware.defaultUser.password)
+              "code" (toString .Values.yugaware.defaultUser.code)
+              "name" (toString .Values.yugaware.defaultUser.username) }}
+        command:
+        - "curl"
+        # Without --fail a 4xx/5xx still exits 0, the hook is recorded as succeeded and the
+        # release comes up with no user. The platform may still be starting when this runs.
+        - "--fail"
+        - "--silent"
+        - "--show-error"
+        - "--retry"
+        - "30"
+        - "--retry-delay"
+        - "10"
+        - "--retry-connrefused"
+        - "-X"
+        - "POST"
+        - "--url"
+        - "{{ .Release.Name }}-yugaware-ui/api/register"
+        - "--header"
+        - "Content-Type: application/json"
+        - "--data"
+        - {{ $body | toJson | toJson }}
+{{- end -}}

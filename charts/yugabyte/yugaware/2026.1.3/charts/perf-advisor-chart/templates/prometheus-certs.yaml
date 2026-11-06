@@ -1,0 +1,20 @@
+{{- /* Only needed when this chart deploys its own prometheus. */}}
+{{- if and .Values.tls.enabled (not .Values.tls.certManager.enabled) (not .Values.prometheus.external.url) (not .Values.yugaware.enabled) }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-perf-advisor-prom-tls-pem
+  namespace: {{ include "perf-advisor-chart.namespace" . }}
+  labels:
+    app: "{{ template "perf-advisor-chart.name" . }}"
+    chart: "{{ template "perf-advisor-chart.chart" . }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+  {{- if .Values.commonLabels }}
+  {{ include "perf-advisor-chart.commonLabels" . | indent 4 }}
+  {{- end }}
+type: Opaque
+data:
+  {{- include "getOrCreatePromServerPem" (dict "Namespace" (include "perf-advisor-chart.namespace" .) "Root" . "Name" (printf "%s%s" .Release.Name "-perf-advisor-prom-tls-pem")) | nindent 2 }}
+{{- end }}
