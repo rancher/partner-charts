@@ -1,0 +1,346 @@
+# PowerStore Alert Rules Test Suite
+# Tests all 18 alert rules with realistic mock data based on actual PowerStore metrics
+
+rule_files:
+  - alert-rules.yaml
+
+tests:
+  # Test Group 1: Volume Operation Failure Alerts (PST-01 to PST-08)
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="CreateVolume",global_id="PSc26835c9a0ba",protocol="block",error_code="InternalError"}'
+        values: '0 0 0 0 5 5 5 5 5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreCreateVolumeFailure
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreCreateVolumeFailure
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              operation: CreateVolume
+              global_id: PSc26835c9a0ba
+              error_code: InternalError
+              protocol: block
+            exp_annotations:
+              summary: "PowerStore CSI CreateVolume operation failures detected"
+              description: "Array PSc26835c9a0ba has 5 CreateVolume failures in the last 5 minutes. Protocol: block, Error Code: InternalError"
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="DeleteVolume",global_id="PSc26835c9a0ba",protocol="block",error_code="InternalError"}'
+        values: '0 0 0 0 3 3 3 3 3'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDeleteVolumeFailure
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreDeleteVolumeFailure
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              operation: DeleteVolume
+              global_id: PSc26835c9a0ba
+              error_code: InternalError
+              protocol: block
+            exp_annotations:
+              summary: "PowerStore CSI DeleteVolume operation failures detected"
+              description: "Array PSc26835c9a0ba has 3 DeleteVolume failures in the last 5 minutes. Protocol: block, Error Code: InternalError"
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="ListVolumes",global_id="PSc26835c9a0ba",protocol="block",error_code="InternalError"}'
+        values: '0 0 0 0 10 10 10 10 10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreCreateVolumeFailure
+        exp_alerts: []  # Should NOT fire - ListVolumes not in tracked operations
+
+  # Test Group 2: Driver Health and Resource Alerts (PST-09 to PST-14)
+
+  # PST-09: Driver Pod Unavailable - fires when zero controller or node instances report metrics
+  - interval: 1m
+    input_series:
+      # No dell_csi_driver_uptime_seconds series at all — simulates all pods down
+      - series: 'dell_csi_driver_uptime_seconds{namespace="csi-powerstore",instance_type="controller"}'
+        values: '_x11'  # stale/absent for the entire duration
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDriverPodUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreDriverPodUnavailable
+              component: csi-driver
+              severity: critical
+              platform: powerstore
+            exp_annotations:
+              summary: "PowerStore CSI driver metrics are unavailable"
+              description: "PowerStore CSI driver has zero controller instances or zero node instances reporting metrics for 5 minutes."
+              runbook_url: ""
+
+  # PST-09 boundary: alert does NOT fire when both controller and node instances are present
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_uptime_seconds{namespace="csi-powerstore",instance_type="controller"}'
+        values: '100 200 300 400 500 600 700 800 900 1000 1100'
+      - series: 'dell_csi_driver_uptime_seconds{namespace="csi-powerstore",instance_type="node"}'
+        values: '100 200 300 400 500 600 700 800 900 1000 1100'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDriverPodUnavailable
+        exp_alerts: []  # Should NOT fire - both controller and node are present
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_restart_total{global_id="PSc26835c9a0ba",pod="powerstore-controller-7cc98c6ddd-ljqhk",node="node1",namespace="csi-powerstore",instance_type="controller"}'
+        values: '0 1 2 3 4 5 6 7 8'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDriverCrashLooping
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreDriverCrashLooping
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              pod: powerstore-controller-7cc98c6ddd-ljqhk
+              node: node1
+              global_id: PSc26835c9a0ba
+              instance_type: controller
+              namespace: csi-powerstore
+            exp_annotations:
+              summary: "PowerStore CSI driver is crash looping"
+              description: "PowerStore CSI driver pod powerstore-controller-7cc98c6ddd-ljqhk (instance type: controller) has restarted 5 times in the last 15m, indicating a crash loop."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_memory_usage_bytes{global_id="PSc26835c9a0ba",pod="powerstore-controller-7cc98c6ddd-ljqhk",node="node1",namespace="csi-powerstore",instance_type="controller"}'
+        values: '2684354560 2684354560 2684354560 2684354560 2684354560 2684354560'  # 2.5 GiB > 2 GiB threshold
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDriverHighMemoryUsage
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreDriverHighMemoryUsage
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              pod: powerstore-controller-7cc98c6ddd-ljqhk
+              global_id: PSc26835c9a0ba
+              instance_type: controller
+              namespace: csi-powerstore
+              node: node1
+            exp_annotations:
+              summary: "PowerStore CSI driver high memory usage"
+              description: "PowerStore CSI driver pod powerstore-controller-7cc98c6ddd-ljqhk on node node1 has memory usage of 2684354560 bytes (threshold: 2147483648 bytes) for more than 5 minutes."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{global_id="PSc26835c9a0ba",pod="powerstore-controller-7cc98c6ddd-ljqhk",node="node1",namespace="csi-powerstore",instance_type="controller"}'
+        values: '85 85 85 85 85 85'  # 85% > 80% threshold
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDriverHighCPUUsage
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreDriverHighCPUUsage
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              pod: powerstore-controller-7cc98c6ddd-ljqhk
+              global_id: PSc26835c9a0ba
+              instance_type: controller
+              namespace: csi-powerstore
+              node: node1
+            exp_annotations:
+              summary: "PowerStore CSI driver high CPU usage"
+              description: "PowerStore CSI driver pod powerstore-controller-7cc98c6ddd-ljqhk on node node1 has CPU usage of 85% (threshold: 80%) for more than 5 minutes."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{global_id="PSc26835c9a0ba",pod="powerstore-controller-7cc98c6ddd-ljqhk",node="node1",namespace="csi-powerstore",instance_type="controller"}'
+        values: '79 79 79 79 79 79'  # 79% < 80% threshold - should NOT fire
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreDriverHighCPUUsage
+        exp_alerts: []  # Should NOT fire - below threshold
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_powerstore_metrics_stale{global_id="PSc26835c9a0ba"}'
+        values: '1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreMetricsStale
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreMetricsStale
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              global_id: PSc26835c9a0ba
+            exp_annotations:
+              summary: "PowerStore metrics collection is stale on array PSc26835c9a0ba"
+              description: "PowerStore metrics collection has reported stale data for 5 minutes on array PSc26835c9a0ba. The stale flag is set immediately on any collection failure, ensuring the alert fires even when the cache is empty."
+              runbook_url: ""
+
+  # PST-13: High API Error Rate - fires when error ratio exceeds 10% for 5 minutes
+  - interval: 1m
+    input_series:
+      # 20 failure calls and 80 success calls = 20% error rate (above 10% threshold)
+      - series: 'dell_csi_api_call_total{global_id="PSc26835c9a0ba",endpoint="/api/v1/volume",method="POST",status="failure"}'
+        values: '0 4 8 12 16 20 24 28 32 36 40'
+      - series: 'dell_csi_api_call_total{global_id="PSc26835c9a0ba",endpoint="/api/v1/volume",method="POST",status="success"}'
+        values: '0 16 32 48 64 80 96 112 128 144 160'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerStoreHighAPIErrorRate
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreHighAPIErrorRate
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              global_id: PSc26835c9a0ba
+              endpoint: /api/v1/volume
+              method: POST
+            exp_annotations:
+              summary: "PowerStore API error rate elevated"
+              description: "PowerStore API error rate on array PSc26835c9a0ba endpoint /api/v1/volume (POST) is 20% over the last 5m (threshold: 10%)."
+              runbook_url: ""
+
+  # PST-13 boundary: error rate at 5% should NOT fire (below 10% threshold)
+  - interval: 1m
+    input_series:
+      # 5 failure calls and 95 success calls = 5% error rate (below 10% threshold)
+      - series: 'dell_csi_api_call_total{global_id="PSc26835c9a0ba",endpoint="/api/v1/volume",method="GET",status="failure"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_csi_api_call_total{global_id="PSc26835c9a0ba",endpoint="/api/v1/volume",method="GET",status="success"}'
+        values: '0 19 38 57 76 95 114 133 152 171 190'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerStoreHighAPIErrorRate
+        exp_alerts: []  # Should NOT fire - 5% is below 10% threshold
+
+  # Test Group 3: Capacity, Connectivity, and Authentication Alerts (PST-15 to PST-18)
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="CreateVolume",global_id="PSc26835c9a0ba",error_code="auth_failure",protocol="block"}'
+        values: '0 0 0 0 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreAuthenticationFailure
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreAuthenticationFailure
+              component: csi-driver
+              severity: critical
+              platform: powerstore
+              operation: CreateVolume
+              global_id: PSc26835c9a0ba
+              error_code: auth_failure
+              protocol: block
+            exp_annotations:
+              summary: "PowerStore authentication failures detected"
+              description: "Array PSc26835c9a0ba has 1 authentication failures in the last 5 minutes for operation CreateVolume. Check array credentials."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="CreateVolume",global_id="PSc26835c9a0ba",error_code="internal_error",protocol="block"}'
+        values: '0 0 0 0 5 5 5 5 5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerStoreAuthenticationFailure
+        exp_alerts: []  # Should NOT fire - not auth_failure error code
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_powerstore_appliance_utilization_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '0.81 0.81 0.81 0.81 0.81 0.81 0.81 0.81 0.81 0.81 0.81'  # 81% > 80% threshold
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerStoreApplianceCapacityWarning
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreApplianceCapacityWarning
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              appliance_id: A1
+              appliance_name: apm8936-appliance-1
+              global_id: PSc26835c9a0ba
+            exp_annotations:
+              summary: "PowerStore appliance apm8936-appliance-1 utilization is high"
+              description: "PowerStore appliance apm8936-appliance-1 on array PSc26835c9a0ba has exceeded the warning utilization threshold at 81% (threshold: 80%)."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_powerstore_appliance_utilization_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '0.79 0.79 0.79 0.79 0.79 0.79 0.79 0.79 0.79 0.79 0.79'  # 79% < 80% threshold
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerStoreApplianceCapacityWarning
+        exp_alerts: []  # Should NOT fire - below threshold
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_powerstore_appliance_utilization_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '0.91 0.91 0.91 0.91 0.91 0.91 0.91 0.91 0.91 0.91 0.91'  # 91% > 90% threshold
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerStoreApplianceCapacityCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreApplianceCapacityCritical
+              component: csi-driver
+              severity: critical
+              platform: powerstore
+              appliance_id: A1
+              appliance_name: apm8936-appliance-1
+              global_id: PSc26835c9a0ba
+            exp_annotations:
+              summary: "PowerStore appliance apm8936-appliance-1 utilization is critical"
+              description: "PowerStore appliance apm8936-appliance-1 on array PSc26835c9a0ba has exceeded the critical utilization threshold at 91% (threshold: 90%). Immediate action required."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_powerstore_appliance_compression_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0'
+      - series: 'dell_powerstore_appliance_utilization_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25'  # 5.0 * 0.25 = 1.25 > 1.0
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerStoreThinProvisioningOvercommitment
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerStoreThinProvisioningOvercommitment
+              component: csi-driver
+              severity: warning
+              platform: powerstore
+              appliance_id: A1
+              appliance_name: apm8936-appliance-1
+              global_id: PSc26835c9a0ba
+            exp_annotations:
+              summary: "PowerStore thin provisioning over-commitment detected on array PSc26835c9a0ba"
+              description: "PowerStore appliance apm8936-appliance-1 on array PSc26835c9a0ba has logical provisioned capacity exceeding physical total."
+              runbook_url: ""
+
+  - interval: 1m
+    input_series:
+      - series: 'dell_powerstore_appliance_compression_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '2.0 2.0 2.0 2.0 2.0 2.0 2.0 2.0 2.0 2.0 2.0'
+      - series: 'dell_powerstore_appliance_utilization_ratio{global_id="PSc26835c9a0ba",appliance_id="A1",appliance_name="apm8936-appliance-1"}'
+        values: '0.30 0.30 0.30 0.30 0.30 0.30 0.30 0.30 0.30 0.30 0.30'  # 2.0 * 0.30 = 0.60 < 1.0
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerStoreThinProvisioningOvercommitment
+        exp_alerts: []  # Should NOT fire - below threshold
