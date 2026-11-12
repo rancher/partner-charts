@@ -1,0 +1,69 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.forwarder.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+# Resolve the local pods and services behind the traffic it forwards, so a
+# captured connection can be attributed to a workload rather than an IP.
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+# Its own configuration, by name. The DLP and filter ConfigMaps are optional
+# mounts the forwarder re-reads without a restart; the operator writes them at
+# runtime (S-12539) and this chart lets the forwarder see them if they appear.
+- apiGroups:
+  - ""
+  resourceNames:
+  - speedscale-forwarder
+  - speedscale-forwarder-dlp
+  - speedscale-forwarder-filter
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-forwarder
+    controlplane.speedscale.com/component: forwarder
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-forwarder
+subjects:
+- kind: ServiceAccount
+  name: speedscale-forwarder
+  namespace: '{{ .Release.Namespace }}'
+{{- end }}
+
+{{- end }}
