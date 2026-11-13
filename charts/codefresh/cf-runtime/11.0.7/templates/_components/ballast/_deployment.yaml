@@ -1,0 +1,52 @@
+{{- define "ballast.resources.deployment" -}}
+{{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- $name := .Values.name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ballast.fullname" . }}
+  labels:
+    {{- include "ballast.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicasCount }}
+  selector:
+    matchLabels:
+      {{- include "ballast.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "ballast.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      priorityClassName: cf-ballast
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver) . | nindent 8 }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: pause
+        image: {{ include (printf "%s.image.name" $cfCommonTplSemver) (dict "image" .Values.image "context" .) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12  }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end -}}

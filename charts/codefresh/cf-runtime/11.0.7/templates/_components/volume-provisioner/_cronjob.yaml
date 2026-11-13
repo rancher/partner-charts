@@ -1,0 +1,58 @@
+{{- define "dind-volume-provisioner.resources.cronjob" -}}
+{{ $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- if not (eq .Values.storage.backend "local") }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "dind-volume-cleanup.fullname" . }}
+  labels:
+    {{- include "dind-volume-cleanup.labels" . | nindent 4 }}
+spec:
+  concurrencyPolicy: {{ .Values.concurrencyPolicy }}
+  schedule: {{ .Values.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistory }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistory }}
+  {{- with .Values.suspend }}
+  suspend: {{ . }}
+  {{- end }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "dind-volume-cleanup.selectorLabels" . | nindent 12 }}
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- include (printf "%s.image.pullSecrets" $cfCommonTplSemver ) . | nindent 10 }}
+          serviceAccountName: {{ include "dind-volume-provisioner.serviceAccountName" . }}
+          {{- if .Values.podSecurityContext.enabled }}
+          securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          restartPolicy: {{ .Values.restartPolicy | default "Never" }}
+          containers:
+          - name: dind-volume-cleanup
+            image: {{ include (printf "%s.image.name" $cfCommonTplSemver ) (dict "image" .Values.image "context" .) }}
+            imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+            env:
+            {{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" .Values.env "context" .) | nindent 12 }}
+            - name: PROVISIONED_BY
+              value: {{ include "dind-volume-provisioner.volumeProvisionerName" . }}
+            resources:
+            {{- toYaml .Values.resources | nindent 14 }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+  {{- end }}
+{{- end -}}

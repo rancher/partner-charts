@@ -1,0 +1,37 @@
+{{- define "app-proxy.environment-variables.defaults" }}
+PORT: 3000
+{{- end }}
+
+{{- define "app-proxy.environment-variables.calculated" }}
+{{- $appProxyVersion := coalesce .Values.image.tag "latest" -}}
+{{- if .Values.image.digest }}
+  {{- $appProxyVersion = printf "%s@%s" $appProxyVersion .Values.image.digest -}}
+{{- end }}
+{{- $runtimeVersion := coalesce .Values.version .Chart.Version -}}
+{{- $runtimeName := include "runtime.runtime-environment-spec.runtime-name" . -}}
+A_POD_NAME:
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+A_NAMESPACE_NAME:
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.namespace
+CF_SERVICE_NAME: {{ printf "cf-classic-app-proxy" }}
+CF_SERVICE_VERSION: {{ $appProxyVersion }}
+CF_TELEMETRY_PYROSCOPE_TAGS: "pod=$(A_POD_NAME),namespace=$(A_NAMESPACE_NAME)"
+OTEL_RESOURCE_ATTRIBUTES: {{ printf "service.name=cf-classic-app-proxy,service.version=%s,service.namespace=cf-classic-runtime,cf.classic.runtime.name=%s,cf.classic.runtime.version=%s" $appProxyVersion $runtimeName $runtimeVersion }}
+CODEFRESH_HOST: {{ include "runtime.runtime-environment-spec.codefresh-host" . }}
+{{- with .Values.ingress.pathPrefix }}
+API_PATH_PREFIX: {{ . | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "app-proxy.environment-variables" }}
+{{- $cfCommonTplSemver := printf "cf-common-%s" (index .Subcharts "cf-common").Chart.Version }}
+{{- $defaults := (include "app-proxy.environment-variables.defaults" . | fromYaml) }}
+{{- $calculated := (include "app-proxy.environment-variables.calculated" . | fromYaml) }}
+{{- $overrides := .Values.env }}
+{{- $mergedValues := mergeOverwrite (merge $defaults $calculated) $overrides }}
+{{- include (printf "%s.env-vars" $cfCommonTplSemver) (dict "Values" $mergedValues "context" .) }}
+{{- end }}
