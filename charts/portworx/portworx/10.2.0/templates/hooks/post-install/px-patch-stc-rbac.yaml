@@ -1,0 +1,89 @@
+{{- if eq .Values.stork.restrictDataProtectionRBAC true }}
+  {{- $customRegistryURL := .Values.customRegistryURL | default "none" }}
+  {{- $registrySecret := .Values.registrySecret | default "none" }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ template "px.getDeploymentNamespace" . }}
+  name: px-hook-patch-stc-rbac
+  labels:
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      {{- if not (eq $registrySecret "none") }}
+      imagePullSecrets:
+        - name: {{ $registrySecret }}
+      {{- end }}
+      serviceAccountName: {{ template "px.hookServiceAccount" . }}
+      restartPolicy: Never
+      containers:
+        - name: patch-stc-rbac
+          {{- if eq $customRegistryURL "none" }}
+          image: "{{ template "px.getKubectlImage" . }}:{{ template "px.kubectlImageTag" . }}"
+          {{- else }}
+          image: "{{ $customRegistryURL }}/{{ template "px.getKubectlImage" . }}:{{ template "px.kubectlImageTag" . }}"
+          {{- end }}
+          env:
+            - name: NS
+              value: {{ template "px.getDeploymentNamespace" . }}
+            - name: STC_NAME
+              value: "{{ required "Clustername cannot be empty" .Values.clusterName }}"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Waiting for portworx-operator to be ready..."
+              while true; do
+                READY=$(kubectl -n "$NS" get deploy portworx-operator \
+                  -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+                if [ "$READY" = "1" ]; then
+                  echo "Operator is ready."
+                  break
+                fi
+                echo "Operator not ready yet (readyReplicas=$READY), waiting 5s..."
+                sleep 5
+              done
+
+              echo "Waiting for StorageCluster CRD to have restrictDataProtectionRBAC field..."
+              while true; do
+                if kubectl get crd storageclusters.core.libopenstorage.org -o yaml 2>/dev/null \
+                  | grep -q "restrictDataProtectionRBAC"; then
+                  echo "CRD has restrictDataProtectionRBAC field."
+                  break
+                fi
+                echo "CRD not updated yet, waiting 5s..."
+                sleep 5
+              done
+
+              echo "Patching STC $STC_NAME with restrictDataProtectionRBAC: true..."
+              kubectl patch stc "$STC_NAME" -n "$NS" --type merge \
+                -p '{"spec":{"stork":{"restrictDataProtectionRBAC":true}}}'
+
+              if [ $? -eq 0 ]; then
+                echo "STC patched successfully."
+              else
+                echo "Failed to patch STC." >&2
+                exit 1
+              fi
+
+              # Verify the field was set
+              VALUE=$(kubectl get stc "$STC_NAME" -n "$NS" \
+                -o jsonpath='{.spec.stork.restrictDataProtectionRBAC}' 2>/dev/null)
+              if [ "$VALUE" = "true" ]; then
+                echo "Verified: restrictDataProtectionRBAC is set to true."
+              else
+                echo "Warning: restrictDataProtectionRBAC value is '$VALUE', expected 'true'." >&2
+                exit 1
+              fi
+{{- end }}
+

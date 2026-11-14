@@ -1,0 +1,153 @@
+{{- if (.Values.clusterToken.create) }}
+  {{- $customRegistryURL := .Values.customRegistryURL | default "none" }}
+  {{- $registrySecret := .Values.registrySecret | default "none" }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ template "px.getDeploymentNamespace" . }}
+  name: px-set-cluster-token
+  labels:
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      {{- if not (eq $registrySecret "none") }}
+      imagePullSecrets:
+        - name: {{ $registrySecret }}
+      {{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.clusterToken.serviceAccountName }}
+      initContainers:
+        - name: post-install-job-init
+          {{- if eq $customRegistryURL "none" }}
+          image: "{{ template "px.getKubectlImage" . }}:{{ template "px.kubectlImageTag" . }}"
+          {{- else }}
+          image: "{{ $customRegistryURL }}/{{ template "px.getKubectlImage" . }}:{{ template "px.kubectlImageTag" . }}"
+          {{- end }}
+          env:
+            - name: NS
+              value: {{ template "px.getDeploymentNamespace" . }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Get ready state of all Portworx pods (True or False)
+              # Wait until there is at least one pod and at least one of them is ready
+
+              echo "Waiting for at least one Portworx pod to be Ready..."
+
+              while true; do
+                READY_POD=$(kubectl -n "$NS" get pods -l name=portworx \
+                  -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{" "}{.metadata.name}{"\n"}{end}' \
+                  | grep True | awk '{print $2}' | head -n 1)
+
+                if [ -n "$READY_POD" ]; then
+                  echo "Found Ready Portworx pod: $READY_POD"
+                  break
+                fi
+
+                sleep 5
+              done
+
+      containers:
+        - name: post-install-job
+          {{- if eq $customRegistryURL "none" }}
+          image: "{{ template "px.getKubectlImage" . }}:{{ template "px.kubectlImageTag" . }}"
+          {{- else }}
+          image: "{{ $customRegistryURL }}/{{ template "px.getKubectlImage" . }}:{{ template "px.kubectlImageTag" . }}"
+          {{- end }}
+          env:
+            - name: NS
+              value: {{ template "px.getDeploymentNamespace" . }}
+            - name: KEY
+              value: cluster-wide-secret-key
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Get a ready Portworx pod
+              readyPortworxPod=$(kubectl -n "$NS" get pods -l name=portworx \
+                -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{" "}{.metadata.name}{"\n"}{end}' \
+                | grep True | awk '{print $2}' | head -n 1)
+
+              echo "Setting cluster-wide secret key using pod: $readyPortworxPod"
+
+              # Set the cluster-wide secret key
+              kubectl -n "$NS" exec -c portworx "$readyPortworxPod" -- \
+                /opt/pwx/bin/pxctl secrets set-cluster-key --secret "$KEY"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.clusterToken.serviceAccountName }}
+  namespace: {{ template "px.getDeploymentNamespace" . }}
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook": "post-install"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+---
+kind: Role
+apiVersion: {{ template "rbac.apiVersion" . }}
+metadata:
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook": post-install
+  name: {{ .Values.clusterToken.serviceAccountName }}-role
+  namespace: {{ template "px.getDeploymentNamespace" . }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "watch", "list" ]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+kind: RoleBinding
+apiVersion: {{ template "rbac.apiVersion" . }}
+metadata:
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook": post-install
+  name: {{ .Values.clusterToken.serviceAccountName }}-binding
+  namespace: {{ template "px.getDeploymentNamespace" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.clusterToken.serviceAccountName }}
+    namespace: {{ template "px.getDeploymentNamespace" . }}
+roleRef:
+  kind: Role
+  name: {{ .Values.clusterToken.serviceAccountName }}-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook": post-install
+  name: {{ .Values.clusterToken.secretName }}
+  namespace: portworx
+  labels:
+    name: {{ .Values.clusterToken.secretName }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+type: "Opaque"
+data:
+  cluster-wide-secret-key: {{ template "portworx-cluster-key"  }}
+{{- end }}
