@@ -1,0 +1,117 @@
+{{ $featureGates := .Values.featureGates }}
+{{- if .Values.global }}
+  {{ $featureGates = mergeOverwrite dict .Values.featureGates .Values.global.featureGates }}
+{{- end }}
+
+{{- $nodeSelector := .Values.nodeSelector }}
+{{- if .Values.global }}
+  {{ $nodeSelector = default .Values.nodeSelector .Values.global.nodeSelector }}
+{{- end }}
+
+{{- $tolerations := .Values.tolerations }}
+{{- if .Values.global }}
+  {{ $tolerations = default .Values.tolerations .Values.global.tolerations }}
+{{- end }}
+
+{{- $affinity := .Values.affinity }}
+{{- if .Values.global }}
+  {{ $affinity = default .Values.affinity .Values.global.affinity }}
+{{- end }}
+
+{{- $cfgmapName := .Values.versionConfigMap -}}
+{{- if .Values.global }}
+  {{ $cfgmapName = default .Values.versionConfigMap .Values.global.versionConfigMap }}
+{{- end }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "kubedb-crd-manager.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubedb-crd-manager.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  backoffLimit: 3
+  {{- if ge (int .Values.ttlSecondsAfterFinished) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+  {{- end }}
+  manualSelector: true
+  selector:
+    matchLabels:
+      {{- include "kubedb-crd-manager.labels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "kubedb-crd-manager.labels" . | nindent 8 }}
+    spec:
+      {{- include "docker.imagePullSecrets" . | nindent 6 }}
+      {{- if eq "true" ( include "distro.openshift" . ) }}
+      securityContext:
+        {{- toYaml (omit .Values.podSecurityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 8 }}
+      {{- else }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "kubedb-crd-manager.serviceAccountName" . }}
+      initContainers:
+        - name: {{ .Chart.Name }}
+          {{- if eq "true" ( include "distro.openshift" . ) }}
+          securityContext:
+            {{- toYaml (omit .Values.securityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 12 }}
+          {{- else }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          image: {{ include "image.registry" . }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ include "operator.ubi" . }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - run
+            - --v=3
+            - --remove-unused-crds={{ .Values.removeUnusedCRDs }}
+            - --install-gitops-crds={{ .Values.installGitOpsCRDs }}
+          {{- range $db, $enable := $featureGates }}
+            - --feature-gates={{ $db }}={{ $enable }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      containers:
+        - name: verifier
+          {{- if eq "true" ( include "distro.openshift" . ) }}
+          securityContext:
+            {{- toYaml (omit .Values.securityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 12 }}
+          {{- else }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          image: {{ include "image.registry" . }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ include "operator.ubi" . }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - verify
+            - --v=3
+            - --version-configmap={{ $cfgmapName }}
+          {{- range $db, $enable := $featureGates }}
+            - --feature-gates={{ $db }}={{ $enable }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with $nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never

@@ -1,0 +1,25 @@
+{{ include "storage-metrics-server.fullname" . }} is now installed.
+
+Verify the APIService registration:
+
+  kubectl get apiservice v1beta2.custom.metrics.k8s.io
+
+Query a PVC's storage metrics:
+
+  kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta2/namespaces/<ns>/persistentvolumeclaims/<pvc>/volume_used_bytes" | jq .
+  kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta2/namespaces/<ns>/persistentvolumeclaims/*/volume_used_percentage" | jq .
+
+Reference these metrics from an HPA / VolumeAutoscaler with:
+
+  metrics:
+  - type: Object
+    object:
+      describedObject:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        name: <pvc>
+      metric:
+        name: volume_used_percentage
+      target:
+        type: Value
+        value: 80000m  # 80%

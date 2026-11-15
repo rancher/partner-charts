@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "storage-metrics-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "storage-metrics-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "storage-metrics-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "storage-metrics-server.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "storage-metrics-server.serviceAccountName" . }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: storage-metrics-server
+        image: {{ include "storage-metrics-server.image.registry" . }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ include "storage-metrics-server.image.ubi" . }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        args:
+        - --secure-port={{ .Values.service.targetPort }}
+        - --cert-dir=/tmp/serving-cert
+        {{- with .Values.extraArgs }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.extraEnv }}
+        env:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+          name: https
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: https
+            scheme: HTTPS
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: https
+            scheme: HTTPS
+          periodSeconds: 10
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- if eq "true" ( include "storage-metrics-server.distro.openshift" . ) }}
+        securityContext:
+          {{- toYaml (omit .Values.securityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 10 }}
+        {{- else }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /tmp/serving-cert
+          name: serving-cert
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: serving-cert
+        emptyDir: {}

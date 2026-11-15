@@ -1,0 +1,353 @@
+{{- $dcdr := .Values.dcDR | default dict }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kubedb-provisioner.fullname" . }}
+  labels:
+    {{- include "kubedb-provisioner.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs: ["*"]
+- apiGroups:
+  - operator.k8s.appscode.com
+  resources:
+  - shardconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs: ["create", "delete", "list","watch", "get", "patch", "deletecollection"]
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - secrets
+  verbs: ["create", "delete", "get", "patch", "update", "list", "watch"]
+- apiGroups:
+  - ""
+  resources:
+  - services/finalizers
+  verbs: ["update"]
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs: ["create", "delete", "get", "watch", "list", "patch", "deletecollection"]
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs: ["create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"]
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs: ["get"]
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs: ["create", "delete", "get", "list", "watch", "patch"]
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - cluster.open-cluster-management.io
+  resources:
+  - clusterclaims
+  verbs: ["get"]
+  resourceNames: ["features.ace.info"]
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/eviction
+  verbs: ["*"]
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs: ["create", "delete", "get", "list", "patch", "watch"]
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs: ["create"]
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  verbs: ["get", "list", "watch", "create", "patch", "update"]
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - namespaces
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - kubedb.com
+  - apps.k8s.appscode.com
+  - archiver.kubedb.com
+  - catalog.kubedb.com
+  - core.kubestash.com
+  - elasticsearch.kubedb.com
+  - kafka.kubedb.com
+  - storage.kubestash.com
+  resources:
+  - "*"
+  verbs: ["*"]
+# The Milvus operator reads the VolumeSnapshot of a VolumeSnapshotter backup before using it as the
+# data source of a restored Standalone's PVC (warm cache).
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - kubedb.com
+  resources:
+  - aerospikes/finalizers
+  - cassandras/finalizers
+  - clickhouses/finalizers
+  - db2s/finalizers
+  - documentdbs/finalizers
+  - druids/finalizers
+  - elasticsearches/finalizers
+  - etcds/finalizers
+  - hanadbs/finalizers
+  - hazelcasts/finalizers
+  - ignites/finalizers
+  - kafkas/finalizers
+  - mariadbs/finalizers
+  - memcacheds/finalizers
+  - milvuses/finalizers
+  - mongodbs/finalizers
+  - mssqlservers/finalizers
+  - mysqls/finalizers
+  - neo4js/finalizers
+  - oracles/finalizers
+  - perconaxtradbs/finalizers
+  - pgbouncers/finalizers
+  - pgpools/finalizers
+  - postgreses/finalizers
+  - proxysqls/finalizers
+  - qdrants/finalizers
+  - rabbitmqs/finalizers
+  - redises/finalizers
+  - redissentinels/finalizers
+  - singlestores/finalizers
+  - solrs/finalizers
+  - weaviates/finalizers
+  - zookeepers/finalizers
+  verbs: ["update"]
+- apiGroups:
+  - elasticsearch.kubedb.com
+  resources:
+  - elasticsearchdashboards/status
+  verbs: ["get"]
+- apiGroups:
+  - elasticsearch.kubedb.com
+  resources:
+  - elasticsearchdashboards/finalizers
+  verbs: ["update"]
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets/finalizers
+  verbs: ["update"]
+- apiGroups:
+  - appcatalog.appscode.com
+  resources:
+  - "*"
+  verbs: ["*"]
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs: ["*"]
+- apiGroups:
+  - ""
+  resources:
+  - "pods/exec"
+  verbs: ["create"]
+- apiGroups:
+  - ""
+  resources:
+  - "pods/status"
+  verbs: ["update"]
+# DB2 HADR primary lease: the operator creates and moves it, and grants the
+# DB2 pods get/update on it so the primary's coordinator can renew it.
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs: ["use"]
+  resourceNames:
+  - {{ include "kubedb-provisioner.fullname" . }}
+  - elasticsearch-db
+  - etcd-db
+  - memcached-db
+  - mongodb-db
+  - mysql-db
+  - percona-xtradb-db
+  - postgres-db
+  - redis-db
+  - proxysql-db
+  - maria-db
+  - kafka-db
+  - kafkaconnector
+  - zookeeper-db
+  {{- range $x := .Values.additionalPodSecurityPolicies }}
+  - {{ $x }}
+  {{- end }}
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs: ["get", "list", "create", "delete", "patch", "deletecollection"]
+- apiGroups:
+  - stash.appscode.com
+  - kubestash.appscode.com
+  resources:
+  - restoresessions
+  - restorebatches
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - "*"
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+    - cert-manager.io
+  resources:
+    - "certificates"
+  verbs: ["create"]
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs: [ "get","create", "list","watch", "patch","delete"]
+- apiGroups:
+  - apps.k8s.appscode.com
+  resources:
+  - sidekicks
+  verbs: ["get", "list", "create", "delete", "patch", "deletecollection"]
+
+- apiGroups:
+  - stash.appscode.com
+  resources:
+  - backupsessions
+  - backupconfigurations
+  verbs: [ "get", "list", "watch" ]
+- apiGroups:
+  - core.kubestash.com
+  resources:
+  - backupsessions
+  - backupconfigurations
+  verbs: [ "get", "list", "watch" ]
+
+- apiGroups:
+  - cilium.io
+  resources:
+  - ciliumnetworkpolicies
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs: [ "get", "list", "watch", "create", "patch"]
+- apiGroups:
+  - cacerts.csi.cert-manager.io
+  resources:
+  - caproviderclasses
+  verbs: [ "get", "list", "watch", "create" ]
+- apiGroups:
+    - virtual-secrets.dev
+  resources:
+    - secrets
+    - secrets/mount
+  verbs: [ "get","create", "list","watch", "update", "patch","delete"]
+- apiGroups:
+    - work.open-cluster-management.io
+  resources:
+    - manifestworks
+  verbs:
+    - get
+    - create
+    - list
+    - watch
+    - patch
+    - delete
+# DC-DR: the provisioner expands a distributed Postgres into one per-DC PlacementPolicy
+# (<pp>-<dc>) and garbage-collects them on delete (they are cluster-scoped with no owner
+# reference), so it needs create/delete in addition to read on placementpolicies.
+- apiGroups:
+    - apps.k8s.appscode.com
+  resources:
+    - placementpolicies
+  verbs:
+    - get
+    - list
+    - watch
+    - create
+    - patch
+    - delete
+- apiGroups:
+    - networking.kubeslice.io
+  resources:
+    - serviceimports
+  verbs:
+    - list
+    - watch
+    - get
+{{- if $dcdr.enabled }}
+# DC-DR: the region check reads the OCM ManagedClusters (cached client: get, list, watch)
+- apiGroups:
+    - cluster.open-cluster-management.io
+  resources:
+    - managedclusters
+  verbs: ["get", "list", "watch"]
+# DC-DR: the orchestrator lists its ForceFailOver/promotion OpsRequests every pass and
+# creates one when a DC must be promoted (direct client: list, create)
+- apiGroups:
+    - ops.kubedb.com
+  resources:
+    - postgresopsrequests
+  verbs: ["list", "create"]
+{{- if not $dcdr.coordKubeconfigSecret }}
+# DC-DR with the hub as the coordination plane: the orchestrator watches the
+# primary-DC Leases and patches the switchover handoff/quiesce annotations on them
+- apiGroups:
+    - coordination.k8s.io
+  resources:
+    - leases
+  verbs: ["get", "list", "watch", "patch"]
+{{- end }}
+{{- end }}

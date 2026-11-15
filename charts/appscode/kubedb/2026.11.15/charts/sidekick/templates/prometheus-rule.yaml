@@ -1,0 +1,45 @@
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule" }}
+{{- if eq "prometheus.io/operator" ( include "monitoring.agent" . ) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "sidekick.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if eq "true" ( include "monitoring.apply-servicemonitor-label" . ) }}
+    {{- include "monitoring.servicemonitor-label" . | nindent 4 }}
+  {{- else }}
+    {{- include "sidekick.selectorLabels" . | nindent 4 }}
+  {{- end }}
+spec:
+  groups:
+    - name: sidekick.rules
+      rules:
+        - alert: SidekickDegraded
+          expr: apps_k8s_appscode_com_sidekick_status_phase{phase="Degraded"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Sidekick {{ "{{" }} $labels.app {{ "}}" }} is Degraded"
+            description: "Sidekick {{ "{{" }} $labels.app {{ "}}" }} in namespace {{ "{{" }} $labels.app_namespace {{ "}}" }} has been in Degraded phase for more than 5 minutes."
+
+        - alert: SidekickFailed
+          expr: apps_k8s_appscode_com_sidekick_status_phase{phase="Failed"} == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Sidekick {{ "{{" }} $labels.app {{ "}}" }} has Failed"
+            description: "Sidekick {{ "{{" }} $labels.app {{ "}}" }} in namespace {{ "{{" }} $labels.app_namespace {{ "}}" }} is in Failed phase."
+
+        - alert: SidekickStuckPending
+          expr: apps_k8s_appscode_com_sidekick_status_phase{phase="Pending"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Sidekick {{ "{{" }} $labels.app {{ "}}" }} is stuck in Pending"
+            description: "Sidekick {{ "{{" }} $labels.app {{ "}}" }} in namespace {{ "{{" }} $labels.app_namespace {{ "}}" }} has been Pending for more than 10 minutes."
+{{- end }}
+{{- end }}

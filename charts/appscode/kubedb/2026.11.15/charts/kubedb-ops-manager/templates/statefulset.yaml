@@ -1,0 +1,207 @@
+{{- $major := default "0" .Capabilities.KubeVersion.Major | trimSuffix "+" | int64 }}
+{{- $minor := default "0" .Capabilities.KubeVersion.Minor | trimSuffix "+" | int64 }}
+{{- $criticalAddon := and .Values.criticalAddon (or (eq .Release.Namespace "kube-system") (and (ge $major 1) (ge $minor 17))) -}}
+
+{{- $maxConcurrentReconciles := .Values.maxConcurrentReconciles }}
+{{- if .Values.global }}
+  {{ $maxConcurrentReconciles = default .Values.maxConcurrentReconciles .Values.global.maxConcurrentReconciles }}
+{{- end }}
+
+{{- $nodeSelector := .Values.nodeSelector }}
+{{- if .Values.global }}
+  {{ $nodeSelector = default .Values.nodeSelector .Values.global.nodeSelector }}
+{{- end }}
+
+{{- $tolerations := .Values.tolerations }}
+{{- if .Values.global }}
+  {{ $tolerations = default .Values.tolerations .Values.global.tolerations }}
+{{- end }}
+
+{{- $affinity := .Values.affinity }}
+{{- if .Values.global }}
+  {{ $affinity = default .Values.affinity .Values.global.affinity }}
+{{- end }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "kubedb-ops-manager.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubedb-ops-manager.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: Parallel
+  serviceName: {{ include "kubedb-ops-manager.fullname" . }}-headless
+  selector:
+    matchLabels:
+      {{- include "kubedb-ops-manager.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubedb-ops-manager.selectorLabels" . | nindent 8 }}
+      annotations:
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "docker.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "kubedb-ops-manager.serviceAccountName" . }}
+      {{- if and .Values.global .Values.global.waitForWebhook }}
+      initContainers:
+      - name: wait
+        image: {{ include "waitfor.registry" . }}/{{ .Values.waitfor.repository }}:{{ .Values.waitfor.tag }}{{ include "operator.ubi" . }}
+        imagePullPolicy: {{ .Values.imagePullPolicy  }}
+        command:
+        - /bin/sh
+        - -c
+        - kubectl wait --for=create -n {{ .Release.Namespace }} service -l 'app.kubernetes.io/name=kubedb-webhook-server' --timeout=5m &&
+          kubectl wait --for=condition=kubedb.com/conversion=true -n {{ .Release.Namespace }} pods -l 'app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name=kubedb-webhook-server' --timeout=5m
+        {{- if eq "true" ( include "distro.openshift" . ) }}
+        securityContext:
+          {{- toYaml (omit .Values.operator.securityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 10 }}
+        {{- else }}
+        securityContext:
+          {{- toYaml .Values.operator.securityContext | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+      {{- end }}
+      containers:
+      - name: operator
+        {{- if eq "true" ( include "distro.openshift" . ) }}
+        securityContext:
+          {{- toYaml (omit .Values.operator.securityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 10 }}
+        {{- else }}
+        securityContext:
+          {{- toYaml .Values.operator.securityContext | nindent 10 }}
+        {{- end }}
+        image: {{ include "operator.registry" . }}/{{ .Values.operator.repository }}:{{ .Values.operator.tag | default .Chart.AppVersion }}{{ include "operator.ubi" . }}
+        imagePullPolicy: {{ .Values.imagePullPolicy  }}
+        args:
+        - operator
+        - --v={{ .Values.logLevel }}
+        - --use-kubeapiserver-fqdn-for-aks={{ .Values.apiserver.useKubeapiserverFqdnForAks }}
+        - --metrics-bind-address=:{{ .Values.monitoring.bindPort }}
+        - --health-probe-bind-address=:{{ .Values.apiserver.healthcheck.probePort }}
+        {{- if gt (int .Values.replicaCount) 1 }}
+        - --shard-config={{ include "kubedb-ops-manager.name" . }}
+        {{- end }}
+        {{- with .Values.recommendationEngine }}
+        - --recommendation-resync-period={{ .resyncPeriod }}
+        - --enable-deadline={{ .deadline.enable }}
+        - --max-evaluation-period-before-deadline={{ .deadline.maxEvaluationPeriod }}
+        - --gen-rotate-tls-recommendation-before-expiry-year={{ .rotateTLS.genRecommendationBeforeExpiryYear }}
+        - --gen-rotate-tls-recommendation-before-expiry-month={{ .rotateTLS.genRecommendationBeforeExpiryMonth }}
+        - --gen-rotate-tls-recommendation-before-expiry-day={{ .rotateTLS.genRecommendationBeforeExpiryDay }}
+        - --gen-rotate-auth-recommendation-before-expiry-year={{ .rotateAuth.genRecommendationBeforeExpiryYear }}
+        - --gen-rotate-auth-recommendation-before-expiry-month={{ .rotateAuth.genRecommendationBeforeExpiryMonth }}
+        - --gen-rotate-auth-recommendation-before-expiry-day={{ .rotateAuth.genRecommendationBeforeExpiryDay }}
+        {{- end }}
+        {{- include "docker.imagePullSecretFlags" . | nindent 8 }}
+        {{- include "docker.insecureRegistries" .  | nindent 8 }}
+        {{- if include "appscode.licenseSecretName" . }}
+        - --license-file=/var/run/secrets/appscode/license/key.txt
+        {{- end }}
+        {{- with $maxConcurrentReconciles }}
+        - --max-concurrent-reconciles={{.}}
+        {{- end }}
+        {{- with .Values.envFrom }}
+        envFrom:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        env:
+        {{- with .Values.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: GODEBUG
+          value: x509negativeserial=1
+        ports:
+        - name: metrics
+          containerPort: {{ .Values.monitoring.bindPort }}
+        - name: probes
+          containerPort: {{ .Values.apiserver.healthcheck.probePort }}
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmpdir
+        {{- if include "appscode.licenseSecretName" . }}
+        - mountPath: /var/run/secrets/appscode/license
+          name: license
+        {{- end }}
+      {{- if .Values.apiserver.healthcheck.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: probes
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: probes
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      {{- end }}
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+      volumes:
+      - name: tmpdir
+        emptyDir: {}
+      {{- if include "appscode.licenseSecretName" . }}
+      - name: license
+        secret:
+          defaultMode: 420
+          secretName: {{ include "appscode.licenseSecretName" . }}
+      {{- end }}
+      {{- if eq "true" ( include "distro.openshift" . ) }}
+      securityContext:
+        {{- toYaml (omit .Values.podSecurityContext "runAsUser" "runAsGroup" "fsGroup" "supplementalGroups") | nindent 8 }}
+      {{- else }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+    {{- if or $tolerations $criticalAddon }}
+      tolerations:
+      {{- with $tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $criticalAddon }}
+        - key: CriticalAddonsOnly
+          operator: Exists
+      {{- end -}}
+    {{- end -}}
+    {{- if $affinity }}
+      affinity:
+        {{- toYaml $affinity | nindent 8 }}
+    {{- else if gt (int .Values.replicaCount) 1 }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                {{- include "kubedb-ops-manager.selectorLabels" . | nindent 16 }}
+            topologyKey: "kubernetes.io/hostname"
+    {{- end }}
+    {{- with $nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- if $criticalAddon }}
+      priorityClassName: system-cluster-critical
+    {{- end -}}

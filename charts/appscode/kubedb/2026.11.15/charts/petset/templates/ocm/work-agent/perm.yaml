@@ -1,0 +1,49 @@
+{{- if .Values.features.ocm.enabled }}
+
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: petset-agent
+  namespace: {{ .Release.Namespace }}
+spec:
+  placementRefs:
+    - name: {{ .Values.features.ocm.placement.name }}
+  manifestWorkTemplate:
+    # deleteOption:
+    #   propagationPolicy: SelectivelyOrphan
+    #   selectivelyOrphans:
+    #     orphaningRules:
+    #       - group: ''
+    #         name: ocm-ns
+    #         namespace: ''
+    #         resource: Namespace
+    # manifestConfigs:
+    #   - feedbackRules:
+    #       - jsonPaths:
+    #           - name: lastScheduleTime
+    #             path: .status.lastScheduleTime
+    #           - name: lastSuccessfulTime
+    #             path: .status.lastSuccessfulTime
+    #         type: JSONPaths
+    #     resourceIdentifier:
+    #       group: batch
+    #       name: sync-cronjob
+    #       namespace: ocm-ns
+    #       resource: cronjobs
+    workload:
+      manifests:
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: open-cluster-management:klusterlet-work:petset
+            labels:
+              open-cluster-management.io/aggregate-to-work: "true"  # with this label, the clusterRole will be selected to aggregate
+          rules:
+            # Allow agent to kubeslices
+            - apiGroups:
+              - networking.kubeslice.io
+              resources:
+              - '*'
+              verbs:
+              - '*'
+{{- end }}

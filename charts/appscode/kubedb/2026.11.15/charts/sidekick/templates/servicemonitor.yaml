@@ -1,0 +1,52 @@
+{{- if eq "prometheus.io/operator" ( include "monitoring.agent" . ) }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "sidekick.fullname" . }}-metrics-token
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/service-account.name: {{ include "sidekick.serviceAccountName" . | quote }}
+type: kubernetes.io/service-account-token
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sidekick.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- if eq "true" ( include "monitoring.apply-servicemonitor-label" . ) }}
+    {{- include "monitoring.servicemonitor-label" . | nindent 4 }}
+  {{- else }}
+    {{- include "sidekick.selectorLabels" . | nindent 4 }}
+  {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "sidekick.selectorLabels" . | nindent 6 }}
+  endpoints:
+  - authorization:
+      type: Bearer
+      credentials:
+        name: {{ include "sidekick.fullname" . }}-metrics-token
+        key: token
+    path: /metrics
+    port: metrics
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          name: {{ include "sidekick.fullname" . }}-cert
+          key: ca.crt
+      cert:
+        secret:
+          name: {{ include "sidekick.fullname" . }}-cert
+          key: tls.crt
+      insecureSkipVerify: false
+      keySecret:
+        name: {{ include "sidekick.fullname" . }}-cert
+        key: tls.key
+      serverName: "{{ include "sidekick.fullname" . }}.{{ .Release.Namespace }}.svc"
+{{- end }}
