@@ -1,0 +1,56 @@
+{{- if include "loft.managementAPIServiceEnabled" . }}
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1.management.loft.sh
+spec:
+  version: v1
+  versionPriority: 1000
+  group: management.loft.sh
+  groupPriorityMinimum: 10000
+  service:
+    name: loft-apiservice
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loft-apiservice
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "loft.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  ports:
+    - name: apiservice
+      port: 443
+      targetPort: {{ if include "loft.hostNetworkProxyEnabled" . }}{{ .Values.hostNetworkProxy.ports.apiService }}{{ else }}8443{{ end }}
+      protocol: TCP
+  selector:
+    app: {{ include "loft.apiServerBackendApp" . }}
+    release: {{ .Release.Name }}
+---
+{{- end }}
+{{- if include "loft.agentAPIServiceEnabled" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: loft-apiservice-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "loft.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  ports:
+    - name: apiservice
+      port: 443
+      targetPort: {{ if include "loft.hostNetworkProxyEnabled" . }}{{ .Values.hostNetworkProxy.ports.agentAPIService }}{{ else }}9444{{ end }}
+      protocol: TCP
+  selector:
+    app: {{ include "loft.apiServerBackendApp" . }}
+    release: {{ .Release.Name }}
+{{- end }}
