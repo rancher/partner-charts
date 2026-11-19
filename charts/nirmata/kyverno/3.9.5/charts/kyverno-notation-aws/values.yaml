@@ -1,0 +1,190 @@
+region: us-west-2
+
+# -- (string) Override the name of the chart
+nameOverride: ~
+
+# -- (string) Override the expanded name of the chart
+fullnameOverride: ~
+
+# -- (string) Override the namespace the chart deploys to
+namespaceOverride: ~
+
+image:
+  # -- (string) Image registry
+  defaultRegistry: ghcr.io
+  registry: ~
+
+  # -- (string) Image repository
+  repository: nirmata/enterprise-kyverno-notation-aws
+
+  # -- (string) Image tag
+  # Defaults to appVersion in Chart.yaml if omitted
+  tag: ~
+
+  # -- (string) Image pull policy
+  pullPolicy: IfNotPresent
+
+# CRDs configuration
+crds:
+
+  # -- Whether to have Helm install the Kyverno Notation AWS CRDs.
+  install: true
+
+# Deployment configuration
+deployment:
+
+  # -- Deployment update strategy.
+  # Ref: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+  # @default -- See [values.yaml](values.yaml)
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+
+  # -- Image pull secrets in case IRSA isn't configured, this will define the `--imagePullSecrets` argument
+  imagePullSecrets: {}
+  # regcred:
+  #   registry: foo.example.com
+  #   username: foobar
+  #   password: secret
+  # regcred2:
+  #   registry: bar.example.com
+  #   username: barbaz
+  #   password: secret2
+
+  # -- Allow insecure registry specifies whether to allow insecure connections to registries. Not recommended.
+  allowInsecureRegistry: false
+
+  # -- Max signature attempts specifies the maximum number of signature envelopes that will be processed for verification
+  maxSignatureAttempts: 30
+
+  # -- (string) Comma-separated audiences a caller's token must be intended for,
+  # passed to TokenReview. Must match the audience the caller mints its token with.
+  # Kyverno 1.18-n4k projects `apiCallToken` with a custom audience so the token
+  # cannot be replayed against the Kubernetes API server — which also means the API
+  # server rejects it, so leaving this empty makes every request fail with
+  # "Token is not authorized". The default matches that chart's
+  # `apiCallToken.audience` default; change both together if you change either.
+  tokenAudiences: kyverno-svc.kyverno.io
+
+# Service account configuration
+serviceAccount:
+  enabled: true
+  # -- The ServiceAccount name
+  name:
+
+  # -- Annotations for the ServiceAccount
+  annotations: {}
+    # To configure IRSA for your cluster, use 'eks.amazonaws.com/role-arn' annotation.
+    # eks.amazonaws.com/role-arn: arn:aws:iam::${aws_account_id}:role/kyverno-notation-aws
+
+# Config map configuration
+configMap:
+
+  # -- The notation-plugin-config configmap name
+  name: notation-plugin-config
+
+# License configuration. An N4K license carrying the n4k.notation.aws
+# entitlement gates /checkimages; see the README's licensing section.
+license:
+  # -- (bool) Create a license Secret from license.value
+  create: false
+
+  # -- (string) Name of the license Secret to create when license.create is true.
+  # Defaults to "<fullname>-license" if omitted
+  name: ~
+
+  # -- (string) Name of a pre-existing license Secret to mount when license.create is false
+  existingSecret: ~
+
+  # -- (string) Key inside the license Secret holding the license file contents
+  key: license
+
+  # -- (string) License file contents, used only when license.create is true
+  value: ~
+
+# nodeSelector for extension Deployment. More details:
+# https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+nodeSelector: {}
+
+# tolerations for extension Deployment. More details:
+# https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+tolerations: []
+
+# affinity for extension Deployment. More details:
+# https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+affinity: {}
+
+# -- user supplied labels to apply to all resources excluding label selectors
+customLabels: {}
+  # my-sweet-label: rad
+  # foo: bar
+
+# -- Startup probe.
+# The block is directly forwarded into the deployment, so you can use whatever startupProbes configuration you want.
+# ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+# @default -- See [values.yaml](values.yaml)
+startupProbe:
+  httpGet:
+    path: /readyz
+    port: 8081
+    scheme: HTTP
+  failureThreshold: 20
+  initialDelaySeconds: 2
+  periodSeconds: 6
+
+# -- Liveness probe.
+# The block is directly forwarded into the deployment, so you can use whatever livenessProbe configuration you want.
+# ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+# @default -- See [values.yaml](values.yaml)
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+    scheme: HTTP
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  failureThreshold: 2
+  successThreshold: 1
+
+# -- Readiness Probe.
+# The block is directly forwarded into the deployment, so you can use whatever readinessProbe configuration you want.
+# ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+# @default -- See [values.yaml](values.yaml)
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8081
+    scheme: HTTP
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+test:
+  # -- Sleep time before running test
+  sleep: 50
+
+  image:
+    # -- (string) Image registry
+    registry: ~
+    # -- Image repository
+    repository: busybox
+    # -- Image tag
+    # Defaults to `latest` if omitted
+    tag: '1.35'
+    # -- (string) Image pull policy
+    # Defaults to image.pullPolicy if omitted
+    pullPolicy: ~
+
+  resources:
+    # -- Pod resource limits
+    limits:
+      cpu: 100m
+      memory: 256Mi
+    # -- Pod resource requests
+    requests:
+      cpu: 10m
+      memory: 64Mi
