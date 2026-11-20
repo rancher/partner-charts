@@ -1,0 +1,460 @@
+# Copyright (C) 2026 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#      http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+groups:
+  - name: powerflex-csi-driver-alerts
+    rules:
+
+      # ── Category 1: Volume Operation Failures (PF-01–08) ─────────────────────
+      # Metric: dell_csi_operation_failure_total{system_id, operation, error_code}
+      # Type: CounterVec | Driver: csi-vxflexos
+      # Pattern: increase([5m]) > 0, for: 0m, severity: warning
+
+      - alert: PowerFlexCreateVolumeFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="CreateVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex CreateVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} CreateVolume failure(s) detected in the last 5 minutes
+            on PowerFlex system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            Check driver logs and PowerFlex Gateway connectivity.
+          runbook_url: ""
+
+      - alert: PowerFlexDeleteVolumeFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="DeleteVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex DeleteVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} DeleteVolume failure(s) in the last 5 minutes on
+            system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            Orphaned volumes may accumulate. Check Gateway and MDM reachability.
+          runbook_url: ""
+
+      - alert: PowerFlexControllerPublishFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="ControllerPublishVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex ControllerPublishVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} ControllerPublishVolume failure(s) in the last 5 minutes
+            on system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            SDC mapping to volume may have failed. Check SDC registration and node connectivity.
+          runbook_url: ""
+
+      - alert: PowerFlexControllerUnpublishFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="ControllerUnpublishVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex ControllerUnpublishVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} ControllerUnpublishVolume failure(s) in the last 5 minutes
+            on system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            SDC unmap from volume may have failed. Stale SDC mappings may persist.
+          runbook_url: ""
+
+      - alert: PowerFlexNodeStageFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="NodeStageVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex NodeStageVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} NodeStageVolume failure(s) in the last 5 minutes
+            on system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            Block device discovery or filesystem formatting may have failed. Check SDC and device paths.
+          runbook_url: ""
+
+      - alert: PowerFlexNodeUnstageFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="NodeUnstageVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex NodeUnstageVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} NodeUnstageVolume failure(s) in the last 5 minutes
+            on system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            Device unmount or cleanup may have failed. Check node device state.
+          runbook_url: ""
+
+      - alert: PowerFlexNodePublishFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="NodePublishVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex NodePublishVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} NodePublishVolume failure(s) in the last 5 minutes
+            on system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            Bind mount to pod may have failed. Check node filesystem state and kubelet logs.
+          runbook_url: ""
+
+      - alert: PowerFlexNodeUnpublishFailure
+        expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="NodeUnpublishVolume"}[5m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex NodeUnpublishVolume failures on system {{ $labels.system_id }}"
+          description: >
+            {{ $value | printf "%.0f" }} NodeUnpublishVolume failure(s) in the last 5 minutes
+            on system {{ $labels.system_id }} (error_code={{ $labels.error_code }}).
+            Bind unmount from pod may have failed. Stale mount points may remain.
+          runbook_url: ""
+
+      # ── Category 2: Driver Health & Resource (PF-09–12) ──────────────────────
+      # Metrics: dell_csi_driver_uptime_seconds, dell_csi_driver_restart_total (GaugeVec),
+      #          dell_csi_driver_cpu_usage_percent, dell_csi_driver_memory_usage_bytes
+      # Labels on all: {driver="csi-vxflexos", pod}
+      # Note: label is "pod" (not "instance") to avoid conflict with Prometheus scrape-target
+      # instance label; with honorLabels: false, an exported "instance" label would be renamed
+      # to "exported_instance", so pod name regex matches would silently fail.
+
+      - alert: PowerFlexDriverUnavailable
+        expr: >-
+          (count(dell_csi_driver_uptime_seconds{driver="csi-vxflexos", pod=~".+-controller-.+"}) or on() vector(0)) == 0
+          or (count(dell_csi_driver_uptime_seconds{driver="csi-vxflexos", pod=~".+-node-.+"}) or on() vector(0)) == 0
+        for: 5m
+        labels:
+          severity: critical
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex CSI driver pods are unavailable"
+          description: >
+            PowerFlex CSI driver has zero controller or zero node instances reporting metrics
+            for 5 minutes. The driver may be crash-looping, evicted, or pending.
+            Volume operations may be unavailable. Immediate investigation required.
+          runbook_url: ""
+
+      - alert: PowerFlexDriverCrashLooping
+        expr: changes(dell_csi_driver_restart_total{driver="csi-vxflexos"}[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex CSI driver pod {{ $labels.pod }} is crash-looping"
+          description: >
+            The PowerFlex CSI driver pod {{ $labels.pod }} has restarted
+            {{ $value | printf "%.0f" }} times in the last 15 minutes (driver={{ $labels.driver }}).
+            This indicates a CrashLoopBackOff condition. Check pod events and driver logs.
+          runbook_url: ""
+
+      - alert: PowerFlexDriverHighCPU
+        expr: dell_csi_driver_cpu_usage_percent{driver="csi-vxflexos"} > 80
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex CSI driver pod {{ $labels.pod }} has high CPU usage"
+          description: >
+            CPU usage for PowerFlex CSI driver pod {{ $labels.pod }} is {{ $value | printf "%.1f" }}%,
+            exceeding the 80% threshold for 5 minutes.
+            Sustained high CPU may indicate excessive concurrent operations or a processing bottleneck.
+          runbook_url: ""
+
+      - alert: PowerFlexDriverHighMemory
+        expr: dell_csi_driver_memory_usage_bytes{driver="csi-vxflexos"} > 2147483648
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex CSI driver pod {{ $labels.pod }} has high memory usage"
+          description: >
+            Memory usage for PowerFlex CSI driver pod {{ $labels.pod }} is
+            {{ $value | printf "%.0f" }} bytes, exceeding the 2 GiB (2147483648 bytes) threshold
+            for 5 minutes. This may indicate a memory leak.
+            Review goroutine count and pending operation queues.
+          runbook_url: ""
+
+      # ── Category 3: Storage Capacity & Connectivity (PF-13–17) ───────────────
+      # Metrics prefix: dell_powerflex_storage_pool_* (NOT dell_powerflex_pool_*)
+      # Labels: {system_id, array_id, pool_id, pool_name}
+
+      - alert: PowerFlexPoolCapacityWarning
+        expr: dell_powerflex_storage_pool_utilization_ratio * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex storage pool {{ $labels.pool_name }} capacity warning"
+          description: >
+            Storage pool {{ $labels.pool_name }} (pool_id={{ $labels.pool_id }}) on array
+            {{ $labels.array_id }} is {{ $value | printf "%.1f" }}% full, exceeding the
+            80% warning threshold. Plan capacity expansion to avoid service disruption.
+          runbook_url: ""
+
+      - alert: PowerFlexPoolCapacityCritical
+        expr: dell_powerflex_storage_pool_utilization_ratio * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex storage pool {{ $labels.pool_name }} capacity critical"
+          description: >
+            Storage pool {{ $labels.pool_name }} (pool_id={{ $labels.pool_id }}) on array
+            {{ $labels.array_id }} is {{ $value | printf "%.1f" }}% full, exceeding the
+            90% critical threshold. Volume creation will fail imminently.
+            Immediate capacity expansion required.
+          runbook_url: ""
+
+      - alert: PowerFlexThinProvisioningHighRatio
+        expr: dell_powerflex_storage_pool_thin_ratio > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex pool {{ $labels.pool_name }} thin provisioning ratio is high"
+          description: >
+            Thin provisioning ratio for pool {{ $labels.pool_name }} (pool_id={{ $labels.pool_id }})
+            on array {{ $labels.array_id }} is {{ $value | printf "%.2f" }}.
+            If all volumes are simultaneously fully written, pool capacity may be exhausted.
+            Review volume sizing and reclamation policies.
+          runbook_url: ""
+
+      - alert: PowerFlexDataReductionDegraded
+        expr: dell_powerflex_storage_pool_data_reduction_ratio < 1.5
+        for: 15m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex pool {{ $labels.pool_name }} data reduction ratio is degraded"
+          description: >
+            Data reduction ratio for pool {{ $labels.pool_name }} (pool_id={{ $labels.pool_id }})
+            on array {{ $labels.array_id }} is {{ $value | printf "%.2f" }}x, below the
+            1.5x threshold. Compression or deduplication efficiency may have degraded.
+            Review workload data characteristics and verify compression/deduplication features are enabled.
+          runbook_url: ""
+
+      - alert: PowerFlexArrayConnectivityLost
+        expr: dell_powerflex_array_healthy == 0
+        for: 5m
+        labels:
+          severity: critical
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex array {{ $labels.system_id }} is unreachable"
+          description: >
+            The PowerFlex array (system_id={{ $labels.system_id }}) has been unreachable for 5 minutes.
+            This alert fires when either: (1) the PowerFlex Gateway cannot be reached, or
+            (2) the MDM cluster state is not "online" or "configured".
+            All volume operations against this array will fail.
+          runbook_url: ""
+
+      # ── Category 4: RCG Replication Alerts (PF-18–26) ────────────────────────
+      # Metrics: dell_powerflex_rcg_* — labels: {system_id, rcg_id, rcg_name, ...}
+      # PF-18: info-style metric — use {state!="Consistent"} == 1
+      # PF-19: dell_powerflex_rcg_link_status does NOT exist — use rcg_activity_state
+      # PF-21: MUST include 'and' guard to prevent false-positives when RCG frozen/paused
+      # PF-26: dynamic RPO violation — lag > per-RCG rpo_seconds; rpo > 0 guard skips unconfigured RCGs
+
+      - alert: PowerFlexRCGStateNotConsistent
+        expr: dell_powerflex_rcg_state{state!="Consistent"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} is not in Consistent state"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} has been in state "{{ $labels.state }}" for 5 minutes.
+            Expected state: "Consistent". This may indicate a replication link issue, lag overflow,
+            or active failover. Investigate immediately to avoid data protection gap.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGInactive
+        expr: dell_powerflex_rcg_activity_state{direction="local"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} local activity is inactive"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} local direction has been inactive for 5 minutes.
+            The replication link may be down. Check network connectivity to the remote site.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGLagExceeded
+        expr: dell_powerflex_rcg_lag_persistent_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} persistent lag exceeds threshold"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} has persistent lag of {{ $value | printf "%.0f" }} seconds,
+            exceeding the 300-second threshold. Persistent lag represents data not yet durably
+            committed at the target, directly impacting RPO compliance.
+            Investigate replication bandwidth and target-side health.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGBandwidthDegraded
+        expr: >-
+          dell_powerflex_rcg_transmit_bandwidth_kbps < 10240
+          and on(system_id, rcg_id, rcg_name)
+          dell_powerflex_rcg_activity_state{direction="local"} == 1
+          and on(system_id, rcg_id, rcg_name)
+          dell_powerflex_rcg_lag_persistent_seconds > 0
+          and on(system_id, rcg_id, rcg_name)
+          dell_powerflex_rcg_freeze_state == 0
+          and on(system_id, rcg_id, rcg_name)
+          dell_powerflex_rcg_pause_mode == 0
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} transmit bandwidth is degraded"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} transmit bandwidth is {{ $value | printf "%.0f" }} KB/s,
+            below the 10240 KB/s threshold for 5 minutes while the RCG is actively replicating.
+            Low bandwidth may cause lag buildup. Check network capacity and QoS policies.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGLatencyHigh
+        expr: dell_powerflex_rcg_transmit_latency_seconds > 5.0
+        for: 5m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} transmit latency is high"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} transmit latency is {{ $value | printf "%.2f" }} seconds,
+            exceeding the 5.0-second threshold for 5 minutes.
+            High transmit latency indicates WAN or network congestion on the replication path.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGFrozen
+        expr: dell_powerflex_rcg_freeze_state == 1
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} is frozen"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} is in frozen state.
+            Replication is paused and data changes are not being replicated to the target.
+            Verify whether this is an intentional administrative action.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGPaused
+        expr: dell_powerflex_rcg_pause_mode == 1
+        for: 0m
+        labels:
+          severity: warning
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} is paused"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} is in paused mode.
+            Replication data transfer is paused; lag will accumulate.
+            Verify whether this is an intentional administrative action.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGFailoverActive
+        expr: dell_powerflex_rcg_failover_state == 1
+        for: 0m
+        labels:
+          severity: info
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} failover is active"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} has an active failover state.
+            This alert is informational. Verify that failover was intentional and monitor
+            recovery progress.
+          runbook_url: ""
+
+      - alert: PowerFlexRCGRPOViolation
+        expr: >-
+          dell_powerflex_rcg_lag_persistent_seconds
+          > on(system_id, rcg_id, rcg_name)
+          dell_powerflex_rcg_rpo_seconds
+          and on(system_id, rcg_id, rcg_name)
+          dell_powerflex_rcg_rpo_seconds > 0
+        for: 5m
+        labels:
+          severity: critical
+          platform: powerflex
+          component: csi-driver
+        annotations:
+          summary: "PowerFlex RCG {{ $labels.rcg_name }} RPO violation"
+          description: >
+            Replication Consistency Group {{ $labels.rcg_name }} (rcg_id={{ $labels.rcg_id }})
+            on system {{ $labels.system_id }} has persistent lag of {{ $value | printf "%.0f" }} seconds,
+            exceeding the per-RCG recovery point objective (RPO).
+            Data protection is at risk. Investigate replication health immediately
+            to prevent data loss exposure.
+          runbook_url: ""

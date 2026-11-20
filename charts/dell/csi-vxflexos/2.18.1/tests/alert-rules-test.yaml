@@ -1,0 +1,1235 @@
+# Copyright (C) 2026 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#      http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# alert-rules-test.yaml — promtool test rules for all 26 PowerFlex CSI alert rules.
+# Run: promtool test rules tests/alert-rules-test.yaml
+# Rule source: tests/alert-rules.yaml (default-threshold static render of prometheusrule.yaml)
+#
+# Coverage (FR-4.2): 61 test scenarios across all 26 alerts (minimum required: 28).
+#   - PF-01..08: Volume operation failure alerts (2 scenarios each = 16 total)
+#   - PF-09:     Driver unavailable (4 scenarios — controller, node, both absent, both present)
+#   - PF-10:     Driver crash-loop (2 scenarios)
+#   - PF-11:     High CPU (2 scenarios)
+#   - PF-12:     High Memory (2 scenarios)
+#   - PF-13:     Pool capacity warning (2 scenarios)
+#   - PF-14:     Pool capacity critical (2 scenarios)
+#   - PF-15:     Thin provisioning (2 scenarios)
+#   - PF-16:     Data reduction degraded (3 scenarios — includes for:15m guard)
+#   - PF-17:     Array connectivity lost (2 scenarios)
+#   - PF-18:     RCG state not consistent (2 scenarios)
+#   - PF-19:     RCG inactive (2 scenarios)
+#   - PF-20:     RCG lag exceeded (2 scenarios)
+#   - PF-21:     RCG bandwidth degraded + activity/lag/freeze/pause guards (6 scenarios)
+#   - PF-22:     RCG latency high (2 scenarios)
+#   - PF-23:     RCG frozen (2 scenarios)
+#   - PF-24:     RCG paused (2 scenarios)
+#   - PF-25:     RCG failover active (2 scenarios)
+#   - PF-26:     RCG RPO violation — dynamic lag > rpo (3 scenarios)
+#
+# Notation: `v+sx n` = start v, step s, n times (n+1 values total)
+#           `vx n`   = v repeated (n+1 values, zero step shorthand)
+
+rule_files:
+  - alert-rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-01: PowerFlexCreateVolumeFailure
+  # expr: increase(dell_csi_operation_failure_total{namespace="vxflexos",operation="CreateVolume"}[5m]) > 3
+  # for: 0m
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-01 FIRE: CreateVolume counter increments over 5 minutes"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="CreateVolume",system_id="sys-abc"}'
+        values: '0+1x5'   # 0,1,2,3,4,5 — counter increases; increase([5m])=5 at t=5m
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexCreateVolumeFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: CreateVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex CreateVolume failures on system sys-abc"
+              description: |
+                5 CreateVolume failure(s) detected in the last 5 minutes on PowerFlex system sys-abc (error_code=5). Check driver logs and PowerFlex Gateway connectivity.
+              runbook_url: ""
+
+  - name: "PF-01 NO-FIRE: CreateVolume counter stable (no recent failures)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="CreateVolume",system_id="sys-abc"}'
+        values: '10x5'   # counter fixed at 10; increase([5m])=0
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexCreateVolumeFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-02: PowerFlexDeleteVolumeFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-02 FIRE: DeleteVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="DeleteVolume",system_id="sys-abc"}'
+        values: '0+2x5'   # 0,2,4,6,8,10 — increase([5m])=10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDeleteVolumeFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: DeleteVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex DeleteVolume failures on system sys-abc"
+              description: |
+                10 DeleteVolume failure(s) in the last 5 minutes on system sys-abc (error_code=5). Orphaned volumes may accumulate. Check Gateway and MDM reachability.
+              runbook_url: ""
+
+  - name: "PF-02 NO-FIRE: DeleteVolume counter stable"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="DeleteVolume",system_id="sys-abc"}'
+        values: '5x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDeleteVolumeFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-03: PowerFlexControllerPublishFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-03 FIRE: ControllerPublishVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="ControllerPublishVolume",system_id="sys-abc"}'
+        values: '0+1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexControllerPublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: ControllerPublishVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex ControllerPublishVolume failures on system sys-abc"
+              description: |
+                5 ControllerPublishVolume failure(s) in the last 5 minutes on system sys-abc (error_code=5). SDC mapping to volume may have failed. Check SDC registration and node connectivity.
+              runbook_url: ""
+
+  - name: "PF-03 NO-FIRE: ControllerPublishVolume stable"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="ControllerPublishVolume",system_id="sys-abc"}'
+        values: '3x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexControllerPublishFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-04: PowerFlexControllerUnpublishFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-04 FIRE: ControllerUnpublishVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="ControllerUnpublishVolume",system_id="sys-abc"}'
+        values: '0+1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexControllerUnpublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: ControllerUnpublishVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex ControllerUnpublishVolume failures on system sys-abc"
+              description: |
+                5 ControllerUnpublishVolume failure(s) in the last 5 minutes on system sys-abc (error_code=5). SDC unmap from volume may have failed. Stale SDC mappings may persist.
+              runbook_url: ""
+
+  - name: "PF-04 NO-FIRE: ControllerUnpublishVolume stable"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="ControllerUnpublishVolume",system_id="sys-abc"}'
+        values: '7x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexControllerUnpublishFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-05: PowerFlexNodeStageFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-05 FIRE: NodeStageVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="server_error",namespace="vxflexos",operation="NodeStageVolume",system_id="unknown"}'
+        values: '0+1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodeStageFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: server_error
+              operation: NodeStageVolume
+              system_id: unknown
+            exp_annotations:
+              summary: "PowerFlex NodeStageVolume failures on system unknown"
+              description: |
+                5 NodeStageVolume failure(s) in the last 5 minutes on system unknown (error_code=server_error). Block device discovery or filesystem formatting may have failed. Check SDC and device paths.
+              runbook_url: ""
+
+  - name: "PF-05 NO-FIRE: NodeStageVolume stable (mirrors live value)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="server_error",namespace="vxflexos",operation="NodeStageVolume",system_id="unknown"}'
+        values: '9x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodeStageFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-06: PowerFlexNodeUnstageFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-06 FIRE: NodeUnstageVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="NodeUnstageVolume",system_id="sys-abc"}'
+        values: '0+1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodeUnstageFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: NodeUnstageVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex NodeUnstageVolume failures on system sys-abc"
+              description: |
+                5 NodeUnstageVolume failure(s) in the last 5 minutes on system sys-abc (error_code=5). Device unmount or cleanup may have failed. Check node device state.
+              runbook_url: ""
+
+  - name: "PF-06 NO-FIRE: NodeUnstageVolume stable"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="NodeUnstageVolume",system_id="sys-abc"}'
+        values: '2x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodeUnstageFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-07: PowerFlexNodePublishFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-07 FIRE: NodePublishVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="NodePublishVolume",system_id="sys-abc"}'
+        values: '0+1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodePublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: NodePublishVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex NodePublishVolume failures on system sys-abc"
+              description: |
+                5 NodePublishVolume failure(s) in the last 5 minutes on system sys-abc (error_code=5). Bind mount to pod may have failed. Check node filesystem state and kubelet logs.
+              runbook_url: ""
+
+  - name: "PF-07 NO-FIRE: NodePublishVolume stable"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="NodePublishVolume",system_id="sys-abc"}'
+        values: '4x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodePublishFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-08: PowerFlexNodeUnpublishFailure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-08 FIRE: NodeUnpublishVolume counter increments"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="NodeUnpublishVolume",system_id="sys-abc"}'
+        values: '0+1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodeUnpublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              namespace: vxflexos
+              error_code: "5"
+              operation: NodeUnpublishVolume
+              system_id: sys-abc
+            exp_annotations:
+              summary: "PowerFlex NodeUnpublishVolume failures on system sys-abc"
+              description: |
+                5 NodeUnpublishVolume failure(s) in the last 5 minutes on system sys-abc (error_code=5). Bind unmount from pod may have failed. Stale mount points may remain.
+              runbook_url: ""
+
+  - name: "PF-08 NO-FIRE: NodeUnpublishVolume stable"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{error_code="5",namespace="vxflexos",operation="NodeUnpublishVolume",system_id="sys-abc"}'
+        values: '6x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexNodeUnpublishFailure
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-09: PowerFlexDriverUnavailable
+  # expr: (count(dell_csi_driver_uptime_seconds{driver="csi-vxflexos", pod=~".+-controller-.+"}) or on() vector(0)) == 0
+  #       or (count(dell_csi_driver_uptime_seconds{driver="csi-vxflexos", pod=~".+-node-.+"}) or on() vector(0)) == 0
+  # for: 5m
+  # Uses count()==0 (PowerScale pattern) instead of absent(job=) to avoid false positives
+  # when Prometheus assigns a job label different from a hardcoded value.
+  # pod=~".+-controller-.+" matches Deployment pods (vxflexos-controller-<rs>-<pod>)
+  # pod=~".+-node-.+"       matches DaemonSet pods  (vxflexos-node-<suffix>)
+  # count() returns no series labels, so the alert fires as a single instance.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-09 FIRE: no series present — both count()==0 arms true, one alert fires"
+    interval: 1m
+    input_series: []  # no input → count() returns no data → or on() vector(0) → 0==0 → true
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+            exp_annotations:
+              summary: "PowerFlex CSI driver pods are unavailable"
+              description: >
+                PowerFlex CSI driver has zero controller or zero node instances reporting metrics
+                for 5 minutes. The driver may be crash-looping, evicted, or pending.
+                Volume operations may be unavailable. Immediate investigation required.
+              runbook_url: ""
+
+  - name: "PF-09 FIRE: only node pods reporting — controller count==0 arm fires"
+    interval: 1m
+    input_series:
+      # Only node DaemonSet pods present; controller Deployment pods are down.
+      # "vxflexos-node-worker1" matches .+-node-.+ but NOT .+-controller-.+
+      - series: 'dell_csi_driver_uptime_seconds{driver="csi-vxflexos",pod="vxflexos-node-worker1"}'
+        values: '25000+60x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+            exp_annotations:
+              summary: "PowerFlex CSI driver pods are unavailable"
+              description: >
+                PowerFlex CSI driver has zero controller or zero node instances reporting metrics
+                for 5 minutes. The driver may be crash-looping, evicted, or pending.
+                Volume operations may be unavailable. Immediate investigation required.
+              runbook_url: ""
+
+  - name: "PF-09 FIRE: only controller pods reporting — node count==0 arm fires"
+    interval: 1m
+    input_series:
+      # Only controller Deployment pods present; node DaemonSet pods are down.
+      # "vxflexos-controller-abc-xyz" matches .+-controller-.+ but NOT .+-node-.+
+      - series: 'dell_csi_driver_uptime_seconds{driver="csi-vxflexos",pod="vxflexos-controller-abc-xyz"}'
+        values: '100000+60x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+            exp_annotations:
+              summary: "PowerFlex CSI driver pods are unavailable"
+              description: >
+                PowerFlex CSI driver has zero controller or zero node instances reporting metrics
+                for 5 minutes. The driver may be crash-looping, evicted, or pending.
+                Volume operations may be unavailable. Immediate investigation required.
+              runbook_url: ""
+
+  - name: "PF-09 NO-FIRE: both controller and node metrics present"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_uptime_seconds{driver="csi-vxflexos",pod="vxflexos-controller-abc-xyz"}'
+        values: '100000+60x5'
+      - series: 'dell_csi_driver_uptime_seconds{driver="csi-vxflexos",pod="vxflexos-node-worker1"}'
+        values: '25000+60x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverUnavailable
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-10: PowerFlexDriverCrashLooping
+  # expr: changes(dell_csi_driver_restart_total{driver="csi-vxflexos"}[15m]) > 3
+  # for: 0m  — uses changes() (counts value transitions) rather than delta() because
+  #            changes() is resilient to staleness gaps caused by container restarts.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-10 FIRE: restart count transitions=4 in 15 minutes (above threshold of 3)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_restart_total{driver="csi-vxflexos",pod="vxflexos-controller-abc"}'
+        # t=0 is baseline (excluded from (0m,15m] window at eval_time=15m). t=1 stays at 0,
+        # then 4 increments at t=2..5. changes((0m,15m])=4>3 → FIRE.
+        values: '0 0 1 2 3 4 4 4 4 4 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerFlexDriverCrashLooping
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              driver: csi-vxflexos
+              pod: vxflexos-controller-abc
+            exp_annotations:
+              summary: "PowerFlex CSI driver pod vxflexos-controller-abc is crash-looping"
+              description: |
+                The PowerFlex CSI driver pod vxflexos-controller-abc has restarted 4 times in the last 15 minutes (driver=csi-vxflexos). This indicates a CrashLoopBackOff condition. Check pod events and driver logs.
+              runbook_url: ""
+
+  - name: "PF-10 NO-FIRE: restart count transitions=2 (at or below threshold of 3)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_restart_total{driver="csi-vxflexos",pod="vxflexos-controller-abc"}'
+        # 2 transitions in window — does not exceed threshold of 3
+        values: '0 0 1 2 2 2 2 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerFlexDriverCrashLooping
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-11: PowerFlexDriverHighCPU
+  # expr: dell_csi_driver_cpu_usage_percent{driver="csi-vxflexos"} > 80
+  # for: 5m
+  # Note: Only controller pod emits this metric (driver-level limitation).
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-11 FIRE: CPU at 85% for 5 minutes (above 80% threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{driver="csi-vxflexos",pod="vxflexos-controller-abc"}'
+        values: '85x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverHighCPU
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              driver: csi-vxflexos
+              pod: vxflexos-controller-abc
+            exp_annotations:
+              summary: "PowerFlex CSI driver pod vxflexos-controller-abc has high CPU usage"
+              description: |
+                CPU usage for PowerFlex CSI driver pod vxflexos-controller-abc is 85.0%, exceeding the 80% threshold for 5 minutes. Sustained high CPU may indicate excessive concurrent operations or a processing bottleneck.
+              runbook_url: ""
+
+  - name: "PF-11 NO-FIRE: CPU at 79% (below 80% threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{driver="csi-vxflexos",pod="vxflexos-controller-abc"}'
+        values: '79x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverHighCPU
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-12: PowerFlexDriverHighMemory
+  # expr: dell_csi_driver_memory_usage_bytes{driver="csi-vxflexos"} > 2147483648
+  # for: 5m — default 2 GiB = 2147483648 bytes
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-12 FIRE: memory at 2.5 GiB for 5 minutes (above 2 GiB threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_memory_usage_bytes{driver="csi-vxflexos",pod="vxflexos-controller-abc"}'
+        values: '2684354560x5'   # 2.5 GiB
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverHighMemory
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              driver: csi-vxflexos
+              pod: vxflexos-controller-abc
+            exp_annotations:
+              summary: "PowerFlex CSI driver pod vxflexos-controller-abc has high memory usage"
+              description: |
+                Memory usage for PowerFlex CSI driver pod vxflexos-controller-abc is 2684354560 bytes, exceeding the 2 GiB (2147483648 bytes) threshold for 5 minutes. This may indicate a memory leak. Review goroutine count and pending operation queues.
+              runbook_url: ""
+
+  - name: "PF-12 NO-FIRE: memory at 1.5 GiB (below 2 GiB threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_memory_usage_bytes{driver="csi-vxflexos",pod="vxflexos-controller-abc"}'
+        values: '1610612736x5'   # 1.5 GiB
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDriverHighMemory
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-13: PowerFlexPoolCapacityWarning
+  # expr: dell_powerflex_storage_pool_utilization_ratio * 100 > 80
+  # for: 5m
+  # Source labels: {array_id, pool_id, pool_name} — verified against live cluster
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-13 FIRE: pool utilization at 81% for 5 minutes (above 80% warning threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_utilization_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '0.81x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexPoolCapacityWarning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              array_id: array-001
+              pool_id: pool-001
+              pool_name: test-pool
+            exp_annotations:
+              summary: "PowerFlex storage pool test-pool capacity warning"
+              description: |
+                Storage pool test-pool (pool_id=pool-001) on array array-001 is 81.0% full, exceeding the 80% warning threshold. Plan capacity expansion to avoid service disruption.
+              runbook_url: ""
+
+  - name: "PF-13 NO-FIRE: pool utilization at 79% (below 80% warning threshold boundary)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_utilization_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '0.79x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexPoolCapacityWarning
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-14: PowerFlexPoolCapacityCritical
+  # expr: dell_powerflex_storage_pool_utilization_ratio * 100 > 90
+  # for: 5m
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-14 FIRE: pool utilization at 91% for 5 minutes (above 90% critical threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_utilization_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '0.91x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexPoolCapacityCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+              array_id: array-001
+              pool_id: pool-001
+              pool_name: test-pool
+            exp_annotations:
+              summary: "PowerFlex storage pool test-pool capacity critical"
+              description: |
+                Storage pool test-pool (pool_id=pool-001) on array array-001 is 91.0% full, exceeding the 90% critical threshold. Volume creation will fail imminently. Immediate capacity expansion required.
+              runbook_url: ""
+
+  - name: "PF-14 NO-FIRE: pool utilization at 89% (below 90% critical threshold boundary)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_utilization_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '0.89x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexPoolCapacityCritical
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-15: PowerFlexThinProvisioningHighRatio
+  # expr: dell_powerflex_storage_pool_thin_ratio > 0.8
+  # for: 5m
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-15 FIRE: thin ratio at 0.85 for 5 minutes (above 0.8 threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_thin_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '0.85x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexThinProvisioningHighRatio
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              array_id: array-001
+              pool_id: pool-001
+              pool_name: test-pool
+            exp_annotations:
+              summary: "PowerFlex pool test-pool thin provisioning ratio is high"
+              description: |
+                Thin provisioning ratio for pool test-pool (pool_id=pool-001) on array array-001 is 0.85. If all volumes are simultaneously fully written, pool capacity may be exhausted. Review volume sizing and reclamation policies.
+              runbook_url: ""
+
+  - name: "PF-15 NO-FIRE: thin ratio at 0.75 (below 0.8 threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_thin_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '0.75x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexThinProvisioningHighRatio
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-16: PowerFlexDataReductionDegraded
+  # expr: dell_powerflex_storage_pool_data_reduction_ratio < 1.5
+  # for: 15m  — longer window prevents false positives on transient workload shifts
+  # Three scenarios: fire at 15m, no-fire ratio OK, no-fire (for:15m guard at 5m)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-16 FIRE: data reduction ratio at 1.3 for 15 minutes (below 1.5 threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_data_reduction_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '1.3x15'   # 1.3 < 1.5 continuously for 16 samples (t=0..15m)
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerFlexDataReductionDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              array_id: array-001
+              pool_id: pool-001
+              pool_name: test-pool
+            exp_annotations:
+              summary: "PowerFlex pool test-pool data reduction ratio is degraded"
+              description: |
+                Data reduction ratio for pool test-pool (pool_id=pool-001) on array array-001 is 1.30x, below the 1.5x threshold. Compression or deduplication efficiency may have degraded. Review workload data characteristics and verify compression/deduplication features are enabled.
+              runbook_url: ""
+
+  - name: "PF-16 NO-FIRE: data reduction ratio at 2.0 (above 1.5 threshold — healthy)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_data_reduction_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '2.0x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerFlexDataReductionDegraded
+        exp_alerts: []
+
+  - name: "PF-16 NO-FIRE: for:15m guard — ratio below threshold for only 5 minutes"
+    # BR scenario: transient dip for <15m must NOT fire
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_storage_pool_data_reduction_ratio{array_id="array-001",pool_id="pool-001",pool_name="test-pool"}'
+        values: '1.3x5'   # only 6 values (t=0..5m); condition true for only 5m < for:15m
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexDataReductionDegraded
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-17: PowerFlexArrayConnectivityLost
+  # expr: dell_powerflex_array_healthy == 0
+  # for: 5m — Labels: {system_id} (verified against live cluster value=0)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-17 FIRE: array_healthy=0 for 5 minutes (array unreachable)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_array_healthy{system_id="sys-001"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexArrayConnectivityLost
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+            exp_annotations:
+              summary: "PowerFlex array sys-001 is unreachable"
+              description: |
+                The PowerFlex array (system_id=sys-001) has been unreachable for 5 minutes. This alert fires when either: (1) the PowerFlex Gateway cannot be reached, or (2) the MDM cluster state is not "online" or "configured". All volume operations against this array will fail.
+              runbook_url: ""
+
+  - name: "PF-17 NO-FIRE: array_healthy=1 (array reachable)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_array_healthy{system_id="sys-001"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexArrayConnectivityLost
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-18: PowerFlexRCGStateNotConsistent
+  # expr: dell_powerflex_rcg_state{state!="Consistent"} == 1
+  # for: 5m
+  # Source: info-style metric — rcgState.WithLabelValues(..., rcg.State).Set(1)
+  # The state label holds the current state string; value is always 1.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-18 FIRE: RCG in Inconsistent state for 5 minutes"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",state="Inconsistent"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGStateNotConsistent
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+              state: Inconsistent
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg is not in Consistent state"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 has been in state "Inconsistent" for 5 minutes. Expected state: "Consistent". This may indicate a replication link issue, lag overflow, or active failover. Investigate immediately to avoid data protection gap.
+              runbook_url: ""
+
+  - name: "PF-18 NO-FIRE: RCG in Consistent state (filter excludes it)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",state="Consistent"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGStateNotConsistent
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-19: PowerFlexRCGInactive
+  # expr: dell_powerflex_rcg_activity_state{direction="local"} == 0
+  # for: 5m
+  # Source: rcgActivityState.WithLabelValues(..., "local").Set(encodeActivityState(...))
+  # Labels: {system_id, rcg_id, rcg_name, direction}
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-19 FIRE: RCG local activity state inactive (=0) for 5 minutes"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGInactive
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+              direction: local
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg local activity is inactive"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 local direction has been inactive for 5 minutes. The replication link may be down. Check network connectivity to the remote site.
+              runbook_url: ""
+
+  - name: "PF-19 NO-FIRE: RCG local activity state active (=1)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGInactive
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-20: PowerFlexRCGLagExceeded
+  # expr: dell_powerflex_rcg_lag_persistent_seconds > 300
+  # for: 5m
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-20 FIRE: persistent lag at 350s for 5 minutes (above 300s threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '350x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGLagExceeded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg persistent lag exceeds threshold"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 has persistent lag of 350 seconds, exceeding the 300-second threshold. Persistent lag represents data not yet durably committed at the target, directly impacting RPO compliance. Investigate replication bandwidth and target-side health.
+              runbook_url: ""
+
+  - name: "PF-20 NO-FIRE: persistent lag at 290s (below 300s threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '290x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGLagExceeded
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-21: PowerFlexRCGBandwidthDegraded
+  # expr: dell_powerflex_rcg_transmit_bandwidth_kbps < 10240
+  #       and on(system_id, rcg_id, rcg_name)
+  #       dell_powerflex_rcg_activity_state{direction="local"} == 1
+  #       and on(system_id, rcg_id, rcg_name)
+  #       dell_powerflex_rcg_lag_persistent_seconds > 0
+  # for: 5m
+  #
+  # CRITICAL FIX: `on(system_id, rcg_id, rcg_name)` is REQUIRED for each join.
+  # Source (rcg_collector.go):
+  #   rcg_transmit_bandwidth_kbps labels: {system_id, rcg_id, rcg_name}            (3 labels)
+  #   rcg_activity_state labels:          {system_id, rcg_id, rcg_name, direction}  (4 labels)
+  #   rcg_lag_persistent_seconds labels:  {system_id, rcg_id, rcg_name}            (3 labels)
+  #   rcg_freeze_state labels:            {system_id, rcg_id, rcg_name}            (3 labels)
+  #   rcg_pause_mode labels:              {system_id, rcg_id, rcg_name}            (3 labels)
+  # Without `on()`, default `and` requires identical label sets → returns nothing in production.
+  # With `on()`, join matches on {system_id, rcg_id, rcg_name}; direction is NOT propagated.
+  #
+  # FALSE-POSITIVE FIX (PF-21): lag_persistent_seconds > 0 guard prevents firing when
+  # replication is healthy but idle (no app writes → bandwidth=0, lag=0).
+  # Alert only fires when data is waiting to replicate (lag>0) but bandwidth is insufficient.
+  #
+  # FREEZE/PAUSE FIX (PF-21): freeze_state == 0 and pause_mode == 0 guards prevent firing
+  # when the RCG is intentionally frozen/paused. Live evidence shows activity_state=1 can
+  # coexist with freeze_state=1 (e.g. failover scenarios), so activity alone is insufficient.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-21 FIRE: bandwidth below threshold, RCG active, lag > 0, not frozen, not paused"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_bandwidth_kbps{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '5000x5'   # 5000 KB/s < 10240
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '1x5'   # active; on() joins on {system_id,rcg_id,rcg_name}
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '30x5'   # 30s persistent lag — data waiting to replicate
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'   # not frozen — freeze guard passes
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'   # not paused — pause guard passes
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGBandwidthDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg   # direction is NOT in result (left-side labels only)
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg transmit bandwidth is degraded"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 transmit bandwidth is 5000 KB/s, below the 10240 KB/s threshold for 5 minutes while the RCG is actively replicating. Low bandwidth may cause lag buildup. Check network capacity and QoS policies.
+              runbook_url: ""
+
+  - name: "PF-21 NO-FIRE: bandwidth=0, activity=1, lag=0 — idle replication (false positive guard)"
+    # PF-21 false-positive scenario: RCG is active but no app writes → bw=0 AND lag=0.
+    # Before fix this would fire because bw < 10240 AND activity=1.
+    # After fix: lag_persistent_seconds=0 guard suppresses the alert.
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_bandwidth_kbps{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'   # 0 KB/s — no writes; would have triggered without the lag guard
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '1x5'   # active (healthy idle replication)
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'   # lag=0: everything is replicated; no data waiting
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGBandwidthDegraded
+        exp_alerts: []
+
+  - name: "PF-21 NO-FIRE guard: bandwidth low but RCG inactive (activity=0 prevents false positive)"
+    # BR scenario: bandwidth=0, activity=0 → activity guard suppresses alert
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_bandwidth_kbps{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'   # 0 KB/s — would trigger without the activity guard
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '0x5'   # inactive
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '60x5'   # lag > 0 but activity=0 still suppresses
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGBandwidthDegraded
+        exp_alerts: []
+
+  - name: "PF-21 NO-FIRE: bandwidth above threshold while RCG active"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_bandwidth_kbps{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '12000x5'   # 12000 KB/s > 10240 — above threshold (OK)
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '1x5'
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '30x5'   # lag present but bandwidth is fine
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGBandwidthDegraded
+        exp_alerts: []
+
+  - name: "PF-21 NO-FIRE: frozen RCG (freeze_state=1) with activity=1 and lag>0 — freeze guard suppresses"
+    # Reviewer-identified gap: activity_state=1 can coexist with freeze_state=1 (observed in live evidence).
+    # The old expression would fire here; the freeze_state==0 guard must suppress it.
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_bandwidth_kbps{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '1000x5'   # 1000 KB/s < 10240 — would trigger without freeze guard
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '1x5'   # active — as observed in live frozen-RCG evidence
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '120x5'   # 120s positive lag — would trigger without freeze guard
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '1x5'   # FROZEN — freeze guard (== 0) prevents alert from firing
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGBandwidthDegraded
+        exp_alerts: []
+
+  - name: "PF-21 NO-FIRE: paused RCG (pause_mode=1) with activity=1 and lag>0 — pause guard suppresses"
+    # Validates the pause_mode==0 guard independently of freeze_state.
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_bandwidth_kbps{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '500x5'   # 500 KB/s < 10240
+      - series: 'dell_powerflex_rcg_activity_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg",direction="local"}'
+        values: '1x5'   # active
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '60x5'   # positive lag
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x5'
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '1x5'   # PAUSED — pause guard (== 0) prevents alert from firing
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGBandwidthDegraded
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-22: PowerFlexRCGLatencyHigh
+  # expr: dell_powerflex_rcg_transmit_latency_seconds > 5.0
+  # for: 5m
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-22 FIRE: RCG transmit latency at 6.5s for 5 minutes (above 5.0s threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_latency_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '6.5x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGLatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg transmit latency is high"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 transmit latency is 6.50 seconds, exceeding the 5.0-second threshold for 5 minutes. High transmit latency indicates WAN or network congestion on the replication path.
+              runbook_url: ""
+
+  - name: "PF-22 NO-FIRE: RCG transmit latency at 4.5s (below 5.0s threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_transmit_latency_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '4.5x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGLatencyHigh
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-23: PowerFlexRCGFrozen
+  # expr: dell_powerflex_rcg_freeze_state == 1
+  # for: 0m — fires immediately; freeze is a discrete state, not a rate
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-23 FIRE: RCG freeze state active (=1)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: PowerFlexRCGFrozen
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg is frozen"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 is in frozen state. Replication is paused and data changes are not being replicated to the target. Verify whether this is an intentional administrative action.
+              runbook_url: ""
+
+  - name: "PF-23 NO-FIRE: RCG not frozen (freeze_state=0)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_freeze_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PowerFlexRCGFrozen
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-24: PowerFlexRCGPaused
+  # expr: dell_powerflex_rcg_pause_mode == 1
+  # for: 0m
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-24 FIRE: RCG pause mode active (=1)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: PowerFlexRCGPaused
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg is paused"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 is in paused mode. Replication data transfer is paused; lag will accumulate. Verify whether this is an intentional administrative action.
+              runbook_url: ""
+
+  - name: "PF-24 NO-FIRE: RCG not paused (pause_mode=0)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_pause_mode{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PowerFlexRCGPaused
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-25: PowerFlexRCGFailoverActive
+  # expr: dell_powerflex_rcg_failover_state == 1
+  # for: 0m
+  # severity: warning — uses warning (not info) for compatibility with standard Alertmanager routes
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-25 FIRE: RCG failover state active (=1)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_failover_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: PowerFlexRCGFailoverActive
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg failover is active"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 has an active failover state. This alert is informational. Verify that failover was intentional and monitor recovery progress.
+              runbook_url: ""
+
+  - name: "PF-25 NO-FIRE: RCG failover state not active (=0)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_failover_state{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PowerFlexRCGFailoverActive
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PF-26: PowerFlexRCGRPOViolation
+  # expr: dell_powerflex_rcg_lag_persistent_seconds > on(...) dell_powerflex_rcg_rpo_seconds
+  #       and on(...) dell_powerflex_rcg_rpo_seconds > 0
+  # for: 5m
+  # severity: critical — lag exceeding per-RCG RPO means data protection is at risk
+  # Guard: rpo_seconds > 0 prevents false-positives on RCGs without RPO configured
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - name: "PF-26 FIRE: lag 350s exceeds per-RCG RPO 300s (RPO violation)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '350x10'
+      - series: 'dell_powerflex_rcg_rpo_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '300x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGRPOViolation
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerflex
+              component: csi-driver
+              system_id: sys-001
+              rcg_id: rcg-001
+              rcg_name: test-rcg
+            exp_annotations:
+              summary: "PowerFlex RCG test-rcg RPO violation"
+              description: |
+                Replication Consistency Group test-rcg (rcg_id=rcg-001) on system sys-001 has persistent lag of 350 seconds, exceeding the per-RCG recovery point objective (RPO). Data protection is at risk. Investigate replication health immediately to prevent data loss exposure.
+              runbook_url: ""
+
+  - name: "PF-26 NO-FIRE: lag 250s below per-RCG RPO 300s (within RPO)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '250x10'
+      - series: 'dell_powerflex_rcg_rpo_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '300x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGRPOViolation
+        exp_alerts: []
+
+  - name: "PF-26 NO-FIRE: lag 350s but RPO=0 (RPO not configured, guard prevents fire)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerflex_rcg_lag_persistent_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '350x10'
+      - series: 'dell_powerflex_rcg_rpo_seconds{system_id="sys-001",rcg_id="rcg-001",rcg_name="test-rcg"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerFlexRCGRPOViolation
+        exp_alerts: []

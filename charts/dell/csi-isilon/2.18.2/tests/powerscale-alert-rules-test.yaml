@@ -1,0 +1,919 @@
+# Copyright © 2022-2026 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#      http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# PowerScale CSI Driver Alert Rules — promtool Unit Test Suite
+#
+# Run with: promtool test rules powerscale-alert-rules-test.yaml
+# Requires: prometheus/prometheus container image, or a local promtool binary.
+#
+# This file validates all 22 PowerScale alert rules across 6 categories with
+# 49 scenarios: fire conditions, no-fire (boundary), and alert recovery.
+# All scenarios run fully offline — no live Prometheus or OneFS required.
+#
+# Timing convention:
+#   - interval: 1m  → one sample per minute.
+#   - For alerts with for: 0m: evaluate at the moment the condition is true.
+#   - For alerts with for: 1m (volume ops PS-01..PS-08): condition must be true for
+#     1 minute; provide data starting at t=0 and evaluate at t=6m to ensure the
+#     for:1m clause is satisfied after increase() stabilises over the 5m window.
+#   - For alerts with for: 5m: provide data from t=0 and evaluate at t=5m or later.
+#   - For rate/increase/histogram_quantile (require ≥2 samples): evaluate at t=10m
+#     to ensure the for: 5m clause is satisfied after the rate stabilises at t=1m.
+#
+# Label matching note (promtool strict mode):
+#   exp_labels must include ALL labels on the fired alert: static rule labels
+#   (severity, platform, component) plus any labels propagated from input series
+#   (cluster_name, operation, pod, instance_type, volume_id, access_zone, etc.).
+#   exp_annotations must match the fully evaluated annotation strings.
+
+rule_files:
+  - alert-rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+
+  # ==========================================================================
+  # Category 1 — Volume Operation Failures (PS-01 to PS-08) — 11 scenarios
+  # Expression: increase(dell_csi_operation_failure_total{operation=X}[5m]) > 3
+  # for: 1m  →  fires after the condition has been true for 1 minute.
+  # Timing convention: counter jumps by 4 (above threshold of 3) at t=0, so
+  # increase() > 3 is true immediately; for:1m is satisfied at eval_time=1m.
+  # A counter jump of exactly 3 stays at boundary (not > 3) and must not fire.
+  # ==========================================================================
+
+  - name: "PS-01 CreateVolume: 4 failures in 5m → PowerScaleCreateVolumeFailure fires (warning)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="CreateVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleCreateVolumeFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: CreateVolume
+            exp_annotations:
+              summary: "PowerScale CSI CreateVolume operation failures detected"
+              description: "Cluster c1 has 4 CreateVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-01 CreateVolume: exactly 3 failures (boundary, not > 3) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="CreateVolume",cluster_name="c1"}'
+        values: '0 3 3 3 3 3 3'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleCreateVolumeFailure
+        exp_alerts: []
+
+  - name: "PS-02 DeleteVolume: 4 failures in 5m → PowerScaleDeleteVolumeFailure fires (warning)"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="DeleteVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleDeleteVolumeFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: DeleteVolume
+            exp_annotations:
+              summary: "PowerScale CSI DeleteVolume operation failures detected"
+              description: "Cluster c1 has 4 DeleteVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-03 ControllerPublishVolume: 4 failures → PowerScaleControllerPublishFailure fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="ControllerPublishVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleControllerPublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: ControllerPublishVolume
+            exp_annotations:
+              summary: "PowerScale CSI ControllerPublishVolume operation failures detected"
+              description: "Cluster c1 has 4 ControllerPublishVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-04 ControllerUnpublishVolume: 4 failures → PowerScaleControllerUnpublishFailure fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="ControllerUnpublishVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleControllerUnpublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: ControllerUnpublishVolume
+            exp_annotations:
+              summary: "PowerScale CSI ControllerUnpublishVolume operation failures detected"
+              description: "Cluster c1 has 4 ControllerUnpublishVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-05 NodeStageVolume: 4 failures → PowerScaleNodeStageFailure fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="NodeStageVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleNodeStageFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: NodeStageVolume
+            exp_annotations:
+              summary: "PowerScale CSI NodeStageVolume operation failures detected"
+              description: "Cluster c1 has 4 NodeStageVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-06 NodeUnstageVolume: 4 failures → PowerScaleNodeUnstageFailure fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="NodeUnstageVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleNodeUnstageFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: NodeUnstageVolume
+            exp_annotations:
+              summary: "PowerScale CSI NodeUnstageVolume operation failures detected"
+              description: "Cluster c1 has 4 NodeUnstageVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-07 NodePublishVolume: 4 failures → PowerScaleNodePublishFailure fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="NodePublishVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleNodePublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: NodePublishVolume
+            exp_annotations:
+              summary: "PowerScale CSI NodePublishVolume operation failures detected"
+              description: "Cluster c1 has 4 NodePublishVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-08 NodeUnpublishVolume: 4 failures → PowerScaleNodeUnpublishFailure fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="NodeUnpublishVolume",cluster_name="c1"}'
+        values: '0 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleNodeUnpublishFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              operation: NodeUnpublishVolume
+            exp_annotations:
+              summary: "PowerScale CSI NodeUnpublishVolume operation failures detected"
+              description: "Cluster c1 has 4 NodeUnpublishVolume failures in the last 5 minutes. Error Code: . Threshold: 3 failures."
+              runbook_url: ""
+
+  - name: "PS-08 NodeUnpublishVolume: 0 failures → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_operation_failure_total{operation="NodeUnpublishVolume",cluster_name="c1"}'
+        values: '0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PowerScaleNodeUnpublishFailure
+        exp_alerts: []
+
+  # ==========================================================================
+  # Category 2 — Driver Health (PS-09 to PS-13) — 13 scenarios
+  # ==========================================================================
+
+  # PS-09: PowerScaleDriverUnavailable
+  # Expression: (count(uptime{...,"controller"}) or on() vector(0)) == 0
+  #          OR (count(uptime{...,"node"}) or on() vector(0)) == 0
+  # for: 5m
+  # When a role's series is absent, count() returns empty → "empty or on() vector(0)"
+  # evaluates to vector(0); 0 == 0 is true → alert fires after 5m.
+
+  - name: "PS-09 No controller uptime series → PowerScaleDriverUnavailable fires (critical)"
+    interval: 1m
+    input_series:
+      # Only node series present; controller count evaluates to 0 → alert fires.
+      - series: 'dell_csi_driver_uptime_seconds{cluster_name="c1",instance_type="node"}'
+        values: '0 10 20 30 40 50 60'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+            exp_annotations:
+              summary: "PowerScale CSI driver metrics are unavailable"
+              description: "PowerScale CSI driver has zero controller instances or zero node instances reporting metrics for 5 minutes."
+              runbook_url: ""
+
+  - name: "PS-09 No node uptime series → PowerScaleDriverUnavailable fires (critical)"
+    interval: 1m
+    input_series:
+      # Only controller series present; node count evaluates to 0 → alert fires.
+      - series: 'dell_csi_driver_uptime_seconds{cluster_name="c1",instance_type="controller"}'
+        values: '0 10 20 30 40 50 60'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+            exp_annotations:
+              summary: "PowerScale CSI driver metrics are unavailable"
+              description: "PowerScale CSI driver has zero controller instances or zero node instances reporting metrics for 5 minutes."
+              runbook_url: ""
+
+  - name: "PS-09 Both controller and node uptime series present → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_uptime_seconds{cluster_name="c1",instance_type="controller"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100'
+      - series: 'dell_csi_driver_uptime_seconds{cluster_name="c1",instance_type="node"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleDriverUnavailable
+        exp_alerts: []
+
+  # PS-10: PowerScaleDriverCrashLooping
+  # Expression: changes(dell_csi_driver_restart_total[15m]) > 3, for: 0m
+  # changes() counts the number of distinct value transitions in the window.
+  # Tip: values '0 0 0 1 2 3 4 4 ...' produce 4 changes → 4 > 3 → fires.
+
+  - name: "PS-10 4 restarts in 15m → PowerScaleDriverCrashLooping fires (warning)"
+    interval: 1m
+    input_series:
+      # Counter changes 4 times (0→1, 1→2, 2→3, 3→4) within the 15m window.
+      - series: 'dell_csi_driver_restart_total{pod="ps-controller-0",instance_type="controller",cluster_name="c1"}'
+        values: '0 0 0 1 2 3 4 4 4 4 4 4 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerScaleDriverCrashLooping
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              pod: ps-controller-0
+              instance_type: controller
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale CSI driver is crash looping"
+              description: "PowerScale CSI driver pod ps-controller-0 (instance type: controller) has restarted 4 times in the last 15m, indicating a crash loop."
+              runbook_url: ""
+
+  - name: "PS-10 Exactly 3 restarts (at boundary, not > 3) → no alert"
+    interval: 1m
+    input_series:
+      # Counter changes 3 times (0→1, 1→2, 2→3); 3 is not > 3.
+      - series: 'dell_csi_driver_restart_total{pod="ps-controller-0",instance_type="controller",cluster_name="c1"}'
+        values: '0 0 0 1 2 3 3 3 3 3 3 3 3 3 3 3'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerScaleDriverCrashLooping
+        exp_alerts: []
+
+  - name: "PS-10 2 restarts in 15m → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_restart_total{pod="ps-controller-0",instance_type="controller",cluster_name="c1"}'
+        values: '0 0 0 0 1 2 2 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PowerScaleDriverCrashLooping
+        exp_alerts: []
+
+  # PS-11: PowerScaleDriverHighCPU
+  # Expression: dell_csi_driver_cpu_usage_percent > 80, for: 5m
+
+  - name: "PS-11 CPU at 81% sustained 5m → PowerScaleDriverHighCPU fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{pod="ps-controller-0",cluster_name="c1"}'
+        values: '81 81 81 81 81 81'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverHighCPU
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              pod: ps-controller-0
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale CSI driver high CPU usage"
+              description: "PowerScale CSI driver pod ps-controller-0 on cluster c1 has CPU usage of 81% (threshold: 80%) for more than 5 minutes."
+              runbook_url: ""
+
+  - name: "PS-11 CPU at 80% (boundary, not > 80) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{pod="ps-controller-0",cluster_name="c1"}'
+        values: '80 80 80 80 80 80'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverHighCPU
+        exp_alerts: []
+
+  - name: "PS-11 CPU at 79% → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_cpu_usage_percent{pod="ps-controller-0",cluster_name="c1"}'
+        values: '79 79 79 79 79 79'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverHighCPU
+        exp_alerts: []
+
+  # PS-12: PowerScaleDriverHighMemory
+  # Expression: dell_csi_driver_memory_usage_bytes > 2147483648, for: 5m
+
+  - name: "PS-12 Memory above 2 GiB (2147483649 bytes) sustained 5m → PowerScaleDriverHighMemory fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_memory_usage_bytes{pod="ps-controller-0",cluster_name="c1"}'
+        values: '2147483649 2147483649 2147483649 2147483649 2147483649 2147483649'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverHighMemory
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              pod: ps-controller-0
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale CSI driver high memory usage"
+              description: "PowerScale CSI driver pod ps-controller-0 on cluster c1 has memory usage of 2.147483649e+09 bytes (threshold: 2.147483648e+09 bytes) for more than 5 minutes."
+              runbook_url: ""
+
+  - name: "PS-12 Memory exactly 2 GiB (boundary, not > 2147483648) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_csi_driver_memory_usage_bytes{pod="ps-controller-0",cluster_name="c1"}'
+        values: '2147483648 2147483648 2147483648 2147483648 2147483648 2147483648'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleDriverHighMemory
+        exp_alerts: []
+
+  # PS-13: PowerScaleMetricsStale
+  # Expression: dell_powerscale_metrics_stale == 1, for: 5m
+
+  - name: "PS-13 Stale flag = 1 sustained 5m → PowerScaleMetricsStale fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_metrics_stale{cluster_name="c1"}'
+        values: '1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleMetricsStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale metrics collection is stale on cluster c1"
+              description: "PowerScale metrics collection has reported stale data for 5 minutes on cluster c1. The stale flag is set immediately on any collection failure, regardless of whether cached data is available, ensuring the alert fires even when the cache is empty."
+              runbook_url: ""
+
+  - name: "PS-13 Stale flag = 0 → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_metrics_stale{cluster_name="c1"}'
+        values: '0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleMetricsStale
+        exp_alerts: []
+
+  - name: "PS-13 Stale flag set for only 4m → no alert (for: 5m not yet met)"
+    interval: 1m
+    input_series:
+      # Flag becomes 1 at t=1m; at eval_time=5m only 4m of true condition has passed.
+      - series: 'dell_powerscale_metrics_stale{cluster_name="c1"}'
+        values: '0 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleMetricsStale
+        exp_alerts: []
+
+  # ==========================================================================
+  # Category 3 — Quota Capacity (PS-14 to PS-16) — 8 scenarios
+  # Ratio metric: dell_powerscale_quota_utilization_ratio in [0,1]; rule multiplies
+  # by 100 and compares to an integer-percent threshold.
+  # Labels from quota_collector: cluster_name, volume_id, access_zone.
+  # ==========================================================================
+
+  # PS-14: PowerScaleQuotaWarning
+  # Expression: dell_powerscale_quota_utilization_ratio * 100 > 80, for: 5m
+
+  - name: "PS-14 Quota at 0.81 → 81% > 80% → PowerScaleQuotaWarning fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_utilization_ratio{cluster_name="c1",volume_id="vol-1",access_zone="zone-a"}'
+        values: '0.81 0.81 0.81 0.81 0.81 0.81'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaWarning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              access_zone: zone-a
+              cluster_name: c1
+              volume_id: vol-1
+            exp_annotations:
+              summary: "Quota warning for volume vol-1 in access zone zone-a"
+              description: "Volume vol-1 in access zone zone-a on cluster c1 has exceeded the quota threshold at 81.0% utilization (threshold: 80%)."
+              runbook_url: ""
+
+  - name: "PS-14 Quota at 0.80 (80%, not > 80, boundary) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_utilization_ratio{cluster_name="c1",volume_id="vol-1",access_zone="zone-a"}'
+        values: '0.80 0.80 0.80 0.80 0.80 0.80'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaWarning
+        exp_alerts: []
+
+  - name: "PS-14 Quota at 0.79 → 79% < 80% → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_utilization_ratio{cluster_name="c1",volume_id="vol-1",access_zone="zone-a"}'
+        values: '0.79 0.79 0.79 0.79 0.79 0.79'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaWarning
+        exp_alerts: []
+
+  # PS-15: PowerScaleQuotaCritical
+  # Expression: dell_powerscale_quota_utilization_ratio * 100 > 90, for: 5m
+
+  - name: "PS-15 Quota at 0.91 → 91% > 90% → PowerScaleQuotaCritical fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_utilization_ratio{cluster_name="c1",volume_id="vol-1",access_zone="zone-a"}'
+        values: '0.91 0.91 0.91 0.91 0.91 0.91'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              access_zone: zone-a
+              cluster_name: c1
+              volume_id: vol-1
+            exp_annotations:
+              summary: "Quota critical for volume vol-1 in access zone zone-a"
+              description: "Volume vol-1 in access zone zone-a on cluster c1 has exceeded the quota threshold at 91.0% utilization (threshold: 90%). Immediate action required."
+              runbook_url: ""
+
+  - name: "PS-15 Quota at 0.90 (90%, not > 90, boundary) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_utilization_ratio{cluster_name="c1",volume_id="vol-1",access_zone="zone-a"}'
+        values: '0.90 0.90 0.90 0.90 0.90 0.90'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaCritical
+        exp_alerts: []
+
+  # PS-16: PowerScaleQuotaHardBreach
+  # Expression: dell_powerscale_quota_hard_breach_total > 0, for: 0m
+
+  - name: "PS-16 Hard quota breach total = 2 → PowerScaleQuotaHardBreach fires (critical)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_hard_breach_total{cluster_name="c1"}'
+        values: '2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: PowerScaleQuotaHardBreach
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+            exp_annotations:
+              summary: "Hard quota breach detected on cluster c1"
+              description: "2 volume(s) on cluster c1 have exceeded their hard quota limit. Check individual volume quota metrics (dell_powerscale_quota_utilization_ratio) to identify affected volumes. Write operations may be blocked."
+              runbook_url: ""
+
+  - name: "PS-16 Hard quota breach total = 0 → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_hard_breach_total{cluster_name="c1"}'
+        values: '0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaHardBreach
+        exp_alerts: []
+
+  # Recovery: quota drops from above warning threshold to below → alert clears.
+  # This test has two eval_time checkpoints: fires at t=5m, clears at t=10m.
+  - name: "PS-14 Recovery: quota drops from 0.85 to 0.70 → PowerScaleQuotaWarning clears"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_quota_utilization_ratio{cluster_name="c1",volume_id="vol-1",access_zone="zone-a"}'
+        # Ratio stays at 0.85 for the first 7m (alert fires at t=5m), then drops to 0.70.
+        values: '0.85 0.85 0.85 0.85 0.85 0.85 0.85 0.70 0.70 0.70 0.70'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleQuotaWarning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              access_zone: zone-a
+              cluster_name: c1
+              volume_id: vol-1
+            exp_annotations:
+              summary: "Quota warning for volume vol-1 in access zone zone-a"
+              description: "Volume vol-1 in access zone zone-a on cluster c1 has exceeded the quota threshold at 85.0% utilization (threshold: 80%)."
+              runbook_url: ""
+      - eval_time: 10m
+        alertname: PowerScaleQuotaWarning
+        exp_alerts: []
+
+  # ==========================================================================
+  # Category 4 — Node Pool Capacity (PS-17 to PS-18) — 6 scenarios
+  # Expression: dell_powerscale_nodepool_utilization_percent > threshold, for: 5m
+  # Raw percent metric — compare directly to integer threshold (no multiplication).
+  # ==========================================================================
+
+  - name: "PS-17 Node pool at 85% → 85 > 80 → PowerScaleNodePoolWarning fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nodepool_utilization_percent{cluster_name="c1",nodepool_name="pool-a"}'
+        values: '85 85 85 85 85 85'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleNodePoolWarning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              nodepool_name: pool-a
+            exp_annotations:
+              summary: "PowerScale node pool utilization warning"
+              description: "Node pool pool-a on cluster c1 is at 85% utilization (threshold: 80%)."
+              runbook_url: ""
+
+  - name: "PS-17 Node pool at 80% (boundary, not > 80) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nodepool_utilization_percent{cluster_name="c1",nodepool_name="pool-a"}'
+        values: '80 80 80 80 80 80'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleNodePoolWarning
+        exp_alerts: []
+
+  - name: "PS-17 Node pool at 79% → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nodepool_utilization_percent{cluster_name="c1",nodepool_name="pool-a"}'
+        values: '79 79 79 79 79 79'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleNodePoolWarning
+        exp_alerts: []
+
+  - name: "PS-18 Node pool at 95% → 95 > 90 → PowerScaleNodePoolCritical fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nodepool_utilization_percent{cluster_name="c1",nodepool_name="pool-a"}'
+        values: '95 95 95 95 95 95'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleNodePoolCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+              nodepool_name: pool-a
+            exp_annotations:
+              summary: "PowerScale node pool utilization critical"
+              description: "Node pool pool-a on cluster c1 is at 95% utilization (threshold: 90%). Immediate action required."
+              runbook_url: ""
+
+  - name: "PS-18 Node pool at 90% (boundary, not > 90) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nodepool_utilization_percent{cluster_name="c1",nodepool_name="pool-a"}'
+        values: '90 90 90 90 90 90'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleNodePoolCritical
+        exp_alerts: []
+
+  - name: "PS-18 Node pool at 89% → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nodepool_utilization_percent{cluster_name="c1",nodepool_name="pool-a"}'
+        values: '89 89 89 89 89 89'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PowerScaleNodePoolCritical
+        exp_alerts: []
+
+  # ==========================================================================
+  # Category 5 — Access Control (PS-19 to PS-20) — 6 scenarios
+  # ==========================================================================
+
+  # PS-19: PowerScaleNFSAuthFailureRate
+  # Expression: rate(dell_powerscale_nfs_mount_auth_failures_total[5m]) > 0, for: 5m
+  # rate() needs ≥2 samples → condition first true at t=1m → for:5m satisfied at t≥6m.
+
+  - name: "PS-19 Sustained NFS auth failures → PowerScaleNFSAuthFailureRate fires"
+    interval: 1m
+    input_series:
+      # Counter increases continuously; rate > 0 from t=1m onwards.
+      - series: 'dell_powerscale_nfs_mount_auth_failures_total{cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10 11'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleNFSAuthFailureRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale NFS authentication failures detected"
+              description: "NFS mount authentication failures detected on cluster c1 at a rate of 0.016666666666666666 failures/second over the last 5 minutes."
+              runbook_url: ""
+
+  - name: "PS-19 Constant NFS auth failure counter (zero rate) → no alert"
+    interval: 1m
+    input_series:
+      # Counter has a non-zero value but does not increase → rate = 0.
+      - series: 'dell_powerscale_nfs_mount_auth_failures_total{cluster_name="c1"}'
+        values: '5 5 5 5 5 5 5 5 5 5 5 5'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleNFSAuthFailureRate
+        exp_alerts: []
+
+  - name: "PS-19 NFS auth failures for only 4m → no alert (for: 5m not yet met)"
+    interval: 1m
+    input_series:
+      # Evaluate at t=4m: rate > 0 has been true for ≈3m (since t=1m); for:5m not met.
+      - series: 'dell_powerscale_nfs_mount_auth_failures_total{cluster_name="c1"}'
+        values: '0 1 2 3 4 5'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PowerScaleNFSAuthFailureRate
+        exp_alerts: []
+
+  # PS-20: PowerScaleAPIErrorRate
+  # Expression: (rate(failures[W]) / ignoring(status) sum without(status)(rate(total[W]))) * 100 > threshold
+  # for: 5m
+  #
+  # The denominator uses "sum without(status)" to aggregate all status values into a
+  # single per-cluster_name total, then "ignoring(status)" drops the status label from
+  # the numerator side for the binary division. This avoids the label-cardinality trap
+  # where dividing failure/failure would always produce 100%.
+  #
+  # Test data: failure and success series both carry cluster_name. The sum without(status)
+  # collapses them into one total-per-cluster series, producing the correct ratio.
+
+  - name: "PS-20 API error rate 15% (15 failures per 100 calls) → PowerScaleAPIErrorRate fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_api_calls_total{status="failure",cluster_name="c1"}'
+        values: '0 15 30 45 60 75 90 105 120 135 150'
+      - series: 'dell_powerscale_api_calls_total{status="success",cluster_name="c1"}'
+        values: '0 85 170 255 340 425 510 595 680 765 850'
+    alert_rule_test:
+      # rate(failure[5m]) / sum_without_status(rate(total[5m])) * 100 = 15/100 * 100 = 15 > 10 → fires
+      - eval_time: 10m
+        alertname: PowerScaleAPIErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale API error rate elevated"
+              description: "PowerScale API error rate on cluster c1 is 15% over the last 5m (threshold: 10%)."
+              runbook_url: ""
+
+  - name: "PS-20 API error rate 5% → no alert (5 < 10 threshold)"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_api_calls_total{status="failure",cluster_name="c1"}'
+        values: '0 5 10 15 20 25 30 35 40 45 50'
+      - series: 'dell_powerscale_api_calls_total{status="success",cluster_name="c1"}'
+        values: '0 95 190 285 380 475 570 665 760 855 950'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleAPIErrorRate
+        exp_alerts: []
+
+  - name: "PS-20 API error rate exactly 10% (boundary, not > 10) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_api_calls_total{status="failure",cluster_name="c1"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100'
+      - series: 'dell_powerscale_api_calls_total{status="success",cluster_name="c1"}'
+        values: '0 90 180 270 360 450 540 630 720 810 900'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleAPIErrorRate
+        exp_alerts: []
+
+  # ==========================================================================
+  # Category 6 — NFS Performance (PS-21 to PS-22) — 4 scenarios
+  # Expression: histogram_quantile(0.99, rate(bucket[5m])) > 10, for: 5m
+  #
+  # Histogram bucket strategy:
+  #   Fires   (P99 ≈ 19.9s > 10s): all observations fall in the le="20" bucket but NOT
+  #           in le="10" → le="10" rate = 0, le="20" rate > 0, le="+Inf" rate > 0.
+  #           histogram_quantile(0.99) = 10 + (0.99/1) * (20-10) = 19.9s.
+  #   No-fire (P99 ≈ 4.95s < 10s): all observations fall in the le="5" bucket →
+  #           all bucket rates equal → histogram_quantile(0.99) = 0 + 0.99 * 5 = 4.95s.
+  #
+  # rate() requires ≥2 samples → for:5m is satisfied at t≥6m; evaluate at t=10m.
+  # ==========================================================================
+
+  - name: "PS-21 NFSv3 P99 latency ≈ 19.9s (> 10s) → PowerScaleNFSv3HighLatency fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="5",cluster_name="c1"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0'
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="10",cluster_name="c1"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0'
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="20",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="+Inf",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleNFSv3HighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale NFSv3 high latency detected"
+              description: "NFSv3 P99 latency on cluster c1 is 19.9s (threshold: 10s). Note: latency is bucket-approximated from the OneFS optime API; minimum resolution is 100ms."
+              runbook_url: ""
+
+  - name: "PS-21 NFSv3 P99 latency ≈ 4.95s (< 10s) → no alert"
+    interval: 1m
+    input_series:
+      # All observations in le="5"; all bucket rates equal → P99 ≈ 4.95s.
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="5",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="10",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="20",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v3_latency_seconds_bucket{le="+Inf",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleNFSv3HighLatency
+        exp_alerts: []
+
+  - name: "PS-22 NFSv4 P99 latency ≈ 19.9s (> 10s) → PowerScaleNFSv4HighLatency fires"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="5",cluster_name="c1"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0'
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="10",cluster_name="c1"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0'
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="20",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="+Inf",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleNFSv4HighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform: powerscale
+              component: csi-driver
+              namespace: test
+              cluster_name: c1
+            exp_annotations:
+              summary: "PowerScale NFSv4 high latency detected"
+              description: "NFSv4 P99 latency on cluster c1 is 19.9s (threshold: 10s). Note: latency is bucket-approximated from the OneFS optime API; minimum resolution is 100ms."
+              runbook_url: ""
+
+  - name: "PS-22 NFSv4 P99 latency ≈ 4.95s (< 10s) → no alert"
+    interval: 1m
+    input_series:
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="5",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="10",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="20",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'dell_powerscale_nfs_v4_latency_seconds_bucket{le="+Inf",cluster_name="c1"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PowerScaleNFSv4HighLatency
+        exp_alerts: []

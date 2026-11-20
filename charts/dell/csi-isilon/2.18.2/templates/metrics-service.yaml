@@ -1,0 +1,67 @@
+{{- if eq (include "csi-isilon.isMetricsEnabled" .) "true" }}
+---
+# Service exposing the shared driver metrics endpoint for Prometheus scraping.
+# Created when metrics.enabled is true.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    app: {{ .Release.Name }}-controller
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port | default 8443 }}
+      targetPort: {{ .Values.metrics.port | default 8443 }}
+      protocol: TCP
+  type: ClusterIP
+{{- end }}
+
+{{- if and (hasKey .Values "podmon") .Values.podmon.enabled (hasKey .Values.podmon "metrics") .Values.podmon.metrics.enabled }}
+---
+# Service exposing the podmon resiliency metrics endpoint for Prometheus scraping.
+# Created when podmon.enabled AND podmon.metrics.enabled are true.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-resiliency-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    app: {{ .Release.Name }}-controller
+  ports:
+    - name: metrics
+      port: {{ .Values.podmon.metrics.port | default 8444 }}
+      targetPort: {{ .Values.podmon.metrics.port | default 8444 }}
+      protocol: TCP
+  type: ClusterIP
+{{- end }}
+
+{{- if hasKey .Values.controller "replication" }}
+{{- if and .Values.controller.replication.enabled (hasKey .Values.controller.replication "metrics") .Values.controller.replication.metrics.enabled }}
+---
+# Service exposing the replication metrics endpoint for Prometheus scraping.
+# Created when controller.replication.enabled AND controller.replication.metrics.enabled are true.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-replication-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-controller
+spec:
+  selector:
+    app: {{ .Release.Name }}-controller
+  ports:
+    - name: repl-metrics
+      port: {{ .Values.controller.replication.metrics.port | default 8445 }}
+      targetPort: {{ .Values.controller.replication.metrics.port | default 8445 }}
+      protocol: TCP
+  type: ClusterIP
+{{- end }}
+{{- end }}
