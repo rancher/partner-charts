@@ -1,0 +1,149 @@
+{{- $tlsDisabled := (eq (include "cerbos.tlsSecretName" .) "None") -}}
+{{- $defaultHubDriverEnabled := (eq (include "cerbos.defaultHubDriverEnabled" .) "yes") -}}
+apiVersion: apps/v1
+{{- if eq .Values.type "deployment" }}
+kind: Deployment
+{{- else if eq .Values.type "daemonset" }}
+kind: DaemonSet
+{{- else }}
+{{- fail "valid values for .Values.type are deployment or daemonset" }}
+{{- end}}
+metadata:
+  name: {{ include "cerbos.fullname" . }}
+  labels:
+    {{- include "cerbos.labels" . | nindent 4 }}
+  {{- with .Values.deployment.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  {{-   if eq .Values.type "deployment" }}
+  replicas: {{ .Values.replicaCount }}
+  {{-   end }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cerbos.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cerbos.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- include "cerbos.podAnnotations" . | nindent 6 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cerbos.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: {{ include "cerbos.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "server"
+            - "--config=/config/.cerbos.yaml"
+            - "--log-level={{ .Values.cerbos.logLevel }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.cerbos.httpPort }}
+            - name: grpc
+              containerPort: {{ .Values.cerbos.grpcPort }}
+          livenessProbe:
+            httpGet:
+              path: /_cerbos/health
+              port: http
+              scheme: {{ include "cerbos.httpScheme" . | upper }}
+          readinessProbe:
+            httpGet:
+              path: /_cerbos/health
+              port: http
+              scheme: {{ include "cerbos.httpScheme" . | upper }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          {{- if $defaultHubDriverEnabled }}
+            - name: bundletmp
+              mountPath: /tmp
+            - name: bundlecache
+              mountPath: /.cache
+          {{- else }}
+            - name: work
+              mountPath: /work
+          {{- end }}
+          {{- if not $tlsDisabled }}
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "cerbos.fullname" . }}
+      {{- if $defaultHubDriverEnabled }}
+        - name: bundletmp
+          emptyDir: {}
+        - name: bundlecache
+          emptyDir: {}
+      {{- else }}
+        - name: work
+          emptyDir: {}
+      {{- end }}
+      {{- if not $tlsDisabled }}
+        - name: certs
+          secret:
+            secretName: {{ include "cerbos.tlsSecretName" . }}
+      {{- end }}
+      {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "cerbos.topologySpreadConstraints" . | nindent 6}}
