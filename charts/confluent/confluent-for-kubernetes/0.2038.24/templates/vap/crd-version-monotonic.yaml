@@ -1,0 +1,86 @@
+{{- if and .Values.manageCRDs (eq (include "confluent-operator.vapEnabled" .) "true") }}
+# Backstop for operator-managed CRD upgrades: reject any UPDATE that lowers a
+# CFK CRD's chart-version annotation. The operator's own downgrade guard is the
+# primary protection (and works on every Kubernetes version); this policy also
+# blocks out-of-band downgrades (e.g. a manual `kubectl apply` of an older CRD
+# or a Helm reinstall from a lower chart). Requires ValidatingAdmissionPolicy
+# (GA in Kubernetes 1.30+).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cfk-crd-version-monotonic-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apiextensions.k8s.io"]
+        apiVersions: ["v1"]
+        operations: ["UPDATE"]
+        resources: ["customresourcedefinitions"]
+  # Only evaluate CFK's own CRDs; leave every other CRD in the cluster alone.
+  matchConditions:
+    - name: only-cfk-crds
+      expression: "object.spec.group == 'platform.confluent.io'"
+  variables:
+    - name: newAnn
+      expression: "has(object.metadata.annotations) ? object.metadata.annotations : {}"
+    - name: oldAnn
+      expression: "has(oldObject.metadata.annotations) ? oldObject.metadata.annotations : {}"
+    - name: newVerRaw
+      expression: >
+        'platform.confluent.io/chart-version' in variables.newAnn
+        ? variables.newAnn['platform.confluent.io/chart-version'] : ''
+    - name: oldVerRaw
+      expression: >
+        'platform.confluent.io/chart-version' in variables.oldAnn
+        ? variables.oldAnn['platform.confluent.io/chart-version'] : ''
+    # Strip the optional leading "v" and split into numeric components.
+    - name: newParts
+      expression: "(variables.newVerRaw.startsWith('v') ? variables.newVerRaw.substring(1) : variables.newVerRaw).split('.')"
+    - name: oldParts
+      expression: "(variables.oldVerRaw.startsWith('v') ? variables.oldVerRaw.substring(1) : variables.oldVerRaw).split('.')"
+    # Only enforce when both versions are well-formed vX.Y.Z; otherwise defer to
+    # the operator's downgrade guard rather than risk a false denial.
+    - name: comparable
+      expression: >
+        size(variables.newParts) == 3 && size(variables.oldParts) == 3 &&
+        variables.newParts.all(p, p.matches('^[0-9]+$')) &&
+        variables.oldParts.all(p, p.matches('^[0-9]+$'))
+    - name: notDowngrade
+      expression: >
+        !variables.comparable ||
+        int(variables.newParts[0]) > int(variables.oldParts[0]) ||
+        (int(variables.newParts[0]) == int(variables.oldParts[0]) &&
+          (int(variables.newParts[1]) > int(variables.oldParts[1]) ||
+          (int(variables.newParts[1]) == int(variables.oldParts[1]) &&
+            int(variables.newParts[2]) >= int(variables.oldParts[2]))))
+  validations:
+    - expression: "variables.notDowngrade"
+      messageExpression: >
+        'Refusing to downgrade CFK CRD "' + object.metadata.name +
+        '" chart-version from ' + variables.oldVerRaw + ' to ' + variables.newVerRaw +
+        '. CFK CRDs are upgraded by the operator (highest version wins) and are never downgraded.'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cfk-crd-version-monotonic-binding-{{ .Release.Namespace }}
+  labels:
+    app: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/name: {{ include "confluent-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: "confluent-operator"
+    helm.sh/chart: {{ include "confluent-operator.chart" . }}
+spec:
+  policyName: cfk-crd-version-monotonic-{{ .Release.Namespace }}
+  validationActions: [Deny]
+  # CRDs are cluster-scoped, so no namespaceSelector applies here.
+{{- end }}
