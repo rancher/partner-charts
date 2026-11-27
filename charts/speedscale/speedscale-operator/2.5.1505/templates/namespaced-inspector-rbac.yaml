@@ -1,0 +1,106 @@
+{{- if ((.Values.namespaced | default dict).enabled | default false) }}
+{{- if .Values.namespaced.inspector.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: speedscale-inspector
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-inspector
+    controlplane.speedscale.com/component: inspector
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+# Read-only, whole Role. The inspector answers "what is in this namespace" for
+# the Speedscale dashboard and for proxymock; it never writes.
+rules:
+# Workload inventory, container logs for triage, and the events that explain a
+# pod that will not start.
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  - events
+  - services
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+{{- if .Values.namespaced.inspector.jobsEnabled }}
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+{{- if .Values.namespaced.inspector.metricsEnabled }}
+# Namespaced Pod metrics, for report enrichment only. Optional because a
+# cluster without metrics-server has no such API, and the resulting 403 must
+# degrade enrichment rather than fail anything.
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+{{- if .Values.namespaced.secretAccessList }}
+# NO Secret access by default. Each name in secretAccessList is granted
+# individually so a reviewer can enumerate exactly what is readable; the chart
+# never grants a blanket secrets rule.
+- apiGroups:
+  - ""
+  resourceNames: {{ toYaml (uniq .Values.namespaced.secretAccessList) | nindent 2 }}
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: speedscale-inspector
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    {{- with .Values.namespaced.globalLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+    app: speedscale-inspector
+    controlplane.speedscale.com/component: inspector
+  {{- with .Values.namespaced.globalAnnotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: speedscale-inspector
+subjects:
+- kind: ServiceAccount
+  name: '{{ include "speedscale.namespaced.inspectorServiceAccountName" . }}'
+  namespace: '{{ .Release.Namespace }}'
+{{- end }}
+
+{{- end }}
